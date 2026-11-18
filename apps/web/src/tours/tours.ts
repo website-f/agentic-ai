@@ -79,6 +79,8 @@ const WELCOME: Tour[] = [
       s("nav:/tasks", msg("Tasks"), msg("Tasks given to you and by you, for people and for your AI. Open one to see its checklist, files and due date.")),
       s("nav:/chat", msg("Chat"), msg("Talk to your AI or any agent, by typing or by voice.")),
       s("nav:/files", msg("Library"), msg("The company's files, SOPs and guidelines, in folders. Your AI reads them before it works.")),
+      // P113: every member opens the organization chart.
+      s("nav:/organization", msg("Organization chart"), msg("Who reports to whom across the group, HQ units too. Find anyone by name, company or department."), { skip: true }),
       s("nav:/prima", msg("Prima"), msg("Clock in and do your daily Prima work. It opens with this same sign-in."), { skip: true }),
       HELP,
       doneCard(msg("Start with the first step on your Getting started list: your email, your workspace, then your own AI.")),

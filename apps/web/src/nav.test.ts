@@ -15,12 +15,13 @@ const VIEWER = ["read", "office.view", "org.read", "engine.view"];
 
 describe("P36: one guard for pages and the sidebar", () => {
   it("keeps staff to their own desk, their AI and their work", () => {
-    for (const path of ["/workspace", "/my-worker", "/twin", "/tasks", "/tasks/tk_1", "/approvals", "/chat", "/files", "/library", "/settings", "/logins"]) {
+    // P113: Organization too (staff get the organization chart only, read only).
+    for (const path of ["/workspace", "/my-worker", "/twin", "/tasks", "/tasks/tk_1", "/approvals", "/chat", "/files", "/library", "/settings", "/logins", "/organization"]) {
       expect(pathAllowed(path, STAFF), path).toBe(true);
     }
     for (const path of [
       "/", "/overview", "/agents", "/agents/ag_1", "/agents/new", "/office", "/monitor", "/brain", "/skills", "/learning",
-      "/organization", "/schedules", "/ai-engine", "/activity", "/settings/members", "/settings/ai-use", "/objectives",
+      "/schedules", "/ai-engine", "/activity", "/settings/members", "/settings/ai-use", "/objectives",
     ]) {
       expect(pathAllowed(path, STAFF), path).toBe(false);
     }

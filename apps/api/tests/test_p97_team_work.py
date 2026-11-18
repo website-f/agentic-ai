@@ -120,13 +120,16 @@ async def test_who_reports_to_whom_and_heads(client):
     bea = {m["name"] for m in (await client.get(f"/api/members/{ids['bea']}/team")).json()}
     assert bea == {"Tom", "Omar"}
 
-    # Only owners, admins, management and HR set it: not an HOD, even for their own people.
+    # P113: an HOD sets it for the people of their own department (Omar is in Operations);
+    # who heads a department stays with owners, admins, management and HR.
     hana = await _as(made, "hana")
     try:
         r = await hana.put(
-            f"/api/members/{ids['hana']}/team", json={"user_ids": [ids["tom"]]}, headers=csrf(hana)
+            f"/api/members/{ids['hana']}/team",
+            json={"user_ids": [ids["tom"], ids["omar"]]},
+            headers=csrf(hana),
         )
-        assert r.status_code == 403
+        assert r.status_code == 200 and r.json()["skipped"] == 1, r.text
         r = await hana.patch(
             f"/api/members/{ids['sara']}", json={"heads_department": True}, headers=csrf(hana)
         )

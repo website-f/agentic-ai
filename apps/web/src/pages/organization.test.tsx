@@ -241,7 +241,7 @@ describe("Organization", { timeout: 30_000 }, () => {
 
   it("keeps people who do not manage the organization to viewing", async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    qc.setQueryData(["me"], { ...ME, role: "viewer", permissions: ["read"] });
+    qc.setQueryData(["me"], { ...ME, role: "viewer", permissions: ["read", "office.view", "org.read"] });
     const root = createRootRoute({ component: OrganizationPage });
     const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/organization"] }) });
     render(<QueryClientProvider client={qc}><RouterProvider router={router} /></QueryClientProvider>);
@@ -251,5 +251,19 @@ describe("Organization", { timeout: 30_000 }, () => {
     const menu = openMenu("Options for Syarikat 00 Sdn Bhd");
     expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["View"]);
     expect(calls.some((c) => c.url.pathname === "/api/prima/companies" || c.url.pathname === "/api/members")).toBe(false);
+  });
+
+  it("P113: gives staff the organization chart only, to look at", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(["me"], { ...ME, role: "staff", permissions: ["read", "work.write"] });
+    const root = createRootRoute({ component: OrganizationPage });
+    const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/organization"] }) });
+    render(<QueryClientProvider client={qc}><RouterProvider router={router} /></QueryClientProvider>);
+    expect(await screen.findByText("View only")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Organization" })).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "Companies" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: /Companies/ })).toBeNull();
+    expect(calls.some((c) => c.url.pathname === "/api/members/hierarchy")).toBe(true);
+    expect(calls.some((c) => c.url.pathname === "/api/branches" || c.url.pathname === "/api/members")).toBe(false);
   });
 });

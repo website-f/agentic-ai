@@ -741,11 +741,31 @@ function OrgMembers({ me }: { me: Me }) {
   return <MembersTable control={control} me={me} withAddImport />;
 }
 
+/** P113 (Fitri, 18 Nov 2026: "make it available for all staff"): every member opens
+ * Organization. Whoever sees the office or manages companies or people gets the whole page;
+ * everyone else (staff) the organization chart only, to look at. */
 export function OrganizationPage() {
+  const { data: me } = useSuspenseQuery(meQuery);
+  const full = ["office.view", "org.manage", "members.manage", "team.manage"].some((p) => me.permissions.includes(p));
+  return full ? <OrganizationOffice me={me} /> : <OrganizationChartOnly me={me} />;
+}
+
+function OrganizationChartOnly({ me }: { me: Me }) {
+  const t = useT();
+  const focus = useRouterState({ select: (s) => (s.location.search as { focus?: string }).focus });
+  return (
+    <Page wide>
+      <PageHeader title={t("Organization")}
+        description={t("Who reports to whom across the group. Find anyone by name, job title, company or department.")} />
+      <OrgChartView key={focus ?? ""} me={me} initialFocus={focus} />
+    </Page>
+  );
+}
+
+function OrganizationOffice({ me }: { me: Me }) {
   const t = useT();
   // "Branches" is also the workflow word (Cabang); companies need their own Malay word.
   const lang = useLang((s) => s.lang);
-  const { data: me } = useSuspenseQuery(meQuery);
   const canManage = me.permissions.includes("org.manage");
   const seesMembers = me.permissions.includes("members.manage") || me.permissions.includes("team.manage");
   const { data: branches, isLoading, error } = useQuery(branchesQuery);

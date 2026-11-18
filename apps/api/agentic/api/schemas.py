@@ -268,6 +268,8 @@ class HierarchyPerson(BaseModel):
     heads_department: bool = False
     is_active: bool = True
     limited: bool = False
+    # P113: the reader may change this person's line and job title.
+    editable: bool = False
 
 
 class HierarchyOut(BaseModel):
@@ -276,7 +278,9 @@ class HierarchyOut(BaseModel):
     people: list[HierarchyPerson]
     me: str
     can_edit: bool
-    whole: bool  # sees the whole workspace (else their part of it)
+    whole: bool  # sees the whole workspace in full (else their part, the rest by name only)
+    # P113: where they change it: the workspace, their branch or department (None: view only).
+    edit_scope: Literal["all", "branch", "department"] | None = None
 
 
 class MyHierarchyOut(BaseModel):

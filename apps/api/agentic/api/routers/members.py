@@ -568,7 +568,9 @@ class _Chart:
         ).all()
         return cls(list(rows), await _names(db, ws))
 
-    def person(self, uid: str, limited: bool, shown: set[str] | None = None) -> HierarchyPerson:
+    def person(
+        self, uid: str, limited: bool, shown: set[str] | None = None, editable: bool = False
+    ) -> HierarchyPerson:
         m = self.by[uid]
         boss = m.reports_to_user_id if m.reports_to_user_id in self.by else None
         place = {
@@ -599,13 +601,38 @@ class _Chart:
             direct_reports=len(self.children.get(uid, [])),
             heads_department=bool(m.heads_department),
             is_active=m.user.is_active,
+            editable=editable,
             **place,
         )
 
     def visible(self, principal: Principal) -> tuple[set[str], set[str]]:
+        """(shown in full, shown by name, title, company and department only). P113: everyone
+        sees the whole organization: their own part in full (org_chart.visible), everyone else
+        limited; a switched-off account outside their part only when it is above them."""
         in_scope = [uid for uid, m in self.by.items() if _member_in_scope(principal, m)]
-        full, limited = org_chart.visible(self.parent, in_scope, principal.user.id)
-        return full & self.by.keys(), limited & self.by.keys()
+        full, above = org_chart.visible(self.parent, in_scope, principal.user.id)
+        full &= self.by.keys()
+        limited = {
+            uid
+            for uid, m in self.by.items()
+            if uid not in full and (m.user.is_active or uid in above)
+        }
+        return full, limited
+
+    def editable(self, principal: Principal) -> set[str]:
+        """P113: whose line and job title this reader may change (set_manager's rules)."""
+        kind = _line_scope(principal)
+        if kind is None:
+            return set()
+        above = set(org_chart.chain_up(self.parent, principal.user.id))
+        out = set()
+        for uid, m in self.by.items():
+            if not _member_in_scope(principal, m) or not _touches(principal, m.role):
+                continue
+            if kind != "all" and (uid == principal.user.id or uid in above):
+                continue  # never their own line
+            out.add(uid)
+        return out
 
 
 @router.get("/hierarchy")
@@ -613,17 +640,28 @@ async def hierarchy(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> HierarchyOut:
-    """P111: the organization chart the reader may see (org/hierarchy.py): their scope, the
-    people under them and their own managers up to the top (by name and title only)."""
+    """P111: the organization chart. P113 (Fitri, 18 Nov 2026: "make it available for all
+    staff ... for hq, branch manager, admins, HOD they can edit, only lower than that just
+    view only"): every member sees the whole organization, their own part in full and
+    everyone else by name, job title, company and department only (no role, no counts).
+    `editable` marks whose line the reader may change (owners, admins, management and HR:
+    the workspace; branch managers and HODs: their branch or department)."""
     chart = await _Chart.load(db, principal.workspace_id)
     full, limited = chart.visible(principal)
     shown = full | limited
-    people_ = [chart.person(uid, uid in limited, shown) for uid in chart.by if uid in shown]
+    editable = chart.editable(principal)
+    people_ = [
+        chart.person(uid, uid in limited, shown, uid in editable)
+        for uid in chart.by
+        if uid in shown
+    ]
+    edit_scope = _line_scope(principal)
     return HierarchyOut(
         people=people_,
         me=principal.user.id,
-        can_edit=can(principal.role, "members.manage"),
+        can_edit=edit_scope is not None,
         whole=principal.scope.everything,
+        edit_scope=edit_scope,  # type: ignore[arg-type]
     )
 
 
@@ -840,6 +878,104 @@ def _org_editor(principal: Principal) -> None:
         )
 
 
+# ---------------------------------------------------------------- P113 who changes the chart
+#
+# Fitri (18 Nov 2026): HQ (management), HR, admins, branch managers and HODs edit the
+# organization chart; everyone below them only sees it. Owners, admins, management and HR
+# (members.manage) change anyone's line and job title in the workspace; branch managers and HODs
+# (team.manage) only the people of their branch or department, never their own line (themselves
+# or the managers above them), and only under someone of their part of the chart, themselves or
+# one of their own managers. Who heads a department stays with members.manage (_org_editor).
+
+
+def _line_scope(principal: Principal) -> str | None:
+    """Where this person changes reporting lines and job titles: "all" (the workspace),
+    "branch" or "department"; None: they only see the chart."""
+    kind = principal.scope.kind
+    if kind in ("branch", "department") and (
+        can(principal.role, "members.manage") or can(principal.role, "team.manage")
+    ):
+        return kind
+    if kind == "all" and can(principal.role, "members.manage"):
+        return kind
+    return None
+
+
+def _touches(principal: Principal, role: str) -> bool:
+    try:
+        _check_can_touch(principal, role)
+    except HTTPException:
+        return False
+    return True
+
+
+def _line_editor(principal: Principal) -> None:
+    if _line_scope(principal) is None:
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Only owners, admins, management, HR, branch managers and heads of department "
+            "change the organization chart.",
+        )
+
+
+async def _chain_above(db: AsyncSession, principal: Principal) -> list[str]:
+    """The reader's own managers, nearest first, up to the top (no loops)."""
+    parent: dict[str, str | None] = {}
+    cur = principal.user.id
+    while cur and cur not in parent and len(parent) <= org_chart.CHAIN_LIMIT:
+        m = await db.get(Membership, (principal.workspace_id, cur))
+        parent[cur] = m.reports_to_user_id if m else None
+        cur = parent[cur]
+    return org_chart.chain_up(parent, principal.user.id)
+
+
+async def _check_line(db: AsyncSession, principal: Principal, m: Membership) -> None:
+    """Whether the reader may change this person's line or job title (after _line_editor)."""
+    sc = principal.scope
+    if not _member_in_scope(principal, m):
+        if can(principal.role, "members.manage"):
+            raise api_error(
+                status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here."
+            )
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "outside_scope",
+            "You can change the organization chart only for the people of {where}.",
+            where=sc.label,
+        )
+    if can(principal.role, "members.manage"):
+        return
+    if m.user_id == principal.user.id or m.user_id in await _chain_above(db, principal):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "own_line",
+            "You cannot change your own line on the organization chart or the managers above "
+            "you. Ask an owner or admin.",
+        )
+
+
+async def _check_lead(db: AsyncSession, principal: Principal, boss: Membership) -> None:
+    """A branch manager or HOD places people only under someone of their part of the chart,
+    themselves or one of their own managers."""
+    if can(principal.role, "members.manage"):
+        return
+    me = principal.user.id
+    if (
+        boss.user_id == me
+        or boss.reports_to_user_id == me
+        or _member_in_scope(principal, boss)
+        or boss.user_id in await _chain_above(db, principal)
+    ):
+        return
+    raise api_error(
+        status.HTTP_403_FORBIDDEN,
+        "outside_scope",
+        "Pick a manager from {where}, yourself or one of the managers above you.",
+        where=principal.scope.label,
+    )
+
+
 async def set_manager(
     db: AsyncSession, principal: Principal, user_id: str, manager_id: str | None
 ) -> Membership:
@@ -847,20 +983,20 @@ async def set_manager(
     commits. P111: the manager is any active member here (the organization chart: a store head
     in the staff role has storekeepers under them); what a manager may do for the people
     under them still comes from their role (teams/people.py MANAGER_ROLES, api/deps.py). No
-    one reports to themselves, no loops, and nobody changes who they report to themselves."""
-    _org_editor(principal)
+    one reports to themselves, no loops, and nobody changes who they report to themselves.
+    P113: branch managers and HODs too, for their own people (_check_line, _check_lead)."""
+    _line_editor(principal)
     m = await _membership(db, principal.workspace_id, user_id)
-    if not _member_in_scope(principal, m):
-        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
-    _check_can_touch(principal, m.role)
-    if manager_id == m.reports_to_user_id:
-        return m
-    if user_id == principal.user.id:
+    if user_id == principal.user.id and manager_id != m.reports_to_user_id:  # anyone, owner too
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
             "self_change",
             "You cannot change who you report to. Ask another owner or admin.",
         )
+    await _check_line(db, principal, m)
+    _check_can_touch(principal, m.role)
+    if manager_id == m.reports_to_user_id:
+        return m
     if manager_id is not None:
         if manager_id == user_id:
             raise api_error(
@@ -871,6 +1007,7 @@ async def set_manager(
             raise api_error(
                 status.HTTP_400_BAD_REQUEST, "bad_manager", "Pick a manager who is a member here."
             )
+        await _check_lead(db, principal, boss)
         up, seen = boss, set()
         while up is not None and up.reports_to_user_id and up.user_id not in seen:
             seen.add(up.user_id)
@@ -910,11 +1047,11 @@ async def set_title(
     db: AsyncSession, principal: Principal, user_id: str, title: str | None
 ) -> Membership:
     """P111: this person's job title on the organization chart (None or "": none). Set by
-    whoever sets who reports to whom; the caller commits."""
-    _org_editor(principal)
+    whoever sets who reports to whom (P113: a branch manager or HOD for their own people, not
+    for themselves); the caller commits."""
+    _line_editor(principal)
     m = await _membership(db, principal.workspace_id, user_id)
-    if not _member_in_scope(principal, m):
-        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    await _check_line(db, principal, m)
     _check_can_touch(principal, m.role)
     want = clean_title(title)
     if want == m.job_title:
@@ -1085,13 +1222,20 @@ async def set_member_team(
 ) -> MembersBulkOut:
     """P97: exactly these people report to this member ("Manages"): the ones listed are
     placed under them, the ones who reported to them and are not listed report to no one.
-    Each change follows set_manager's rules; anyone the rules stop is skipped and says why."""
-    _org_editor(principal)
+    Each change follows set_manager's rules; anyone the rules stop is skipped and says why.
+    P113: a branch manager or HOD for someone of their branch or department (themselves too);
+    the people under that person from outside their part stay as they are."""
+    _line_editor(principal)
     boss = await _membership(db, principal.workspace_id, user_id)
     if not _member_in_scope(principal, boss):
         raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
     want = list(dict.fromkeys(body.user_ids))
     now = set(await people.direct_reports(db, principal.workspace_id, user_id))
+    if not can(principal.role, "members.manage"):
+        for uid in now - set(want):
+            m = await db.get(Membership, (principal.workspace_id, uid))
+            if m is None or not _member_in_scope(principal, m):
+                now.discard(uid)
     results: list[MembersBulkResult] = []
     for uid, target in [*((u, user_id) for u in want), *((u, None) for u in now - set(want))]:
         try:
@@ -1379,7 +1523,7 @@ async def bulk(
     if body.action == "access" and body.role is None:
         raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "role_required", "Pick a role.")
     if body.action == "manager":
-        _org_editor(principal)
+        _line_editor(principal)  # P113: branch managers and HODs for their own people
     if body.action == "prima":
         _prima_access_editor(principal)
         if body.access is None and "prima_modules" not in body.model_fields_set:

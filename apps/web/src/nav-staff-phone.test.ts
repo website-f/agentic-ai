@@ -56,7 +56,8 @@ describe("P92: the staff More sheet", () => {
   });
 
   it("has nothing high-level", () => {
-    for (const p of ["/", "/agents", "/brain", "/skills", "/learning", "/objectives", "/ai-engine", "/organization", "/settings/members", "/activity", "/schedules", "/mcp-servers", "/settings/storage"]) {
+    // P113: the organization chart (/organization) is for everyone now, read only for staff.
+    for (const p of ["/", "/agents", "/brain", "/skills", "/learning", "/objectives", "/ai-engine", "/settings/members", "/activity", "/schedules", "/mcp-servers", "/settings/storage"]) {
       expect(paths, p).not.toContain(p);
     }
     expect(paths.every((p) => pathAllowed(p, STAFF))).toBe(true);

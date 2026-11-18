@@ -233,7 +233,8 @@ export const NAV: NavSection[] = [
     hint: msg("Set up once: companies, people, AI, connections and limits."),
     open: "none",
     items: [
-      { to: "/organization", label: msg("Organization"), icon: TreeStructureIcon, perm: "office.view", blurb: msg("Branches (one per company) and the departments inside them.") },
+      // P113: every member opens it (staff: the organization chart only, to look at).
+      { to: "/organization", label: msg("Organization"), icon: TreeStructureIcon, blurb: msg("Branches (one per company), the departments inside them, and the organization chart: who reports to whom.") },
       { to: "/staff-computers", label: msg("Staff computers"), icon: DesktopTowerIcon, perm: ["members.manage", "team.manage"], blurb: msg("Every company computer your staff linked: who has which, online or not, the folders it shares. Open one to see its screen and fetch files, and turn on a company backup of those folders.") },
       { to: "/settings", label: msg("Settings"), icon: GearSixIcon, blurb: msg("Members and roles, appearance and your account.") },
       { to: "/settings/members", label: msg("Members and roles"), icon: UsersIcon, perm: ["members.manage", "team.manage"], hidden: true, blurb: msg("Add teammates and decide what each one can do.") },

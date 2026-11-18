@@ -17,8 +17,10 @@ import { SettingsTab } from "./settings";
 
 // Charts (Recharts) load only when the Usage tab is opened.
 const UsageTab = lazy(() => import("./usage").then((m) => ({ default: m.UsageTab })));
+// P113: the developer's AI usage per user (the API refuses everyone else).
+const PeopleUsageTab = lazy(() => import("./people-usage").then((m) => ({ default: m.PeopleUsageTab })));
 
-export const AI_TABS = ["providers", "groups", "privacy", "usage", "playground", "settings"] as const;
+export const AI_TABS = ["providers", "groups", "privacy", "usage", "people", "playground", "settings"] as const;
 export type AITab = (typeof AI_TABS)[number];
 
 const LABELS: Record<AITab, string> = {
@@ -26,6 +28,7 @@ const LABELS: Record<AITab, string> = {
   groups: msg("Model groups"),
   privacy: msg("Privacy"),
   usage: msg("Usage"),
+  people: msg("AI usage per user"),
   playground: msg("Playground"),
   settings: msg("Settings"),
 };
@@ -35,7 +38,10 @@ export function AIEnginePage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canManage = me.permissions.includes("engine.manage");
   const search = useSearch({ strict: false }) as { tab?: AITab };
-  const tab: AITab = search.tab && AI_TABS.includes(search.tab) ? search.tab : "providers";
+  // P113: only the system's developer (an owner the operator marked) has AI usage per user.
+  const developer = Boolean(me.user.is_developer) && me.role === "owner";
+  const tabs = AI_TABS.filter((k) => k !== "people" || developer);
+  const tab: AITab = search.tab && tabs.includes(search.tab) ? search.tab : "providers";
   const navigate = useNavigate();
   const { data: providers } = useQuery(providersQuery);
   const { data: groups } = useQuery(groupsQuery);
@@ -52,7 +58,7 @@ export function AIEnginePage() {
         label={t("AI Engine sections")}
         value={tab}
         onChange={(v) => navigate({ to: "/ai-engine", search: { tab: v }, replace: true })}
-        options={AI_TABS.map((k) => ({ value: k, label: t(LABELS[k]), count: counts[k] }))}
+        options={tabs.map((k) => ({ value: k, label: t(LABELS[k]), count: counts[k] }))}
         className="w-fit"
       />
       <div role="tabpanel" aria-label={t(LABELS[tab])} className="min-w-0 outline-none">
@@ -62,6 +68,11 @@ export function AIEnginePage() {
         {tab === "usage" ? (
           <Suspense fallback={<Skeleton className="h-72 rounded-[var(--radius-md)]" />}>
             <UsageTab />
+          </Suspense>
+        ) : null}
+        {tab === "people" ? (
+          <Suspense fallback={<Skeleton className="h-72 rounded-[var(--radius-md)]" />}>
+            <PeopleUsageTab />
           </Suspense>
         ) : null}
         {tab === "playground" ? <PlaygroundTab canRun={me.permissions.includes("work.write")} /> : null}

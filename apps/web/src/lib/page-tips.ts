@@ -268,6 +268,11 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
     },
   },
   "/organization": {
+    // P113: staff open the organization chart only, to look at.
+    staff: {
+      what: msg("The organization chart: who reports to whom across the group, HQ units too."),
+      steps: [msg("Find yourself or anyone with Find a person."), msg("Pick a company or department to see one part of the group.")],
+    },
     manager: {
       what: msg("Your companies and their departments; every agent belongs to one."),
       steps: [msg("Add a company and pick its industry to get a ready AI team."), msg("Add departments, then hire agents into them.")],

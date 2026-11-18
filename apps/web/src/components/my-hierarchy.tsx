@@ -3,52 +3,31 @@
  * hierarchy expand so see who is my higher ups". My manager first; open it to see everyone
  * above me up to the top; then me and the people who report to me. The managers above come by
  * name, job title, department and company only (the server's rule, lib/hierarchy.ts). Opens the
- * organization chart on me (Organization > Hierarchy, or a chart in a dialog for people who
- * do not open the Organization page).
+ * organization chart on me (Organization > Hierarchy; P113: every member opens it).
  */
 import { ArrowRightIcon, CaretDownIcon, CaretUpIcon, TreeStructureIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { lazy, Suspense, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/i18n";
 import { myHierarchyQuery, placeOf, type OrgPerson } from "@/lib/hierarchy";
 import type { Me } from "@/lib/types";
 import { cn, initials } from "@/lib/utils";
 
-// The chart (and the Members dialogs it uses) loads only when opened.
-const OrgChartView = lazy(() => import("@/pages/org-chart").then((m) => ({ default: m.OrgChartView })));
 const REPORTS_SHOWN = 8;
 
-/** Opens the chart on me: the Organization page for those who open it, else a dialog. */
+/** Opens the chart on me: Organization > Hierarchy (P113: every member opens it). */
 export function MyHierarchyLink({ me }: { me: Me }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
-  if (me.permissions.includes("office.view")) {
-    return (
-      <Link to="/organization" search={{ view: "hierarchy", focus: me.user.id } as never}
-        className="hit inline-flex items-center gap-1 text-[12.5px] font-medium text-accent hover:underline">
-        {t("Open the organization chart")} <ArrowRightIcon size={13} />
-      </Link>
-    );
-  }
   return (
-    <>
-      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
-        <TreeStructureIcon size={15} /> {t("View as chart")}
-      </Button>
-      {open ? (
-        <ResponsiveDialog open onOpenChange={setOpen} title={t("My hierarchy")} className="w-[min(94vw,72rem)]">
-          <Suspense fallback={<Skeleton className="h-96" />}>
-            <OrgChartView me={me} initialFocus={me.user.id} embedded />
-          </Suspense>
-        </ResponsiveDialog>
-      ) : null}
-    </>
+    <Link to="/organization" search={{ view: "hierarchy", focus: me.user.id } as never}
+      className="hit inline-flex items-center gap-1 text-[12.5px] font-medium text-accent hover:underline">
+      {t("Open the organization chart")} <ArrowRightIcon size={13} />
+    </Link>
   );
 }
 

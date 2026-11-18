@@ -36,7 +36,7 @@ import { MemberIdentityDialog, ResetMicrosoftDialog } from "@/components/member-
 
 import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, DEFAULT_ACCESS, LibraryAccessFields, libraryChanges, libraryOf, PrimaOpensAsCard, setsAccess, type AccessValue, type LibraryValue } from "./members-access";
 import { ImportMembersDialog } from "./members-import";
-import { addsDepartments, BulkManagerDialog, editsOrg, HodBadge, ManagesField, NewDepartment, OrgFields, OrgLine, saveManages, TeamDialog } from "./members-org";
+import { addsDepartments, BulkManagerDialog, editsLines, editsOrg, HodBadge, ManagesField, NewDepartment, OrgFields, OrgLine, saveManages, TeamDialog } from "./members-org";
 
 const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", "staff", "operator", "approver", "viewer", "management", "hr"];
 // What a branch manager or HOD may hand out (mirrors api/routers/members.py TEAM_ROLES).
@@ -277,8 +277,10 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
   const [role, setRole] = useState<Role>(one?.role ?? (roles.includes("staff") ? "staff" : roles[0] ?? "viewer"));
   const [branchIds, setBranchIds] = useState<string[]>(one ? branchIdsOf(one) : allowed?.length ? [me.scope?.branch_id ?? allowed[0]!] : []);
   const [departmentId, setDepartmentId] = useState(one?.department_id ?? "");
-  // P97: who they report to and whether they head their department (members.manage).
-  const org = !!one && editsOrg(me);
+  // P97: who they report to and whether they head their department (members.manage). P113:
+  // branch managers and HODs set who their own people report to and their job titles.
+  const org = !!one && editsLines(me);
+  const heads = editsOrg(me);
   const { data: everyone = [] } = useQuery({ ...membersQuery, enabled: org });
   const [reportsTo, setReportsTo] = useState(one?.reports_to_user_id ?? "");
   // P111: their job title on the organization chart.
@@ -302,7 +304,7 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
           ? {
               ...(reportsTo !== (one.reports_to_user_id ?? "") ? { reports_to_user_id: reportsTo || null } : {}),
               ...(jobTitle.trim() !== (one.job_title ?? "") ? { job_title: jobTitle.trim() || null } : {}),
-              ...(headOf.slice().sort().join() !== headOfStart.slice().sort().join() ? { head_of: headOf } : {}),
+              ...(heads && headOf.slice().sort().join() !== headOfStart.slice().sort().join() ? { head_of: headOf } : {}),
             }
           : {};
         const accessBody = editsAccess && role !== "owner" ? accessChanges(accessOf(one), access) : {};
@@ -344,7 +346,7 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
           onChange={(b, d) => { setBranchIds(b); setDepartmentId(d); }} />
         {org && one ? (
           <OrgFields member={{ ...one, role }} members={everyone} reportsTo={reportsTo} onReportsTo={setReportsTo} headOf={headOf} onHeadOf={setHeadOf}
-            jobTitle={jobTitle} onJobTitle={setJobTitle}
+            jobTitle={jobTitle} onJobTitle={setJobTitle} heads={heads}
             departmentId={placementBody(role, orFirst(branchIds, list), departmentId).department_id ?? ""} />
         ) : null}
         {org && one ? (
@@ -461,7 +463,7 @@ function MemberActions({ member, me, onView }: { member: Member; me: Me; onView?
   const [resettingMs, setResettingMs] = useState(false);
   // P97: who this member manages (owners, admins, management, HR).
   const [team, setTeam] = useState(false);
-  const managesPeople = editsOrg(me); // P111: anyone may have people under them on the chart
+  const managesPeople = editsLines(me); // P111: anyone may have people under them on the chart
   const fixesPeople = me.permissions.includes("members.manage");
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.members });
@@ -783,7 +785,7 @@ export function MembersTable({ control, me, withAddImport }: { control: TableCon
                 <ShieldCheckIcon size={14} /> {t("Access")}
               </Button>
             ) : null}
-            {editsOrg(me) ? (
+            {editsLines(me) ? (
               <Button size="sm" variant="secondary" onClick={() => setBulkManager(true)}>
                 <TreeStructureIcon size={14} /> {t("Reports to")}
               </Button>

@@ -10,6 +10,8 @@
  * Owners, admins, management and HR change who someone reports to right from a box (and who
  * is under them); the server checks every rule (no loops, nobody their own manager). What each
  * reader sees is the server's (lib/hierarchy.ts). No chart library: plain boxes and lines.
+ * P113: everyone sees the whole organization; branch managers and HODs change the boxes of
+ * their own people (`editable`), and everyone else gets a "View only" note and no menus.
  */
 import {
   ArrowsInIcon,
@@ -18,6 +20,7 @@ import {
   CaretRightIcon,
   CrownSimpleIcon,
   DotsThreeIcon,
+  EyeIcon,
   MagnifyingGlassMinusIcon,
   MagnifyingGlassPlusIcon,
   TreeStructureIcon,
@@ -68,6 +71,8 @@ const ZOOMS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.5];
 interface ChartCtx {
   me: string;
   canEdit: boolean;
+  /** P113: the reader's own managers (a branch manager or HOD may place people under them). */
+  above: Set<string>;
   focus: string | null;
   matched: Set<string> | null;
   collapsed: Set<string>;
@@ -135,9 +140,11 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
     forest.forEach(walk);
     return ids;
   }, [forest]);
+  const above = useMemo(() => new Set(ancestorsOf(all, me.user.id)), [all, me.user.id]);
   const ctx: ChartCtx = {
     me: me.user.id,
     canEdit: !!data?.can_edit,
+    above,
     focus,
     matched,
     collapsed,
@@ -167,7 +174,7 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
     <div className="grid min-w-0 gap-3">
       {/* Tools: find, filter, open or close every level, zoom */}
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <div className="min-w-0 flex-1 basis-56 sm:max-w-80">
+        <div className="min-w-0 flex-1 basis-56 max-sm:basis-full sm:max-w-80">
           <SearchSelect value={focus ?? ""} onValueChange={(v) => find(v || null)} label={t("Find a person")} placeholder={t("Find a person")}
             searchPlaceholder={t("Search by name, title, company or department")} options={personOptions} size="sm" />
         </div>
@@ -175,13 +182,13 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
           <Button size="sm" variant="ghost" onClick={() => setFocus(null)}><XIcon size={14} /> {t("Clear")}</Button>
         ) : null}
         {companies.length > 1 ? (
-          <div className="min-w-0 basis-44 max-sm:flex-1">
+          <div className="min-w-0 basis-44 max-sm:flex-1 max-sm:basis-36">
             <SearchSelect value={company} onValueChange={(v) => { setCompany(v); setDepartment(ALL); }} label={t("Company")} size="sm"
               searchPlaceholder={t("Search companies")} options={[{ value: ALL, label: t("All companies") }, ...companies]} />
           </div>
         ) : null}
         {departments.length ? (
-          <div className="min-w-0 basis-44 max-sm:flex-1">
+          <div className="min-w-0 basis-44 max-sm:flex-1 max-sm:basis-36">
             <SearchSelect value={department} onValueChange={setDepartment} label={t("Department")} size="sm"
               searchPlaceholder={t("Search departments")} options={[{ value: ALL, label: t("All departments") }, ...departments]} />
           </div>
@@ -210,17 +217,26 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
           ) : null}
         </div>
       </div>
-      <p className="text-[12.5px] text-muted">
-        {t("{n} people · {lines} reporting lines", { n: people.length, lines })}
-        {data.whole ? null : <> · {t("You see your part of the organization and the managers above you.")}</>}
-      </p>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[12.5px] text-muted">
+        {!data.can_edit ? (
+          <Pill tone="neutral" className="gap-1 px-2 py-0.5 text-[11.5px]"><EyeIcon size={12} /> {t("View only")}</Pill>
+        ) : null}
+        <span>{t("{n} people · {lines} reporting lines", { n: people.length, lines })}</span>
+        {!data.can_edit ? (
+          <span className="min-w-0">· {t("Owners, admins, HQ management, HR, branch managers and heads of department keep it up to date.")}</span>
+        ) : data.edit_scope === "branch" || data.edit_scope === "department" ? (
+          <span className="min-w-0">· {data.edit_scope === "branch"
+            ? t("You change the lines and job titles of the people in your branch.")
+            : t("You change the lines and job titles of the people in your department.")}</span>
+        ) : null}
+      </div>
 
       <div ref={area} className="min-w-0">
         {!trees.length ? (
           <EmptyState icon={TreeStructureIcon} title={t("No reporting lines yet")}
             body={data.can_edit
               ? t("Set who each person reports to: use Change reports to on a person below, or tick many people in Members and pick Reports to.")
-              : t("Nobody's reporting lines are set yet. An owner or admin sets them.")} />
+              : t("Nobody's reporting lines are set yet. Owners, admins, HQ management, HR, branch managers and heads of department set them.")} />
         ) : phone ? (
           <ul role="tree" aria-label={t("Organization chart")} className="grid gap-1 rounded-[var(--radius-md)] border border-border bg-surface p-2">
             {trees.map((n) => <ListNode key={n.person.user_id} node={n} depth={0} ctx={ctx} />)}
@@ -238,8 +254,8 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
 
       {alone.length ? <AloneList people={alone} ctx={ctx} total={all.length} /> : null}
 
-      {changing ? <ChangeManagerDialog person={changing} people={all} onClose={() => setChanging(null)} /> : null}
-      {team ? <TeamFor person={team} me={me} onClose={() => setTeam(null)} /> : null}
+      {changing ? <ChangeManagerDialog person={changing} people={all} above={above} onClose={() => setChanging(null)} /> : null}
+      {team ? <TeamFor person={team} me={me} editable={!!team.editable || team.user_id === me.user.id} onClose={() => setTeam(null)} /> : null}
     </div>
   );
 }
@@ -406,7 +422,10 @@ function TeamBox({ people, ctx }: { people: OrgPerson[]; ctx: ChartCtx }) {
 
 function BoxMenu({ person, ctx }: { person: OrgPerson; ctx: ChartCtx }) {
   const t = useT();
-  if (!ctx.canEdit || person.limited) return null;
+  // P113: only on the boxes this reader may change (the server's `editable`), and their own
+  // box for the people under them; nothing for those who only look.
+  const isMe = person.user_id === ctx.me;
+  if (!ctx.canEdit || person.limited || !(person.editable || isMe)) return null;
   return (
     <Menu>
       <MenuTrigger asChild>
@@ -415,7 +434,7 @@ function BoxMenu({ person, ctx }: { person: OrgPerson; ctx: ChartCtx }) {
         </Button>
       </MenuTrigger>
       <MenuContent>
-        {person.user_id !== ctx.me ? (
+        {!isMe && person.editable ? (
           <MenuItem icon={<UserSwitchIcon />} onSelect={() => ctx.onChangeManager(person)}>{t("Change reports to")}</MenuItem>
         ) : null}
         <MenuItem icon={<UsersThreeIcon />} onSelect={() => ctx.onTeam(person)}>{t("People under them")}</MenuItem>
@@ -509,8 +528,9 @@ function AloneList({ people, ctx, total }: { people: OrgPerson[]; ctx: ChartCtx;
 
 // ---------------------------------------------------------------- changing it
 
-/** Who this person reports to: anyone active here but themselves and the people under them. */
-export function ChangeManagerDialog({ person, people, onClose }: { person: OrgPerson; people: OrgPerson[]; onClose: () => void }) {
+/** Who this person reports to: anyone active here but themselves and the people under them
+ * (P113: for a branch manager or HOD, someone of their part of the chart or above them). */
+export function ChangeManagerDialog({ person, people, above, onClose }: { person: OrgPerson; people: OrgPerson[]; above?: Set<string>; onClose: () => void }) {
   const t = useT();
   const qc = useQueryClient();
   const [value, setValue] = useState(person.reports_to_user_id ?? NO_ONE);
@@ -518,7 +538,7 @@ export function ChangeManagerDialog({ person, people, onClose }: { person: OrgPe
   const options = [
     { value: NO_ONE, label: t("No one (top of a line)") },
     ...people
-      .filter((p) => p.user_id !== person.user_id && !under.has(p.user_id) && p.is_active && !p.limited)
+      .filter((p) => p.user_id !== person.user_id && !under.has(p.user_id) && p.is_active && (!p.limited || !!above?.has(p.user_id)))
       .map((p) => ({
         value: p.user_id,
         label: p.name,
@@ -551,9 +571,9 @@ export function ChangeManagerDialog({ person, people, onClose }: { person: OrgPe
 }
 
 /** "People under them": the Members page's own dialog (tick who reports to this person). */
-function TeamFor({ person, me, onClose }: { person: OrgPerson; me: Me; onClose: () => void }) {
+function TeamFor({ person, me, editable, onClose }: { person: OrgPerson; me: Me; editable: boolean; onClose: () => void }) {
   const { data: members } = useQuery(membersQuery);
   const member = members?.find((m) => m.user_id === person.user_id);
   if (!member) return null;
-  return <TeamDialog member={member} me={me} open onOpenChange={(o) => !o && onClose()} />;
+  return <TeamDialog member={member} me={me} editable={editable} open onOpenChange={(o) => !o && onClose()} />;
 }

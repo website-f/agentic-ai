@@ -12,6 +12,11 @@ workspace can see this my hierarchy expand so see who is my higher ups."
   them and their own line of managers up to the top. Staff see themselves, the people under them
   and their own line of managers. The managers above someone that they would not otherwise see
   come with their name, job title, company and department only (`limited`): no role, no counts.
+- P113 (Fitri, 18 Nov 2026: "make it available for all staff"): every member now sees the
+  whole organization: what `visible` gives them in full, everyone else `limited` (the members
+  router, _Chart.visible). HQ (management), HR, admins and owners change any line; branch
+  managers and HODs the people of their branch or department, never their own line; everyone
+  else only looks (members.py _line_scope, _check_line, _check_lead).
 - Anyone with nobody above them (or whose manager the reader does not see) is a root.
 
 The pure helpers here work on {user id: manager id} maps loaded once per request; each walk

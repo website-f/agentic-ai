@@ -17,6 +17,7 @@ const HANA = m("u_hana", "Hana", { role: "hod", heads_department: true, manages:
 const ALL = [HANA, m("u_sara", "Sara", { reports_to_user_id: "u_hana", reports_to_name: "Hana" }), m("u_tom", "Tom"), m("u_omar", "Omar", { department_id: "dp_ops", department_name: "Operations" })];
 const OWNER: Me = { user: { id: "u_owner", email: "o@example.com", name: "Owner", must_change_password: false }, workspace: { id: "ws", name: "W", slug: "w", timezone: "Asia/Kuala_Lumpur" }, role: "owner", permissions: ["read", "members.manage", "org.manage"] };
 const HOD: Me = { ...OWNER, user: { ...OWNER.user, id: "u_hana" }, role: "hod", permissions: ["read", "team.manage"] };
+const STAFF: Me = { ...OWNER, user: { ...OWNER.user, id: "u_tom" }, role: "staff", permissions: ["read", "work.write"] };
 
 let sent: { path: string; method: string; body: unknown }[] = [];
 const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
@@ -63,8 +64,14 @@ describe("Who a head of department manages", { timeout: 30_000 }, () => {
     expect([...(sent[0]!.body as { user_ids: string[] }).user_ids].sort()).toEqual(["u_omar", "u_sara", "u_tom"]);
   });
 
-  it("is read only for the head of department themselves", async () => {
+  it("P113: lets the head of department tick their own people", async () => {
     wrap(<TeamDialog member={HANA} me={HOD} open onOpenChange={() => {}} />);
+    await screen.findByRole("group", { name: "People Hana manages" }, { timeout: 10_000 });
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+
+  it("is read only for staff", async () => {
+    wrap(<TeamDialog member={HANA} me={STAFF} open onOpenChange={() => {}} />);
     expect(await screen.findByText("Sara")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(screen.queryByRole("group")).toBeNull();

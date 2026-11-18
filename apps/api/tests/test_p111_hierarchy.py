@@ -121,15 +121,16 @@ async def test_reporting_lines_rules_and_titles(client):
     r = await client.patch(f"/api/members/{ids['hana']}", json={"job_title": ""}, headers=h)
     assert r.json()["job_title"] is None
 
-    # Only owners, admins, management and HR set lines and titles: not an HOD, not staff.
+    # P113: an HOD sets lines and titles for their own department only (under someone of
+    # it, themselves or their own managers; test_p113_org_chart_access); staff never.
     hana, sara = await _as(made, "hana"), await _as(made, "sara")
     try:
-        r = await _set(hana, ids["sara"], ids["omar"])
+        r = await _set(hana, ids["sara"], ids["omar"])  # Omar is in Operations
         assert r.status_code == 403
         r = await hana.patch(
             f"/api/members/{ids['sara']}", json={"job_title": "Boss"}, headers=csrf(hana)
         )
-        assert r.status_code == 403
+        assert r.status_code == 200
         r = await _set(sara, ids["tom"], ids["sara"])
         assert r.status_code == 403
     finally:
@@ -160,14 +161,15 @@ async def test_who_sees_what_of_the_chart(client):
     assert by[ids["bea"]]["job_title"] == "Branch Head"
     assert not any(p["limited"] for p in chart["people"])
 
-    # Staff Tom: himself and his line up to the top; the managers he would not otherwise see
-    # by name and title only (no role, no counts). Not his colleague Omar.
+    # Staff Tom: P113 the whole organization; everyone but himself (and anyone under him)
+    # by name and title only (no role, no counts), his colleague Omar too.
     tom = await _as(made, "tom")
     try:
         chart = (await tom.get("/api/members/hierarchy")).json()
         assert chart["can_edit"] is False and chart["whole"] is False
         by = {p["user_id"]: p for p in chart["people"]}
-        assert set(by) == {ids["tom"], ids["sara"], ids["hana"], ids["bea"]}
+        assert set(ids.values()) <= set(by)
+        assert by[ids["tom"]]["limited"] is False and by[ids["omar"]]["limited"] is True
         for k in ("sara", "hana", "bea"):
             p = by[ids[k]]
             assert p["limited"] is True and p["role"] is None and p["direct_reports"] is None
@@ -191,19 +193,21 @@ async def test_who_sees_what_of_the_chart(client):
         assert sorted(p["name"] for p in mine["reports"]) == ["Omar", "Tom"]
         assert all(not p["limited"] for p in mine["reports"]) and mine["below"] == 2
         chart = (await sara.get("/api/members/hierarchy")).json()
-        names = sorted(p["name"] for p in chart["people"])
-        assert names == ["Bea", "Hana", "Omar", "Sara", "Tom"]
+        full = sorted(p["name"] for p in chart["people"] if not p["limited"])
+        assert full == ["Omar", "Sara", "Tom"]  # herself and the people under her
+        assert {"Bea", "Hana"} <= {p["name"] for p in chart["people"] if p["limited"]}
     finally:
         await sara.aclose()
 
-    # HOD Hana sees her department in full (Sara, Tom) and Bea above her by name only.
+    # HOD Hana sees her department in full (Sara, Tom), Bea above her and (P113) the rest of
+    # the organization by name only.
     hana = await _as(made, "hana")
     try:
         chart = (await hana.get("/api/members/hierarchy")).json()
         by = {p["user_id"]: p for p in chart["people"]}
         assert by[ids["bea"]]["limited"] is True
         assert by[ids["tom"]]["limited"] is False
-        assert ids["omar"] not in by  # Operations: not hers
+        assert by[ids["omar"]]["limited"] is True  # Operations: not hers
     finally:
         await hana.aclose()
 

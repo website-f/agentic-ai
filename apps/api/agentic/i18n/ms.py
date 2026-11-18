@@ -2049,3 +2049,8 @@ MS.update({k: v for k, v in MS_PRIMA_ORG.items() if k not in MS})
 from .ms_prima_members import MS_PRIMA_MEMBERS  # noqa: E402
 
 MS.update({k: v for k, v in MS_PRIMA_MEMBERS.items() if k not in MS})
+
+# P113: AI usage per user (the developer's report).
+from .ms_ai_usage import MS_AI_USAGE  # noqa: E402
+
+MS.update({k: v for k, v in MS_AI_USAGE.items() if k not in MS})

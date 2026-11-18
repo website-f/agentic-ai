@@ -158,8 +158,8 @@ describe("DeskHome", { timeout: 30_000 }, () => {
     expect(within(block).queryByText("Ahmad Bakar")).toBeNull();
     fireEvent.click(within(block).getByRole("button", { name: /Show everyone above me \(1\)/ }));
     expect(within(block).getByText("Ahmad Bakar")).toBeInTheDocument();
-    // Staff do not open the Organization page: the chart opens in a dialog instead.
-    expect(within(block).getByRole("button", { name: /View as chart/ })).toBeInTheDocument();
+    // P113: staff open Organization too (the organization chart, read only), found on them.
+    expect(within(block).getByRole("link", { name: /Open the organization chart/ })).toHaveAttribute("href", expect.stringContaining("/organization"));
   });
 
   it("puts what needs the person first, next to the work on their plate", async () => {

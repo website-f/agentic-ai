@@ -71,11 +71,15 @@ import { TOURS } from "./tours";
 import { PICKERS_P111 } from "./pickers-p111";
 import { ORG_PRIMA_P111 } from "./org-prima-p111";
 import { HIERARCHY_P111 } from "./hierarchy-p111";
+import { HIERARCHY_P113 } from "./hierarchy-p113";
+import { AI_USAGE_PEOPLE } from "./ai-usage-people";
 
 export const MS: Record<string, string> = {
   ...PICKERS_P111, // P111: Teams people picker, company picker
   ...ORG_PRIMA_P111, // P111: organizations in capitals and in Prima
   ...HIERARCHY_P111, // P111: the organization chart and My hierarchy
+  ...HIERARCHY_P113, // P113: the organization chart for every member
+  ...AI_USAGE_PEOPLE, // P113: AI usage per user (the developer's report)
   // P109: Getting started and the guided tours; first, so an existing translation wins.
   ...TOURS,
   // P109: the Microsoft 365 page and other email accounts; first, so an existing translation

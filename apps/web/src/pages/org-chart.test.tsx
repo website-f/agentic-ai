@@ -38,7 +38,7 @@ const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { sta
 beforeEach(() => {
   sent = [];
   phone = false;
-  chart = { people: PEOPLE, me: "u_top", can_edit: true, whole: true };
+  chart = { people: PEOPLE.map((x) => ({ ...x, editable: true })), me: "u_top", can_edit: true, whole: true, edit_scope: "all" };
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   Element.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal("matchMedia", (q: string) => ({ matches: phone && q.includes("max-width"), media: q, addEventListener() {}, removeEventListener() {} }));
@@ -115,7 +115,7 @@ describe("OrgChartView", { timeout: 30_000 }, () => {
     await waitFor(() => expect(sent).toContainEqual({ path: "/api/members/u_store", method: "PATCH", body: { reports_to_user_id: "u_clean" } }));
   });
 
-  it("shows staff their own line without any way to change it", async () => {
+  it("P113: shows staff the organization, view only, without any way to change it", async () => {
     chart = {
       people: [
         p("u_top", "Ahmad Top", null, { job_title: "General Manager", role: null, limited: true, direct_reports: null }),
@@ -129,8 +129,46 @@ describe("OrgChartView", { timeout: 30_000 }, () => {
     const region = await screen.findByRole("region", { name: "Organization chart" });
     expect(within(region).getByText("General Manager")).toBeInTheDocument();
     expect(within(region).queryByRole("button", { name: /Options for/ })).toBeNull();
-    expect(screen.getByText(/You see your part of the organization/)).toBeInTheDocument();
+    expect(screen.getByText("View only")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Set many at once in Members" })).toBeNull();
     await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
+  });
+
+  it("P113: lets a head of department change only their own people, under their own part or above them", async () => {
+    // Nora (HOD) sees her people in full; the rest by name only; she may change the store line.
+    const ME_HOD: Me = { ...ME_OWNER, user: { ...ME_OWNER.user, id: "u_dep", name: "Nora Deputy" }, role: "hod", permissions: ["read", "team.manage", "office.view"] };
+    chart = {
+      people: [
+        p("u_top", "Ahmad Top", null, { job_title: "General Manager", role: null, limited: true, direct_reports: null }),
+        p("u_dep", "Nora Deputy", "u_top", { role: "hod" }),
+        p("u_store", "Hafiz Store", "u_dep", { editable: true }),
+        p("u_k1", "Azman Keeper", "u_store", { editable: true }),
+        p("u_k2", "Bakri Keeper", "u_store", { editable: true }),
+        p("u_clean", "Munirah Clean", "u_top", { role: null, limited: true, direct_reports: null }),
+      ],
+      me: "u_dep", can_edit: true, whole: false, edit_scope: "department",
+    };
+    show(ME_HOD);
+    const region = await screen.findByRole("region", { name: "Organization chart" });
+    expect(screen.getByText(/the people in your department/)).toBeInTheDocument();
+    expect(screen.queryByText("View only")).toBeNull();
+    expect(within(region).queryByRole("button", { name: "Options for Munirah Clean" })).toBeNull();
+    expect(within(region).queryByRole("button", { name: "Options for Ahmad Top" })).toBeNull();
+    fireEvent.pointerDown(within(region).getByRole("button", { name: "Options for Azman Keeper" }), { button: 0, pointerType: "mouse" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Change reports to" }));
+    const dialog = await screen.findByRole("dialog", { name: "Who Azman Keeper reports to" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reports to" }));
+    await screen.findByRole("combobox");
+    expect(screen.getByRole("option", { name: /Ahmad Top/ })).toBeInTheDocument(); // above her
+    expect(screen.queryByRole("option", { name: /Munirah Clean/ })).toBeNull(); // not her part
+    fireEvent.click(screen.getByRole("option", { name: /Bakri Keeper/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(sent).toContainEqual({ path: "/api/members/u_k1", method: "PATCH", body: { reports_to_user_id: "u_k2" } }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // Her own box: the people under her, never her own line.
+    fireEvent.pointerDown(within(region).getByRole("button", { name: "Options for Nora Deputy" }), { button: 0, pointerType: "mouse" });
+    expect(await screen.findByRole("menuitem", { name: "People under them" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Change reports to" })).toBeNull();
   });
 
   it("is an indented list on a phone", async () => {

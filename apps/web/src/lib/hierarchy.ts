@@ -4,6 +4,9 @@
  * part of it for managers, and for staff themselves, the people under them and their own line
  * of managers (those by name and title only). Here: the queries and the pure helpers that turn
  * the list into trees (roots are the people with nobody above them that the reader sees).
+ * P113: every member sees the whole organization (their own part in full, the rest by name,
+ * title, company and department); owners, admins, management and HR change any line, branch
+ * managers and HODs the people of their branch or department (`editable`), the rest only look.
  */
 import { queryOptions } from "@tanstack/react-query";
 
@@ -29,6 +32,8 @@ export interface OrgPerson {
   heads_department: boolean;
   is_active: boolean;
   limited: boolean;
+  /** P113: the reader may change this person's line and job title. */
+  editable?: boolean;
 }
 
 export interface OrgChart {
@@ -36,6 +41,8 @@ export interface OrgChart {
   me: string;
   can_edit: boolean;
   whole: boolean;
+  /** P113: where the reader changes the chart (null: view only). */
+  edit_scope?: "all" | "branch" | "department" | null;
 }
 
 export interface MyHierarchy {

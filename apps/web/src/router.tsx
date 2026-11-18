@@ -127,7 +127,7 @@ function Root() {
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 const num = (v: unknown) => (v ? Number(v) : undefined);
 
-const AI_TABS = ["providers", "groups", "privacy", "usage", "playground", "settings"] as const;
+const AI_TABS = ["providers", "groups", "privacy", "usage", "people", "playground", "settings"] as const;
 
 interface RouterContext {
   queryClient: QueryClient;

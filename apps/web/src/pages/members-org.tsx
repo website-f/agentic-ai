@@ -2,7 +2,9 @@
  * P97: the organisation around a member. A department made right from the member editor, who
  * heads a department, who reports to whom ("Manages"), and placing many people under one
  * manager at once. Who may change it: owners, admins, management and HR (members.manage), as
- * the server decides (api/routers/members.py set_manager / set_head).
+ * the server decides (api/routers/members.py set_manager / set_head). P113: branch managers
+ * and HODs (team.manage) too, for who reports to whom and job titles of their own people
+ * (`editsLines`); who heads a department stays with members.manage (`editsOrg`).
  */
 import { CrownSimpleIcon, PlusIcon, TreeStructureIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,8 +26,11 @@ import { ROLE_INFO, type Branch, type Department, type Me, type Member } from "@
 
 export const NEW_DEPT = "__new__";
 
-/** Who may set who reports to whom and who heads a department. */
+/** Who may set who heads a department (and anyone's line in the workspace). */
 export const editsOrg = (me: Me) => me.permissions.includes("members.manage");
+/** P113: who may set who reports to whom and job titles (branch managers and HODs for their
+ * own people: the server keeps them to their branch or department). */
+export const editsLines = (me: Me) => editsOrg(me) || me.permissions.includes("team.manage");
 /** Who may add a department (as on the Organization page). */
 export const addsDepartments = (me: Me) => me.permissions.includes("org.manage");
 
@@ -78,7 +83,7 @@ export function headOfOptions(branches: Branch[]) {
 
 /** Reports to (a manager), and (P109) Head of department (HOD): on or off, and which
  * departments of any company they head. Part of the member editor. */
-export function OrgFields({ member, members, reportsTo, onReportsTo, headOf, onHeadOf, departmentId, jobTitle, onJobTitle }: {
+export function OrgFields({ member, members, reportsTo, onReportsTo, headOf, onHeadOf, departmentId, jobTitle, onJobTitle, heads = true }: {
   member: Member;
   members: Member[];
   reportsTo: string;
@@ -90,6 +95,8 @@ export function OrgFields({ member, members, reportsTo, onReportsTo, headOf, onH
   onHeadOf: (v: string[]) => void;
   /** The department picked for them above ("" none): turning HOD on starts with it. */
   departmentId: string;
+  /** P113: who heads a department is set by owners, admins, management and HR only. */
+  heads?: boolean;
 }) {
   const t = useT();
   const { data: branches = [] } = useBranches();
@@ -108,6 +115,7 @@ export function OrgFields({ member, members, reportsTo, onReportsTo, headOf, onH
           searchPlaceholder={t("Search by name, title, company or department")} options={[{ value: NO_ONE, label: t("No one") }, ...managerOptions(members, member.user_id)]} />
         <p className="text-[12.5px] text-muted">{t("Their manager on the organization chart. A manager in a managing role (such as Head of department) can also give them tasks.")}</p>
       </div>
+      {heads ? (
       <label className="flex min-h-11 cursor-pointer items-start gap-3">
         <input type="checkbox" checked={isHead} disabled={!isHead && !departmentId && !options.length}
           onChange={(e) => onHeadOf(e.target.checked ? (departmentId ? [departmentId] : options.slice(0, 1).map((o) => o.value)) : [])}
@@ -117,7 +125,8 @@ export function OrgFields({ member, members, reportsTo, onReportsTo, headOf, onH
           <span className="text-[12.5px] text-muted">{t("Heads of a company's departments are told when files are uploaded for it. A department can have more than one head.")}</span>
         </span>
       </label>
-      {isHead ? (
+      ) : null}
+      {heads && isHead ? (
         <div className="grid gap-1.5">
           <span className="text-[13px] font-medium">{t("Departments they head")}</span>
           <MultiSelect value={headOf} onValueChange={onHeadOf} label={t("Departments they head")} placeholder={t("Pick one or more departments")}
@@ -223,12 +232,13 @@ export function HodBadge({ member }: { member: Member }) {
   );
 }
 
-/** "Manages": the people who report to this member. Editable by members.manage, read only otherwise. */
-export function TeamDialog({ member, me, open, onOpenChange }: { member: Member; me: Me; open: boolean; onOpenChange: (o: boolean) => void }) {
+/** "Manages": the people who report to this member. Editable by whoever sets reporting lines
+ * (P113: a branch manager or HOD for their own people), read only otherwise. */
+export function TeamDialog({ member, me, open, onOpenChange, editable }: { member: Member; me: Me; open: boolean; onOpenChange: (o: boolean) => void; editable?: boolean }) {
   const t = useT();
   const qc = useQueryClient();
   // P111: anyone may have people under them on the organization chart.
-  const canEdit = editsOrg(me);
+  const canEdit = editable ?? editsLines(me);
   const team = useQuery({ queryKey: [...keys.members, "team", member.user_id], queryFn: () => api<Member[]>(`/api/members/${member.user_id}/team`), enabled: open });
   const all = useQuery({ ...membersQuery, enabled: open && canEdit });
   const [picked, setPicked] = useState<Set<string> | null>(null);
