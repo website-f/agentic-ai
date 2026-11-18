@@ -1,6 +1,7 @@
 """P113: AI usage per user, the developer's report (api/routers/ai_people_usage.py).
 
-Only the system's developer reads it (owners, admins, management and staff get 403). The
+P115: owners, admins and the system's developer read it (management, branch managers and staff
+get 403). The
 numbers come straight from the model-call ledger (llm_calls), here synthetic rows.
 """
 
@@ -82,22 +83,24 @@ def test_features_and_periods():
     assert (w.start, w.end) == (date(2026, 3, 1), date(2026, 3, 1))
 
 
-async def test_only_the_developer_sees_it(client):
+async def test_owners_admins_and_the_developer_see_it(client):
+    """P115 (Fitri, 18 Nov 2026): owners and admins too; every other role 403."""
     o = await office(client)
     admin = await as_role(client, "ada@example.com", "admin")
     staff = await as_role(client, "sam@example.com", "staff", branch_id=o["branch"]["id"])
     mgmt = await as_role(client, "mia@example.com", "management")
+    hod = await as_role(client, "hana@example.com", "branch_manager", branch_id=o["branch"]["id"])
     urls = (BASE, f"{BASE}/office", f"{BASE}/office/events")
-    for c in (client, admin, staff, mgmt):  # client = a plain owner
+    for c in (staff, mgmt, hod):
         for url in urls:
             assert (await c.get(url)).status_code == 403, url
-    # The developer flag only counts on an owner.
-    await make_dev("ada@example.com")
-    assert (await admin.get(BASE)).status_code == 403
+    for c in (client, admin):  # client = a plain owner (no developer flag)
+        for url in urls:
+            assert (await c.get(url)).status_code == 200, url
     await make_dev()
     for url in urls:
         assert (await client.get(url)).status_code == 200, url
-    for c in (admin, staff, mgmt):
+    for c in (admin, staff, mgmt, hod):
         await c.aclose()
 
 

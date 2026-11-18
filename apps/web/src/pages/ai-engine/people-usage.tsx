@@ -1,5 +1,5 @@
 /**
- * P113: AI usage per user, the developer's report (only the system's developer sees this tab;
+ * P113: AI usage per user, owners, admins and the developer (P115; earlier only the developer;
  * the API refuses everyone else). One row per person for a period, most tokens first; open a
  * row for their full report: by feature, agent, model and day, and every call. P114: each call
  * with what it was about (their message and the reply, or the task's brief and result), their
@@ -400,7 +400,7 @@ export function PeopleUsageTab() {
     <div className="grid min-w-0 gap-6">
       <div className="flex min-w-0 flex-wrap items-end justify-between gap-3">
         <p className="max-w-2xl min-w-0 text-[13.5px] text-muted">
-          {t("Who uses the AI, how much, and what for. Only you (the developer) see this page. Open a person for their full report: every call with what they asked and what came back, their conversations and tasks. Opening a report is recorded in the audit log.")}
+          {t("Who uses the AI, how much, and what for. Only owners, admins and the system's developer see this page. Open a person for their full report: every call with what they asked and what came back, their conversations and tasks. Opening a report is recorded in the audit log.")}
         </p>
         <PeriodPicker value={period} onChange={(v) => { setPeriod(v); control.set({ page: 1 }); }} />
       </div>

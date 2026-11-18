@@ -41,8 +41,7 @@ async def test_a_persons_report_downloads_as_excel(client):
         assert (await staff.get(f"{BASE}/{a}/report.xlsx?period=today")).status_code == 403
     finally:
         await staff.aclose()
-    assert (await client.get(f"{BASE}/{a}/report.xlsx?period=today")).status_code == 403
-    await make_dev()
+    await make_dev()  # (owners and admins may download it too, P115)
     r = await client.get(f"{BASE}/{a}/report.xlsx?period=today")
     assert r.status_code == 200, r.text
     assert "AI-usage-Aina-" in r.headers["content-disposition"]

@@ -51,6 +51,10 @@ MS_NOTIFY: dict[str, str] = {
     ),
     # api/routers/my_notifications.py
     "Send at least one setting.": "Hantar sekurang-kurangnya satu tetapan.",
+    # P115: api/routers/ai_people_usage.py
+    "Only owners, admins and the system's developer see AI usage per user.": (
+        "Hanya pemilik, admin dan pembangun sistem boleh melihat penggunaan AI setiap pengguna."
+    ),
     "Test notification": "Notifikasi ujian",
     "This is how the office tells you when your AI needs you.": (
         "Beginilah pejabat memberitahu anda apabila AI anda memerlukan anda."

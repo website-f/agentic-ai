@@ -2,8 +2,8 @@
  * Engine (pages/ai-engine/people-usage.tsx). Same terms as ai-use.ts: token, elaun, panggilan. */
 export const AI_USAGE_PEOPLE: Record<string, string> = {
   "AI usage per user": "Penggunaan AI ikut pengguna",
-  "Who uses the AI, how much, and what for. Only you (the developer) see this page. Open a person for their full report: every call with what they asked and what came back, their conversations and tasks. Opening a report is recorded in the audit log.":
-    "Siapa guna AI, berapa banyak, dan untuk apa. Hanya anda (pembangun) yang nampak halaman ini. Buka seseorang untuk laporan penuhnya: setiap panggilan dengan apa yang diminta dan jawapannya, perbualan dan tugasan mereka. Setiap laporan yang dibuka direkodkan dalam log audit.",
+  "Who uses the AI, how much, and what for. Only owners, admins and the system's developer see this page. Open a person for their full report: every call with what they asked and what came back, their conversations and tasks. Opening a report is recorded in the audit log.":
+    "Siapa guna AI, berapa banyak, dan untuk apa. Hanya pemilik, admin dan pembangun sistem yang nampak halaman ini. Buka seseorang untuk laporan penuhnya: setiap panggilan dengan apa yang diminta dan jawapannya, perbualan dan tugasan mereka. Setiap laporan yang dibuka direkodkan dalam log audit.",
 
   // The period
   "Last month": "Bulan lepas",

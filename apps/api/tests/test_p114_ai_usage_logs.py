@@ -100,7 +100,7 @@ async def test_the_log_says_what_each_call_was_about(client):
         )
         await db.commit()
 
-    # Only the developer.
+    # Owners, admins and the developer only (P115).
     staff = await as_role(client, "sam@example.com", "staff", branch_id=branch)
     urls = (
         f"{BASE}/{a}/conversations",
@@ -109,7 +109,7 @@ async def test_the_log_says_what_each_call_was_about(client):
         f"{BASE}/{a}/facets",
     )
     for url in urls:
-        assert (await client.get(url)).status_code == 403, url
+        assert (await client.get(url)).status_code == 200, url  # a plain owner
         assert (await staff.get(url)).status_code == 403, url
     await staff.aclose()
     await make_dev()

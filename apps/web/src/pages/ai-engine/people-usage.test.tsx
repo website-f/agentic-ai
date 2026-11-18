@@ -25,6 +25,8 @@ vi.mock("recharts", () => {
 
 const OWNER = { user: { id: "u_me", name: "Owner One", email: "owner@example.com" }, workspace: { id: "w", name: "Acme", slug: "acme", timezone: "Asia/Kuala_Lumpur" }, role: "owner", permissions: ["engine.view"] };
 const DEV = { ...OWNER, user: { ...OWNER.user, is_developer: true } };
+const ADMIN = { ...OWNER, role: "admin" };
+const VIEWER = { ...OWNER, role: "viewer" };
 const SUMS = { calls: 0, errors: 0, prompt: 0, completion: 0, cached: 0, tokens: 0, cost_usd: 0, unpriced: 0 };
 const person = (id: string, name: string, tokens: number, extra: Record<string, unknown> = {}) => ({
   ...SUMS, user_id: id, name, email: `${id}@example.com`, role: "staff", member: true, branch_id: null, branch_name: "Maju", department_name: null,
@@ -109,17 +111,19 @@ function show(Component: () => ReactNode, me: unknown = DEV, at = "/ai-engine") 
 }
 
 describe("AI usage per user", { timeout: 30_000 }, () => {
-  it("is a tab only the developer sees", async () => {
-    show(AIEnginePage, DEV);
-    const tabs = await screen.findByRole("tablist", { name: "AI Engine sections" }, { timeout: 8000 });
-    expect(within(tabs).getByRole("tab", { name: /AI usage per user/ })).toBeInTheDocument();
-    cleanup();
-    show(AIEnginePage, OWNER);
+  it("is a tab for owners, admins and the developer (P115), not other roles", async () => {
+    for (const who of [DEV, OWNER, ADMIN]) {
+      show(AIEnginePage, who);
+      const tabs = await screen.findByRole("tablist", { name: "AI Engine sections" }, { timeout: 8000 });
+      expect(within(tabs).getByRole("tab", { name: /AI usage per user/ })).toBeInTheDocument();
+      cleanup();
+    }
+    show(AIEnginePage, VIEWER);
     const plain = await screen.findByRole("tablist", { name: "AI Engine sections" }, { timeout: 8000 });
     expect(within(plain).queryByRole("tab", { name: /AI usage per user/ })).toBeNull();
-    // A plain owner sent straight to the tab lands on Providers.
+    // Another role sent straight to the tab lands on Providers.
     cleanup();
-    show(AIEnginePage, OWNER, "/ai-engine?tab=people");
+    show(AIEnginePage, VIEWER, "/ai-engine?tab=people");
     const tabs2 = await screen.findByRole("tablist", { name: "AI Engine sections" }, { timeout: 8000 });
     expect(within(tabs2).getByRole("tab", { name: /Providers/ })).toHaveAttribute("aria-selected", "true");
     expect(gets).toEqual([]);

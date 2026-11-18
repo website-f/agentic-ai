@@ -6,8 +6,8 @@ acting.py), what it was for (`task`, e.g. "agent.chat", "document.write"), the a
 when there was one, the provider, model and group, the tokens and the cost in USD (worked out
 when the call was made from the model's prices in AI Engine > Models; None = unpriced).
 
-Only the system's developer sees it (deps.require_developer, 403 for everyone else, owners and
-admins included). P114 (Fitri, 18 Nov 2026): the developer also sees what each call was about:
+P115 (Fitri, 18 Nov 2026): owners, admins and the system's developer see it (require_usage_reader,
+403 for every other role). P114: they also see what each call was about:
 the person's chat message and the AI's reply (matched by person, agent and time, since a chat
 call does not record its conversation), a task's brief and result, their conversations and the
 tasks their use paid for. Opening a person's report, a call or a conversation is audited
@@ -55,12 +55,27 @@ from ...models import (
 from ...services import audit
 from ...teams import allowance
 from ...teams.budget import periods
-from ..deps import Principal, api_error, require_developer
+from ..deps import Principal, api_error, current_principal, is_developer
 from ..paging import TOTAL
 from ..table import TableParams, like, matches, page_of
 from .allowances import _grants
 
 router = APIRouter(prefix="/api/ai/people-usage", tags=["ai-engine"])
+
+# P115 (Fitri, 18 Nov 2026): "the AI usage report open for owner and admins as well".
+READERS = ("owner", "admin")
+
+
+async def require_usage_reader(principal: Principal = Depends(current_principal)) -> Principal:
+    """Owners, admins and the system's developer; everyone else 403."""
+    if principal.role not in READERS and not is_developer(principal.user, principal.role):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Only owners, admins and the system's developer see AI usage per user.",
+        )
+    return principal
+
 
 OFFICE = "office"  # the {user_id} for work nobody asked for (llm_calls.user_id IS NULL)
 MAX_DAYS = 366
@@ -337,7 +352,7 @@ async def people_usage(
     role: str | None = Query(default=None, max_length=16),
     branch: str | None = Query(default=None, max_length=40),
     department: str | None = Query(default=None, max_length=40),
-    principal: Principal = Depends(require_developer),
+    principal: Principal = Depends(require_usage_reader),
     db: AsyncSession = Depends(get_db),
 ) -> PeopleOut:
     """One row per person, most tokens first. Members with no use in the period are listed
@@ -536,7 +551,7 @@ def _who(user_id: str) -> ColumnElement[bool]:
 async def person_usage(
     user_id: str,
     period: PeriodParams = Depends(),
-    principal: Principal = Depends(require_developer),
+    principal: Principal = Depends(require_usage_reader),
     db: AsyncSession = Depends(get_db),
 ) -> ReportOut:
     """Everything one person's AI did in the period: by feature, purpose, agent, model, day."""
@@ -920,7 +935,7 @@ async def person_events(
     feature: str | None = Query(default=None, max_length=24),
     agent: str | None = Query(default=None, max_length=40),
     model: str | None = Query(default=None, max_length=200),
-    principal: Principal = Depends(require_developer),
+    principal: Principal = Depends(require_usage_reader),
     db: AsyncSession = Depends(get_db),
 ) -> list[EventOut]:
     """One page of the person's model calls, newest first: when, what for, which agent and
@@ -985,7 +1000,7 @@ class FacetsOut(BaseModel):
 async def person_facets(
     user_id: str,
     period: PeriodParams = Depends(),
-    principal: Principal = Depends(require_developer),
+    principal: Principal = Depends(require_usage_reader),
     db: AsyncSession = Depends(get_db),
 ) -> FacetsOut:
     """P114: the agents and models in the person's calls for the period (the log's filters)."""
@@ -1033,7 +1048,7 @@ class EventDetailOut(EventOut):
 async def person_event(
     user_id: str,
     call_id: int,
-    principal: Principal = Depends(require_developer),
+    principal: Principal = Depends(require_usage_reader),
     db: AsyncSession = Depends(get_db),
 ) -> EventDetailOut:
     """P114: one call in full: what they asked and what came back (up to 20,000 characters
@@ -1088,7 +1103,7 @@ async def person_conversations(
     params: TableParams = Depends(),
     period: PeriodParams = Depends(),
     agent: str | None = Query(default=None, max_length=40),
-    principal: Principal = Depends(require_developer),
+    principal: Principal = Depends(require_usage_reader),
     db: AsyncSession = Depends(get_db),
 ) -> list[ConversationOut]:
     """P114: the person's conversations with agents that had messages in the period, last
@@ -1255,7 +1270,7 @@ MAX_LINES = 500
 async def person_conversation(
     user_id: str,
     session_id: str,
-    principal: Principal = Depends(require_developer),
+    principal: Principal = Depends(require_usage_reader),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationDetailOut:
     """P114: one conversation: what the person and the AI wrote (text only, never tool calls or
@@ -1324,7 +1339,7 @@ async def person_tasks(
     response: Response,
     params: TableParams = Depends(),
     period: PeriodParams = Depends(),
-    principal: Principal = Depends(require_developer),
+    principal: Principal = Depends(require_usage_reader),
     db: AsyncSession = Depends(get_db),
 ) -> list[PaidTaskOut]:
     """P114: the tasks the person's AI use paid for in the period, most tokens first, with what
@@ -1414,7 +1429,7 @@ def _xlsx_name(text: str) -> str:
 async def person_report_file(
     user_id: str,
     period: PeriodParams = Depends(),
-    principal: Principal = Depends(require_developer),
+    principal: Principal = Depends(require_usage_reader),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """P114 (Fitri, 18 Nov 2026): one person's whole report for the period as an Excel file:

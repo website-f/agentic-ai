@@ -17,7 +17,7 @@ import { SettingsTab } from "./settings";
 
 // Charts (Recharts) load only when the Usage tab is opened.
 const UsageTab = lazy(() => import("./usage").then((m) => ({ default: m.UsageTab })));
-// P113: the developer's AI usage per user (the API refuses everyone else).
+// P113: AI usage per user (P115: owners, admins and the developer; the API refuses everyone else).
 const PeopleUsageTab = lazy(() => import("./people-usage").then((m) => ({ default: m.PeopleUsageTab })));
 
 export const AI_TABS = ["providers", "groups", "privacy", "usage", "people", "playground", "settings"] as const;
@@ -38,9 +38,9 @@ export function AIEnginePage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canManage = me.permissions.includes("engine.manage");
   const search = useSearch({ strict: false }) as { tab?: AITab };
-  // P113: only the system's developer (an owner the operator marked) has AI usage per user.
-  const developer = Boolean(me.user.is_developer) && me.role === "owner";
-  const tabs = AI_TABS.filter((k) => k !== "people" || developer);
+  // P115 (Fitri, 18 Nov 2026): owners, admins and the system's developer have AI usage per user.
+  const usageReader = me.role === "owner" || me.role === "admin"; // the developer is always an owner
+  const tabs = AI_TABS.filter((k) => k !== "people" || usageReader);
   const tab: AITab = search.tab && tabs.includes(search.tab) ? search.tab : "providers";
   const navigate = useNavigate();
   const { data: providers } = useQuery(providersQuery);
