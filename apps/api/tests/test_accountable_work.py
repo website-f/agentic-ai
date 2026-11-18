@@ -52,11 +52,11 @@ def notices(monkeypatch):
     """Record the owner notices (phone push / Telegram / WhatsApp) instead of queueing."""
     sent: list[dict] = []
 
-    async def notify_user(db, ws, user_id, title, body, url, *, dedupe):
+    async def notify_user(db, ws, user_id, title, body, url, *, dedupe, **_kw):
         sent.append({"user": user_id, "title": title, "body": body, "url": url})
         return []
 
-    async def notify_people(db, ws, title, body, url, *, dedupe, perm="approvals.decide"):
+    async def notify_people(db, ws, title, body, url, *, dedupe, perm="approvals.decide", **_kw):
         sent.append({"user": None, "title": title, "body": body, "url": url})
         return []
 

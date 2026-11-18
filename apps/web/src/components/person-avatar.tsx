@@ -36,3 +36,12 @@ export function AssigneeFace({ task, size = "xs" }: { task: Task; size?: "xs" | 
 }
 
 export const assigneeName = (task: Task) => task.assignee_user_name ?? task.assignee_name ?? null;
+
+/** P114: an agent task's people, by name: who started the request (their daily AI allowance
+ * pays) and whose AI it is when that is someone else. Nothing for a task given to a person. */
+export function taskWhose(task: Task): { startedBy: string | null; aiOf: string | null } {
+  if (task.assignee_user_id || !task.assignee_agent_id) return { startedBy: null, aiOf: null };
+  const startedBy = task.for_user_name ?? null;
+  const other = task.assignee_owner_id && task.assignee_owner_id !== task.for_user_id;
+  return { startedBy, aiOf: other ? task.assignee_owner_name ?? null : null };
+}

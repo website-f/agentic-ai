@@ -29,6 +29,9 @@ export interface PersonAllowance extends Allowance {
   /** Percent of the limit used; null = no limit. */
   pct?: number | null;
   status?: AllowanceStatus;
+  /** P114: of `extra`, what was given for every day of this week; tasks paused at the limit. */
+  extra_week?: number;
+  paused?: number;
 }
 
 export type AllowanceStatus = "ok" | "near" | "over" | "unlimited";
@@ -40,6 +43,8 @@ export interface AllowanceSummary {
   near: number;
   used: number;
   cost_usd: number;
+  /** P114: tasks waiting for more allowance. */
+  paused?: number;
 }
 
 /** GET /api/allowances: with ?page= one page of people; total is the matching count. */
@@ -72,9 +77,39 @@ export interface Refusal {
   why: string;
 }
 
+/** P114: a task paused because the person it is for used up today's allowance. */
+export interface PausedTask {
+  approval_id: string;
+  task_id: string;
+  title: string;
+  user_id: string;
+  /** Whose allowance it is: the person who started the work. */
+  name: string;
+  agent_id: string | null;
+  /** Their AI, by whatever name they gave it, and whose AI it is. */
+  agent_name: string | null;
+  agent_owner_name: string | null;
+  used: number;
+  limit: number;
+  paused_at: string;
+  /** 1 = paused first (more allowance starts them in this order). */
+  order: number;
+}
+
+export type GiveSpan = "today" | "week";
+
+export interface GiveResult {
+  person: PersonAllowance;
+  given: number;
+  span: GiveSpan;
+  ends_at: string;
+  resumed: number;
+}
+
 export const allowanceKeys = {
   mine: ["allowance", "me"] as const,
   all: ["allowance", "all"] as const,
+  paused: ["allowance", "paused"] as const,
   scope: ["work-scope"] as const,
   refusals: ["work-scope", "refusals"] as const,
 };
@@ -90,6 +125,16 @@ export const allowancesQuery = queryOptions({
   queryFn: () => api<AllowancesBody>("/api/allowances"),
   refetchInterval: 60_000,
 });
+
+/** P114: people managers only (the API refuses others). */
+export const pausedQuery = queryOptions({
+  queryKey: allowanceKeys.paused,
+  queryFn: () => api<PausedTask[]>("/api/allowances/paused"),
+  refetchInterval: 60_000,
+});
+
+export const giveAllowance = (userId: string, tokens: number, span: GiveSpan) =>
+  api<GiveResult>(`/api/allowances/${userId}/give`, "POST", { tokens, span });
 
 export const workScopeQuery = queryOptions({
   queryKey: allowanceKeys.scope,

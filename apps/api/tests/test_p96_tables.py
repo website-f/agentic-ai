@@ -66,8 +66,14 @@ async def test_ai_use_is_a_searchable_sortable_paged_table(client):
     bid = o["branch"]["id"]
     ids = await _people(30, bid)
     await _people(5, None, role="viewer", start=100)
-    # Staff get the default 50,000 a day: one over, one near, one a little, and one learning
-    # call that never counts.
+    # Staff get 50,000 a day (P114: the default is now 300,000; this table test keeps 50,000):
+    # one over, one near, one a little, and one learning call that never counts.
+    r = await client.put(
+        "/api/allowances/policy",
+        json={"daily_tokens": 50_000, "roles": ["staff"]},
+        headers=csrf(client),
+    )
+    assert r.status_code == 200, r.text
     await _used(ids[0], 60_000, cost=0.5)
     await _used(ids[1], 45_000, cost=0.25)
     await _used(ids[2], 1_000)
@@ -83,6 +89,7 @@ async def test_ai_use_is_a_searchable_sortable_paged_table(client):
         "near": 1,
         "used": 106_000,
         "cost_usd": 0.75,
+        "paused": 0,
     }
 
     first, total = await _table(client)

@@ -22,7 +22,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowClockwiseIcon, ArrowLeftIcon, ArrowRightIcon, CalendarBlankIcon, CalendarDotsIcon, CaretRightIcon, ChartBarHorizontalIcon, EyeIcon, KanbanIcon, ListBulletsIcon, PaperclipIcon, PlusIcon, PushPinIcon, SealCheckIcon, TreeStructureIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, ArrowLeftIcon, ArrowRightIcon, CalendarBlankIcon, CalendarDotsIcon, CaretRightIcon, ChartBarHorizontalIcon, EyeIcon, KanbanIcon, ListBulletsIcon, PaperclipIcon, PlusIcon, PushPinIcon, SealCheckIcon, TreeStructureIcon, UserCircleIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery, type QueryKey } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
@@ -30,7 +30,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "rea
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
-import { AssigneeFace, assigneeName } from "@/components/person-avatar";
+import { AssigneeFace, assigneeName, taskWhose } from "@/components/person-avatar";
 import { openTaskComposer } from "@/components/task-composer/store";
 import { LoadMore } from "@/components/load-more";
 import { ObjectiveChip } from "@/components/objective-bits";
@@ -46,6 +46,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
+import { pausedQuery } from "@/lib/allowance";
 import { pinsQuery } from "@/lib/desk";
 import { canMoveTask, isPersonTask, MANAGER_ROLES, movesFor, teamPeopleQuery } from "@/lib/people";
 import { editPaged, useDebounced, usePagedList, type PagedList } from "@/lib/paged";
@@ -168,6 +169,7 @@ function CardContent({ task, company }: { task: Task; company?: Branch }) {
   const { data: pins = [] } = useQuery(pinsQuery);
   const pinned = pins.some((p) => p.kind === "task" && p.ref === task.id);
   const shared = task.visibility && task.visibility !== "private" ? VISIBILITY.find((v) => v.value === task.visibility) : undefined;
+  const whose = taskWhose(task);
   return (
     <>
       <p className="line-clamp-3 text-[13.5px] leading-snug font-medium break-words">
@@ -203,6 +205,13 @@ function CardContent({ task, company }: { task: Task; company?: Branch }) {
           ) : null}
         </span>
       ) : null}
+      {/* P114: whose request it is, whatever they named their AI (their allowance pays). */}
+      {whose.startedBy ? (
+        <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
+          <UserCircleIcon size={13} className="shrink-0" />
+          <span className="truncate">{t("Started by {name}", { name: whose.startedBy })}</span>
+        </span>
+      ) : null}
       <div className="flex min-w-0 items-center gap-2 border-t border-border/70 pt-2">
         {(task.assignees?.length ?? 0) > 1 ? (
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
@@ -213,6 +222,7 @@ function CardContent({ task, company }: { task: Task; company?: Branch }) {
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
             <AssigneeFace task={task} />
             <span className="truncate">{assigneeName(task)}</span>
+            {whose.aiOf ? <span className="min-w-0 truncate">· {t("{name}'s AI", { name: whose.aiOf })}</span> : null}
             {isPersonTask(task) && task.status === "triage" ? <span className="shrink-0 rounded-full bg-info/12 px-1.5 text-[10.5px] font-medium text-info">{t("Not taken yet")}</span> : null}
           </span>
         ) : <span className="truncate text-[12px] text-muted italic">{t("Unassigned")}</span>}
@@ -470,6 +480,27 @@ interface Move {
   beforeId?: string;
   afterId?: string;
   prev?: [QueryKey, unknown][];
+}
+
+/** P114 (Fitri, 18 Nov 2026): "N tasks paused: the AI allowance is used up", with who, and the way
+ * to give more (AI use and limits). Only for people who may give more; nothing when none wait. */
+function PausedBanner() {
+  const t = useT();
+  const navigate = useNavigate();
+  const { data = [] } = useQuery(pausedQuery);
+  if (!data.length) return null;
+  const names = [...new Set(data.map((p) => p.name))];
+  const shown = names.slice(0, 3).join(", ");
+  return (
+    <div role="status" className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--radius-sm)] border border-warn/30 bg-warn/8 px-3 py-2.5 text-[13px]">
+      <WarningIcon size={16} weight="bold" className="shrink-0 text-warn" />
+      <span className="min-w-0 flex-1 break-words">
+        <span className="font-medium">{t("{n} tasks paused: the AI allowance is used up.", { n: data.length })}</span>{" "}
+        <span className="text-muted">{names.length > 3 ? t("Started by {names} and {n} more.", { names: shown, n: names.length - 3 }) : t("Started by {names}.", { names: shown })}</span>
+      </span>
+      <Button size="sm" variant="secondary" onClick={() => void navigate({ to: "/settings/ai-use" })}>{t("See who and give more")}</Button>
+    </div>
+  );
 }
 
 export function TasksPage() {
@@ -820,6 +851,8 @@ export function TasksPage() {
         // Phones: a round "+" beside the search instead of a full-width button, so the board gets the screen.
         actions={canWrite && !(phone && (showBoard || view !== "board")) ? <Button data-guide="tasks.new" onClick={() => openTaskComposer()}><PlusIcon size={16} weight="bold" /> {t("New task")}</Button> : null}
       />
+      {/* P114: tasks paused at a person's daily AI allowance, for whoever may give more. */}
+      {me.permissions.includes("members.manage") || me.permissions.includes("team.manage") ? <PausedBanner /> : null}
       {isLoading ? (
         <BoardSkeleton />
       ) : error ? (

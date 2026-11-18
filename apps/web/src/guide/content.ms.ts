@@ -1432,6 +1432,39 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
     related: ["ai-engine", "approvals", "agents"],
   },
 
+  notifications: {
+    purpose: "Cara pejabat memberitahu anda, dan tentang apa: e-mel, aplikasi ini di telefon atau komputer, Telegram dan WhatsApp.",
+    can: [
+      "Hidupkan atau matikan setiap cara: e-mel, peranti anda, Telegram, WhatsApp.",
+      "Pilih apa yang dimaklumkan: AI anda memerlukan anda, elaun AI anda, tugasan selesai, keputusan yang menunggu anda, lain-lain.",
+      "Hantar ujian kepada diri sendiri.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Dapatkan e-mel apabila AI anda memerlukan anda",
+        steps: [
+          s("Buka **Tetapan > Notifikasi saya**."),
+          s("Hidupkan **E-mel saya**. Soalan, keputusan, elaun dan tugasan selesai AI anda dihantar melalui e-mel."),
+          s("Klik **Hantar ujian kepada saya**."),
+        ],
+      },
+      {
+        title: "Dapatkan makluman di WhatsApp atau Telegram",
+        steps: [
+          s("Klik **Buka Saluran** di bawah WhatsApp atau Telegram dan pautkan nombor anda dengan kod."),
+          s("Kembali ke **Notifikasi saya**, biarkan **Beritahu saya di WhatsApp** atau **Beritahu saya di Telegram** hidup."),
+        ],
+      },
+    ],
+    tips: [
+      "Notis kecil (tugasan diberi kepada anda, sebutan) dihantar melalui e-mel hanya jika anda hidupkan **E-mel juga semua yang lain**.",
+      "Loceng di atas sentiasa menyenaraikan apa yang menunggu anda, walaupun anda matikan di sini.",
+    ],
+    who: "Semua orang, daripada staf hingga pemilik, menetapkan sendiri.",
+    related: ["channels", "approvals", "ai-use"],
+  },
+
   channels: {
     purpose: "Cara pejabat menghubungi anda: pemberitahuan telefon, Telegram, WhatsApp, Gmail dan token API, serta ejen mana menjawab di mana.",
     can: [
@@ -1914,7 +1947,9 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
     purpose: "Elaun AI harian setiap orang, apa yang staf boleh guna AI mereka untuk, dan apa yang ditolak.",
     can: [
       "Lihat siapa guna berapa banyak hari ini, dan siapa yang hampir atau sudah mencecah had.",
-      "Beri seseorang lebih dengan **Tukar**.",
+      "Beri seseorang jumlah sendiri dengan **Tukar**.",
+      "Beri lebih untuk hari ini sahaja atau minggu ini dengan **Beri lebih**: tugasan mereka yang dijeda bersambung semula, yang dijeda dahulu bersambung dahulu.",
+      "Lihat setiap tugasan yang dijeda kerana had, siapa yang memulakannya dan AI mana, di bawah **Dijeda: elaun AI sudah habis**.",
       "Tetapkan jumlah untuk semua orang di bawah **Elaun AI harian**.",
       "Pastikan AI staf untuk kerja dengan **Semak permintaan berkaitan kerja**, dan baca **Permintaan yang ditolak**.",
     ],

@@ -1,8 +1,10 @@
-import { BrainIcon, CoinsIcon, GaugeIcon, PencilSimpleIcon, ProhibitIcon, ShieldCheckIcon, UsersIcon } from "@phosphor-icons/react";
+import { BrainIcon, CoinsIcon, GaugeIcon, HandCoinsIcon, PauseCircleIcon, PencilSimpleIcon, ProhibitIcon, ShieldCheckIcon, UsersIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { GiveAllowanceSheet, type GiveTarget } from "@/components/allowance-give";
 import { procedureSummaryQuery, useReplaySwitch, type AgentSavings } from "@/components/learned-procedures";
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -19,12 +21,14 @@ import { SwitchField } from "@/components/ui/switch";
 import { msg, useT } from "@/i18n";
 import {
   allowanceKeys,
+  pausedQuery,
   refusalsQuery,
   tokens,
   workScopeQuery,
   type AllowancePolicy,
   type AllowancesBody,
   type AllowanceStatus,
+  type PausedTask,
   type PersonAllowance,
   type Refusal,
   type WorkScope,
@@ -38,7 +42,7 @@ import { cn, initials, timeAgo } from "@/lib/utils";
 const LIMITABLE: Role[] = ["staff", "supervisor", "hod", "branch_manager", "operator", "approver", "viewer", "admin", "management", "hr"];
 const ALL_ROLES: Role[] = ["owner", ...LIMITABLE];
 const WHERE: Record<string, string> = { chat: msg("Chat"), task: msg("Task") };
-const PRESETS = [20_000, 50_000, 100_000, 250_000];
+const PRESETS = [50_000, 100_000, 300_000, 500_000];
 const STATUS: Record<AllowanceStatus, { label: string; tone: "ok" | "warn" | "danger" | "neutral" }> = {
   ok: { label: msg("Within limit"), tone: "ok" },
   near: { label: msg("Near the limit"), tone: "warn" },
@@ -46,6 +50,7 @@ const STATUS: Record<AllowanceStatus, { label: string; tone: "ok" | "warn" | "da
   unlimited: { label: msg("No limit"), tone: "neutral" },
 };
 const ALL = "all";
+const PAUSED = "paused"; // P114: the status filter for people with tasks paused at the limit
 
 /** How much of the limit is used: a bar and a percent, or "No limit". */
 function Meter({ p }: { p: PersonAllowance }) {
@@ -157,7 +162,7 @@ function LimitSheet({ p, policy, meId, canOwnerRows, onClose }: {
   const t = useT();
   const qc = useQueryClient();
   const [choice, setChoice] = useState(p.own === null ? OWN_DEFAULT : p.own === 0 ? OWN_NONE : OWN_CUSTOM);
-  const [value, setValue] = useState(String(p.own && p.own > 0 ? p.own : 50_000));
+  const [value, setValue] = useState(String(p.own && p.own > 0 ? p.own : 300_000));
   const locked = lockedFor(p, meId, canOwnerRows);
   const save = useMutation({
     mutationFn: (daily: number | null) => api<PersonAllowance>(`/api/allowances/${p.user_id}`, "PUT", { daily_tokens: daily }),
@@ -261,6 +266,7 @@ function PeopleTable({ canSet, canOwnerRows, meId }: { canSet: boolean; canOwner
   const [branch, setBranch] = filterOf(control, "branch");
   const [status, setStatus] = filterOf(control, "status");
   const [open, setOpen] = useState<PersonAllowance | null>(null);
+  const [giving, setGiving] = useState<GiveTarget | null>(null);
   const body = table.body;
   const summary = body?.summary;
 
@@ -292,7 +298,16 @@ function PeopleTable({ canSet, canOwnerRows, meId }: { canSet: boolean; canOwner
       ),
     },
     { id: "pct", header: t("Used %"), sortable: true, kind: "number", cell: (p) => <Meter p={p} /> },
-    { id: "status", header: t("Status"), cell: (p) => <Pill tone={STATUS[p.status ?? "ok"].tone}>{t(STATUS[p.status ?? "ok"].label)}</Pill> },
+    {
+      id: "status", header: t("Status"),
+      cell: (p) => (
+        <span className="flex flex-wrap gap-1">
+          <Pill tone={STATUS[p.status ?? "ok"].tone}>{t(STATUS[p.status ?? "ok"].label)}</Pill>
+          {p.paused ? <Pill tone="warn"><PauseCircleIcon size={11} weight="fill" /> {t("{n} paused", { n: p.paused })}</Pill> : null}
+          {p.extra_week ? <Pill tone="info">{t("+{n} a day this week", { n: tokens(p.extra_week) })}</Pill> : null}
+        </span>
+      ),
+    },
   ];
 
   return (
@@ -303,7 +318,7 @@ function PeopleTable({ canSet, canOwnerRows, meId }: { canSet: boolean; canOwner
         <Stat label={t("Used today")} value={tokens(summary.used)} icon={CoinsIcon} tone="accent"
           hint={summary.cost_usd ? t("Tokens, by everyone you manage · {cost}", { cost: usd(summary.cost_usd) }) : t("Tokens, by everyone you manage")} />
         <Stat label={t("People at their limit")} value={summary.over} icon={ProhibitIcon} tone={summary.over ? "warn" : "ok"}
-          hint={summary.over ? t("Their AI waits for a manager") : t("Nobody")}
+          hint={summary.paused ? t("{n} tasks paused, waiting for more", { n: summary.paused }) : summary.over ? t("Their AI waits for a manager") : t("Nobody")}
           onClick={() => setStatus(status === "over" ? "" : "over")} active={status === "over"} />
         <Stat label={t("Near their limit")} value={summary.near} icon={GaugeIcon} tone={summary.near ? "warn" : "neutral"}
           hint={t("80% or more used today")} onClick={() => setStatus(status === "near" ? "" : "near")} active={status === "near"} />
@@ -330,9 +345,16 @@ function PeopleTable({ canSet, canOwnerRows, meId }: { canSet: boolean; canOwner
             searchPlaceholder={t("Search by name or email")}
             onOpen={setOpen}
             actions={(p) => (
-              <Button size="sm" variant="ghost" onClick={() => setOpen(p)} aria-label={t("Change the allowance for {name}", { name: p.name })}>
-                <PencilSimpleIcon size={15} /> <span className="max-sm:sr-only">{t("Change")}</span>
-              </Button>
+              <span className="flex flex-wrap justify-end gap-1">
+                {p.limit !== null && p.user_id !== meId ? (
+                  <Button size="sm" variant={p.status === "over" ? "secondary" : "ghost"} onClick={() => setGiving(p)} aria-label={t("Give {name} more AI", { name: p.name })}>
+                    <HandCoinsIcon size={15} /> <span className="max-sm:sr-only">{t("Give more")}</span>
+                  </Button>
+                ) : null}
+                <Button size="sm" variant="ghost" onClick={() => setOpen(p)} aria-label={t("Change the allowance for {name}", { name: p.name })}>
+                  <PencilSimpleIcon size={15} /> <span className="max-sm:sr-only">{t("Change")}</span>
+                </Button>
+              </span>
             )}
             filters={
               <>
@@ -343,7 +365,7 @@ function PeopleTable({ canSet, canOwnerRows, meId }: { canSet: boolean; canOwner
                     before={[{ value: ALL, label: t("All companies") }, { value: "none", label: t("No company") }]} companies={branches} />
                 ) : null}
                 <Select className="w-full sm:w-40" label={t("Status")} value={status || ALL} onValueChange={(v) => setStatus(v === ALL ? "" : v)}
-                  options={[{ value: ALL, label: t("All statuses") }, ...(Object.keys(STATUS) as AllowanceStatus[]).map((s) => ({ value: s, label: t(STATUS[s].label) }))]} />
+                  options={[{ value: ALL, label: t("All statuses") }, ...(Object.keys(STATUS) as AllowanceStatus[]).map((s) => ({ value: s, label: t(STATUS[s].label) })), { value: PAUSED, label: t("Has paused tasks") }]} />
               </>
             }
             empty={<EmptyState icon={UsersIcon} title={t("Nobody yet")} body={t("Add people in Members and roles.")} />}
@@ -352,10 +374,73 @@ function PeopleTable({ canSet, canOwnerRows, meId }: { canSet: boolean; canOwner
       </Card>
       {/* The default for everyone sits under the people: the table is what managers use most. */}
       {body ? <PolicyCard key={JSON.stringify(body.policy)} policy={body.policy} canSet={canSet} /> : null}
+      {giving ? <GiveAllowanceSheet key={giving.user_id} person={giving} onClose={() => setGiving(null)} /> : null}
       {open ? (
         <LimitSheet key={`${open.user_id}:${open.own}`} p={open} policy={body?.policy} meId={meId} canOwnerRows={canOwnerRows} onClose={() => setOpen(null)} />
       ) : null}
     </>
+  );
+}
+
+/** P114 (Fitri, 18 Nov 2026): every task paused because the person it is for used up today's
+ * allowance, first paused first: whose it is (whatever they named their AI) and a way to give more. */
+function PausedTasks({ meId }: { meId: string }) {
+  const t = useT();
+  const navigate = useNavigate();
+  const { data = [], isLoading, error, refetch } = useQuery(pausedQuery);
+  const [giving, setGiving] = useState<GiveTarget | null>(null);
+  const control = useLocalTableState({ size: 10, sort: "order", dir: "asc" });
+  if (!isLoading && !error && !data.length) return null;
+  const people = new Set(data.map((p) => p.user_id)).size;
+  const columns: Column<PausedTask>[] = [
+    { id: "order", header: "#", kind: "number", sortValue: (r) => r.order, cell: (r) => <span className="text-muted tabular">{r.order}</span> },
+    {
+      id: "title", header: t("Task"), card: "title", sortValue: (r) => r.title,
+      cell: (r) => (
+        <button type="button" className="text-left font-medium break-words hover:underline" onClick={() => void navigate({ to: "/tasks", search: { task: r.task_id } as never })}>
+          {r.title}
+        </button>
+      ),
+    },
+    {
+      id: "name", header: t("Started by"), sortValue: (r) => r.name,
+      cell: (r) => (
+        <span className="grid min-w-0">
+          <span className="font-medium break-words">{r.name}</span>
+          <span className="text-[12px] text-muted tabular">{t("Used {used} of {limit}", { used: tokens(r.used), limit: tokens(r.limit) })}</span>
+        </span>
+      ),
+    },
+    {
+      id: "agent", header: t("Their AI"), sortValue: (r) => r.agent_name ?? "", hideBelow: "lg",
+      cell: (r) => (
+        <span className="grid min-w-0">
+          <span className="break-words">{r.agent_name ?? "–"}</span>
+          {r.agent_owner_name && r.agent_owner_name !== r.name ? <span className="text-[12px] text-muted">{t("{name}'s AI", { name: r.agent_owner_name })}</span> : null}
+        </span>
+      ),
+    },
+    { id: "at", header: t("Paused"), kind: "date", sortValue: (r) => r.paused_at, cell: (r) => <span className="whitespace-nowrap text-muted">{timeAgo(r.paused_at)}</span> },
+  ];
+  const give = (r: PausedTask) =>
+    setGiving({ user_id: r.user_id, name: r.name, used: r.used, limit: r.limit, paused: data.filter((x) => x.user_id === r.user_id).length });
+  return (
+    <Card>
+      <CardHeader title={t("Paused: AI allowance used up")} icon={<IconTile icon={PauseCircleIcon} size="sm" tone="warn" />}
+        description={t("{n} tasks from {p} people wait for more allowance, the first paused at the top. Give more for today or for this week and they start again in this order.", { n: data.length, p: people })} />
+      <CardBody>
+        <DataTable label={t("Tasks paused for the AI allowance")} columns={columns} rows={data} rowId={(r) => r.approval_id} rowLabel={(r) => r.title}
+          control={control} loading={isLoading} error={error} onRetry={() => void refetch()}
+          searchText={(r) => `${r.title} ${r.name} ${r.agent_name ?? ""}`} searchPlaceholder={t("Search by task, person or AI")}
+          actions={(r) => r.user_id === meId ? null : (
+            <Button size="sm" variant="secondary" onClick={() => give(r)} aria-label={t("Give {name} more AI", { name: r.name })}>
+              <HandCoinsIcon size={15} /> <span className="max-sm:sr-only">{t("Give more")}</span>
+            </Button>
+          )}
+          empty={<p className="py-3 text-[13px] text-muted">{t("Nothing is paused.")}</p>} />
+      </CardBody>
+      {giving ? <GiveAllowanceSheet key={giving.user_id} person={giving} onClose={() => setGiving(null)} /> : null}
+    </Card>
   );
 }
 
@@ -478,6 +563,7 @@ export function AiUsePage() {
       <PageHeader title={t("AI use and limits")}
         description={t("Keep AI use fair and on the job: a daily allowance for each person, a check that staff use their AI for work, and who used what today.")} />
       {/* The stat tiles, the policy and the people table share one call (PeopleTable). */}
+      <PausedTasks meId={me.user.id} />
       <PeopleTable canSet={canSet} canOwnerRows={canOwnerRows} meId={me.user.id} />
       <LearnedSavings />
       {scope.data ? <ScopeCard key={JSON.stringify(scope.data)} scope={scope.data} canSet={canSet} /> : <Skeleton className="h-40" />}

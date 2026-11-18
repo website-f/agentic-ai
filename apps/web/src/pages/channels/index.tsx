@@ -90,7 +90,7 @@ function fill(text: string, parts: Record<string, ReactNode>): ReactNode[] {
 
 // ---------------------------------------------------------------- this device
 
-function ThisDevice() {
+export function ThisDevice() {
   const t = useT();
   const qc = useQueryClient();
   const [state, setState] = useState<PushState | null>(null);

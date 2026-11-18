@@ -1758,6 +1758,8 @@ async def _finish(task_id: str, state: str, message: str | None) -> dict[str, An
                 finished_at=_now(),
                 blocked_reason=None,
             )
+            if not reviewing:
+                await _tell_person_done(db, task, agent, status)
         elif state == "cancelled":
             for a in (
                 await db.scalars(
@@ -1804,6 +1806,42 @@ async def _finish(task_id: str, state: str, message: str | None) -> dict[str, An
             log.warning("follow-ups after %s failed", task.id, exc_info=True)
 
 
+async def _tell_person_done(db: AsyncSession, task: Task, agent: Agent, status: str) -> None:
+    """P114: the person whose request a top-level agent task is hears it is finished (or waits
+    for their check), on the channels they keep on for "done"."""
+    if task.depth > 0:
+        return
+    from ..channels import deliver  # late: channels import this module
+    from ..i18n import Msg
+
+    try:
+        person = await allowance.person_of_task(db, task)
+        if not person:
+            return
+        if status == "review":
+            title = Msg("Ready for your check: {title}", title=task.title[:100])
+            body = Msg(
+                "{agent} finished it. Open it to accept it or send it back.", agent=agent.name
+            )
+        else:
+            title = Msg("Task done: {title}", title=task.title[:100])
+            body = Msg("{agent} finished it. Open it to see the result.", agent=agent.name)
+        await deliver.start(
+            await deliver.notify_user(
+                db,
+                task.workspace_id,
+                person,
+                title,
+                body,
+                f"/tasks?task={task.id}",
+                dedupe=f"done:{task.id}:{task.run_count}",
+                event="done",
+            )
+        )
+    except Exception:  # noqa: BLE001 - a notice must never change how the task ended
+        log.warning("could not tell the person that %s finished", task.id, exc_info=True)
+
+
 async def _tell_owner_it_failed(
     db: AsyncSession, task: Task, agent: Agent, message: str | None
 ) -> None:
@@ -1829,6 +1867,7 @@ async def _tell_owner_it_failed(
                 ),
                 f"/tasks?task={task.id}",
                 dedupe=f"failed:{task.id}:{task.run_count}",
+                event="my_ai",
             )
         )
     except Exception:  # noqa: BLE001 - a notice must never change how the task ended
@@ -1863,13 +1902,21 @@ async def _apply_decision(db: AsyncSession, a: Approval) -> None:
         # No tool message: the next step re-checks the budget (and fails if denied).
         if a.status == "approved" and (a.tool_call_id or "").startswith("allowance:"):
             person = str((a.args or {}).get("user_id") or "")
-            extra = await allowance.grant(db, ws, person) if person else 0
+            # P114: a manager already gave an amount from AI use and limits ("given" = it).
+            given = (a.args or {}).get("given")
+            if isinstance(given, dict):
+                extra = int(given.get("tokens") or 0)
+                span = "this week" if given.get("span") == "week" else "today"
+                text = f"gave {extra:,} more AI tokens a day for {span}"
+            else:
+                extra = await allowance.grant(db, ws, person) if person else 0
+                text = f"gave {extra:,} more AI tokens for today"
             await task_event(
                 db,
                 task,
                 "budget",
                 a.decided_by or "system",
-                f"gave {extra:,} more AI tokens for today",
+                text,
                 {"user_id": person, "extra": extra},
             )
         elif a.status == "approved" and (a.tool_call_id or "").startswith("office:"):
@@ -2268,6 +2315,8 @@ async def _chat_turn(
     st = await budget.state(db, agent, ws.timezone)
     left = await allowance.check(db, ws, session.user_id)
     if st.over or left is not None:
+        if left is not None:  # P114: they and their managers hear of it, once a day
+            await allowance.tell_used_up(db, ws, session.user_id, agent, left)
         note = (
             left.note(explicit_lang() or await prefs.language(db, session.user_id))
             if left is not None

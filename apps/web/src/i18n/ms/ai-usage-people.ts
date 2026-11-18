@@ -2,8 +2,8 @@
  * Engine (pages/ai-engine/people-usage.tsx). Same terms as ai-use.ts: token, elaun, panggilan. */
 export const AI_USAGE_PEOPLE: Record<string, string> = {
   "AI usage per user": "Penggunaan AI ikut pengguna",
-  "Who uses the AI, how much, and what for. Only you (the developer) see this page. It shows purposes, tasks and numbers, never what was said.":
-    "Siapa guna AI, berapa banyak, dan untuk apa. Hanya anda (pembangun) yang nampak halaman ini. Ia tunjukkan tujuan, tugasan dan angka, bukan apa yang dikatakan.",
+  "Who uses the AI, how much, and what for. Only you (the developer) see this page. Open a person for their full report: every call with what they asked and what came back, their conversations and tasks. Opening a report is recorded in the audit log.":
+    "Siapa guna AI, berapa banyak, dan untuk apa. Hanya anda (pembangun) yang nampak halaman ini. Buka seseorang untuk laporan penuhnya: setiap panggilan dengan apa yang diminta dan jawapannya, perbualan dan tugasan mereka. Setiap laporan yang dibuka direkodkan dalam log audit.",
 
   // The period
   "Last month": "Bulan lepas",
@@ -75,4 +75,32 @@ export const AI_USAGE_PEOPLE: Record<string, string> = {
   "Search purpose or model": "Cari tujuan atau model",
   "AI calls": "Panggilan AI",
   "All features": "Semua ciri",
+
+  // P114: what each call was about, their conversations and tasks
+  "Try another period, role, company or department.": "Cuba tempoh, peranan, syarikat atau jabatan lain.",
+  "What it was about": "Tentang apa",
+  "What they asked (task brief)": "Apa yang diminta (ringkasan tugasan)",
+  "They wrote": "Mereka tulis",
+  "The AI replied": "Jawapan AI",
+  "Result": "Hasil",
+  "In “{title}” · matched by time": "Dalam “{title}” · dipadankan ikut masa",
+  "Matched by time": "Dipadankan ikut masa",
+  "No text kept for this feature": "Tiada teks disimpan untuk ciri ini",
+  "AI call": "Panggilan AI",
+  "Search what they asked, the reply, task, purpose or model": "Cari apa yang diminta, jawapan, tugasan, tujuan atau model",
+  "Their logs": "Log mereka",
+  "Every call: when, what for, what they asked and what came back, which model, tokens and cost. Open a call to read it in full. Chat calls are matched to the conversation by time.":
+    "Setiap panggilan: bila, untuk apa, apa yang diminta dan jawapannya, model, token dan kos. Buka panggilan untuk baca sepenuhnya. Panggilan sembang dipadankan dengan perbualan ikut masa.",
+  "Their conversations with agents in this period. Open one to read it. Tokens are the chat calls with that agent while it ran.":
+    "Perbualan mereka dengan ejen dalam tempoh ini. Buka satu untuk membacanya. Token ialah panggilan sembang dengan ejen itu sepanjang perbualan.",
+  "The tasks their AI use paid for, most tokens first.": "Tugasan yang dibiayai oleh penggunaan AI mereka, token terbanyak dahulu.",
+  "With {agent}": "Dengan {agent}",
+  "Only the latest {n} messages are shown.": "Hanya {n} mesej terkini ditunjukkan.",
+  "Search the title, agent or anything written": "Cari tajuk, ejen atau apa-apa yang ditulis",
+  "Search the task, what was asked or the result": "Cari tugasan, apa yang diminta atau hasilnya",
+  "No conversations": "Tiada perbualan",
+  "{n} ({mine} theirs)": "{n} ({mine} daripada mereka)",
+  "Tokens (about)": "Token (anggaran)",
+  "Last message": "Mesej terakhir",
+  "Last call": "Panggilan terakhir",
 };

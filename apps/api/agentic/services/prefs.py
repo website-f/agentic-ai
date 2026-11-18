@@ -21,7 +21,8 @@ from ..models import User
 if TYPE_CHECKING:
     from ..i18n.notes import Voice
 
-KEYS: tuple[str, ...] = ("tutorial", "onboarding", "locale", "needs")  # P56 needs: bell read mark
+# P56 needs: the bell's read mark. P114 notify: how and about what the person hears (notify_prefs).
+KEYS: tuple[str, ...] = ("tutorial", "onboarding", "locale", "needs", "notify")
 MAX_KEY_BYTES = 8_000  # one key's object, as JSON
 
 
@@ -131,7 +132,14 @@ async def voice(
 VALIDATORS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "tutorial": _tutorial,
     "locale": _locale,
+    "notify": lambda sub: _notify(sub),
 }
+
+
+def _notify(sub: dict[str, Any]) -> dict[str, Any]:
+    from .notify_prefs import validate
+
+    return validate(sub)
 
 
 def visible(prefs: dict[str, Any] | None) -> dict[str, Any]:

@@ -158,7 +158,7 @@ async def test_numbers_filters_and_report(client):
     assert round(pa["cost_usd"], 6) == 0.06 and pa["unpriced"] == 1 and pa["errors"] == 1
     assert pa["share"] == 63.53 and pa["top_feature"] == "agent_task"
     assert pa["role"] == "staff" and pa["branch_name"] == o["branch"]["name"]
-    assert pa["today_used"] == 5400 and pa["today_limit"] == 50_000
+    assert pa["today_used"] == 5400 and pa["today_limit"] == 300_000
     assert pa["last_used"] is not None
     assert people[2]["member"] is False and people[2]["role"] == ""
     assert all(p["tokens"] == 0 for p in people[3:])  # members who used none, at the end

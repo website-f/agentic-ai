@@ -1472,6 +1472,39 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     related: ["ai-engine", "approvals", "agents"],
   },
 
+  notifications: {
+    purpose: "How the office tells you, and about what: email, this app on your phone or computer, Telegram and WhatsApp.",
+    can: [
+      "Turn each way on or off: email, your devices, Telegram, WhatsApp.",
+      "Choose what you hear about: your AI needs you, your AI allowance, finished tasks, decisions waiting for you, everything else.",
+      "Send yourself a test.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Get told by email when your AI needs you",
+        steps: [
+          s("Open **Settings > My notifications**."),
+          s("Turn on **Email me**. Your AI's questions, decisions, allowance and finished tasks come by email."),
+          s("Click **Send me a test**."),
+        ],
+      },
+      {
+        title: "Get told on WhatsApp or Telegram",
+        steps: [
+          s("Click **Open Channels** under WhatsApp or Telegram and link your number with the code."),
+          s("Back in **My notifications**, keep **Notify me on WhatsApp** or **Notify me on Telegram** on."),
+        ],
+      },
+    ],
+    tips: [
+      "Small notices (tasks given to you, mentions) come by email only when you turn on **Also email everything else**.",
+      "The bell at the top always lists what waits for you, whatever you turn off here.",
+    ],
+    who: "Everyone, from staff to the owner, sets their own.",
+    related: ["channels", "approvals", "ai-use"],
+  },
+
   channels: {
     purpose: "Where the office reaches you: phone notifications, Telegram, WhatsApp, Gmail and API tokens, and which agent answers where.",
     can: [
@@ -1954,7 +1987,9 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     purpose: "Each person's daily AI allowance, what staff may use their AI for, and what was refused.",
     can: [
       "See who used how much today, and who is near or at their limit.",
-      "Give one person more with **Change**.",
+      "Give one person their own amount with **Change**.",
+      "Give more for today only or for this week with **Give more**: their paused tasks start again, the first paused first.",
+      "See every task paused at the limit, who started it and which AI, under **Paused: AI allowance used up**.",
       "Set the amount for everyone under **Daily AI allowance**.",
       "Keep staff AI on work with **Check requests are about work**, and read **Refused requests**.",
     ],

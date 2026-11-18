@@ -1,6 +1,7 @@
 /** P113: AI usage per user, the developer's report in the AI Engine. Only the developer sees
  * the tab; the table asks the server for the period, most tokens first; a row opens the
- * person's full report and their calls. */
+ * person's full report and their calls. P114: each call says what it was about, and their
+ * conversations and tasks are one click away. */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -50,10 +51,20 @@ const REPORT = {
 };
 const EVENTS = [
   { id: 2, ts: new Date().toISOString(), purpose: "agent.task", feature: "agent_task", charged: true, agent_id: "ag_1", agent_name: "Ana", task_id: "tk_1", task_title: "Quarterly report",
-    provider: "Good", model: "m1", group: "smart", prompt: 3000, completion: 500, cached: 0, tokens: 3500, cost_usd: 0.05, status: "ok", error_class: null, latency_ms: 900 },
+    provider: "Good", model: "m1", group: "smart", prompt: 3000, completion: 500, cached: 0, tokens: 3500, cost_usd: 0.05, status: "ok", error_class: null, latency_ms: 900,
+    source: "task", asked: "List overdue invoices", answered: "Twelve customers are overdue.", session_id: null, session_title: null },
   { id: 1, ts: new Date().toISOString(), purpose: "agent.chat", feature: "chat", charged: true, agent_id: "ag_1", agent_name: "Ana", task_id: null, task_title: null,
-    provider: "Good", model: "m1", group: "smart", prompt: 1000, completion: 200, cached: 0, tokens: 1200, cost_usd: 0.01, status: "error", error_class: "timeout", latency_ms: 300 },
+    provider: "Good", model: "m1", group: "smart", prompt: 1000, completion: 200, cached: 0, tokens: 1200, cost_usd: 0.01, status: "error", error_class: "timeout", latency_ms: 300,
+    source: "chat", asked: "How do I compute overtime pay?", answered: "Multiply the hourly rate by 1.5.", session_id: "cs_1", session_title: "Payroll help" },
 ];
+const FACETS = { agents: [{ id: "ag_1", name: "Ana", calls: 3 }, { id: null, name: null, calls: 1 }], models: [{ model: "m1", provider: "Good", calls: 4 }] };
+const CONVOS = [{ id: "cs_1", title: "Payroll help", agent_id: "ag_1", agent_name: "Ana", messages: 2, asked: 1, first_at: new Date().toISOString(),
+  last_at: new Date().toISOString(), first_message: "How do I compute overtime pay?", tokens: 900, cost_usd: 0.01 }];
+const CONVO = { id: "cs_1", title: "Payroll help", agent_id: "ag_1", agent_name: "Ana", more: false, lines: [
+  { id: 1, role: "user", content: "How do I compute overtime pay?", at: new Date().toISOString() },
+  { id: 2, role: "assistant", content: "Multiply the hourly rate by 1.5.", at: new Date().toISOString() },
+] };
+const PAID = [{ task_id: "tk_1", title: "Quarterly report", status: "done", brief: "List overdue invoices", agent_name: "Ana", created_at: null, calls: 2, tokens: 3600, cost_usd: 0.05, last_at: new Date().toISOString() }];
 
 let gets: URL[] = [];
 
@@ -70,6 +81,11 @@ beforeEach(() => {
     if (url.pathname === "/api/ai/people-usage") return json(BODY, { "X-Total-Count": "4" });
     if (url.pathname === "/api/ai/people-usage/u_a") return json(REPORT);
     if (url.pathname === "/api/ai/people-usage/u_a/events") return json(EVENTS, { "X-Total-Count": "2" });
+    if (url.pathname === "/api/ai/people-usage/u_a/events/1") return json({ ...EVENTS[1], task_status: null, error_detail: null });
+    if (url.pathname === "/api/ai/people-usage/u_a/facets") return json(FACETS);
+    if (url.pathname === "/api/ai/people-usage/u_a/conversations") return json(CONVOS, { "X-Total-Count": "1" });
+    if (url.pathname === "/api/ai/people-usage/u_a/conversations/cs_1") return json(CONVO);
+    if (url.pathname === "/api/ai/people-usage/u_a/tasks") return json(PAID, { "X-Total-Count": "1" });
     if (url.pathname === "/api/branches") return json([{ id: "br_1", name: "Maju", departments: [] }]);
     if (url.pathname.startsWith("/api/ai/")) return json([]);
     return json({});
@@ -132,7 +148,7 @@ describe("AI usage per user", { timeout: 30_000 }, () => {
     expect(await screen.findByText("Pick a start and an end date (the end on or after the start).")).toBeInTheDocument();
   });
 
-  it("opens a person's full report and their calls, without what was said", async () => {
+  it("opens a person's full report and their calls, with what each was about", async () => {
     show(PeopleUsageTab);
     await screen.findByRole("table", { name: "AI usage per user" }, { timeout: 8000 });
     fireEvent.click(screen.getByRole("button", { name: /^Aina/ }));
@@ -142,10 +158,31 @@ describe("AI usage per user", { timeout: 30_000 }, () => {
     const calls = await within(sheet).findByRole("table", { name: "Every call" }, { timeout: 8000 });
     expect(within(calls).getByRole("link", { name: "Quarterly report" })).toHaveAttribute("href", "/tasks?task=tk_1");
     expect(within(calls).getByText("Failed: timeout")).toBeInTheDocument();
+    expect(within(calls).getByText("How do I compute overtime pay?")).toBeInTheDocument();
+    expect(within(calls).getByText("Twelve customers are overdue.")).toBeInTheDocument();
+    expect(within(calls).getByText(/matched by time/)).toBeInTheDocument();
     const ev = gets.find((u) => u.pathname.endsWith("/events"))!;
     expect(ev.searchParams.get("period")).toBe("7d");
     expect(ev.searchParams.get("sort")).toBe("-ts");
     fireEvent.click(within(sheet).getByRole("tab", { name: /^Agent/ }));
-    expect(within(sheet).getByText("No agent (direct use)")).toBeInTheDocument();
+    expect(within(sheet).getAllByText("No agent (direct use)").length).toBeGreaterThan(0);
+  });
+
+  it("shows their conversations to read in full, and the tasks their use paid for", async () => {
+    show(PeopleUsageTab);
+    await screen.findByRole("table", { name: "AI usage per user" }, { timeout: 8000 });
+    fireEvent.click(screen.getByRole("button", { name: /^Aina/ }));
+    const sheet = await screen.findByRole("dialog");
+    await within(sheet).findByText("Their logs", undefined, { timeout: 8000 });
+    fireEvent.click(within(sheet).getByRole("tab", { name: /^Conversations/ }));
+    const convos = await within(sheet).findByRole("table", { name: "Conversations" }, { timeout: 8000 });
+    fireEvent.click(within(convos).getByRole("button", { name: /^Payroll help/ }));
+    expect(await screen.findByText("Multiply the hourly rate by 1.5.", undefined, { timeout: 8000 })).toBeInTheDocument();
+    expect(gets.some((u) => u.pathname.endsWith("/conversations/cs_1"))).toBe(true);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    fireEvent.click(within(sheet).getByRole("tab", { name: /^Tasks/ }));
+    const tasks = await within(sheet).findByRole("table", { name: "Tasks" }, { timeout: 8000 });
+    expect(within(tasks).getByRole("link", { name: "Quarterly report" })).toHaveAttribute("href", "/tasks?task=tk_1");
+    expect(within(tasks).getByText("3.6k")).toBeInTheDocument();
   });
 });

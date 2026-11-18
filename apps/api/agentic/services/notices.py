@@ -74,7 +74,7 @@ async def tell(
     for uid in ids:
         try:
             got = await deliver.notify_user(
-                db, workspace_id, uid, title, body, path, dedupe=f"{dedupe}:{uid}"
+                db, workspace_id, uid, title, body, path, dedupe=f"{dedupe}:{uid}", email=False
             )
             await deliver.start(got)
         except Exception:  # noqa: BLE001

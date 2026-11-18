@@ -223,6 +223,10 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     targets: [],
   },
   {
+    id: "notifications", route: "/notifications", title: "Notifikasi saya", group: "Settings", states: [],
+    targets: [],
+  },
+  {
     id: "channels", route: "/channels", title: "Saluran", group: "Settings", states: [],
     targets: [t("channels.whatsapp", "WhatsApp"), t("channels.telegram", "Telegram"), t("channels.push", "Pemberitahuan telefon")],
   },

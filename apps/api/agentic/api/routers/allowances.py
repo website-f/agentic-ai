@@ -7,6 +7,10 @@ work-scope guard (teams/allowance.py, agents/scope_guard.py).
                                       data table (api/table.py), X-Total-Count = matching people
 - PUT  /api/allowances/policy         the default allowance and who it applies to (owner, admin)
 - PUT  /api/allowances/{user_id}      one person's own allowance (people managers, in scope)
+- POST /api/allowances/{user_id}/give P114: add tokens for today only or for this week, and resume
+                                      their tasks paused at the limit (people managers, in scope,
+                                      never for themselves)
+- GET  /api/allowances/paused         P114: tasks paused at a person's limit, first paused first
 - GET  /api/work-scope                what staff may use their AI for (people managers)
 - PUT  /api/work-scope                change it (owner, admin)
 - GET  /api/work-scope/refusals       recent requests the guard refused (people managers)
@@ -17,15 +21,15 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from ...agents import scope_guard
+from ...agents import decisions, scope_guard
 from ...core.db import get_db
 from ...core.security import ROLES, can
 from ...core.valkey import valkey
-from ...models import AuditLog, LLMCall, Membership, Workspace
+from ...models import Agent, Approval, AuditLog, LLMCall, Membership, Task, Workspace
 from ...services import audit
 from ...teams import allowance
 from ...teams.budget import periods
@@ -61,6 +65,9 @@ class PersonAllowance(AllowanceOut):
     cost_usd: float = 0.0
     pct: int | None = None  # None = no limit
     status: str = "ok"  # ok | near (80% or more) | over | unlimited
+    # P114: of `extra`, what was given for every day of this week; tasks paused at the limit.
+    extra_week: int = 0
+    paused: int = 0
 
 
 class PolicyIn(BaseModel):
@@ -76,6 +83,7 @@ class AllowanceSummary(BaseModel):
     near: int = 0
     used: int = 0
     cost_usd: float = 0.0
+    paused: int = 0  # P114: tasks waiting for more allowance
 
 
 class AllowancesOut(BaseModel):
@@ -130,8 +138,8 @@ async def my_allowance(
 
 
 NEAR = 0.8  # "near the limit" from 80% used
-SORTS = ("name", "email", "role", "place", "used", "cost", "limit", "pct")
-Status = Literal["ok", "near", "over", "unlimited", "limited"]
+SORTS = ("name", "email", "role", "place", "used", "cost", "limit", "pct", "paused")
+Status = Literal["ok", "near", "over", "unlimited", "limited", "paused"]
 
 
 def _status(used: int, limit: int | None) -> tuple[int | None, str]:
@@ -153,6 +161,8 @@ def _person(
     extra: int,
     day: str,
     resets: str,
+    extra_week: int = 0,
+    paused: int = 0,
 ) -> PersonAllowance:
     """allowance.state() for one person, from numbers worked out for everyone at once."""
     limit = None if base is None else base + extra
@@ -176,6 +186,8 @@ def _person(
         cost_usd=round(cost, 4),
         pct=pct,
         status=state,
+        extra_week=extra_week if base is not None else 0,
+        paused=paused,
     )
 
 
@@ -195,15 +207,36 @@ async def _costs_today(db: AsyncSession, ws: Workspace, day_start: datetime) -> 
     return {str(u): float(c or 0) for u, c in (await db.execute(q)).all()}
 
 
-async def _grants(ws_id: str, user_ids: list[str], day: str) -> dict[str, int]:
-    """What managers gave each person today, in one Valkey round trip."""
+async def _grants(ws_id: str, user_ids: list[str], day: str) -> dict[str, tuple[int, int]]:
+    """What managers gave each person for today: (today only, every day this week), in one
+    Valkey round trip."""
     if not user_ids:
         return {}
+    keys = [k for u in user_ids for k in allowance.grant_keys(ws_id, u, day)]
     try:
-        raw = await valkey().mget([allowance._grant_key(ws_id, u, day) for u in user_ids])
+        raw = await valkey().mget(keys)
     except Exception:  # noqa: BLE001 - no Valkey: no extra today
         return {}
-    return {u: int(v or 0) for u, v in zip(user_ids, raw, strict=True)}
+    return {u: (int(raw[2 * i] or 0), int(raw[2 * i + 1] or 0)) for i, u in enumerate(user_ids)}
+
+
+def _paused_q(ws_id: str) -> Select[tuple[Approval]]:
+    """Tasks stopped at a person's daily limit: their pending allowance approvals."""
+    return select(Approval).where(
+        Approval.workspace_id == ws_id,
+        Approval.status == "pending",
+        Approval.kind == "budget",
+        Approval.tool_call_id.startswith("allowance:"),
+    )
+
+
+async def _paused_by_person(db: AsyncSession, ws_id: str) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for a in (await db.scalars(_paused_q(ws_id))).all():
+        u = str((a.args or {}).get("user_id") or "")
+        if u:
+            out[u] = out.get(u, 0) + 1
+    return out
 
 
 def _place(p: PersonAllowance) -> str:
@@ -219,6 +252,7 @@ SORT_KEYS: dict[str, Any] = {
     "cost": lambda p: p.cost_usd,
     "limit": lambda p: p.limit,
     "pct": lambda p: p.pct,
+    "paused": lambda p: p.paused,
 }
 
 
@@ -251,6 +285,7 @@ async def list_allowances(
     ]
     limits = {m.user_id: allowance.limit_of(ws, m) for m in rows}
     grants = await _grants(ws.id, [u for u, b in limits.items() if b is not None], p.day)
+    paused = await _paused_by_person(db, ws.id)
     everyone = [
         _person(
             m,
@@ -258,9 +293,11 @@ async def list_allowances(
             used.get(m.user_id, 0),
             costs.get(m.user_id, 0.0),
             limits[m.user_id],
-            grants.get(m.user_id, 0),
+            sum(grants.get(m.user_id, (0, 0))),
             p.day,
             resets,
+            extra_week=grants.get(m.user_id, (0, 0))[1],
+            paused=paused.get(m.user_id, 0),
         )
         for m in rows
     ]
@@ -270,6 +307,7 @@ async def list_allowances(
         near=sum(1 for x in everyone if x.status == "near"),
         used=sum(x.used for x in everyone),
         cost_usd=round(sum(x.cost_usd for x in everyone), 4),
+        paused=sum(x.paused for x in everyone),
     )
     people = everyone
     if params.words:
@@ -280,6 +318,8 @@ async def list_allowances(
         people = [x for x in people if (x.branch_id or "none") == branch]
     if status_ == "limited":
         people = [x for x in people if x.limit is not None]
+    elif status_ == "paused":
+        people = [x for x in people if x.paused]
     elif status_:
         people = [x for x in people if x.status == status_]
     # The usual order (and the tie-break of any other): most used first, then by name.
@@ -349,12 +389,19 @@ async def set_own(
         after={"daily_tokens": body.daily_tokens},
     )
     await db.commit()
-    st = await allowance.state(db, ws, user_id)
+    return await _row(db, ws, m)
+
+
+async def _row(db: AsyncSession, ws: Workspace, m: Membership) -> PersonAllowance:
+    """One person's row, as the table shows it."""
+    st = await allowance.state(db, ws, m.user_id)
     pct, state = _status(st.used, st.limit)
     names = await _names(db, ws.id)
+    week = (await _grants(ws.id, [m.user_id], st.day)).get(m.user_id, (0, 0))[1]
+    paused = (await _paused_by_person(db, ws.id)).get(m.user_id, 0)
     return PersonAllowance(
         **st.dict(),
-        user_id=user_id,
+        user_id=m.user_id,
         name=m.user.name,
         email=m.user.email,
         role=m.role,
@@ -364,7 +411,163 @@ async def set_own(
         department_name=names.get(m.department_id or ""),
         pct=pct,
         status=state,
+        extra_week=week if st.limit is not None else 0,
+        paused=paused,
     )
+
+
+class GiveIn(BaseModel):
+    tokens: int = Field(ge=1000, le=allowance.MAX_GIVE)
+    span: allowance.Span = "today"
+
+
+class GiveOut(BaseModel):
+    person: PersonAllowance
+    given: int
+    span: str
+    ends_at: str
+    resumed: int  # paused tasks started again
+
+
+@router.post("/allowances/{user_id}/give")
+async def give_more(
+    user_id: str,
+    body: GiveIn,
+    principal: Principal = Depends(people_manager()),
+    db: AsyncSession = Depends(get_db),
+) -> GiveOut:
+    """P114 (Fitri, 18 Nov 2026): add tokens to a person's limit for today only, or for every
+    day to the end of this week, then start their tasks paused at the limit again, first
+    paused first. Like approving the ask: never for yourself."""
+    ws = await _ws(db, principal)
+    m = await db.get(Membership, (ws.id, user_id))
+    if m is None or not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    if user_id == principal.user.id:
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "self_allowance",
+            "You cannot give yourself more AI allowance. Ask another manager.",
+        )
+    if allowance.limit_of(ws, m) is None:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "no_limit",
+            "{name} has no daily limit, so there is nothing to add.",
+            name=m.user.name,
+        )
+    try:
+        ends = await allowance.give(ws, user_id, body.tokens, body.span)
+    except Exception as e:  # noqa: BLE001 - Valkey down: nothing was given
+        raise api_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "allowance_store_down",
+            "Could not save the extra allowance. Try again in a moment.",
+        ) from e
+    await audit.record(
+        db,
+        ws.id,
+        principal.actor,
+        "allowance.given",
+        target=user_id,
+        after={"tokens": body.tokens, "span": body.span, "ends_at": ends},
+    )
+    await db.commit()
+    resumed = 0
+    waiting = (await db.scalars(_paused_q(ws.id).order_by(Approval.created_at, Approval.id))).all()
+    for a in waiting:
+        if str((a.args or {}).get("user_id") or "") != user_id:
+            continue
+        if not await decisions._may_grant(db, a, principal.actor):  # noqa: SLF001
+            continue  # their task waits for a manager who may give more
+        # Saved before deciding (decide re-reads the row): the run applies this gift, not
+        # its usual "half again".
+        a.args = {**(a.args or {}), "given": {"tokens": body.tokens, "span": body.span}}
+        await db.commit()
+        try:
+            await decisions.decide(
+                db, a, principal.actor, "approve", answer="More AI allowance was given."
+            )
+            resumed += 1
+        except decisions.DecisionError:
+            await db.rollback()  # decided meanwhile, or this manager may not decide it
+    await allowance.tell_given(
+        db, ws, user_id, principal.user.name, body.tokens, body.span, resumed
+    )
+    return GiveOut(
+        person=await _row(db, ws, m),
+        given=body.tokens,
+        span=body.span,
+        ends_at=ends,
+        resumed=resumed,
+    )
+
+
+class PausedTask(BaseModel):
+    approval_id: str
+    task_id: str
+    title: str
+    user_id: str
+    name: str  # whose allowance it is: the person who started the work
+    agent_id: str | None = None
+    agent_name: str | None = None  # their AI, by whatever name they gave it
+    agent_owner_name: str | None = None  # whose AI it is
+    used: int = 0
+    limit: int = 0
+    paused_at: str
+    order: int  # 1 = paused first
+
+
+@router.get("/allowances/paused")
+async def paused_tasks(
+    principal: Principal = Depends(people_manager()), db: AsyncSession = Depends(get_db)
+) -> list[PausedTask]:
+    """P114: every task waiting because the person it is for used up today's allowance, in
+    the people the caller manages, first paused first (the order a gift starts them again)."""
+    ws = await _ws(db, principal)
+    rows = (
+        await db.scalars(_paused_q(ws.id).order_by(Approval.created_at, Approval.id).limit(500))
+    ).all()
+    if not rows:
+        return []
+    members = {
+        m.user_id: m
+        for m in (
+            await db.scalars(select(Membership).where(Membership.workspace_id == ws.id))
+        ).all()
+    }
+    task_ids = {a.task_id for a in rows}
+    tasks = {t.id: t for t in (await db.scalars(select(Task).where(Task.id.in_(task_ids)))).all()}
+    agent_ids = {a.agent_id for a in rows if a.agent_id}
+    agents = {
+        g.id: g for g in (await db.scalars(select(Agent).where(Agent.id.in_(agent_ids)))).all()
+    }
+    out: list[PausedTask] = []
+    for a in rows:
+        args = a.args or {}
+        m = members.get(str(args.get("user_id") or ""))
+        t = tasks.get(a.task_id)
+        if m is None or t is None or not _member_in_scope(principal, m):
+            continue
+        g = agents.get(a.agent_id or "")
+        owner = members.get(g.owner_user_id or "") if g is not None else None
+        out.append(
+            PausedTask(
+                approval_id=a.id,
+                task_id=t.id,
+                title=t.title,
+                user_id=m.user_id,
+                name=m.user.name,
+                agent_id=g.id if g else None,
+                agent_name=g.name if g else None,
+                agent_owner_name=owner.user.name if owner else None,
+                used=int(args.get("used") or 0),
+                limit=int(args.get("limit") or 0),
+                paused_at=a.created_at.isoformat(),
+                order=len(out) + 1,
+            )
+        )
+    return out
 
 
 @router.get("/work-scope")

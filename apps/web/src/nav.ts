@@ -54,6 +54,7 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { ClockUserIcon } from "@phosphor-icons/react"; // P92: the staff phone's Clock in tab
+import { BellRingingIcon } from "@phosphor-icons/react"; // P114: My notifications
 
 import { msg } from "@/i18n";
 
@@ -107,6 +108,7 @@ export type AppPath =
   | "/settings"
   | "/settings/members"
   | "/settings/ai-use"
+  | "/notifications"
   | "/settings/storage"
   | "/settings/roles"
   | "/timetable"
@@ -242,6 +244,7 @@ export const NAV: NavSection[] = [
       { to: "/settings/ai-use", label: msg("AI use and limits"), icon: CoinsIcon, perm: ["members.manage", "team.manage"], blurb: msg("Each person's daily AI allowance, what staff may use their AI for, and what was refused.") },
       { to: "/web-connections", label: msg("Web connections"), icon: GlobeIcon, perm: "org.manage", blurb: msg("How the AI's browsers reach websites: this server, a company computer, or your own proxies.") },
       { to: "/approved-services", label: msg("Approved services"), icon: ShieldCheckIcon, perm: "org.manage", blurb: msg("Which outside services may receive company information (AI providers, storage, messaging, the web). Turn on to use only approved ones.") },
+      { to: "/notifications", label: msg("My notifications"), icon: BellRingingIcon, blurb: msg("How the office tells you (email, this app, Telegram, WhatsApp) when your AI needs you, runs out of allowance or finishes.") },
       { to: "/channels", label: msg("Channels"), icon: PlugsConnectedIcon, blurb: msg("Phone notifications, Telegram, API tokens, and which agent answers where.") },
       { to: "/ai-engine", label: msg("AI Engine"), icon: CpuIcon, perm: "engine.view", blurb: msg("Add provider keys, test the connection, choose models and see what every agent spends.") },
       { to: "/settings/storage", label: msg("File storage"), icon: HardDrivesIcon, perm: "storage.manage", blurb: msg("Where company files are kept: the database, this server's disk, a Backblaze B2 or S3 bucket, or your own file server, and what feeds the Library.") },
@@ -296,7 +299,7 @@ export const HUBS: Hub[] = [
   { label: msg("Agents"), tabs: ["/agents", "/timetable", "/monitor", "/meetings", "/broadcasts"] },
   { label: msg("Knowledge & skills"), tabs: ["/learning", "/skills", "/brain", "/blueprints"] },
   { label: msg("Organization & people"), tabs: ["/organization", "/settings/members", "/settings/roles", "/staff-computers", "/settings/ai-use", "/approved-services", "/web-connections"] },
-  { label: msg("Settings"), tabs: ["/settings", "/channels", "/ai-engine", "/settings/storage", "/logins", "/schedules", "/mcp-servers", "/activity"] },
+  { label: msg("Settings"), tabs: ["/settings", "/notifications", "/channels", "/ai-engine", "/settings/storage", "/logins", "/schedules", "/mcp-servers", "/activity"] },
   { label: msg("Learn"), tabs: ["/tutorial", "/guide", "/present"] },
 ];
 

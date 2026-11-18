@@ -157,6 +157,12 @@ export interface Task {
   subtasks_done?: number;
   subtasks_total?: number;
   files_count?: number;
+  /** P114: whose request an agent task is (their daily AI allowance pays), and whose AI does it
+   * (staff rename their AI as they like, so its name alone may not say). */
+  for_user_id?: string | null;
+  for_user_name?: string | null;
+  assignee_owner_id?: string | null;
+  assignee_owner_name?: string | null;
 }
 
 /** P109: a person on a task (an assignee or a watcher). */

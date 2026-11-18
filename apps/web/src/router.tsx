@@ -50,6 +50,7 @@ const page = {
   rolesAccess: lazyRouteComponent(() => import("@/pages/roles-access"), "RolesAccessPage"),
   members: lazyRouteComponent(() => import("@/pages/members"), "MembersPage"),
   aiUse: lazyRouteComponent(() => import("@/pages/ai-use"), "AiUsePage"),
+  notifications: lazyRouteComponent(() => import("@/pages/notifications"), "NotificationsPage"),
   storage: lazyRouteComponent(() => import("@/pages/storage"), "StoragePage"),
   timetable: lazyRouteComponent(() => import("@/pages/timetable"), "TimetablePage"),
   gettingStarted: lazyRouteComponent(() => import("@/pages/getting-started"), "GettingStartedPage"),
@@ -336,6 +337,8 @@ const membersRoute = createRoute({
 
 // P36: each person's daily AI allowance and what staff may use their AI for.
 const aiUseRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/ai-use", component: page.aiUse });
+// P114: each person's own notifications (every role).
+const notificationsRoute = createRoute({ getParentRoute: () => appRoute, path: "/notifications", component: page.notifications });
 // P92: what each role may do (owner only; the server refuses everyone else too).
 const rolesAccessRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -959,6 +962,7 @@ const routeTree = rootRoute.addChildren([
     settingsRoute,
     membersRoute,
     aiUseRoute,
+    notificationsRoute,
     rolesAccessRoute,
     storageRoute,
     timetableRoute,

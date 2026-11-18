@@ -39,7 +39,7 @@ import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
-import { AssigneeFace, assigneeName } from "@/components/person-avatar";
+import { AssigneeFace, assigneeName, taskWhose } from "@/components/person-avatar";
 import { LessonNote } from "@/components/lesson-note";
 import { ApprovalCard } from "@/components/approval-card";
 import { Markdown } from "@/components/markdown";
@@ -345,8 +345,11 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
           {forPeople && (task.assignees?.length ?? 0) > 1 ? (
             <span className="inline-flex min-w-0 items-center gap-1.5 text-fg"><AssigneeStack task={task} /> <span className="truncate">{task.assignees!.map((a) => a.name).join(", ")}</span></span>
           ) : assigneeName(task) ? (
-            <span className="inline-flex min-w-0 items-center gap-1.5 text-fg"><AssigneeFace task={task} /> <span className="truncate">{assigneeName(task)}</span></span>
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-fg"><AssigneeFace task={task} /> <span className="truncate">{assigneeName(task)}</span>
+              {taskWhose(task).aiOf ? <span className="truncate text-muted">· {t("{name}'s AI", { name: taskWhose(task).aiOf! })}</span> : null}</span>
           ) : <span>{t("Unassigned")}</span>}
+          {/* P114: whose request it is (their daily AI allowance pays). */}
+          {taskWhose(task).startedBy ? <span className="truncate">{t("Started by {name}", { name: taskWhose(task).startedBy! })}</span> : null}
           {task.run_count > 1 ? <span className="tabular">{t("Run {n}", { n: task.run_count })}</span> : null}
           {task.labels?.map((l) => <Pill key={l}>{l}</Pill>)}
         </span>

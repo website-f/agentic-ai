@@ -2054,3 +2054,8 @@ MS.update({k: v for k, v in MS_PRIMA_MEMBERS.items() if k not in MS})
 from .ms_ai_usage import MS_AI_USAGE  # noqa: E402
 
 MS.update({k: v for k, v in MS_AI_USAGE.items() if k not in MS})
+
+# P114: AI allowance gifts, paused tasks and each person's notifications.
+from .ms_notify import MS_NOTIFY  # noqa: E402
+
+MS.update({k: v for k, v in MS_NOTIFY.items() if k not in MS})

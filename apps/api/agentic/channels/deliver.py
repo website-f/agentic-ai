@@ -10,6 +10,7 @@ agent wrote goes in as i18n.Plain and is never translated.
 """
 
 import hashlib
+import html
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -35,7 +36,7 @@ from ..models import (
     Task,
     User,
 )
-from ..services import events, prefs
+from ..services import events, notify_prefs, prefs
 from . import telegram, webpush, whatsapp
 
 log = logging.getLogger("agentic.channels.deliver")
@@ -151,17 +152,40 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
     )
     now = datetime.now(UTC)
     ids: list[str] = []
-    for user in await deciders(db, a.workspace_id, agent, budget=a.kind == "budget"):
+    # P114: whose AI is asking (its owner, and the person whose request the task is).
+    mine = await _askers_people(db, a, agent, task)
+    limit = (a.tool_call_id or "").startswith("allowance:")
+    who = await deciders(db, a.workspace_id, agent, budget=a.kind == "budget")
+    for user in who:
         lang = prefs.lang_of(user)  # the recipient's language, not the agent's or the asker's
         title, body = render(title_msg, lang), render(body_msg, lang)
-        subs = (
-            await db.scalars(
-                select(PushSubscription).where(
-                    PushSubscription.user_id == user.id,
-                    PushSubscription.workspace_id == a.workspace_id,
-                )
+        event = "my_ai" if user.id in mine else "approvals"
+        if notify_prefs.wants(user, event, "email"):
+            did = await _queue_email(
+                db,
+                a.workspace_id,
+                user,
+                title,
+                body + ("\n" + tr("Task: {title}", lang, title=task.title) if task else ""),
+                f"/approve/{a.id}",
+                f"approval:{a.id}:{user.id}",
+                lang,
+                now,
             )
-        ).all()
+            if did:
+                ids.append(did)
+        subs = (
+            (
+                await db.scalars(
+                    select(PushSubscription).where(
+                        PushSubscription.user_id == user.id,
+                        PushSubscription.workspace_id == a.workspace_id,
+                    )
+                )
+            ).all()
+            if notify_prefs.wants(user, event, "app")
+            else []
+        )
         for sub in subs:
             raw = secrets.token_urlsafe(32)
             db.add(
@@ -208,6 +232,8 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
             )
         ).all()
         for link, ch in links:
+            if not notify_prefs.wants(user, event, ch.kind):
+                continue
             task_line = "\n" + tr("Task: {title}", lang, title=task.title) if task else ""
             if ch.kind == "whatsapp":
                 from ..core.config import settings
@@ -264,8 +290,60 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
             )
             if did:
                 ids.append(did)
+    # P114: the person whose AI asks hears of it too when only a manager may decide (more
+    # allowance, more budget): what waits and that a manager was asked.
+    told = {u.id for u in who}
+    for uid in mine - told:
+        if limit:
+            t_msg = Msg("Your AI allowance for today is used up")
+            b_msg = Msg(
+                '{name} paused "{title}". A manager was asked to give you more; it carries on '
+                "as soon as they do, or tomorrow.",
+                name=name,
+                title=(task.title[:100] if task else ""),
+            )
+        else:
+            t_msg = Msg("{name} is waiting for a manager", name=name)
+            b_msg = Msg(
+                '{name} asked a manager about "{title}". It carries on once they decide.',
+                name=name,
+                title=(task.title[:100] if task else ""),
+            )
+        ids += await _queue_for_user(
+            db,
+            a.workspace_id,
+            uid,
+            t_msg,
+            b_msg,
+            f"/tasks?task={a.task_id}",
+            f"approval:{a.id}:mine",
+            event="limit" if limit else "my_ai",
+        )
     await db.commit()
     return ids
+
+
+async def _askers_people(
+    db: AsyncSession, a: Approval, agent: Agent | None, task: Task | None
+) -> set[str]:
+    """P114: the people an agent's ask is about: the agent's owner (their own AI) and the
+    person whose request the task is (their allowance pays)."""
+    from ..teams import allowance  # late: teams import the agents that import this
+
+    out: set[str] = set()
+    if agent is not None and agent.owner_user_id:
+        out.add(agent.owner_user_id)
+    person = str((a.args or {}).get("user_id") or "") if a.kind == "budget" else ""
+    if person:
+        out.add(person)
+    elif task is not None:
+        try:
+            p = await allowance.person_of_task(db, task)
+        except Exception:  # noqa: BLE001 - only who hears of it
+            p = None
+        if p:
+            out.add(p)
+    return out
 
 
 async def _queue_for_user(
@@ -277,20 +355,38 @@ async def _queue_for_user(
     url: str,
     dedupe: str,
     lang: str | None = None,
+    *,
+    event: str = "other",
+    email: bool = True,
 ) -> list[str]:
-    """One person, every way they can be reached: each device, linked Telegram and WhatsApp.
-    Title and body are said in the person's language."""
-    lang = lang or await prefs.language(db, user_id)
+    """One person, every way they can be reached: each device, linked Telegram and WhatsApp,
+    and (P114) email from the office's system mailbox. Title and body are said in the person's
+    language. P114: only the channels and kinds of notice (`event`, notify_prefs.EVENTS) the
+    person left on. `email=False` for callers that send their own email."""
+    user = await db.get(User, user_id)
+    if user is None or not user.is_active:
+        return []
+    lang = lang or prefs.lang_of(user)
     title, body = render(title, lang), render(body, lang)
     now = datetime.now(UTC)
     ids: list[str] = []
-    for sub in (
-        await db.scalars(
-            select(PushSubscription).where(
-                PushSubscription.user_id == user_id, PushSubscription.workspace_id == workspace_id
+    if email and notify_prefs.wants(user, event, "email"):
+        did = await _queue_email(db, workspace_id, user, title, body, url, dedupe, lang, now)
+        if did:
+            ids.append(did)
+    devices = (
+        (
+            await db.scalars(
+                select(PushSubscription).where(
+                    PushSubscription.user_id == user_id,
+                    PushSubscription.workspace_id == workspace_id,
+                )
             )
-        )
-    ).all():
+        ).all()
+        if notify_prefs.wants(user, event, "app")
+        else []
+    )
+    for sub in devices:
         did = await _add(
             db,
             Delivery(
@@ -319,6 +415,8 @@ async def _queue_for_user(
         )
     ).all():
         wa = ch.kind == "whatsapp"
+        if not notify_prefs.wants(user, event, "whatsapp" if wa else "telegram"):
+            continue
         text = f"*{title}*\n\n{body}" if wa else f"{title}\n\n{body}"
         if url and url.startswith("/"):
             text += f"\n\n{settings.public_url}{url}"
@@ -339,6 +437,72 @@ async def _queue_for_user(
     return ids
 
 
+def email_html(name: str, title: str, body: str, link: str, lang: str) -> str:
+    """P114: one notice by email, in the person's language: hello, what happened, the button."""
+    from ..services.signin_mail import _page
+
+    ms = lang == "ms"
+    n, ti, u = html.escape(name), html.escape(title), html.escape(link, quote=True)
+    lines = "".join(
+        f'<p style="margin:0 0 10px">{html.escape(x)}</p>' for x in body.split("\n") if x.strip()
+    )
+    btn = (
+        f'<p style="margin:16px 0"><a href="{u}" style="display:inline-block;padding:10px 18px;'
+        "border-radius:8px;background:#1f2937;color:#ffffff;text-decoration:none;"
+        f'font-weight:600">{"Buka" if ms else "Open it"}</a></p>'
+    )
+    off = (
+        "Tukar notifikasi anda di Tetapan &gt; Notifikasi saya."
+        if ms
+        else "Change your notifications in Settings &gt; My notifications."
+    )
+    hello = "Salam" if ms else "Hello"
+    return _page(
+        f'<p style="margin:0 0 10px">{hello} {n},</p>'
+        f'<p style="margin:0 0 10px;font-size:16px;font-weight:600">{ti}</p>{lines}{btn}'
+        f'<p style="margin:0;font-size:12.5px;color:#6b7280">{off}</p>'
+    )
+
+
+async def _queue_email(
+    db: AsyncSession,
+    workspace_id: str,
+    user: User,
+    title: str,
+    body: str,
+    url: str,
+    dedupe: str,
+    lang: str,
+    now: datetime,
+) -> str | None:
+    """P114: a notice by email, when the office's system mailbox is on and the person has a
+    real address. Sent by the worker like every other delivery (deliver: "email")."""
+    from ..core.config import settings
+    from ..core.workspace_settings import system_mail, valid_address
+    from ..models import Workspace
+
+    ws = await db.get(Workspace, workspace_id)
+    if not system_mail(ws.settings if ws else None).ready or not valid_address(user.email or ""):
+        return None
+    base = settings.public_url.rstrip("/")
+    link = f"{base}{url}" if url.startswith("/") else (url or base)
+    return await _add(
+        db,
+        Delivery(
+            workspace_id=workspace_id,
+            channel="email",
+            target=user.id,
+            kind="notice",
+            payload={
+                "subject": title[:200],
+                "html": email_html(user.name, title, body, link, lang),
+            },
+            dedupe_key=f"{dedupe}:email",
+            created_at=now,
+        ),
+    )
+
+
 async def notify_people(
     db: AsyncSession,
     workspace_id: str,
@@ -348,6 +512,7 @@ async def notify_people(
     *,
     dedupe: str,
     perm: str = "approvals.decide",
+    event: str = "other",
 ) -> list[str]:
     """A plain notice (no buttons) to everyone with `perm`: every device, Telegram, WhatsApp.
     `title` / `body`: English (a Msg, or text with a template in i18n/ms.py); each person
@@ -367,7 +532,15 @@ async def notify_people(
     for user, role in rows:
         if can(role, perm):
             ids += await _queue_for_user(
-                db, workspace_id, user.id, title, body, url, dedupe, prefs.lang_of(user)
+                db,
+                workspace_id,
+                user.id,
+                title,
+                body,
+                url,
+                dedupe,
+                prefs.lang_of(user),
+                event=event,
             )
     await db.commit()
     return ids
@@ -382,10 +555,15 @@ async def notify_user(
     url: str,
     *,
     dedupe: str,
+    event: str = "other",
+    email: bool = True,
 ) -> list[str]:
     """A notice to one person on every channel they set up, in their language (see
-    notify_people). Returns the delivery ids."""
-    ids = await _queue_for_user(db, workspace_id, user_id, title, body, url, dedupe)
+    notify_people). Returns the delivery ids. P114: `event` is the kind of notice the person
+    can switch off (notify_prefs.EVENTS); `email=False` when the caller emails them itself."""
+    ids = await _queue_for_user(
+        db, workspace_id, user_id, title, body, url, dedupe, event=event, email=email
+    )
     await db.commit()
     return ids
 
@@ -472,7 +650,7 @@ async def deliver(db: AsyncSession, delivery_id: str) -> str:
     if d is None or d.state != "pending":
         return d.state if d else "missing"
     d.attempts += 1
-    service = {"webpush": "push"}.get(d.channel, d.channel)
+    service = {"webpush": "push", "email": "m365"}.get(d.channel, d.channel)
     if not await compliance.allowed(
         db, d.workspace_id, service, compliance.KINDS.get(service, service), d.channel
     ):
@@ -516,6 +694,8 @@ async def deliver(db: AsyncSession, delivery_id: str) -> str:
                 )
                 d.state, d.sent_at = "sent", datetime.now(UTC)
                 d.result = {"message_id": msg.get("message_id")}
+        elif d.channel == "email":
+            await _send_email(db, d)
         elif d.channel == "whatsapp":
             ch_id, _, chat_id = d.target.partition(":")
             ch = await db.get(Channel, ch_id)
@@ -556,6 +736,52 @@ async def deliver(db: AsyncSession, delivery_id: str) -> str:
         {"delivery_id": d.id, "state": d.state, "channel": d.channel},
     )
     return d.state
+
+
+async def _send_email(db: AsyncSession, d: Delivery) -> None:
+    """P114: send one notice email from the office's system mailbox (Microsoft Graph)."""
+    from ..core.workspace_settings import system_mail, valid_address
+    from ..microsoft import sendmail
+    from ..models import Workspace
+
+    ws = await db.get(Workspace, d.workspace_id)
+    sm = system_mail(ws.settings if ws else None)
+    user = await db.get(User, d.target)
+    if not sm.ready:
+        d.state, d.last_error = "skipped", "The office's email is switched off."
+        return
+    if user is None or not user.is_active or not valid_address(user.email or ""):
+        d.state, d.last_error = "skipped", "The person has no email address."
+        return
+    try:
+        await send_mail(
+            db,
+            d.workspace_id,
+            sender=sm.address,
+            from_name=sm.from_name,
+            to=user.email,
+            to_name=user.name,
+            subject=str(d.payload.get("subject") or ""),
+            html=str(d.payload.get("html") or ""),
+        )
+    except sendmail.SendError as e:
+        if e.kind == "not_configured":
+            d.state, d.last_error = "skipped", "Microsoft 365 is not connected for email."
+            return
+        if e.kind in ("throttled", "unavailable", "failed"):
+            raise Retry(f"email: {e.kind}") from e
+        d.state, d.last_error = "failed", f"email: {e.kind}"
+        return
+    d.state, d.sent_at = "sent", datetime.now(UTC)
+    # Sent: keep only the subject on the row, not the whole page.
+    d.payload = {"subject": d.payload.get("subject")}
+
+
+async def send_mail(db: AsyncSession, workspace_id: str, **kw: str) -> None:
+    """The Graph send (tests swap this)."""
+    from ..microsoft import sendmail
+
+    await sendmail.send(db, workspace_id, **kw)
 
 
 async def start(delivery_ids: list[str]) -> None:

@@ -30,7 +30,7 @@ from ...models import (
 )
 from ...services import audit, events, task_mail
 from ...skills import store as skills_store
-from ...teams import blockers, objectives, people, reconcile, review, task_parts
+from ...teams import allowance, blockers, objectives, people, reconcile, review, task_parts
 from ...teams.task_models import ASSIGNEE, WATCHER, TaskAttachment, TaskChecklistItem
 from .. import paging
 from ..agent_schemas import (
@@ -174,10 +174,32 @@ async def fill_people(db: AsyncSession, rows: list[Task], outs: list[TaskOut]) -
     on = await task_parts.people_of(db, [t.id for t in rows])
     ids |= {r.user_id for rs in on.values() for r in rs}
     counts = await task_parts.card_counts(db, [t.id for t in rows])
+    # P114: whose request each agent task is (their allowance pays) and whose AI does it.
+    agent_tasks = [t for t in rows if t.assignee_agent_id]
+    for_whom = await allowance.people_of_tasks(db, agent_tasks) if agent_tasks else {}
+    owners: dict[str, str] = {}
+    if agent_tasks:
+        owners = {
+            a: o
+            for a, o in (
+                await db.execute(
+                    select(Agent.id, Agent.owner_user_id).where(
+                        Agent.id.in_({t.assignee_agent_id for t in agent_tasks})
+                    )
+                )
+            ).all()
+            if o
+        }
+    ids |= {u for u in for_whom.values() if u} | set(owners.values())
     known = await people.names(db, ids)
     for t, out in zip(rows, outs, strict=True):
         out.assignee_user_name = known.get(t.assignee_user_id or "")
         out.created_by_name = known.get(people.giver_id(t) or "")
+        if t.assignee_agent_id:
+            out.for_user_id = for_whom.get(t.id)
+            out.for_user_name = known.get(out.for_user_id or "")
+            out.assignee_owner_id = owners.get(t.assignee_agent_id)
+            out.assignee_owner_name = known.get(out.assignee_owner_id or "")
         rs = on.get(t.id, [])
         doers = task_parts.by_role(rs, ASSIGNEE)
         if t.assignee_user_id:

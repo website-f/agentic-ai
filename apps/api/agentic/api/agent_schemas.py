@@ -301,6 +301,12 @@ class TaskOut(BaseModel):
     subtasks_done: int = 0
     subtasks_total: int = 0
     files_count: int = 0
+    # P114: the person whose request this is (it counts against their daily AI allowance), and
+    # whose AI does it (staff rename their AI as they like, so the name alone may not say).
+    for_user_id: str | None = None
+    for_user_name: str | None = None
+    assignee_owner_id: str | None = None
+    assignee_owner_name: str | None = None
 
 
 class TaskEventOut(BaseModel):

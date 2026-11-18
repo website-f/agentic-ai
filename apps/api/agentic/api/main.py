@@ -567,6 +567,11 @@ from .routers import ai_people_usage as ai_people_usage_router  # noqa: E402
 
 app.include_router(ai_people_usage_router.router)
 
+# P114: each person's own notification settings (email, app, Telegram, WhatsApp).
+from .routers import my_notifications as my_notifications_router  # noqa: E402
+
+app.include_router(my_notifications_router.router)
+
 # P94: only the API process holds the PC sockets (devices/hub.py); the worker reaches them
 # through /internal/devices/*. Set here, not when a module is imported.
 from ..devices import bridge as _devices_bridge  # noqa: E402

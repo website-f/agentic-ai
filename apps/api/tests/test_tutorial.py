@@ -255,6 +255,7 @@ async def test_prefs_keep_other_keys_and_are_per_person(client):
             "onboarding": {},
             "locale": {},
             "needs": {},
+            "notify": {},
         }
         assert (await progress(other))["done"] == []
     finally:
@@ -262,18 +263,14 @@ async def test_prefs_keep_other_keys_and_are_per_person(client):
 
 
 def test_merge_helper_is_generic_for_whitelisted_keys():
-    assert prefs.KEYS == ("tutorial", "onboarding", "locale", "needs")
+    assert prefs.KEYS == ("tutorial", "onboarding", "locale", "needs", "notify")
     out = prefs.merge({"onboarding": {"a": 1}}, {"onboarding": {"b": 2}})
     assert out == {"onboarding": {"a": 1, "b": 2}}
     with pytest.raises(prefs.PrefsError):
         prefs.merge({}, {"admin": {"x": 1}})
-    assert prefs.visible(None) == {"tutorial": {}, "onboarding": {}, "locale": {}, "needs": {}}
-    assert prefs.visible({"tutorial": "junk"}) == {
-        "tutorial": {},
-        "onboarding": {},
-        "locale": {},
-        "needs": {},
-    }
+    empty = {"tutorial": {}, "onboarding": {}, "locale": {}, "needs": {}, "notify": {}}
+    assert prefs.visible(None) == empty
+    assert prefs.visible({"tutorial": "junk"}) == empty
 
 
 async def test_language_is_a_profile_setting(client, llm, temporal):

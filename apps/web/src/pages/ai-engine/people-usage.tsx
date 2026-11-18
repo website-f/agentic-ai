@@ -1,10 +1,12 @@
 /**
  * P113: AI usage per user, the developer's report (only the system's developer sees this tab;
  * the API refuses everyone else). One row per person for a period, most tokens first; open a
- * row for their full report: by feature, agent, model and day, and every call (never what was
- * said). Numbers come from the model-call ledger (api/routers/ai_people_usage.py).
+ * row for their full report: by feature, agent, model and day, and every call. P114: each call
+ * with what it was about (their message and the reply, or the task's brief and result), their
+ * conversations and the tasks their use paid for (opening them is audited). Numbers come from
+ * the model-call ledger (api/routers/ai_people_usage.py).
  */
-import { BuildingsIcon, ChartBarIcon, CoinsIcon, CrownIcon, TextAaIcon, UsersIcon } from "@phosphor-icons/react";
+import { BuildingsIcon, ChartBarIcon, ChatsCircleIcon, CoinsIcon, CrownIcon, FileXlsIcon, ListChecksIcon, TextAaIcon, UsersIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
@@ -12,6 +14,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 
 import { EmptyState, IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { CompanyPicker } from "@/components/ui/company-picker";
 import { DataTable, filterOf, useLocalTableState, useServerTable, withParams, type Column } from "@/components/ui/data-table";
@@ -25,6 +28,7 @@ import { Stat, StatGrid } from "@/components/ui/stat";
 import { locale, msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { branchesQuery } from "@/lib/queries";
+import { startDownload } from "@/lib/native";
 import { everyRow } from "@/lib/table-export";
 import { ROLE_INFO, type Role } from "@/lib/types";
 import { cn, initials, timeAgo } from "@/lib/utils";
@@ -117,6 +121,60 @@ export interface UsageEvent {
   status: string;
   error_class: string | null;
   latency_ms: number;
+  /** P114: what it was about. "task": the brief and result; "chat": their message and the reply,
+   * matched by person, agent and time; null: no text kept for this feature. */
+  source: "task" | "chat" | null;
+  asked: string | null;
+  answered: string | null;
+  session_id: string | null;
+  session_title: string | null;
+}
+
+export interface UsageEventDetail extends UsageEvent {
+  task_status: string | null;
+  error_detail: string | null;
+}
+
+export interface UsageFacets {
+  agents: { id: string | null; name: string | null; calls: number }[];
+  models: { model: string; provider: string; calls: number }[];
+}
+
+export interface ConversationRow {
+  id: string;
+  title: string;
+  agent_id: string;
+  agent_name: string | null;
+  messages: number;
+  asked: number;
+  first_at: string;
+  last_at: string;
+  first_message: string | null;
+  /** Chat calls with that agent while it ran (matched by time). */
+  tokens: number;
+  cost_usd: number;
+}
+
+export interface ConversationDetail {
+  id: string;
+  title: string;
+  agent_id: string;
+  agent_name: string | null;
+  lines: { id: number; role: "user" | "assistant"; content: string; at: string }[];
+  more: boolean;
+}
+
+export interface PaidTask {
+  task_id: string;
+  title: string;
+  status: string | null;
+  brief: string | null;
+  agent_name: string | null;
+  created_at: string | null;
+  calls: number;
+  tokens: number;
+  cost_usd: number;
+  last_at: string;
 }
 
 // ---------------------------------------------------------------- words
@@ -281,7 +339,12 @@ export function PeopleUsageTab() {
   const { data: branches = [] } = useQuery(branchesQuery);
   const [role, setRole] = filterOf(control, "role");
   const [branch, setBranch] = filterOf(control, "branch");
+  const [dept, setDept] = filterOf(control, "department");
   const [open, setOpen] = useState<string | null>(null);
+  // P114: departments of the chosen company, or of every company (named with it).
+  const depts = branches
+    .filter((b) => !branch || branch === ALL || b.id === branch)
+    .flatMap((b) => b.departments.map((d) => ({ value: d.id, label: branch ? d.name : `${b.name} · ${d.name}` })));
   const body = table.body;
   const totals = body?.totals;
 
@@ -337,7 +400,7 @@ export function PeopleUsageTab() {
     <div className="grid min-w-0 gap-6">
       <div className="flex min-w-0 flex-wrap items-end justify-between gap-3">
         <p className="max-w-2xl min-w-0 text-[13.5px] text-muted">
-          {t("Who uses the AI, how much, and what for. Only you (the developer) see this page. It shows purposes, tasks and numbers, never what was said.")}
+          {t("Who uses the AI, how much, and what for. Only you (the developer) see this page. Open a person for their full report: every call with what they asked and what came back, their conversations and tasks. Opening a report is recorded in the audit log.")}
         </p>
         <PeriodPicker value={period} onChange={(v) => { setPeriod(v); control.set({ page: 1 }); }} />
       </div>
@@ -407,9 +470,13 @@ export function PeopleUsageTab() {
                   <CompanyPicker className="w-full sm:w-44" label={t("Company")} value={branch || ALL} onValueChange={(v) => setBranch(v === ALL ? "" : v)}
                     before={[{ value: ALL, label: t("All companies") }, { value: "none", label: t("No company") }]} companies={branches} />
                 ) : null}
+                {depts.length ? (
+                  <Select className="w-full sm:w-52" label={t("Department")} value={dept || ALL} onValueChange={(v) => setDept(v === ALL ? "" : v)}
+                    options={[{ value: ALL, label: t("All departments") }, { value: "none", label: t("No department") }, ...depts]} />
+                ) : null}
               </>
             }
-            empty={<EmptyState icon={UsersIcon} title={t("Nobody matches")} body={t("Try another period, role or company.")} />}
+            empty={<EmptyState icon={UsersIcon} title={t("Nobody matches")} body={t("Try another period, role, company or department.")} />}
           />
         </CardBody>
       </Card>
@@ -482,8 +549,13 @@ function EventsTable({ userId, params }: { userId: string; params: Record<string
   const feature = useFeature();
   const control = useLocalTableState({ size: 25, sort: "ts", dir: "desc" });
   const [only, setOnly] = filterOf(control, "feature");
+  const [agent, setAgent] = filterOf(control, "agent");
+  const [model, setModel] = filterOf(control, "model");
+  const [detail, setDetail] = useState<number | null>(null);
   const url = `/api/ai/people-usage/${encodeURIComponent(userId)}/events`;
   const table = useServerTable<UsageEvent>(["ai", "people-usage", userId, "events"], url, control.state, params);
+  const facetsHref = withParams(`/api/ai/people-usage/${encodeURIComponent(userId)}/facets`, params);
+  const { data: facets } = useQuery({ queryKey: ["ai", "people-usage", userId, facetsHref], queryFn: () => api<UsageFacets>(facetsHref) });
   const columns: Column<UsageEvent>[] = [
     { id: "ts", header: t("When"), sortable: true, kind: "date", cell: (e) => <span className="whitespace-nowrap">{dateTime(e.ts)}</span>, exportValue: (e) => e.ts },
     {
@@ -501,7 +573,12 @@ function EventsTable({ userId, params }: { userId: string; params: Record<string
       exportValue: (e) => `${feature(e.feature)} (${e.purpose})`,
     },
     {
-      id: "task", header: t("Task or agent"),
+      id: "about", header: t("What it was about"), card: "full",
+      cell: (e) => <About e={e} />,
+      exportValue: (e) => [e.asked, e.answered].filter(Boolean).join(" → "),
+    },
+    {
+      id: "task", header: t("Task or agent"), hideBelow: "xl",
       cell: (e) => (
         <span className="grid min-w-0 gap-0.5 text-[13px]">
           {e.task_id ? (
@@ -540,6 +617,7 @@ function EventsTable({ userId, params }: { userId: string; params: Record<string
     { id: "cost", header: t("Cost (USD)"), sortable: true, kind: "number", align: "right", cell: (e) => <Num>{usd(e.cost_usd)}</Num>, exportValue: (e) => (e.cost_usd === null ? "" : e.cost_usd.toFixed(6)) },
   ];
   return (
+    <>
     <DataTable
       label={t("Every call")}
       mode="server"
@@ -553,17 +631,191 @@ function EventsTable({ userId, params }: { userId: string; params: Record<string
       fetching={table.fetching}
       error={table.error}
       onRetry={table.refetch}
-      searchPlaceholder={t("Search purpose or model")}
+      searchPlaceholder={t("Search what they asked, the reply, task, purpose or model")}
+      onOpen={(e) => setDetail(e.id)}
       exportName={t("AI calls")}
       exportRows={() => everyRow<UsageEvent>(url, control.state, params)}
       stickyHeader={false}
       layout="auto"
       filters={
-        <Select className="w-full sm:w-52" label={t("Feature")} value={only || ALL} onValueChange={(v) => setOnly(v === ALL ? "" : v)}
-          options={[{ value: ALL, label: t("All features") }, ...Object.keys(FEATURE_LABELS).map((k) => ({ value: k, label: feature(k) }))]} />
+        <>
+          <Select className="w-full sm:w-52" label={t("Feature")} value={only || ALL} onValueChange={(v) => setOnly(v === ALL ? "" : v)}
+            options={[{ value: ALL, label: t("All features") }, ...Object.keys(FEATURE_LABELS).map((k) => ({ value: k, label: feature(k) }))]} />
+          {facets?.agents?.length ? (
+            <Select className="w-full sm:w-48" label={t("Agent")} value={agent || ALL} onValueChange={(v) => setAgent(v === ALL ? "" : v)}
+              options={[{ value: ALL, label: t("All agents") }, ...facets.agents.map((a) => ({ value: a.id ?? "none", label: a.id ? (a.name ?? a.id) : t("No agent (direct use)") }))]} />
+          ) : null}
+          {facets?.models && facets.models.length > 1 ? (
+            <Select className="w-full sm:w-48" label={t("Model")} value={model || ALL} onValueChange={(v) => setModel(v === ALL ? "" : v)}
+              options={[{ value: ALL, label: t("All models") }, ...[...new Set(facets.models.map((m) => m.model))].map((m) => ({ value: m, label: m }))]} />
+          ) : null}
+        </>
       }
       empty={<EmptyState icon={ChartBarIcon} title={t("No calls")} body={t("Nothing in this period.")} />}
     />
+    {detail !== null ? <CallDialog userId={userId} callId={detail} onClose={() => setDetail(null)} /> : null}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- P114: what it was about
+
+/** What a call was about: the person's message and the reply (chat, matched by time), or the
+ * task's brief and result. */
+function About({ e, full }: { e: UsageEvent; full?: boolean }) {
+  const t = useT();
+  if (!e.source) return <span className="text-[12.5px] text-muted">{t("No text kept for this feature")}</span>;
+  const clamp = full ? "whitespace-pre-wrap" : "line-clamp-3";
+  return (
+    <span className="grid min-w-0 gap-1.5 text-[13px]">
+      {e.asked ? (
+        <span className="grid min-w-0">
+          <span className="text-[11px] font-medium tracking-wide text-muted uppercase">{e.source === "task" ? t("What they asked (task brief)") : t("They wrote")}</span>
+          <span className={cn("break-words", clamp)}>{e.asked}</span>
+        </span>
+      ) : null}
+      {e.answered ? (
+        <span className="grid min-w-0">
+          <span className="text-[11px] font-medium tracking-wide text-muted uppercase">{e.source === "task" ? t("Result") : t("The AI replied")}</span>
+          <span className={cn("break-words text-muted", clamp)}>{e.answered}</span>
+        </span>
+      ) : null}
+      {e.source === "chat" ? (
+        <span className="text-[11.5px] text-muted">
+          {e.session_title ? t("In “{title}” · matched by time", { title: e.session_title }) : t("Matched by time")}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function CallDialog({ userId, callId, onClose }: { userId: string; callId: number; onClose: () => void }) {
+  const t = useT();
+  const feature = useFeature();
+  const { data: e, isLoading, error } = useQuery({
+    queryKey: ["ai", "people-usage", userId, "call", callId],
+    queryFn: () => api<UsageEventDetail>(`/api/ai/people-usage/${encodeURIComponent(userId)}/events/${callId}`),
+  });
+  return (
+    <ResponsiveDialog open onOpenChange={(o) => { if (!o) onClose(); }} title={e ? feature(e.feature) : t("AI call")}
+      description={e ? `${dateTime(e.ts)} · ${e.purpose}` : undefined} className="sm:max-w-2xl">
+      {isLoading ? <Skeleton className="h-40" /> : error || !e ? (
+        <p role="alert" className="text-[13.5px] text-danger">{errorMessage(error)}</p>
+      ) : (
+        <div className="grid min-w-0 gap-4">
+          <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13px]">
+            {e.task_id ? (<><dt className="text-muted">{t("Task")}</dt><dd><Link to="/tasks" search={{ task: e.task_id }} className="break-words text-accent hover:underline">{e.task_title ?? e.task_id}</Link></dd></>) : null}
+            {e.agent_id ? (<><dt className="text-muted">{t("Agent")}</dt><dd className="break-words">{e.agent_name ?? e.agent_id}</dd></>) : null}
+            <dt className="text-muted">{t("Model")}</dt><dd className="font-mono text-[12px] break-words">{[e.provider, e.model, e.group].filter(Boolean).join(" · ")}</dd>
+            <dt className="text-muted">{t("Tokens")}</dt><dd className="tabular">{t("{in} in · {out} out", { in: compact(e.prompt), out: compact(e.completion) })}</dd>
+            <dt className="text-muted">{t("Cost (USD)")}</dt><dd className="tabular">{usd(e.cost_usd)}</dd>
+            {e.status === "error" ? (<><dt className="text-muted">{t("Failed")}</dt><dd className="break-words text-danger">{[e.error_class, e.error_detail].filter(Boolean).join(": ")}</dd></>) : null}
+          </dl>
+          <div className="max-h-[55dvh] overflow-y-auto rounded-[var(--radius-sm)] border border-border bg-surface-2/40 p-3"><About e={e} full /></div>
+        </div>
+      )}
+    </ResponsiveDialog>
+  );
+}
+
+function ConversationDialog({ userId, sessionId, onClose }: { userId: string; sessionId: string; onClose: () => void }) {
+  const t = useT();
+  const { data: c, isLoading, error } = useQuery({
+    queryKey: ["ai", "people-usage", userId, "conversation", sessionId],
+    queryFn: () => api<ConversationDetail>(`/api/ai/people-usage/${encodeURIComponent(userId)}/conversations/${encodeURIComponent(sessionId)}`),
+  });
+  return (
+    <ResponsiveDialog open onOpenChange={(o) => { if (!o) onClose(); }} title={c?.title ?? t("Conversation")}
+      description={c?.agent_name ? t("With {agent}", { agent: c.agent_name }) : undefined} className="sm:max-w-2xl">
+      {isLoading ? <Skeleton className="h-60" /> : error || !c ? (
+        <p role="alert" className="text-[13.5px] text-danger">{errorMessage(error)}</p>
+      ) : (
+        <div className="grid max-h-[65dvh] min-w-0 gap-3 overflow-y-auto pr-1">
+          {c.more ? <p className="text-[12px] text-muted">{t("Only the latest {n} messages are shown.", { n: c.lines.length })}</p> : null}
+          {c.lines.map((l) => (
+            <div key={l.id} className={cn("grid max-w-[92%] min-w-0 gap-1 rounded-[var(--radius-sm)] px-3 py-2 text-[13px]",
+              l.role === "user" ? "justify-self-end bg-accent-soft" : "justify-self-start border border-border bg-surface")}>
+              <span className="text-[11px] text-muted">{l.role === "user" ? t("They wrote") : (c.agent_name ?? t("The AI replied"))} · {dateTime(l.at)}</span>
+              <span className="break-words whitespace-pre-wrap">{l.content}</span>
+            </div>
+          ))}
+          {!c.lines.length ? <p className="text-[13px] text-muted">{t("No messages.")}</p> : null}
+        </div>
+      )}
+    </ResponsiveDialog>
+  );
+}
+
+function ConversationsTable({ userId, params }: { userId: string; params: Record<string, string> }) {
+  const t = useT();
+  const control = useLocalTableState({ size: 25, sort: "last", dir: "desc" });
+  const url = `/api/ai/people-usage/${encodeURIComponent(userId)}/conversations`;
+  const table = useServerTable<ConversationRow>(["ai", "people-usage", userId, "conversations"], url, control.state, params);
+  const [open, setOpen] = useState<string | null>(null);
+  const columns: Column<ConversationRow>[] = [
+    {
+      id: "title", header: t("Conversation"), sortable: true, card: "title",
+      cell: (c) => (
+        <span className="grid min-w-0">
+          <span className="font-medium break-words">{c.title}</span>
+          {c.first_message ? <span className="line-clamp-2 text-[12px] break-words text-muted">{c.first_message}</span> : null}
+        </span>
+      ),
+      exportValue: (c) => c.title,
+    },
+    { id: "agent", header: t("Agent"), cell: (c) => c.agent_name ?? <span className="text-muted">–</span>, exportValue: (c) => c.agent_name ?? "" },
+    {
+      id: "messages", header: t("Messages"), sortable: true, kind: "number", align: "right",
+      cell: (c) => <Num>{t("{n} ({mine} theirs)", { n: c.messages, mine: c.asked })}</Num>, exportValue: (c) => c.messages,
+    },
+    { id: "tokens", header: t("Tokens (about)"), sortable: true, kind: "number", align: "right", cell: (c) => <Num>{compact(c.tokens)}</Num>, exportValue: (c) => c.tokens },
+    { id: "cost", header: t("Cost (USD)"), kind: "number", align: "right", hideBelow: "lg", cell: (c) => <Num>{usd(c.cost_usd)}</Num>, exportValue: (c) => c.cost_usd.toFixed(6) },
+    { id: "last", header: t("Last message"), sortable: true, kind: "date", cell: (c) => <span className="whitespace-nowrap">{dateTime(c.last_at)}</span>, exportValue: (c) => c.last_at },
+  ];
+  return (
+    <>
+      <DataTable label={t("Conversations")} mode="server" columns={columns} rows={table.rows} total={table.total}
+        rowId={(c) => c.id} rowLabel={(c) => c.title} control={control} loading={table.loading} fetching={table.fetching}
+        error={table.error} onRetry={table.refetch} onOpen={(c) => setOpen(c.id)}
+        searchPlaceholder={t("Search the title, agent or anything written")}
+        exportName={t("Conversations")} exportRows={() => everyRow<ConversationRow>(url, control.state, params)}
+        stickyHeader={false} layout="auto"
+        empty={<EmptyState icon={ChatsCircleIcon} title={t("No conversations")} body={t("Nothing in this period.")} />} />
+      {open ? <ConversationDialog userId={userId} sessionId={open} onClose={() => setOpen(null)} /> : null}
+    </>
+  );
+}
+
+function TasksTable({ userId, params }: { userId: string; params: Record<string, string> }) {
+  const t = useT();
+  const control = useLocalTableState({ size: 25, sort: "tokens", dir: "desc" });
+  const url = `/api/ai/people-usage/${encodeURIComponent(userId)}/tasks`;
+  const table = useServerTable<PaidTask>(["ai", "people-usage", userId, "tasks"], url, control.state, params);
+  const columns: Column<PaidTask>[] = [
+    {
+      id: "title", header: t("Task"), sortable: true, card: "title",
+      cell: (x) => (
+        <span className="grid min-w-0">
+          <Link to="/tasks" search={{ task: x.task_id }} className="font-medium break-words text-accent hover:underline">{x.title}</Link>
+          {x.brief ? <span className="line-clamp-2 text-[12px] break-words text-muted">{x.brief}</span> : null}
+        </span>
+      ),
+      exportValue: (x) => x.title,
+    },
+    { id: "agent", header: t("Agent"), hideBelow: "lg", cell: (x) => x.agent_name ?? <span className="text-muted">–</span>, exportValue: (x) => x.agent_name ?? "" },
+    { id: "status", header: t("Status"), cell: (x) => (x.status ? <Pill>{x.status}</Pill> : <span className="text-muted">–</span>), exportValue: (x) => x.status ?? "" },
+    { id: "calls", header: t("Calls"), sortable: true, kind: "number", align: "right", cell: (x) => <Num>{compact(x.calls)}</Num>, exportValue: (x) => x.calls },
+    { id: "tokens", header: t("Tokens"), sortable: true, kind: "number", align: "right", cell: (x) => <Num className="font-medium">{compact(x.tokens)}</Num>, exportValue: (x) => x.tokens },
+    { id: "cost", header: t("Cost (USD)"), sortable: true, kind: "number", align: "right", cell: (x) => <Num>{usd(x.cost_usd)}</Num>, exportValue: (x) => x.cost_usd.toFixed(6) },
+    { id: "last", header: t("Last call"), sortable: true, kind: "date", hideBelow: "lg", cell: (x) => <span className="whitespace-nowrap">{dateTime(x.last_at)}</span>, exportValue: (x) => x.last_at },
+  ];
+  return (
+    <DataTable label={t("Tasks")} mode="server" columns={columns} rows={table.rows} total={table.total}
+      rowId={(x) => x.task_id} rowLabel={(x) => x.title} control={control} loading={table.loading} fetching={table.fetching}
+      error={table.error} onRetry={table.refetch} searchPlaceholder={t("Search the task, what was asked or the result")}
+      exportName={t("Tasks")} exportRows={() => everyRow<PaidTask>(url, control.state, params)}
+      stickyHeader={false} layout="auto"
+      empty={<EmptyState icon={ListChecksIcon} title={t("No tasks")} body={t("Nothing in this period.")} />} />
   );
 }
 
@@ -571,6 +823,7 @@ export function PersonReport({ userId, params, onClose }: { userId: string; para
   const t = useT();
   const feature = useFeature();
   const [view, setView] = useState<Breakdown>("feature");
+  const [log, setLog] = useState<"calls" | "conversations" | "tasks">("calls");
   const href = withParams(`/api/ai/people-usage/${encodeURIComponent(userId)}`, params);
   const { data: r, isLoading, error } = useQuery({ queryKey: ["ai", "people-usage", userId, href], queryFn: () => api<UsageReport>(href) });
   const office = userId === OFFICE;
@@ -590,7 +843,11 @@ export function PersonReport({ userId, params, onClose }: { userId: string; para
 
   return (
     <SideSheet open onOpenChange={(o) => { if (!o) onClose(); }} size="xl" title={title}
-      description={office ? t("Work nobody asked for: routines, learning and the office's own jobs.") : where || undefined}>
+      description={office ? t("Work nobody asked for: routines, learning and the office's own jobs.") : where || undefined}
+      // P114: the whole report for the period as one Excel file (summary, breakdowns, every call).
+      actions={<Button size="sm" variant="outline" onClick={() => startDownload(withParams(`/api/ai/people-usage/${encodeURIComponent(userId)}/report.xlsx`, params))}>
+        <FileXlsIcon size={16} /> {t("Download full report (Excel)")}
+      </Button>}>
       {isLoading ? (
         <div className="grid gap-4">
           <div className="grid grid-cols-2 gap-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-[var(--radius-md)]" />)}</div>
@@ -638,11 +895,29 @@ export function PersonReport({ userId, params, onClose }: { userId: string; para
           </section>
 
           <section className="grid min-w-0 gap-3">
-            <div>
-              <h3 className="text-[14px] font-semibold">{t("Every call")}</h3>
-              <p className="text-[12.5px] text-muted">{t("When, what for, which task or agent, which model, tokens and cost. What was said is never shown.")}</p>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-[14px] font-semibold">{t("Their logs")}</h3>
+                <p className="max-w-xl text-[12.5px] text-muted">
+                  {log === "calls"
+                    ? t("Every call: when, what for, what they asked and what came back, which model, tokens and cost. Open a call to read it in full. Chat calls are matched to the conversation by time.")
+                    : log === "conversations"
+                      ? t("Their conversations with agents in this period. Open one to read it. Tokens are the chat calls with that agent while it ran.")
+                      : t("The tasks their AI use paid for, most tokens first.")}
+                </p>
+              </div>
+              {office ? null : (
+                <Segmented size="sm" label={t("Show")} value={log} onChange={setLog}
+                  options={[
+                    { value: "calls", label: t("Every call") },
+                    { value: "conversations", label: t("Conversations") },
+                    { value: "tasks", label: t("Tasks") },
+                  ]} />
+              )}
             </div>
-            <EventsTable userId={userId} params={params} />
+            {log === "conversations" && !office ? <ConversationsTable userId={userId} params={params} />
+              : log === "tasks" && !office ? <TasksTable userId={userId} params={params} />
+                : <EventsTable userId={userId} params={params} />}
           </section>
         </div>
       )}

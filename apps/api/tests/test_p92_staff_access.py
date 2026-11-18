@@ -288,6 +288,7 @@ STAFF_OK = {
     "/api/getting-started",  # P109: their own checklist and tours (test_p109_getting_started)
     "/api/integrations/microsoft", "/api/integrations/microsoft/account", "/api/library",
     "/api/library/linked", "/api/mail/activity", "/api/me/allowance", "/api/me/needs",
+    "/api/me/notifications",  # P114: their own notification settings
     "/api/mail-accounts",  # P109: their own other email accounts only (test_p109_mail_accounts)
     "/api/m365/summary",  # P109b: their own Microsoft 365 tile ("not connected" until they are)
     "/api/me/prefs", "/api/me/staff", "/api/me/twin", "/api/me/worker", "/api/meetings",
@@ -500,6 +501,7 @@ STAFF_WRITE_OK = {
     ("POST", "/api/me/needs/seen"),  # their own "seen" mark
     ("POST", "/api/push/unsubscribe"),  # this device
     ("PUT", "/api/me/prefs"),  # their own preferences
+    ("POST", "/api/me/notifications/test"),  # P114: a test notice to themselves
     ("PUT", "/api/desk/items/order"),  # their own desk
     ("POST", "/api/tutorial/progress"),  # their own tutorial
     ("PUT", "/api/getting-started"),  # P109: their own checklist and tours

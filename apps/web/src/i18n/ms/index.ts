@@ -73,6 +73,7 @@ import { ORG_PRIMA_P111 } from "./org-prima-p111";
 import { HIERARCHY_P111 } from "./hierarchy-p111";
 import { HIERARCHY_P113 } from "./hierarchy-p113";
 import { AI_USAGE_PEOPLE } from "./ai-usage-people";
+import { NOTIFY_P114 } from "./notify-p114";
 
 export const MS: Record<string, string> = {
   ...PICKERS_P111, // P111: Teams people picker, company picker
@@ -80,6 +81,7 @@ export const MS: Record<string, string> = {
   ...HIERARCHY_P111, // P111: the organization chart and My hierarchy
   ...HIERARCHY_P113, // P113: the organization chart for every member
   ...AI_USAGE_PEOPLE, // P113: AI usage per user (the developer's report)
+  ...NOTIFY_P114, // P114: who started a task, paused tasks, giving more, my notifications
   // P109: Getting started and the guided tours; first, so an existing translation wins.
   ...TOURS,
   // P109: the Microsoft 365 page and other email accounts; first, so an existing translation
