@@ -26,7 +26,7 @@ import urllib.parse
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import crypto
@@ -37,6 +37,7 @@ from . import app, http
 from .errors import MicrosoftError, NotConfigured, ReconnectNeeded
 
 STATE_TTL = 600
+MAX_EXTRA_ACCOUNTS = 5  # P118: extra accounts beside the main one
 # Token errors that mean "this person has to sign in again", not "try later".
 RECONNECT_ERRORS = frozenset(
     {"invalid_grant", "interaction_required", "consent_required", "login_required"}
@@ -104,7 +105,9 @@ async def scopes_for(
     if (not files or not chats) and user_id:
         acct = await db.scalar(
             select(MicrosoftAccount).where(
-                MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
+                MicrosoftAccount.workspace_id == workspace_id,
+                MicrosoftAccount.user_id == user_id,
+                MicrosoftAccount.is_primary.is_(True),
             )
         )
         granted = acct.scopes if acct is not None else ""
@@ -123,8 +126,10 @@ async def auth_url(
     *,
     with_files: bool = False,
     with_new_chats: bool = False,
+    another: bool = False,
 ) -> str:
-    """Microsoft's sign-in page for this person. `base` is the public address the callback
+    """Microsoft's sign-in page for this person. P118: `another` connects an extra account
+    (personal or shared) beside their main one. `base` is the public address the callback
     returns to; it is remembered in the state so the token call uses the same one. P80:
     `with_files` also asks to read their SharePoint / OneDrive files (the Library). P102:
     `with_new_chats` also asks to start new Teams chats (the Teams tab)."""
@@ -148,6 +153,7 @@ async def auth_url(
                 "scope": scope,
                 "files": with_files,
                 "chats": with_new_chats,
+                "another": another,
             }
         ),
         ex=STATE_TTL,
@@ -177,6 +183,11 @@ async def _started(state: str, key: str) -> bool:
 async def started_with_files(state: str) -> bool:
     """P80: was this connect started by the Library's "allow SharePoint" (with_files)?"""
     return await _started(state, "files")
+
+
+async def started_another(state: str) -> bool:
+    """P118: was this connect "Add another Microsoft account"?"""
+    return await _started(state, "another")
 
 
 async def started_with_new_chats(state: str) -> bool:
@@ -230,7 +241,9 @@ async def finish(
         raise MicrosoftError(
             Msg("Mail access was not granted. Accept the mail permissions on Microsoft's screen.")
         )
-    return await store(db, workspace_id, user_id, tok, await profile_of(tok))
+    return await store(
+        db, workspace_id, user_id, tok, await profile_of(tok), another=bool(st.get("another"))
+    )
 
 
 async def profile_of(tok: dict[str, Any]) -> dict[str, Any]:
@@ -247,16 +260,47 @@ async def profile_of(tok: dict[str, Any]) -> dict[str, Any]:
 
 
 async def store(
-    db: AsyncSession, workspace_id: str, user_id: str, tok: dict[str, Any], profile: dict[str, Any]
+    db: AsyncSession,
+    workspace_id: str,
+    user_id: str,
+    tok: dict[str, Any],
+    profile: dict[str, Any],
+    *,
+    another: bool = False,
 ) -> MicrosoftAccount:
-    """Keep this person's connection (one per person): its refresh token, encrypted. Commits."""
+    """Keep this person's connection: its refresh token, encrypted. Commits. P118: their main
+    account, or with `another` an extra one beside it (the same Microsoft account connected
+    again updates its own row either way)."""
     granted = str(tok.get("scope") or "")
     claims = _claims(str(tok.get("id_token") or ""))
-    acct = await db.scalar(
-        select(MicrosoftAccount).where(
-            MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
-        )
+    oid = str(profile.get("id") or claims.get("oid") or "")[:80]
+    mine = select(MicrosoftAccount).where(
+        MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
     )
+    acct = await db.scalar(mine.where(MicrosoftAccount.ms_user_id == oid)) if oid else None
+    if acct is None and another:
+        extra = await db.scalar(
+            select(func.count())
+            .select_from(MicrosoftAccount)
+            .where(
+                MicrosoftAccount.workspace_id == workspace_id,
+                MicrosoftAccount.user_id == user_id,
+                MicrosoftAccount.is_primary.is_(False),
+            )
+        )
+        if int(extra or 0) >= MAX_EXTRA_ACCOUNTS:
+            raise MicrosoftError(
+                Msg(
+                    "You already connected {n} more Microsoft accounts. Remove one on the "
+                    "Microsoft 365 page first.",
+                    n=MAX_EXTRA_ACCOUNTS,
+                )
+            )
+        acct = MicrosoftAccount(workspace_id=workspace_id, user_id=user_id, is_primary=False)
+        db.add(acct)
+        await db.flush()
+    if acct is None:
+        acct = await db.scalar(mine.where(MicrosoftAccount.is_primary.is_(True)))
     if acct is None:
         acct = MicrosoftAccount(workspace_id=workspace_id, user_id=user_id)
         db.add(acct)
@@ -295,6 +339,7 @@ async def store(
     member = await db.get(Membership, (workspace_id, user_id))
     if (
         member is not None
+        and acct.is_primary
         and acct.ms_user_id
         and acct.tenant_id
         and await own_microsoft(

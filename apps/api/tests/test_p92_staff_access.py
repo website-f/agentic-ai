@@ -289,6 +289,7 @@ STAFF_OK = {
     "/api/integrations/microsoft", "/api/integrations/microsoft/account", "/api/library",
     "/api/library/linked", "/api/mail/activity", "/api/me/allowance", "/api/me/needs",
     "/api/me/notifications",  # P114: their own notification settings
+    "/api/integrations/microsoft/accounts",  # P118: their own Microsoft accounts only
     "/api/mail-accounts",  # P109: their own other email accounts only (test_p109_mail_accounts)
     "/api/m365/summary",  # P109b: their own Microsoft 365 tile ("not connected" until they are)
     "/api/me/prefs", "/api/me/staff", "/api/me/twin", "/api/me/worker", "/api/meetings",

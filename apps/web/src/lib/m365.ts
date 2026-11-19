@@ -8,7 +8,7 @@
  */
 import { queryOptions } from "@tanstack/react-query";
 
-import { api } from "./api";
+import { api, m365AccountId } from "./api";
 
 // ------------------------------------------------------------------------------------- mail
 
@@ -76,7 +76,11 @@ export const mailQuery = (id: string) =>
 
 export const markRead = (id: string, read = true) => api<{ read: boolean }>(`/api/m365/mail/${enc(id)}/read`, "POST", { read });
 
-export const attachmentUrl = (messageId: string, attachmentId: string) => `/api/m365/mail/${enc(messageId)}/attachments/${enc(attachmentId)}`;
+export const attachmentUrl = (messageId: string, attachmentId: string) => {
+  // P118: a plain link carries no header: the account picked goes in the address.
+  const acct = m365AccountId();
+  return `/api/m365/mail/${enc(messageId)}/attachments/${enc(attachmentId)}${acct ? `?account=${enc(acct)}` : ""}`;
+};
 
 export const saveAttachment = (messageId: string, attachmentId: string) =>
   api<{ file_id: string; name: string; folder: string }>(`${attachmentUrl(messageId, attachmentId)}/save`, "POST");

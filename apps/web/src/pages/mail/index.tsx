@@ -69,6 +69,7 @@ import { meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { CalendarDraftCard, DraftCard } from "@/pages/assistants";
 
+import { AccountSwitcher } from "./account-switcher";
 import { M365Frame, type FrameTab } from "./frame";
 import { OutlookInbox } from "./inbox";
 import { MeetingComposerHost, useMeetingComposer } from "./meeting";
@@ -182,7 +183,8 @@ export function MailPage() {
   ) : null;
 
   return (
-    <M365Frame title={t("Microsoft 365")} tabs={tabs} value={app} onChange={setApp} onBack={back} actions={actions}>
+    <M365Frame title={t("Microsoft 365")} tabs={tabs} value={app} onChange={setApp} onBack={back} actions={actions}
+      switcher={connected ? <AccountSwitcher /> : null}>
       {config.isLoading ? <Skeleton className="h-64 rounded-[var(--radius-md)]" />
         : config.error ? (isMissingApi(config.error) ? <MissingServer /> : <ErrorLine error={config.error} onRetry={() => void config.refetch()} />)
         : !configured ? (

@@ -18,8 +18,10 @@ export interface FrameTab<T extends string> {
   count?: number | null;
 }
 
-export function M365Frame<T extends string>({ title, tabs, value, onChange, onBack, actions, children }: {
+export function M365Frame<T extends string>({ title, tabs, value, onChange, onBack, actions, switcher, children }: {
   title: string;
+  /** P118: which of the person's Microsoft accounts is shown, beside the title. */
+  switcher?: ReactNode;
   tabs: FrameTab<T>[];
   value: T;
   onChange: (v: T) => void;
@@ -51,7 +53,8 @@ export function M365Frame<T extends string>({ title, tabs, value, onChange, onBa
         <Button variant="ghost" onClick={onBack} title={t("Back (Esc)")} className="h-11 shrink-0 gap-1.5 px-2.5 text-fg sm:h-10">
           <ArrowLeftIcon size={19} /> <span className="max-sm:sr-only">{t("Back")}</span>
         </Button>
-        <h1 className="min-w-0 shrink truncate text-[15.5px] font-semibold tracking-tight">{title}</h1>
+        <h1 className="min-w-0 shrink truncate text-[15.5px] font-semibold tracking-tight max-sm:sr-only">{title}</h1>
+        {switcher}
         <div className="hidden min-w-0 flex-1 justify-center md:flex">
           <Tabs tabs={tabs} value={value} onChange={onChange} label={title} variant="top" />
         </div>

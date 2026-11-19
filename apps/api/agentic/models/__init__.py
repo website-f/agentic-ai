@@ -22,6 +22,8 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
+    true,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
@@ -2087,14 +2089,33 @@ class DeviceLinkCode(Base):
 
 class MicrosoftAccount(Timestamps, Base):
     """P34: a person's own Microsoft 365 mailbox and calendar, connected by them (OAuth with
-    PKCE, delegated permissions, Microsoft Graph only). One per person. Only that person and
-    their own AI (twin or private assistant) use it. The refresh token is encrypted at rest;
-    access tokens live in Valkey. Status: connected | reconnect_needed (Microsoft refused the
-    refresh token: syncing stops until they connect again) | error | disconnected."""
+    PKCE, delegated permissions, Microsoft Graph only). Only that person and their own AI (twin
+    or private assistant) use it. The refresh token is encrypted at rest; access tokens live in
+    Valkey. Status: connected | reconnect_needed (Microsoft refused the refresh token: syncing
+    stops until they connect again) | error | disconnected.
+
+    P118: a person may connect more than one (a personal one, a shared work mailbox). Their MAIN
+    account (is_primary, one per person) is the one their AI, Teams, SharePoint and Prima use;
+    the others (with a `label`) they read on the Microsoft 365 page. The same Microsoft account
+    once per person."""
 
     __tablename__ = "microsoft_accounts"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "user_id", name="uq_microsoft_accounts_user"),
+        Index(
+            "uq_microsoft_accounts_primary",
+            "workspace_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("is_primary"),
+        ),
+        Index(
+            "uq_microsoft_accounts_user_oid",
+            "workspace_id",
+            "user_id",
+            "ms_user_id",
+            unique=True,
+            postgresql_where=text("ms_user_id <> ''"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ma"))
@@ -2114,6 +2135,9 @@ class MicrosoftAccount(Timestamps, Base):
     # What the AI does with their mail (microsoft/rules.personal_effective): digest, tasks
     # (none by default), attachments, follow-up hours.
     prefs: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    # P118: the main account (one per person), and what the person calls an extra one.
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    label: Mapped[str] = mapped_column(String(40), default="", server_default="")
 
     @property
     def aad(self) -> str:

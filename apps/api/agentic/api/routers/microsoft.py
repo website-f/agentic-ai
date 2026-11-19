@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response, status
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...assistants.access import may_assist
@@ -33,7 +33,7 @@ from ...i18n import render, tr
 from ...microsoft import access, app, auth, graph, signin, sync
 from ...microsoft import rules as mail_rules
 from ...microsoft.errors import Forbidden, MicrosoftError, NotConfigured, NotFound
-from ...models import Agent, Branch, MailItem, SharedMailbox
+from ...models import Agent, Branch, MailItem, MicrosoftAccount, SharedMailbox
 from ...services import audit
 from ..deps import Principal, api_error, optional_principal, require
 
@@ -201,6 +201,8 @@ class ConnectIn(BaseModel):
     with_files: bool = False
     # P102: also allow starting new Teams chats (the Teams tab's "Allow new Teams chats").
     with_new_chats: bool = False
+    # P118: connect another Microsoft account (personal or shared) beside the main one.
+    another: bool = False
 
 
 @router.post(f"{BASE}/connect")
@@ -229,6 +231,7 @@ async def microsoft_connect(
             base,
             with_files=bool(body and body.with_files),
             with_new_chats=bool(body and body.with_new_chats),
+            another=bool(body and body.another),
         )
     except NotConfigured as e:
         raise api_error(status.HTTP_409_CONFLICT, "not_configured", str(e)) from e
@@ -312,11 +315,14 @@ async def microsoft_callback(
     home = await _home(db, principal)
     files = await auth.started_with_files(state)
     chats = await auth.started_with_new_chats(state)
+    another = await auth.started_another(state)
     extra: dict[str, str] = {}
     if files:  # P80: the Library's SharePoint reconnect comes back to the Library
         home = "/library"
     elif chats:  # P102: "Allow new Teams chats" comes back to the Teams tab
         home, extra = "/mail", {"app": "teams"}
+    elif another:  # P118: another account comes back to the Microsoft 365 page
+        home, extra = "/mail", {"app": "mail"}
 
     def back(result: str, msg: str = "") -> RedirectResponse:
         q = urllib.parse.urlencode({**extra, "ms": result, **({"msg": msg[:200]} if msg else {})})
@@ -345,6 +351,23 @@ async def microsoft_callback(
                 "Starting new Teams chats was not allowed. Your Microsoft 365 admin can allow "
                 "Chat.Create for this app (Azure portal > App registrations > API permissions). "
                 "Your mail and Teams replies keep working."
+            ),
+        )
+    if (
+        error
+        and another
+        and "AADSTS" in (error_description or "")
+        and any(c in (error_description or "") for c in ("50020", "500200", "700016", "9002331"))
+    ):
+        # P118: a personal account (outlook.com, hotmail) the office's Microsoft app does not
+        # accept: say what to do instead.
+        await auth.drop_state(state)
+        return back(
+            "error",
+            tr(
+                "Microsoft did not accept this account here: the office's Microsoft app takes "
+                "work accounts only. Add a personal mailbox (Outlook.com, Gmail) under Other email "
+                "accounts instead, or ask your admin to allow personal Microsoft accounts."
             ),
         )
     if error:
@@ -684,6 +707,104 @@ async def microsoft_set_prefs(
     acct.prefs = body.model_dump()
     await db.commit()
     return mail_rules.personal_effective(acct.prefs)
+
+
+# ---------------------------------------------------------------- P118: more than one account
+
+
+class AccountLabelIn(BaseModel):
+    label: str = Field(default="", max_length=40)
+
+
+async def _account_row(db: AsyncSession, principal: Principal, a: Any) -> dict[str, Any]:
+    """One of my accounts, and how many other people here connected the same one (shared)."""
+    others = 0
+    if a.ms_user_id:
+        others = int(
+            await db.scalar(
+                select(func.count(func.distinct(MicrosoftAccount.user_id))).where(
+                    MicrosoftAccount.workspace_id == principal.workspace_id,
+                    MicrosoftAccount.ms_user_id == a.ms_user_id,
+                    MicrosoftAccount.user_id != principal.user.id,
+                    MicrosoftAccount.status != "disconnected",
+                )
+            )
+            or 0
+        )
+    return {
+        "id": a.id,
+        "email": a.email,
+        "display_name": a.display_name,
+        "label": a.label or "",
+        "primary": bool(a.is_primary),
+        "status": a.status,
+        "connected": a.status != "disconnected",
+        "last_sync_at": a.last_sync_at,
+        "shared_with": others,
+        "is_sign_in": a.email.lower() == principal.user.email.lower(),
+    }
+
+
+@router.get(f"{BASE}/accounts")
+async def my_accounts(
+    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+) -> list[dict[str, Any]]:
+    """Every Microsoft account I connected, the main one first; never anyone else's."""
+    rows = await access.accounts_of(db, principal.workspace_id, principal.user.id)
+    return [await _account_row(db, principal, a) for a in rows]
+
+
+async def _my_account(db: AsyncSession, principal: Principal, account_id: str) -> Any:
+    acct = await access.own_account(db, principal.workspace_id, principal.user.id, account_id)
+    if acct is None:
+        raise api_error(
+            status.HTTP_404_NOT_FOUND, "account_not_found", "That account is not yours here."
+        )
+    return acct
+
+
+@router.patch(f"{BASE}/accounts/{{account_id}}")
+async def name_account(
+    account_id: str,
+    body: AccountLabelIn,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """What I call this account ("Personal", "Shared", "Work")."""
+    acct = await _my_account(db, principal, account_id)
+    acct.label = body.label.strip()
+    await db.commit()
+    return await _account_row(db, principal, acct)
+
+
+@router.delete(f"{BASE}/accounts/{{account_id}}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_account(
+    account_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Remove an extra account: disconnected (tokens and the mail it synced deleted) and gone.
+    The main account is disconnected with DELETE /account instead."""
+    acct = await _my_account(db, principal, account_id)
+    if acct.is_primary:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "main_account",
+            "This is your main Microsoft account. Disconnect it under Connections instead.",
+        )
+    if acct.status != "disconnected":
+        await sync.disconnect_account(db, acct)  # commits
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "microsoft.account_removed",
+        target=acct.id,
+        before={"email": acct.email},
+    )
+    await db.delete(acct)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete(f"{BASE}/account", status_code=status.HTTP_204_NO_CONTENT)

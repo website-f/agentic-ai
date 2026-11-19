@@ -45,12 +45,15 @@ async def let_go_of_microsoft(db: AsyncSession, workspace_id: str, user_id: str)
         m.ms_oid = None
         m.ms_tenant_id = None
         done["microsoft_link"] = "cleared"
-    acct = await db.scalar(
-        select(MicrosoftAccount).where(
-            MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
+    # P118: every Microsoft account they connected (the main one and any extra one).
+    accounts = (
+        await db.scalars(
+            select(MicrosoftAccount).where(
+                MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
+            )
         )
-    )
-    if acct is not None:
+    ).all()
+    for acct in accounts:
         if acct.status != "disconnected":
             await sync.disconnect_account(db, acct)  # commits
             done["mailbox"] = "disconnected"

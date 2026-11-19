@@ -25,11 +25,12 @@ AI:       POST /api/m365/ai
 import asyncio
 import logging
 import urllib.parse
+from contextvars import ContextVar
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,7 +42,17 @@ from ...services import audit
 from ..deps import Principal, api_error, ensure_allowance, require
 from .microsoft import _channels_fail, _kept, _say, _teams_fail
 
-router = APIRouter(prefix="/api/m365", tags=["m365"])
+# P118: which of the person's own Microsoft accounts this request is for: the X-M365-Account
+# header (or ?account= on a plain link, e.g. an attachment); none means their main account.
+_PICKED: ContextVar[str] = ContextVar("m365_account", default="")
+
+
+async def _pick_account(request: Request) -> None:
+    raw = request.headers.get("x-m365-account") or request.query_params.get("account") or ""
+    _PICKED.set(raw.strip()[:40])
+
+
+router = APIRouter(prefix="/api/m365", tags=["m365"], dependencies=[Depends(_pick_account)])
 log = logging.getLogger("agentic.api.m365")
 
 FOLDERS = ("inbox", "sentitems", "drafts", "archive", "deleteditems", "junkemail")
@@ -53,7 +64,15 @@ CHATS_FOR = 30  # seconds the chat list is kept (Microsoft is slow to list chats
 
 
 async def _mine(db: AsyncSession, principal: Principal) -> tuple[MicrosoftAccount, graph.Graph]:
-    acct = await access.personal_account_of(db, principal.workspace_id, principal.user.id)
+    picked = _PICKED.get()
+    if picked:  # P118: one of their own extra accounts (never anyone else's: 404)
+        acct = await access.own_account(db, principal.workspace_id, principal.user.id, picked)
+        if acct is None:
+            raise api_error(
+                status.HTTP_404_NOT_FOUND, "account_not_found", "That account is not yours here."
+            )
+    else:
+        acct = await access.personal_account_of(db, principal.workspace_id, principal.user.id)
     if acct is None or acct.status not in access.USABLE_ACCOUNT:
         raise api_error(
             status.HTTP_409_CONFLICT,

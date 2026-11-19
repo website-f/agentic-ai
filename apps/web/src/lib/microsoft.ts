@@ -193,6 +193,34 @@ export const startSharePointConnect = () => api<{ url: string }>(`${MS_PATH}/con
 /** P102: the same, also allowing new Teams chats (a first message to anyone); back on the Teams tab. */
 export const startNewChatsConnect = () => api<{ url: string }>(`${MS_PATH}/connect`, "POST", { with_new_chats: true });
 
+/** P118: every Microsoft account the person connected: the main one (sign-in, their AI, Teams,
+ * Prima) first, then extra ones (personal, or a shared work mailbox others here connected too). */
+export interface MsAccount {
+  id: string;
+  email: string;
+  display_name: string;
+  label: string;
+  primary: boolean;
+  status: string;
+  connected: boolean;
+  last_sync_at: string | null;
+  /** How many other people here connected the same account (shared when above 0). */
+  shared_with: number;
+  /** The account's address is the person's sign-in email. */
+  is_sign_in: boolean;
+}
+
+export const msAccountsQuery = queryOptions({
+  queryKey: ["microsoft", "accounts"] as const,
+  queryFn: () => api<MsAccount[]>(`${MS_PATH}/accounts`),
+  staleTime: 60_000,
+});
+
+/** "Add another Microsoft account": Microsoft's sign-in page, back on the Microsoft 365 page. */
+export const startAnotherConnect = () => api<{ url: string }>(`${MS_PATH}/connect`, "POST", { another: true });
+export const nameMsAccount = (id: string, label: string) => api<MsAccount>(`${MS_PATH}/accounts/${encodeURIComponent(id)}`, "PATCH", { label });
+export const removeMsAccount = (id: string) => api<void>(`${MS_PATH}/accounts/${encodeURIComponent(id)}`, "DELETE");
+
 export const getMicrosoftAccount = () => api<MicrosoftAccount>(`${MS_PATH}/account`);
 
 export const disconnectMicrosoft = () => api<void>(`${MS_PATH}/account`, "DELETE");

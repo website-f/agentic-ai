@@ -136,4 +136,18 @@ export const NOTIFY_P114: Record<string, string> = {
   "Open my clock to clock out or see today.": "Buka jam saya untuk daftar keluar atau lihat hari ini.",
   "Clock in here, without leaving the office.": "Daftar masuk di sini, tanpa meninggalkan pejabat.",
   "Prima home": "Laman utama Prima",
+  // P118: more than one Microsoft account (Microsoft 365 page)
+  "Shared": "Dikongsi",
+  "Main account": "Akaun utama",
+  "Which account": "Akaun yang mana",
+  "Your Microsoft accounts": "Akaun Microsoft anda",
+  "Shared with {n}": "Dikongsi dengan {n}",
+  "Call this account": "Namakan akaun ini",
+  "Remove this account": "Buang akaun ini",
+  "Add another Microsoft account": "Tambah akaun Microsoft lain",
+  "You always sign in with {email}. Your AI, Teams and Prima use your main account.":
+    "Anda sentiasa log masuk dengan {email}. AI, Teams dan Prima anda menggunakan akaun utama anda.",
+  "Remove {email}?": "Buang {email}?",
+  "Its mail stops showing here and the office forgets its sign-in. Nothing is deleted in the mailbox itself.":
+    "E-melnya tidak lagi dipaparkan di sini dan pejabat melupakan log masuknya. Tiada apa dipadam dalam peti mel itu sendiri.",
 };

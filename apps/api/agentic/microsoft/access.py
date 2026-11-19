@@ -319,8 +319,40 @@ def address_of(box: MicrosoftAccount | SharedMailbox) -> str:
 async def personal_account_of(
     db: AsyncSession, workspace_id: str, user_id: str
 ) -> MicrosoftAccount | None:
+    """The person's MAIN Microsoft account (P118: their AI, Teams and SharePoint use only it)."""
     return await db.scalar(
         select(MicrosoftAccount).where(
-            MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
+            MicrosoftAccount.workspace_id == workspace_id,
+            MicrosoftAccount.user_id == user_id,
+            MicrosoftAccount.is_primary.is_(True),
+        )
+    )
+
+
+async def accounts_of(db: AsyncSession, workspace_id: str, user_id: str) -> list[MicrosoftAccount]:
+    """P118: every Microsoft account this person connected, the main one first."""
+    return list(
+        (
+            await db.scalars(
+                select(MicrosoftAccount)
+                .where(
+                    MicrosoftAccount.workspace_id == workspace_id,
+                    MicrosoftAccount.user_id == user_id,
+                )
+                .order_by(MicrosoftAccount.is_primary.desc(), MicrosoftAccount.created_at)
+            )
+        ).all()
+    )
+
+
+async def own_account(
+    db: AsyncSession, workspace_id: str, user_id: str, account_id: str
+) -> MicrosoftAccount | None:
+    """P118: one of this person's own accounts by its id; never anyone else's."""
+    return await db.scalar(
+        select(MicrosoftAccount).where(
+            MicrosoftAccount.id == account_id,
+            MicrosoftAccount.workspace_id == workspace_id,
+            MicrosoftAccount.user_id == user_id,
         )
     )

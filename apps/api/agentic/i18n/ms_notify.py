@@ -82,6 +82,23 @@ MS_NOTIFY: dict[str, str] = {
     "That code is wrong or has expired. Check the newest email, or ask for a new code.": (
         "Kod itu salah atau sudah tamat tempoh. Semak e-mel terbaharu, atau minta kod baharu."
     ),
+    # P118: more than one Microsoft account per person
+    "You already connected {n} more Microsoft accounts. Remove one on the Microsoft 365 page "
+    "first.": (
+        "Anda sudah menyambungkan {n} akaun Microsoft tambahan. Buang satu di halaman Microsoft "
+        "365 dahulu."
+    ),
+    "Microsoft did not accept this account here: the office's Microsoft app takes work accounts "
+    "only. Add a personal mailbox (Outlook.com, Gmail) under Other email accounts instead, or "
+    "ask your admin to allow personal Microsoft accounts.": (
+        "Microsoft tidak menerima akaun ini di sini: aplikasi Microsoft pejabat hanya menerima "
+        "akaun kerja. Tambah peti mel peribadi (Outlook.com, Gmail) di bawah Akaun e-mel lain, "
+        "atau minta admin anda membenarkan akaun Microsoft peribadi."
+    ),
+    "That account is not yours here.": "Akaun itu bukan milik anda di sini.",
+    "This is your main Microsoft account. Disconnect it under Connections instead.": (
+        "Ini akaun Microsoft utama anda. Putuskannya di bawah Sambungan."
+    ),
     "Test notification": "Notifikasi ujian",
     "This is how the office tells you when your AI needs you.": (
         "Beginilah pejabat memberitahu anda apabila AI anda memerlukan anda."

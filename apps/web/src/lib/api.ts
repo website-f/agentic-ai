@@ -27,12 +27,25 @@ export function langHeader(): Record<string, string> {
   return { "x-lang": useLang.getState().lang };
 }
 
+/** P118: the Microsoft account the Microsoft 365 page shows (one of the person's own; null: their
+ * main one). Sent with every /api/m365 call as X-M365-Account. */
+let m365Account: string | null = null;
+export function setM365Account(id: string | null): void {
+  m365Account = id;
+}
+export function m365AccountId(): string | null {
+  return m365Account;
+}
+
 export async function api<T>(path: string, method: Method = "GET", body?: unknown): Promise<T> {
   const init: RequestInit = { method, credentials: "same-origin", headers: langHeader() };
   if (method !== "GET") {
     // The API only accepts JSON for state-changing calls, and checks the CSRF echo.
     init.headers = writeHeaders();
     init.body = JSON.stringify(body ?? {});
+  }
+  if (m365Account && path.startsWith("/api/m365/")) {
+    init.headers = { ...(init.headers as Record<string, string>), "x-m365-account": m365Account };
   }
 
   let res: Response;

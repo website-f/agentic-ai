@@ -316,7 +316,11 @@ async def due(db: AsyncSession, now: datetime | None = None) -> list[str]:
     accounts = {
         (a.workspace_id, a.user_id): a
         for a in (
-            await db.scalars(select(MicrosoftAccount).where(MicrosoftAccount.user_id.in_(waiting)))
+            await db.scalars(
+                select(MicrosoftAccount).where(
+                    MicrosoftAccount.user_id.in_(waiting), MicrosoftAccount.is_primary.is_(True)
+                )
+            )
         ).all()
     }
     out: list[str] = []
