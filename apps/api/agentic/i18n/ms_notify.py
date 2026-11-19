@@ -68,6 +68,20 @@ MS_NOTIFY: dict[str, str] = {
     "Only owners, admins and the system's developer see AI usage per user.": (
         "Hanya pemilik, admin dan pembangun sistem boleh melihat penggunaan AI setiap pengguna."
     ),
+    # P116: microsoft/signin.py (a shared work mailbox never decides who signs in)
+    "{email} is a shared Microsoft account: several people here connected it, so it cannot "
+    "tell who you are. Sign in with your own email and password.": (
+        "{email} ialah akaun Microsoft yang dikongsi: beberapa orang di sini telah "
+        "menyambungkannya, jadi ia tidak dapat mengenal pasti anda. Log masuk dengan e-mel dan "
+        "kata laluan anda sendiri."
+    ),
+    # P116: api/routers/signin_mail.py (reset the password with a code by email)
+    "Too many tries from here. Wait an hour and try again.": (
+        "Terlalu banyak cubaan dari sini. Tunggu sejam dan cuba lagi."
+    ),
+    "That code is wrong or has expired. Check the newest email, or ask for a new code.": (
+        "Kod itu salah atau sudah tamat tempoh. Semak e-mel terbaharu, atau minta kod baharu."
+    ),
     "Test notification": "Notifikasi ujian",
     "This is how the office tells you when your AI needs you.": (
         "Beginilah pejabat memberitahu anda apabila AI anda memerlukan anda."

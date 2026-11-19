@@ -79,6 +79,92 @@ export function EmailSignInForm({ initialEmail = "", onBack }: { initialEmail?: 
   );
 }
 
+/** P116: "Forgot your password?": a 6-digit code by email, then the code and a new password. The
+ * first answer is the same whether or not the email has an account. */
+export function ResetPasswordForm({ initialEmail = "", onDone, onBack }: { initialEmail?: string; onDone: (email: string) => void; onBack: () => void }) {
+  const t = useT();
+  const [email, setEmail] = useState(initialEmail);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fields, setFields] = useState<Record<string, string | undefined>>({});
+  const ask = async (e?: FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
+    const value = (sentTo ?? email).trim();
+    if (!plausibleAddress(value)) {
+      setFields({ email: t("Type your full work email address.") });
+      return;
+    }
+    setFields({});
+    setError(null);
+    setBusy(true);
+    try {
+      await api("/api/auth/password-reset", "POST", { email: value });
+      setSentTo(value);
+      if (sentTo) toast.success(t("A new code is on its way."));
+    } catch (err) {
+      if (err instanceof ApiError && err.fields.email) setFields({ email: err.fields.email });
+      else setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const confirm = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const c = code.replace(/\s/g, "");
+    if (!/^\d{6}$/.test(c)) return setFields({ code: t("Type the 6 digits from the email.") });
+    if (pw !== pw2) return setFields({ new_password2: t("The two passwords are not the same.") });
+    setFields({});
+    setError(null);
+    setBusy(true);
+    try {
+      await api("/api/auth/password-reset/confirm", "POST", { email: sentTo, code: c, new_password: pw });
+      toast.success(t("Your password is changed. Sign in with it."));
+      onDone(sentTo ?? email);
+    } catch (err) {
+      if (err instanceof ApiError && Object.keys(err.fields).length) setFields(err.fields);
+      else setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!sentTo) {
+    return (
+      <form className="grid gap-4" onSubmit={ask} noValidate>
+        <Field label={t("Email")} name="email" type="email" required autoComplete="username" inputMode="email" autoFocus
+          value={email} onChange={(e) => setEmail(e.target.value)} error={fields.email} className="[&_input]:h-12 [&_input]:text-[16px]" />
+        <FormError message={error} />
+        <Button type="submit" size="lg" loading={busy} className="h-12 text-[16px]">
+          {!busy ? <PaperPlaneTiltIcon size={17} weight="bold" /> : null} {t("Email me a code")}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onBack}>{t("Back to sign in")}</Button>
+      </form>
+    );
+  }
+  return (
+    <form className="grid gap-4" onSubmit={confirm} noValidate>
+      <p role="status" className="rounded-[var(--radius-md)] border border-ok/30 bg-ok/8 p-3 text-[13.5px] break-words">
+        {t("If {email} belongs to someone in the office, a 6-digit code is on its way. Check your inbox (and Junk). It works for 15 minutes.", { email: sentTo })}
+      </p>
+      <Field label={t("Code from the email")} name="code" inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={7}
+        value={code} onChange={(e) => setCode(e.target.value)} error={fields.code} className="[&_input]:h-12 [&_input]:text-[20px] [&_input]:tracking-[0.3em]" />
+      <Field label={t("New password")} name="new_password" type="password" autoComplete="new-password" required
+        value={pw} onChange={(e) => setPw(e.target.value)} error={fields.new_password} hint={t("At least 10 characters.")} />
+      <Field label={t("New password again")} name="new_password2" type="password" autoComplete="new-password" required
+        value={pw2} onChange={(e) => setPw2(e.target.value)} error={fields.new_password2} />
+      <FormError message={error} />
+      <Button type="submit" size="lg" loading={busy} className="h-12 text-[16px]">{t("Set my new password")}</Button>
+      <div className="flex flex-wrap justify-between gap-2">
+        <Button type="button" variant="ghost" onClick={() => void ask()} disabled={busy}>{t("Send a new code")}</Button>
+        <Button type="button" variant="ghost" onClick={onBack}>{t("Back to sign in")}</Button>
+      </div>
+    </form>
+  );
+}
+
 // ---------------------------------------------------------------- Settings > Sign-in emails
 
 function CopyBlock({ text }: { text: string }) {

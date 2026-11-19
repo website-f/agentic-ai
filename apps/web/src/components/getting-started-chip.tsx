@@ -59,7 +59,7 @@ export function GettingStartedChip({ always = false }: { always?: boolean }) {
   const next = nextStep(state);
   return (
     <Link to="/getting-started" data-tour="gs.chip"
-      className={cn("rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 px-3 py-2.5 transition-colors hover:bg-accent-soft", always ? "grid" : "mx-3 mb-2 hidden xl:grid")}>
+      className={cn("rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 px-3 py-2.5 transition-colors hover:bg-accent-soft", always ? "grid" : "mx-3 mb-2 hidden wide:grid")}>
       <span className="flex items-center justify-between gap-2 text-[12.5px] font-semibold text-accent">
         <span className="inline-flex items-center gap-1.5"><RocketLaunchIcon size={14} weight="fill" /> {t("Getting started")}</span>
         <span className="tabular">{t("{done} of {total}", { done: state.done, total: state.total })}</span>

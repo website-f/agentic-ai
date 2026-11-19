@@ -101,4 +101,31 @@ export const NOTIFY_P114: Record<string, string> = {
     "Untuk mematikannya anda perlukan kata laluan dan kod daripada aplikasi pengesah (atau kod pemulihan). Kod pemulihan baharu hanya untuk apabila kod lama hilang atau sudah habis digunakan.",
   "Your Agentic Office password (also opens Prima here). It is not your email password. Changing it signs out your other devices.":
     "Kata laluan Agentic Office anda (juga untuk Prima di sini). Ia bukan kata laluan e-mel anda. Menukarnya akan mengeluarkan anda daripada peranti lain.",
+  // P116: reset the password with a code by email
+  "Reset your password": "Set semula kata laluan anda",
+  "We email you a 6-digit code. Enter it with your new password. This is your Agentic Office password, not your email password.":
+    "Kami e-mel kod 6 digit kepada anda. Masukkannya bersama kata laluan baharu anda. Ini kata laluan Agentic Office anda, bukan kata laluan e-mel anda.",
+  "Forgot your password? Reset it with a code": "Lupa kata laluan? Set semula dengan kod",
+  "First time here?": "Kali pertama di sini?",
+  "Email me a code": "E-mel kod kepada saya",
+  "A new code is on its way.": "Kod baharu sedang dihantar.",
+  "Type the 6 digits from the email.": "Taip 6 digit daripada e-mel.",
+  "The two passwords are not the same.": "Kedua-dua kata laluan tidak sama.",
+  "Your password is changed. Sign in with it.": "Kata laluan anda telah ditukar. Log masuk dengannya.",
+  "If {email} belongs to someone in the office, a 6-digit code is on its way. Check your inbox (and Junk). It works for 15 minutes.":
+    "Jika {email} milik seseorang di pejabat, kod 6 digit sedang dihantar. Semak peti masuk anda (dan Junk). Ia sah selama 15 minit.",
+  "Code from the email": "Kod daripada e-mel",
+  "New password again": "Kata laluan baharu sekali lagi",
+  "Set my new password": "Tetapkan kata laluan baharu saya",
+  "Send a new code": "Hantar kod baharu",
+  // P116: the menu folds, the phone menu, "Ask my AI" on every page, the people picker
+  "Fold the menu": "Lipat menu",
+  "Open the menu with names": "Buka menu dengan nama",
+  "Menu": "Menu",
+  "You have no AI of your own yet. Make it once and it is here on every page.":
+    "Anda belum mempunyai AI sendiri. Buat sekali dan ia ada di setiap halaman.",
+  "Chat with your assistants, or any AI you work with.": "Bersembang dengan pembantu anda, atau mana-mana AI yang anda bekerja bersama.",
+  "Make my AI": "Buat AI saya",
+  "Open chats": "Buka sembang",
+  "Search by name, email or place": "Cari mengikut nama, e-mel atau tempat",
 };

@@ -290,13 +290,59 @@ async def store(
         await db.execute(delete(MailSubscription).where(MailSubscription.account_id == acct.id))
         acct.delta_link = None
         acct.last_sync_at = None
-    # P66: the same verified account, for Prima (agentic/prima).
+    # P66: the same verified account, for Prima (agentic/prima). P116: only when it is the
+    # person's own (not a shared work mailbox or someone else's account they connected).
     member = await db.get(Membership, (workspace_id, user_id))
-    if member is not None and acct.ms_user_id and acct.tenant_id:
+    if (
+        member is not None
+        and acct.ms_user_id
+        and acct.tenant_id
+        and await own_microsoft(
+            db,
+            workspace_id,
+            user_id,
+            acct.ms_user_id,
+            [str(profile.get(k) or "").strip().lower() for k in ("mail", "userPrincipalName")],
+        )
+    ):
         member.ms_oid, member.ms_tenant_id = acct.ms_user_id, acct.tenant_id
     await db.commit()
     await _cache(acct.id, tok)
     return acct
+
+
+async def own_microsoft(
+    db: AsyncSession, workspace_id: str, user_id: str, oid: str, emails: list[str]
+) -> bool:
+    """P116: is this Microsoft account the person's own? Not when its address is another
+    member's sign-in email, nor when another member is already linked to it (a shared work
+    mailbox, or someone else's account connected from a test account)."""
+    from ..models import User
+
+    mine = [e for e in emails if e]
+    if mine:
+        other = await db.scalar(
+            select(User.id)
+            .join(Membership, Membership.user_id == User.id)
+            .where(
+                Membership.workspace_id == workspace_id,
+                User.email.in_(mine),
+                User.id != user_id,
+            )
+            .limit(1)
+        )
+        if other is not None:
+            return False
+    taken = await db.scalar(
+        select(Membership.user_id)
+        .where(
+            Membership.workspace_id == workspace_id,
+            Membership.ms_oid == oid,
+            Membership.user_id != user_id,
+        )
+        .limit(1)
+    )
+    return taken is None
 
 
 def has_scope(granted: str, scope: str) -> bool:

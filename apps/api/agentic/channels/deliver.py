@@ -156,6 +156,10 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
     mine = await _askers_people(db, a, agent, task)
     limit = (a.tool_call_id or "").startswith("allowance:")
     who = await deciders(db, a.workspace_id, agent, budget=a.kind == "budget")
+    # P116: owners and admins (the developer too) may decide for every AI, but are only told
+    # of their own AI's asks; the rest waits for them on Approvals and the bell, to check later.
+    wide = await _whole_office(db, a.workspace_id, [u.id for u in who])
+    who = [u for u in who if u.id not in wide or u.id in mine]
     for user in who:
         lang = prefs.lang_of(user)  # the recipient's language, not the agent's or the asker's
         title, body = render(title_msg, lang), render(body_msg, lang)
@@ -321,6 +325,23 @@ async def approval_requested(db: AsyncSession, a: Approval) -> list[str]:
         )
     await db.commit()
     return ids
+
+
+WHOLE_OFFICE = ("owner", "admin")
+
+
+async def _whole_office(db: AsyncSession, workspace_id: str, user_ids: list[str]) -> set[str]:
+    """P116: who among these decides for the whole office (owner, admin)."""
+    if not user_ids:
+        return set()
+    rows = await db.scalars(
+        select(Membership.user_id).where(
+            Membership.workspace_id == workspace_id,
+            Membership.user_id.in_(user_ids),
+            Membership.role.in_(WHOLE_OFFICE),
+        )
+    )
+    return set(rows.all())
 
 
 async def _askers_people(

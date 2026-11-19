@@ -11,7 +11,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from agentic.agents import runtime
 from agentic.channels import deliver
 from agentic.core.db import SessionLocal
-from agentic.models import Delivery, LLMCall, User, Workspace
+from agentic.models import Approval, Delivery, LLMCall, User, Workspace
 from agentic.services import notify_prefs
 
 from .conftest import csrf
@@ -177,9 +177,15 @@ async def test_running_out_tells_the_person_and_their_managers(client, llm, temp
         assert step.state == "needs_approval"
         mine = [d.payload["subject"] for d in await _rows(me["id"])]
         assert mine.count("Your AI allowance for today is used up") == 2
-        # Approval emails go to who may decide (the owner), linked to the approval.
+        # P116: the owner may decide it, but is not emailed about someone else's AI: it waits on
+        # Approvals (and "used today's AI allowance" already told them).
         owner_rows = await _rows(owner["id"])
-        assert any(twin["name"] in (d.payload.get("subject") or "") for d in owner_rows)
+        assert not any(twin["name"] in (d.payload.get("subject") or "") for d in owner_rows)
+        async with SessionLocal() as db:
+            waiting = await db.scalar(
+                select(Approval).where(Approval.task_id == task_id, Approval.status == "pending")
+            )
+            assert waiting is not None
 
         # More given: they hear how much and that the task carries on.
         r = await client.post(

@@ -8,11 +8,13 @@ import {
   CommandIcon,
   DotsThreeIcon,
   KeyIcon,
+  ListIcon,
   MagnifyingGlassIcon,
   MegaphoneIcon,
   MonitorIcon,
   MoonIcon,
   PlusIcon,
+  SidebarSimpleIcon,
   SignOutIcon,
   SquaresFourIcon,
   SunIcon,
@@ -26,6 +28,7 @@ import { Drawer } from "vaul";
 import { create } from "zustand";
 
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
+import { AiFab } from "@/components/ai-fab";
 import { GettingStartedChip } from "@/components/getting-started-chip";
 import { useBackClose } from "@/lib/back-close";
 import { useLiveEvents } from "@/lib/live";
@@ -85,6 +88,33 @@ const useShowAll = create<{ on: boolean; toggle: () => void }>((set, get) => ({
   },
 }));
 
+/** P116: the sidebar folds to icons or opens with names, each person's choice on this device
+ * (until they choose, it follows the screen: names from 1280px). Phones open it as a drawer. */
+const NAV_WIDE_KEY = "agentic.nav.wide";
+function readWide(): boolean | null {
+  try {
+    const v = localStorage.getItem(NAV_WIDE_KEY);
+    return v === "1" ? true : v === "0" ? false : null;
+  } catch {
+    return null;
+  }
+}
+const useNavWide = create<{ chosen: boolean | null; choose: (wide: boolean) => void }>((set) => ({
+  chosen: readWide(),
+  choose: (wide) => {
+    try {
+      localStorage.setItem(NAV_WIDE_KEY, wide ? "1" : "0");
+    } catch {
+      /* private mode: it lasts until the page reloads */
+    }
+    set({ chosen: wide });
+  },
+}));
+export const useNavDrawer = create<{ open: boolean; setOpen: (open: boolean) => void }>((set) => ({
+  open: false,
+  setOpen: (open) => set({ open }),
+}));
+
 const allowedItem = (i: NavItem, perms: string[]) => !i.perm || [i.perm].flat().some((p) => perms.includes(p));
 
 function useVisibleNav() {
@@ -122,9 +152,9 @@ function NavSearch() {
     .filter((x) => x.label.toLowerCase().includes(needle) || x.about.toLowerCase().includes(needle) || x.i.to.includes(needle))
     .sort((a, b) => Number(b.label.toLowerCase().includes(needle)) - Number(a.label.toLowerCase().includes(needle)))
     .slice(0, 7);
-  const open = (to: string) => { setQ(""); void navigate({ to }); };
+  const open = (to: string) => { setQ(""); useNavDrawer.getState().setOpen(false); void navigate({ to }); };
   return (
-    <div className="relative mx-3 mb-2 hidden xl:block">
+    <div className="relative mx-3 mb-2 hidden wide:block">
       <MagnifyingGlassIcon size={15} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted" />
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Find a page or ask…")} aria-label={t("Find a page or ask")}
         onKeyDown={(e) => {
@@ -223,16 +253,16 @@ function HelpFooter({ pathname }: { pathname: string }) {
   const helpItems = useHelpItems();
   return (
     <nav aria-label={t("Help")} className="shrink-0 border-t border-border px-3 py-2.5">
-      <p className="hidden px-2.5 pb-1.5 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase xl:block">
+      <p className="hidden px-2.5 pb-1.5 text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase wide:block">
         {t(HELP_SECTION)}
       </p>
       {/* P49: ask the AI how to do something, in your own words */}
       <button type="button" onClick={() => ask()} title={t("Ask how to do something")}
-        className="mb-1 flex h-9 w-full items-center justify-center gap-2 rounded-sm bg-accent-soft/60 text-[13px] font-medium text-accent transition-colors hover:bg-accent-soft xl:justify-start xl:px-2.5">
+        className="mb-1 flex h-9 w-full items-center justify-center gap-2 rounded-sm bg-accent-soft/60 text-[13px] font-medium text-accent transition-colors hover:bg-accent-soft wide:justify-start wide:px-2.5">
         <ChatCircleDotsIcon size={19} weight="fill" />
-        <span className="hidden xl:inline">{t("Ask how")}</span>
+        <span className="hidden wide:inline">{t("Ask how")}</span>
       </button>
-      <ul className="grid gap-0.5 xl:grid-cols-3 xl:gap-1">
+      <ul className="grid gap-0.5 wide:grid-cols-3 wide:gap-1">
         {helpItems.map((item) => {
           const active = isActive(pathname, item.to);
           const IconCmp = item.icon;
@@ -243,12 +273,12 @@ function HelpFooter({ pathname }: { pathname: string }) {
                 title={t(item.blurb)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex h-9 items-center justify-center rounded-sm transition-colors xl:h-auto xl:flex-col xl:gap-0.5 xl:py-1.5",
+                  "flex h-9 items-center justify-center rounded-sm transition-colors wide:h-auto wide:flex-col wide:gap-0.5 wide:py-1.5",
                   active ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2 hover:text-fg",
                 )}
               >
                 <IconCmp size={19} weight={active ? "fill" : "regular"} />
-                <span className="sr-only text-[11.5px] leading-tight font-medium xl:not-sr-only">{t(item.label)}</span>
+                <span className="sr-only text-[11.5px] leading-tight font-medium wide:not-sr-only">{t(item.label)}</span>
               </Link>
             </li>
           );
@@ -258,8 +288,12 @@ function HelpFooter({ pathname }: { pathname: string }) {
   );
 }
 
-function Sidebar() {
+function Sidebar({ drawer = false, onPick }: { drawer?: boolean; onPick?: () => void }) {
   const t = useT();
+  const xl = useMedia("(min-width: 1280px)");
+  const chosen = useNavWide((s) => s.chosen);
+  const choose = useNavWide((s) => s.choose);
+  const wide = drawer || (chosen ?? xl);
   const sections = useVisibleNav().filter((s) => s.title !== HELP_SECTION);
   const showAll = useShowAll();
   const more = useHiddenCount();
@@ -267,15 +301,34 @@ function Sidebar() {
   const waiting = useWaiting();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <aside className="sticky top-0 hidden h-dvh w-[68px] shrink-0 flex-col border-r border-border bg-surface md:flex xl:w-[244px]">
-      <div className="flex h-14 items-center px-[18px] xl:px-4">
+    <aside
+      data-nav={wide ? "wide" : "rail"}
+      onClickCapture={onPick ? (e) => { if ((e.target as HTMLElement).closest("a[href]")) onPick(); } : undefined}
+      className={cn(
+        "flex-col bg-surface",
+        drawer ? "flex h-full w-full" : "sticky top-0 hidden h-dvh w-[68px] shrink-0 border-r border-border transition-[width] duration-200 md:flex wide:w-[244px]",
+      )}
+    >
+      <div className="flex h-14 shrink-0 items-center gap-1 px-[18px] wide:pr-2 wide:pl-4">
         <Link to="/" className="flex items-center" aria-label={t("Agentic Office home")}>
-          <span className="xl:hidden">
+          <span className="wide:hidden">
             <LogoMark />
           </span>
-          <Wordmark className="hidden xl:flex" />
+          <Wordmark className="hidden wide:flex" />
         </Link>
+        {!drawer && wide ? (
+          <button type="button" onClick={() => choose(false)} aria-label={t("Fold the menu")} title={t("Fold the menu")}
+            className="ml-auto grid size-8 place-items-center rounded-sm text-muted transition-colors hover:bg-surface-2 hover:text-fg">
+            <SidebarSimpleIcon size={18} />
+          </button>
+        ) : null}
       </div>
+      {!drawer && !wide ? (
+        <button type="button" onClick={() => choose(true)} aria-label={t("Open the menu with names")} title={t("Open the menu with names")}
+          className="mx-3 mb-2 flex h-9 shrink-0 items-center justify-center rounded-sm text-muted transition-colors hover:bg-surface-2 hover:text-fg">
+          <SidebarSimpleIcon size={19} weight="fill" />
+        </button>
+      ) : null}
       <NavSearch />
       <GettingStartedChip />
       <nav className="flex-1 overflow-y-auto overscroll-contain px-3 pb-4" aria-label={t("Main")}>
@@ -284,23 +337,23 @@ function Sidebar() {
           const open = here || groups.isOpen(section);
           const waitingHere = section.items.reduce((n, i) => n + (waiting[i.to] ?? 0), 0);
           return (
-            <div key={section.title} className="mt-3 border-t border-border/60 pt-2 first:mt-1 first:border-0 first:pt-0 xl:border-0 xl:pt-0">
+            <div key={section.title} className="mt-3 border-t border-border/60 pt-2 first:mt-1 first:border-0 first:pt-0 wide:border-0 wide:pt-0">
               <button
                 type="button"
                 onClick={() => groups.toggle(section)}
                 aria-expanded={open}
                 disabled={here}
                 title={t(section.hint)}
-                className="hidden w-full items-center gap-1.5 rounded-sm px-2.5 py-1 text-left text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase transition-colors hover:text-fg disabled:cursor-default disabled:hover:text-muted/80 xl:flex"
+                className="hidden w-full items-center gap-1.5 rounded-sm px-2.5 py-1 text-left text-[10.5px] font-semibold tracking-[0.08em] text-muted/80 uppercase transition-colors hover:text-fg disabled:cursor-default disabled:hover:text-muted/80 wide:flex"
               >
                 <span className="min-w-0 flex-1 truncate">{t(section.title)}</span>
                 {!open && waitingHere ? <Badge count={waitingHere} className="normal-case" /> : null}
                 {here ? null : <CaretDownIcon size={11} weight="bold" className={cn("shrink-0 transition-transform", !open && "-rotate-90")} />}
               </button>
               {open ? (
-                <p className="hidden px-2.5 pb-1.5 text-[11.5px] leading-snug text-muted xl:block">{t(section.hint)}</p>
+                <p className="hidden px-2.5 pb-1.5 text-[11.5px] leading-snug text-muted wide:block">{t(section.hint)}</p>
               ) : null}
-              <ul className={cn("grid gap-0.5", !open && "xl:hidden")}>
+              <ul className={cn("grid gap-0.5", !open && "wide:hidden")}>
                 {section.items.map((item) => {
                   const active = isActive(pathname, item.to);
                   const IconCmp = item.icon;
@@ -311,7 +364,7 @@ function Sidebar() {
                         title={`${t(item.label)}: ${t(item.blurb)}`}
                         className={cn(
                           "relative flex h-9 items-center gap-2.5 rounded-sm px-2.5 text-[13.5px] transition-colors",
-                          "justify-center xl:justify-start",
+                          "justify-center wide:justify-start",
                           active
                             ? "bg-accent-soft font-medium text-accent before:absolute before:top-2 before:bottom-2 before:-left-3 before:w-[3px] before:rounded-r-full before:bg-accent"
                             : "text-muted hover:bg-surface-2 hover:text-fg",
@@ -319,12 +372,12 @@ function Sidebar() {
                       >
                         <span className="relative">
                           <IconCmp size={19} weight={active ? "fill" : "regular"} />
-                          {waiting[item.to] ? <span className="absolute -top-1 -right-1 size-2 rounded-full bg-warn xl:hidden" /> : null}
+                          {waiting[item.to] ? <span className="absolute -top-1 -right-1 size-2 rounded-full bg-warn wide:hidden" /> : null}
                         </span>
-                        <span className="hidden truncate xl:inline">{t(item.label)}</span>
-                        <Badge count={waiting[item.to] ?? 0} className="ml-auto hidden xl:grid" />
+                        <span className="hidden truncate wide:inline">{t(item.label)}</span>
+                        <Badge count={waiting[item.to] ?? 0} className="ml-auto hidden wide:grid" />
                         {item.phase ? (
-                          <span className="hidden xl:contents">
+                          <span className="hidden wide:contents">
                             <PhaseTag phase={item.phase} />
                           </span>
                         ) : null}
@@ -338,7 +391,7 @@ function Sidebar() {
         })}
         {more ? (
           <button type="button" onClick={showAll.toggle}
-            className="mt-3 hidden w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-[12.5px] text-muted hover:bg-surface-2 hover:text-fg xl:flex">
+            className="mt-3 hidden w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-[12.5px] text-muted hover:bg-surface-2 hover:text-fg wide:flex">
             <SquaresFourIcon size={15} />
             {showAll.on ? t("Show fewer pages") : t("Show all pages ({n} more)", { n: more })}
           </button>
@@ -620,6 +673,10 @@ function Header() {
       // of the notch eating its 3.5rem; the sides keep clear of a landscape notch.
       className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-2 border-b border-border bg-bg/85 pt-[env(safe-area-inset-top)] pr-[max(0.75rem,env(safe-area-inset-right))] pl-[max(0.75rem,env(safe-area-inset-left))] backdrop-blur-md sm:pr-[max(1rem,env(safe-area-inset-right))] sm:pl-[max(1rem,env(safe-area-inset-left))] md:px-4"
     >
+      <Button variant="ghost" size="icon-sm" className="-ml-1 md:hidden" aria-label={t("Menu")} title={t("Menu")}
+        onClick={() => useNavDrawer.getState().setOpen(true)}>
+        <ListIcon size={21} />
+      </Button>
       <Link to="/" className="-m-1.5 p-1.5 md:hidden" aria-label={t("Home")}>
         <LogoMark className="size-7" />
       </Link>
@@ -810,6 +867,34 @@ function MobileTabBar() {
   );
 }
 
+/** P116: the whole sidebar on a phone, from the menu button in the header. */
+function NavDrawer() {
+  const t = useT();
+  const open = useNavDrawer((s) => s.open);
+  const setOpen = useNavDrawer((s) => s.setOpen);
+  const phone = useMedia("(max-width: 767px)");
+  useBackClose(open, () => setOpen(false));
+  useEffect(() => {
+    if (!phone && open) setOpen(false);
+  }, [phone, open, setOpen]);
+  return (
+    <Drawer.Root direction="left" open={open && phone} onOpenChange={setOpen}>
+      <Drawer.Portal>
+        <Drawer.Overlay className="fixed inset-0 z-40 bg-black/40" />
+        <Drawer.Content
+          aria-describedby={undefined}
+          className="fixed inset-y-0 left-0 z-50 flex w-[min(86vw,20rem)] flex-col border-r border-border bg-surface pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] outline-none"
+        >
+          <Drawer.Title className="sr-only">{t("Menu")}</Drawer.Title>
+          <div data-vaul-no-drag className="flex min-h-0 flex-1 flex-col">
+            <Sidebar drawer onPick={() => setOpen(false)} />
+          </div>
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
+  );
+}
+
 let pushSynced = false;
 
 /** The installed app's badge and this device's push subscription; the full-screen Library uses it too. */
@@ -855,6 +940,8 @@ export function AppShell() {
         </main>
       </div>
       <MobileTabBar />
+      <NavDrawer />
+      <AiFab />
       <LazyCommandPalette />
       <LazyTaskComposerHost />
       <LazyHelpAskSheet />

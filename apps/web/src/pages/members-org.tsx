@@ -259,6 +259,8 @@ export function TeamDialog({ member, me, open, onOpenChange, editable }: { membe
     .map((m) => ({
       user_id: m.user_id,
       name: m.name,
+      email: m.email,
+      keywords: [m.branch_name, m.job_title, ...(m.branches ?? []).map((b) => b.name)].filter(Boolean).join(" "),
       line: [tr(ROLE_INFO[m.role].label), m.department_name, m.reports_to_user_id && m.reports_to_user_id !== member.user_id && m.reports_to_name ? t("now reports to {name}", { name: m.reports_to_name }) : null].filter(Boolean).join(" · "),
     }));
   const sameDept = member.department_id ? (all.data ?? []).filter((m) => m.department_id === member.department_id && m.user_id !== member.user_id && m.is_active).map((m) => m.user_id) : [];

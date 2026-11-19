@@ -51,10 +51,10 @@ describe("Who a head of department manages", { timeout: 30_000 }, () => {
     const group = await screen.findByRole("group", { name: "People Hana manages" }, { timeout: 10_000 });
     await waitFor(() => expect(screen.getByLabelText("Sara")).toBeChecked());
     expect(group).toHaveTextContent("Tom");
-    fireEvent.change(screen.getByPlaceholderText("Search by name or place"), { target: { value: "oper" } });
+    fireEvent.change(screen.getByPlaceholderText("Search by name, email or place"), { target: { value: "oper" } });
     expect(screen.queryByLabelText("Tom")).toBeNull();
     fireEvent.click(screen.getByLabelText("Omar"));
-    fireEvent.change(screen.getByPlaceholderText("Search by name or place"), { target: { value: "" } });
+    fireEvent.change(screen.getByPlaceholderText("Search by name, email or place"), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "+ Everyone in Finance" }));
     expect(screen.getByLabelText("Tom")).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

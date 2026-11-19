@@ -7,10 +7,15 @@ registration needs nothing new). The state lives in Valkey as `mslogin:{state}` 
 is how the callback tells a sign-in from a connection (`msauth:`).
 
 Who gets in (never anyone new: people are added by an admin first, as before):
-1. The Microsoft account this person connected before (same tenant + object id), else
-2. a member of the workspace whose email is the account's `mail` or `userPrincipalName` from
-   Graph /me (both set by the organisation's admin; the id token's optional `email` claim is
-   not trusted, it can be unverified).
+1. A member of the workspace whose sign-in email is the account's `mail` or
+   `userPrincipalName` from Graph /me (both set by the organisation's admin; the id token's
+   optional `email` claim is not trusted, it can be unverified), else
+2. the one person who connected this Microsoft account (same tenant + object id), for someone
+   whose office email differs from their Microsoft one.
+P116: the sign-in email comes first. A Microsoft account connected by someone else (a test
+account, or a shared work mailbox several people connected) never takes a person's sign-in:
+when more than one person connected it and none signs in with it, the sign-in is refused and
+they use their own email and password.
 The account must come from the company's own Microsoft organisation: the tenant the app is
 registered for (Microsoft enforces it on a single-tenant app), or with a multi-tenant app the
 tenant an admin consented in or that members already connected from.
@@ -219,27 +224,37 @@ async def finish(db: AsyncSession, state: str, code: str) -> SignedIn:
     shown = next((e for e in emails if e), "")
 
     user: User | None = None
-    acct = await db.scalar(
-        select(MicrosoftAccount).where(
-            MicrosoftAccount.workspace_id == ws_id,
-            MicrosoftAccount.tenant_id == tid,
-            MicrosoftAccount.ms_user_id == oid,
-            MicrosoftAccount.status != "disconnected",
+    # Only the organisation-managed addresses (the first two); preferred_username is the UPN
+    # on work accounts, kept only for the message below.
+    for e in [x for x in emails[:2] if x]:
+        user = await db.scalar(
+            select(User)
+            .join(Membership, Membership.user_id == User.id)
+            .where(User.email == e, Membership.workspace_id == ws_id)
         )
-    )
-    if acct is not None and oid:
-        user = await db.get(User, acct.user_id)
-    if user is None:
-        # Only the organisation-managed addresses (the first two); preferred_username is the
-        # UPN on work accounts, kept only for the message above.
-        for e in [x for x in emails[:2] if x]:
-            user = await db.scalar(
-                select(User)
-                .join(Membership, Membership.user_id == User.id)
-                .where(User.email == e, Membership.workspace_id == ws_id)
+        if user is not None:
+            break
+    if user is None and oid:
+        holders = (
+            await db.scalars(
+                select(MicrosoftAccount.user_id).where(
+                    MicrosoftAccount.workspace_id == ws_id,
+                    MicrosoftAccount.tenant_id == tid,
+                    MicrosoftAccount.ms_user_id == oid,
+                    MicrosoftAccount.status != "disconnected",
+                )
             )
-            if user is not None:
-                break
+        ).all()
+        if len(set(holders)) > 1:
+            raise SignInError(
+                Msg(
+                    "{email} is a shared Microsoft account: several people here connected it, so "
+                    "it cannot tell who you are. Sign in with your own email and password.",
+                    email=shown or "This Microsoft account",
+                )
+            )
+        if holders:
+            user = await db.get(User, holders[0])
     if user is None:
         raise SignInError(
             Msg(
@@ -264,7 +279,12 @@ async def finish(db: AsyncSession, state: str, code: str) -> SignedIn:
         user = await db.get(User, user.id)
         assert membership is not None and user is not None
     # P66: the verified account, for Prima (agentic/prima links its staff by object ID).
-    if oid and tid and (membership.ms_oid, membership.ms_tenant_id) != (oid, tid):
+    if (
+        oid
+        and tid
+        and (membership.ms_oid, membership.ms_tenant_id) != (oid, tid)
+        and await auth.own_microsoft(db, ws_id, user.id, oid, emails[:2])
+    ):
         membership.ms_oid, membership.ms_tenant_id = oid, tid
         await db.commit()
         membership = await db.get(Membership, (ws_id, user.id))

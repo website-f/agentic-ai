@@ -3,6 +3,8 @@
 Public:
 - `POST /api/auth/email-signin {email}`: always the same 202; an active member gets a fresh
   temporary password by email when the workspace allows it (in the background).
+- `POST /api/auth/password-reset {email}`: the same 202; a 6-digit code by email (P116).
+- `POST /api/auth/password-reset/confirm {email, code, new_password}`: sets the new password.
 Owner only (Settings > Sign-in emails):
 - `GET|PUT /api/settings/system-mail`: the sender address and name, and the two switches.
 - `POST /api/settings/system-mail/test`: a harmless test email (no password) to the owner.
@@ -15,7 +17,7 @@ Owners and admins (members.manage), on the Members page:
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,7 +29,9 @@ from ...microsoft import app as ms_app
 from ...microsoft import sendmail
 from ...models import Membership, User, Workspace
 from ...services import audit, signin_mail
+from ...services import password_reset as password_reset_svc
 from ..deps import Principal, api_error, client_ip, current_principal, require
+from ..schemas import _Password
 
 router = APIRouter(tags=["sign-in emails"])
 
@@ -46,6 +50,41 @@ class EmailSigninIn(BaseModel):
 async def email_signin(body: EmailSigninIn, request: Request) -> dict[str, bool]:
     """The same answer whether or not the email has an account; the work happens after it."""
     signin_mail.spawn(signin_mail.requested(body.email.lower(), client_ip(request)))
+    return {"ok": True}
+
+
+# P116: forgot password, reset with a 6-digit code by email (services/password_reset.py).
+
+
+class ResetConfirmIn(_Password):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=12)
+    new_password: str = Field(max_length=200)
+
+    _pw = field_validator("new_password")(_Password.check_password)
+
+
+@router.post("/api/auth/password-reset", status_code=status.HTTP_202_ACCEPTED)
+async def password_reset(body: EmailSigninIn, request: Request) -> dict[str, bool]:
+    """The same answer whether or not the email has an account; the code goes after it."""
+    signin_mail.spawn(password_reset_svc.requested(body.email.lower(), client_ip(request)))
+    return {"ok": True}
+
+
+@router.post("/api/auth/password-reset/confirm")
+async def password_reset_confirm(body: ResetConfirmIn, request: Request) -> dict[str, bool]:
+    if not await signin_mail._ip_ok(client_ip(request)):  # noqa: SLF001
+        raise api_error(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "too_many",
+            "Too many tries from here. Wait an hour and try again.",
+        )
+    if not await password_reset_svc.confirm(body.email.lower(), body.code, body.new_password):
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "bad_code",
+            "That code is wrong or has expired. Check the newest email, or ask for a new code.",
+        )
     return {"ok": True}
 
 

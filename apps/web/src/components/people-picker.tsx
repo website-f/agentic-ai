@@ -15,6 +15,10 @@ export interface PickPerson {
   name: string;
   /** Where they sit, their role, or who they report to now. */
   line?: string;
+  /** P116: their email, shown and searched (two people can share a name). */
+  email?: string;
+  /** P116: more words the search finds them by (company, job title). */
+  keywords?: string;
   /** Shown but not tickable (with why). */
   locked?: string;
 }
@@ -36,7 +40,14 @@ export function PeoplePicker({ people, value, onChange, label, quick }: {
     [people, first],
   );
   const needle = q.trim().toLowerCase();
-  const shown = needle ? ordered.filter((p) => `${p.name} ${p.line ?? ""}`.toLowerCase().includes(needle)) : ordered;
+  // P116: every typed word must match the name, email, place, role or job title.
+  const words = needle.split(/\s+/).filter(Boolean);
+  const shown = words.length
+    ? ordered.filter((p) => {
+        const hay = `${p.name} ${p.email ?? ""} ${p.line ?? ""} ${p.keywords ?? ""}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      })
+    : ordered;
   const toggle = (id: string) => {
     const n = new Set(value);
     if (n.has(id)) n.delete(id);
@@ -47,7 +58,7 @@ export function PeoplePicker({ people, value, onChange, label, quick }: {
   const allOn = tickable.length > 0 && tickable.every((id) => value.has(id));
   return (
     <div className="grid min-w-0 gap-2">
-      <SearchInput value={q} onChange={setQ} placeholder={t("Search by name or place")} />
+      <SearchInput value={q} onChange={setQ} placeholder={t("Search by name, email or place")} />
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="text-[12.5px] text-muted tabular">{value.size === 1 ? t("1 ticked") : t("{n} ticked", { n: value.size })}</span>
         {tickable.length ? (
@@ -80,7 +91,10 @@ export function PeoplePicker({ people, value, onChange, label, quick }: {
                 {on ? <CheckSquareIcon size={20} weight="fill" className="shrink-0 text-accent" /> : <SquareIcon size={20} className="shrink-0 text-muted" />}
                 <PersonAvatar name={p.name} id={p.user_id} size="xs" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-medium">{p.name}</span>
+                  <span className="flex min-w-0 items-baseline gap-2">
+                    <span className="truncate text-[13px] font-medium">{p.name}</span>
+                    {p.email ? <span className="min-w-0 truncate text-[11.5px] text-muted">{p.email}</span> : null}
+                  </span>
                   {p.locked || p.line ? <span className="block truncate text-[11.5px] text-muted">{p.locked ?? p.line}</span> : null}
                 </span>
               </label>

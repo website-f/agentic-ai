@@ -77,6 +77,8 @@ export interface ChatViewProps {
   onReply?: (r: ChatReply) => void;
   /** What it is probably doing while it works. */
   thinking?: (asked: string) => string;
+  /** P116: inside the floating "Ask my AI" panel, not full screen (no conversations rail). */
+  docked?: boolean;
 }
 
 /** Remembered per device: whether the conversation list is open beside the chat. */
@@ -93,6 +95,7 @@ const coarse = () => typeof window !== "undefined" && window.matchMedia?.("(poin
 
 export function ChatView({
   agent, canWrite, onBack, initialSession, resumeLatest, onSessionChange, quickPrompts, headerExtra, emptyState, onMakeTask, onReply, thinking,
+  docked = false,
 }: ChatViewProps) {
   const t = useT();
   const qc = useQueryClient();
@@ -392,7 +395,7 @@ export function ChatView({
   const thinkingText = doing
     ? t("{name} is working: {step}…", { name: agent.name, step: t(doing) })
     : thinking ? thinking(asked) : t("{name} is thinking…", { name: agent.name });
-  const railOpen = rail && !phone;
+  const railOpen = rail && !phone && !docked;
   const prompts = locked ? [] : quickPrompts ?? [];
   const placeholder = inactive
     ? agent.status === "paused" ? t("{name} is paused", { name: agent.name }) : t("{name} is retired", { name: agent.name })
@@ -403,7 +406,9 @@ export function ChatView({
   return (
     <div
       ref={root}
-      className="fixed inset-x-0 top-0 z-40 flex h-dvh min-w-0 overflow-hidden bg-surface pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      className={docked
+        ? "relative flex h-full min-w-0 overflow-hidden bg-surface"
+        : "fixed inset-x-0 top-0 z-40 flex h-dvh min-w-0 overflow-hidden bg-surface pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"}
     >
       {/* Wide screens: the conversations sit beside the chat (and fold away). */}
       {railOpen ? (
@@ -423,7 +428,7 @@ export function ChatView({
               <ArrowLeftIcon size={19} />
             </Button>
           ) : null}
-          {!phone && !rail ? (
+          {!phone && !rail && !docked ? (
             <Button size="icon-sm" variant="ghost" onClick={toggleRail} aria-label={t("Show conversations")} title={t("Show conversations")}><SidebarSimpleIcon size={17} /></Button>
           ) : null}
           <AgentAvatar name={agent.name} color={agent.color} size="sm" working={working || agent.current_task?.status === "running"} className="ml-1" />

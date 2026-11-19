@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* P116: the sidebar with names (folded to icons otherwise): data-nav="wide" on the sidebar. */
+@custom-variant wide (&:where([data-nav="wide"], [data-nav="wide"] *));
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
 
