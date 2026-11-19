@@ -427,7 +427,7 @@ const WA_PILL: Record<WaStatus, { label: string; tone: PillTone; live?: boolean 
 };
 
 const WA_PROBLEM: Partial<Record<WaStatus, { title: string; hint: string }>> = {
-  FAILED: { title: msg("The WhatsApp session failed"), hint: msg("Restart the session. If it keeps failing, log out and scan again.") },
+  FAILED: { title: msg("The WhatsApp session failed"), hint: msg("Press Start the session. It reconnects if the connection only dropped; if WhatsApp logged the office phone out, it shows a new QR code to scan with that phone.") },
   UNREACHABLE: { title: msg("The WhatsApp gateway is not answering"), hint: msg("Check that the WAHA container is running, then try again.") },
   STOPPED: { title: msg("The session is stopped"), hint: msg("Start it again to get a new code.") },
   MISSING: { title: msg("There is no session on the gateway yet"), hint: msg("Start the session to get a code to scan.") },
@@ -796,7 +796,11 @@ function WhatsAppCard({ ch, canManage }: { ch: ChannelOut; canManage: boolean })
     qc.setQueryData(integrationKeys.whatsapp(ch.id), (old: WhatsAppStatus | undefined) => (old ? { ...old, error: undefined, ...s } : old));
   const start = useMutation({
     mutationFn: () => api<WhatsAppStatus>(`/api/channels/${ch.id}/whatsapp/start`, "POST"),
-    onSuccess: (s) => { merge(s); toast.success(t("Session restarted.")); },
+    onSuccess: (s) => {
+      merge(s);
+      if (s.rescan) toast.warning(t("WhatsApp logged the office phone out. Scan the new QR code with the office phone to connect again."));
+      else toast.success(s.status === "WORKING" ? t("WhatsApp is connected again.") : t("Session restarted."));
+    },
     onError: (e) => toast.error(errorMessage(e)),
   });
   const toggle = useMutation({

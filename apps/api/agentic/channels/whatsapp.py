@@ -11,7 +11,9 @@ People link their own WhatsApp by sending a one-time code to the office number, 
 Telegram, so only people who asked for it ever get messages.
 """
 
+import asyncio
 import base64
+import contextlib
 import hashlib
 import hmac
 import json
@@ -99,8 +101,51 @@ async def waha_status(cfg: Config) -> dict[str, Any]:
     return {"status": (s or {}).get("status", "UNKNOWN"), "me": (s or {}).get("me")}
 
 
-async def waha_start(cfg: Config, webhook_url: str) -> dict[str, Any]:
-    """Create (or update) the session with our webhook, and start it."""
+RECOVER_WAIT, RECOVER_STEP = 14.0, 2.0  # seconds a restart may take to settle (tests: 0)
+
+
+async def waha_restart(cfg: Config) -> None:
+    await _waha(cfg, "POST", f"/api/sessions/{cfg.session}/restart")
+
+
+async def _settled(cfg: Config) -> dict[str, Any]:
+    """The status once the session stops STARTING (or the wait is over)."""
+    waited = 0.0
+    st = await waha_status(cfg)
+    while st["status"] == "STARTING" and waited < RECOVER_WAIT:
+        await asyncio.sleep(RECOVER_STEP)
+        waited += RECOVER_STEP
+        st = await waha_status(cfg)
+    return st
+
+
+async def waha_recover(cfg: Config, webhook_url: str) -> dict[str, Any]:
+    """P115 (18-19 Nov 2026, the office number logged out by WhatsApp, "device_removed"): a
+    FAILED NOWEB session never comes back by itself ("do not reconnect"), and starting it again
+    reuses its dead login ("Connection Failure"). Restart once (a network drop comes back); if
+    it fails again the login is dead: log out (drops it) and start fresh, which shows a new QR
+    for the office phone. `rescan` says the phone has to scan again."""
+    with contextlib.suppress(WhatsAppError):
+        await waha_restart(cfg)
+    st = await _settled(cfg)
+    if st["status"] != "FAILED":
+        return {**st, "rescan": False}
+    with contextlib.suppress(WhatsAppError):
+        await waha_logout(cfg)
+    await waha_start(cfg, webhook_url, recover=False)
+    return {**await _settled(cfg), "rescan": True}
+
+
+async def waha_start(cfg: Config, webhook_url: str, recover: bool = True) -> dict[str, Any]:
+    """Create (or update) the session with our webhook, and start it. P115: a FAILED session is
+    recovered (waha_recover) instead of being started again on its dead login."""
+    if recover:
+        try:
+            now = await waha_status(cfg)
+        except WhatsAppError:
+            now = {"status": "UNKNOWN"}
+        if now["status"] == "FAILED":
+            return await waha_recover(cfg, webhook_url)
     config = {
         "webhooks": [
             {

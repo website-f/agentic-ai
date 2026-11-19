@@ -98,7 +98,7 @@ export function SettingsPage() {
           {me.permissions.includes("roles.manage") ? (
             <LinkRow to="/settings/roles" icon={UserGearIcon} tone="accent" title={t("Roles and access")} body={t("Set what each role can open and change, permission by permission. Only owners.")} />
           ) : null}
-          <LinkRow to="/change-password" icon={KeyIcon} tone="warn" title={t("Change password")} body={t("Signs out your other devices.")} />
+          <LinkRow to="/change-password" icon={KeyIcon} tone="warn" title={t("Change password")} body={t("Your Agentic Office password (also opens Prima here). It is not your email password. Changing it signs out your other devices.")} />
           {me.role === "owner" ? <AccountEmailRow email={me.user.email} /> : null}
         </div>
       </Section>

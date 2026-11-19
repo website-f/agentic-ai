@@ -41,6 +41,14 @@ async def liveness_reconcile() -> dict[str, int]:
             out["day_reports"] = await timetable.day_reports(db)
     except Exception:  # noqa: BLE001
         activity.logger.warning("day reports failed", exc_info=True)
+    try:  # P115: WhatsApp (WAHA) sessions that dropped are restarted, or a person is told
+        from ..channels import wa_watch
+        from ..core.db import SessionLocal
+
+        async with SessionLocal() as db:
+            out.update(await wa_watch.watch(db))
+    except Exception:  # noqa: BLE001
+        activity.logger.warning("WhatsApp watchdog failed", exc_info=True)
     try:  # P53: company backup of the folders staff computers share
         from ..core.db import SessionLocal
         from ..devices import backup

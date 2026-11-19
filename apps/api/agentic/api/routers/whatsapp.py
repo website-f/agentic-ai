@@ -257,10 +257,17 @@ async def whatsapp_start(
             status.HTTP_400_BAD_REQUEST, "not_waha", "Only WAHA sessions are started here."
         )
     try:
-        await whatsapp.waha_start(cfg, waha_hook(ch.id))
+        started = await whatsapp.waha_start(cfg, waha_hook(ch.id))
     except Exception as e:  # noqa: BLE001
         raise api_error(status.HTTP_502_BAD_GATEWAY, "waha_failed", f"WAHA: {e}"[:300]) from e
-    return await _status(ch, cfg)
+    out = await _status(ch, cfg)
+    # P115: a FAILED session was recovered; `rescan` = its login was dead, scan the new QR.
+    out["rescan"] = bool(started.get("rescan"))
+    if out["status"] == "WORKING":
+        ch.state = {**(ch.state or {}), "status": "WORKING", "restarts": 0}
+        ch.state.pop("needs_scan", None)
+        await db.commit()
+    return out
 
 
 @router.post("/channels/{channel_id}/whatsapp/logout")

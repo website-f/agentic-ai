@@ -445,14 +445,20 @@ export function TwoFactorSettings() {
                 {st.recovery_codes_left === 1 ? t("1 recovery code left.") : t("{n} recovery codes left.", { n: st.recovery_codes_left })}
               </p>
               {st.recovery_codes_left <= 3 ? <p className="text-[13px] text-warn">{t("Few recovery codes left. Make new ones.")}</p> : null}
+              {/* P115 (feedback, 18 Nov): an admin pressed New recovery codes three times looking for Turn off. */}
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => setNewCodes(true)}>
+                <Button variant="outline" onClick={() => setTurningOff(true)}>
+                  {t("Turn off two-step sign-in")}
+                </Button>
+                <Button variant="ghost" onClick={() => setNewCodes(true)}>
                   {t("New recovery codes")}
                 </Button>
-                <Button variant="ghost" onClick={() => setTurningOff(true)}>
-                  {t("Turn off")}
-                </Button>
               </div>
+              <p className="text-[12.5px] text-muted">
+                {st.required
+                  ? t("Your company requires it for your role, so after turning it off you will be asked to set it up again.")
+                  : t("To turn it off you need your password and a code from your authenticator app (or a recovery code). New recovery codes are only for when you lost or used up the old ones.")}
+              </p>
             </div>
           ) : settingUp ? (
             <TwoFactorSetup email={me.user.email} onDone={() => setSettingUp(false)} onCancel={() => setSettingUp(false)} />

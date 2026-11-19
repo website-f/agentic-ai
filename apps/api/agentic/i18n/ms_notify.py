@@ -51,6 +51,19 @@ MS_NOTIFY: dict[str, str] = {
     ),
     # api/routers/my_notifications.py
     "Send at least one setting.": "Hantar sekurang-kurangnya satu tetapan.",
+    # P115: channels/wa_watch.py
+    "The office WhatsApp is disconnected": "WhatsApp pejabat terputus",
+    "{why} Open Channels and press Start the session: it reconnects, or shows a new QR code to "
+    "scan with the office phone ({number}).": (
+        "{why} Buka Saluran dan tekan Mulakan sesi: ia bersambung semula, atau memaparkan kod QR "
+        "baharu untuk diimbas dengan telefon pejabat ({number})."
+    ),
+    "WhatsApp logged the office phone out (the linked device was removed).": (
+        "WhatsApp telah mengeluarkan telefon pejabat (peranti yang dipautkan telah dibuang)."
+    ),
+    "The WhatsApp session stopped and did not start again.": (
+        "Sesi WhatsApp berhenti dan tidak bermula semula."
+    ),
     # P115: api/routers/ai_people_usage.py
     "Only owners, admins and the system's developer see AI usage per user.": (
         "Hanya pemilik, admin dan pembangun sistem boleh melihat penggunaan AI setiap pengguna."

@@ -52,6 +52,8 @@ export interface WhatsAppStatus {
   /** data:image/png;base64 URL while waiting for a scan (managers only). */
   qr: string | null;
   error?: string;
+  /** P115: after Start: the session had failed and its login was dead; scan the new QR. */
+  rescan?: boolean;
   // managers only
   webhook_url?: string;
   verify_token?: string;

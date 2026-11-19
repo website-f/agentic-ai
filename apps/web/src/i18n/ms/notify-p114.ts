@@ -87,4 +87,18 @@ export const NOTIFY_P114: Record<string, string> = {
     "Terpakai untuk semua cara di atas. Matikan apa yang anda lebih suka semak dalam aplikasi.",
   "Link your number on the Channels page: it gives you a code to send to the office's bot or WhatsApp number.":
     "Pautkan nombor anda di halaman Saluran: ia memberi anda kod untuk dihantar kepada bot atau nombor WhatsApp pejabat.",
+  // P115: WhatsApp (WAHA) sessions that fail
+  "WhatsApp logged the office phone out. Scan the new QR code with the office phone to connect again.":
+    "WhatsApp telah mengeluarkan telefon pejabat. Imbas kod QR baharu dengan telefon pejabat untuk menyambung semula.",
+  "WhatsApp is connected again.": "WhatsApp bersambung semula.",
+  "Press Start the session. It reconnects if the connection only dropped; if WhatsApp logged the office phone out, it shows a new QR code to scan with that phone.":
+    "Tekan Mulakan sesi. Ia bersambung semula jika sambungan hanya terputus; jika WhatsApp telah mengeluarkan telefon pejabat, kod QR baharu dipaparkan untuk diimbas dengan telefon itu.",
+  // P115: two-step sign-in and password, clearer (feedback 18 Nov)
+  "Turn off two-step sign-in": "Matikan log masuk dua langkah",
+  "Your company requires it for your role, so after turning it off you will be asked to set it up again.":
+    "Syarikat anda mewajibkannya untuk peranan anda, jadi selepas dimatikan anda akan diminta menyediakannya semula.",
+  "To turn it off you need your password and a code from your authenticator app (or a recovery code). New recovery codes are only for when you lost or used up the old ones.":
+    "Untuk mematikannya anda perlukan kata laluan dan kod daripada aplikasi pengesah (atau kod pemulihan). Kod pemulihan baharu hanya untuk apabila kod lama hilang atau sudah habis digunakan.",
+  "Your Agentic Office password (also opens Prima here). It is not your email password. Changing it signs out your other devices.":
+    "Kata laluan Agentic Office anda (juga untuk Prima di sini). Ia bukan kata laluan e-mel anda. Menukarnya akan mengeluarkan anda daripada peranti lain.",
 };
