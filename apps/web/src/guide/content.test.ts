@@ -86,7 +86,7 @@ describe("guide content", () => {
     const labels = (r: string) => whereOf(r)?.trail.map((s) => (s.tab ? `${s.label} tab` : s.label));
     expect(labels("/")).toEqual(["Today", "Command center"]);
     expect(labels("/impact")).toEqual(["Today", "Command center", "Impact tab"]);
-    expect(labels("/documents")).toEqual(["Library", "Documents tab"]);
+    expect(labels("/documents")).toEqual(["Work", "Library", "Documents tab"]); // P119: the Library sits in Work
     expect(labels("/prima")).toEqual(["Prima"]);
     expect(labels("/channels")).toEqual(["Settings", "Channels tab"]);
     expect(whereOf("/settings/members")?.folded).toBe(true);

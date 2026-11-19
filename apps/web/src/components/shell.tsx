@@ -30,6 +30,7 @@ import { create } from "zustand";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
 import { AiFab } from "@/components/ai-fab";
 import { GettingStartedChip } from "@/components/getting-started-chip";
+import { PrimaHost, PrimaMenuProbe } from "@/components/prima-host";
 import { PrimaNav } from "@/components/prima-nav";
 import { useBackClose } from "@/lib/back-close";
 import { useLiveEvents } from "@/lib/live";
@@ -943,11 +944,14 @@ export function AppShell() {
         <Header />
         <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
           <Outlet />
+          {/* P119: Prima, kept loaded once opened (shown on /prima only). */}
+          <PrimaHost />
         </main>
       </div>
       <MobileTabBar />
       <NavDrawer />
       <AiFab />
+      <PrimaMenuProbe />
       <LazyCommandPalette />
       <LazyTaskComposerHost />
       <LazyHelpAskSheet />

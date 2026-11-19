@@ -75,7 +75,7 @@ export const GUIDE_PAGES: GuidePage[] = [
   },
   // ---------------------------------------------------------------- Work
   {
-    id: "tasks", route: "/tasks", title: "Tasks", group: "Work",
+    id: "tasks", route: "/tasks", title: "Tasks", group: "Today",
     states: [
       { key: "new", how: "Click New task: the task composer opens (what you need, how, who and when)" },
       { key: "sheet", how: "Click a task card: its sheet with plan, result and timeline" },
@@ -83,16 +83,16 @@ export const GUIDE_PAGES: GuidePage[] = [
     targets: [t("tasks.new", "New task"), t("tasks.columns", "Board columns"), t("tasks.card", "A task card"), t("tasks.search", "Search")],
   },
   {
-    id: "approvals", route: "/approvals", title: "Approvals", group: "Work", states: [],
+    id: "approvals", route: "/approvals", title: "Approvals", group: "Today", states: [],
     targets: [t("approvals.card", "A decision waiting"), t("approvals.actions", "Approve, always or deny"), t("approvals.history", "History")],
   },
   {
-    id: "chat", route: "/chat", title: "Chat", group: "Work",
+    id: "chat", route: "/chat", title: "Chat", group: "Today",
     states: [{ key: "conversation", how: "Pick an agent: the full-screen conversation opens" }],
     targets: [t("chat.agents", "Pick an agent"), t("chat.composer", "Type, or hold the microphone")],
   },
   {
-    id: "mail", route: "/mail", title: "Microsoft 365", group: "Work", who: "People with their own AI or a private assistant",
+    id: "mail", route: "/mail", title: "Microsoft 365", group: "Today", who: "People with their own AI or a private assistant",
     states: [],
     targets: [t("mail.drafts", "Waiting for your approval")],
   },
@@ -124,7 +124,7 @@ export const GUIDE_PAGES: GuidePage[] = [
   },
   // ---------------------------------------------------------------- Library
   {
-    id: "files", route: "/files", title: "Library: Browse", group: "Library",
+    id: "files", route: "/files", title: "Library: Browse", group: "Work",
     states: [{ key: "sheet", how: "Click a file: its preview and what was read from it" }],
     targets: [
       t("files.company", "Pick the company"), t("files.upload", "Upload files, folders or a zip"), t("files.report", "Upload report"),
@@ -134,28 +134,28 @@ export const GUIDE_PAGES: GuidePage[] = [
     ],
   },
   {
-    id: "documents", route: "/documents", title: "Documents", group: "Library",
+    id: "documents", route: "/documents", title: "Documents", group: "Work",
     states: [{ key: "editor", how: "Open a document: the editor with fields and preview" }],
     targets: [t("documents.new", "New document"), t("documents.list", "Documents and their checks")],
   },
   {
-    id: "sops", route: "/sops", title: "SOPs", group: "Library", states: [],
+    id: "sops", route: "/sops", title: "SOPs", group: "Work", states: [],
     targets: [t("sops.new", "New SOP"), t("sops.list", "SOPs by scope")],
   },
   {
-    id: "library", route: "/library", title: "Guidelines", group: "Library", states: [],
+    id: "library", route: "/library", title: "Guidelines", group: "Work", states: [],
     targets: [t("library.upload", "Upload guidelines"), t("library.sources", "Sources and status"), t("library.search", "Try a search"), t("library.sharepoint", "SharePoint and OneDrive")],
   },
   {
-    id: "templates", route: "/templates", title: "Templates", group: "Library", states: [],
+    id: "templates", route: "/templates", title: "Templates", group: "Work", states: [],
     targets: [t("templates.new", "New template"), t("templates.list", "Templates")],
   },
   {
-    id: "packs", route: "/packs", title: "Packs", group: "Library", states: [],
+    id: "packs", route: "/packs", title: "Packs", group: "Work", states: [],
     targets: [t("packs.new", "New pack"), t("packs.list", "Packs and their progress")],
   },
   {
-    id: "company-kit", route: "/company-kit", title: "Company kit", group: "Library", states: [],
+    id: "company-kit", route: "/company-kit", title: "Company kit", group: "Work", states: [],
     targets: [t("company-kit.fields", "Company facts"), t("company-kit.save", "Save")],
   },
   // ---------------------------------------------------------------- AI team
@@ -270,7 +270,7 @@ export const GUIDE_PAGES: GuidePage[] = [
   },
   // ---------------------------------------------------------------- Developer
   {
-    id: "feedbacks", route: "/feedbacks", title: "Feedbacks", group: "Feedback", who: "Owners, management and the system's developer", states: [],
+    id: "feedbacks", route: "/feedbacks", title: "Feedbacks", group: "Settings", who: "Owners, management and the system's developer", states: [],
     targets: [],
   },
   // ---------------------------------------------------------------- Help

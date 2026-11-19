@@ -44,7 +44,8 @@ export interface FlowDoc {
 
 /** Sidebar order of the groups: the office sidebar's own sections (nav.ts), so a chapter sits
  * where its page sits in the sidebar (content.test.ts checks it). */
-export const GUIDE_GROUPS = ["Today", "Work", "Prima", "Library", "AI team", "Settings", "Feedback", "Help"] as const;
+// P119: the sidebar's five groups (and Help), in its order.
+export const GUIDE_GROUPS = ["Today", "Prima", "Work", "AI team", "Settings", "Help"] as const;
 
 const s = (text: string, target?: string): DocStep => (target ? { text, target } : { text });
 

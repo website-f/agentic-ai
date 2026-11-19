@@ -46,7 +46,7 @@ describe("P92: the staff More sheet", () => {
 
   it("is short and grouped", () => {
     expect(paths.length).toBeLessThanOrEqual(12);
-    expect(sections.map((s) => s.title)).toEqual(["Today", "Work", "Prima", "Library", "Settings"]);
+    expect(sections.map((s) => s.title)).toEqual(["Today", "Prima", "Work", "Settings"]); // P119: five groups
   });
 
   it("has Approvals (no longer a tab) and Prima (its tab opens only the clock), not the tabs", () => {

@@ -2,7 +2,7 @@
  * per person on this device. */
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { allScreens, cleanMenu, primaGo, usePrima } from "./prima-embed";
+import { allScreens, cleanMenu, MENU_FRESH_MS, menuIsFresh, primaGo, usePrima } from "./prima-embed";
 
 describe("Prima's menu inside the office", () => {
   beforeEach(() => {
@@ -40,5 +40,15 @@ describe("Prima's menu inside the office", () => {
     usePrima.getState().setFrame({ postMessage: (m: unknown) => sent.push(m) } as unknown as Window);
     expect(primaGo("#@hr")).toBe(true);
     expect(sent).toEqual([{ source: "office", type: "go", hash: "#@hr" }]);
+  });
+
+  it("is read again in the background only when it is old (P119)", () => {
+    const now = 1_000_000_000_000;
+    expect(menuIsFresh(0, now)).toBe(false); // never read, or kept before P119
+    expect(menuIsFresh(now - 60_000, now)).toBe(true);
+    expect(menuIsFresh(now - MENU_FRESH_MS - 1, now)).toBe(false);
+    usePrima.getState().load("us_c");
+    usePrima.getState().setMenu({ apps: [], screens: [{ view: "clock", label: "Clock" }] });
+    expect(menuIsFresh(usePrima.getState().menuAt)).toBe(true);
   });
 });

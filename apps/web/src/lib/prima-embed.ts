@@ -4,7 +4,10 @@
  * Prima tells the office (apps/prima/apps/web/src/office-embed.ts) what this person has (its apps
  * and screens, already in their Prima language) and which screen is open; the office's sidebar
  * lists and marks them and opens them with the same addresses Prima reads ('#clock', '#@hr').
- * What Prima has is kept per person on this device, so the sidebar shows it before Prima opens. */
+ * What Prima has is kept per person on this device, so the sidebar shows it before Prima opens.
+ * P119: it is also read ahead of time (components/prima-host.tsx PrimaMenuProbe: Prima's menu-only
+ * mode, nothing else runs), and Prima stays open in the background once opened (`mounted`), so
+ * coming back to it is instant. */
 import { create } from "zustand";
 
 export interface PrimaScreen {
@@ -27,6 +30,11 @@ export interface PrimaMenu {
 interface PrimaState {
   userId: string | null;
   menu: PrimaMenu | null;
+  /** When the menu was last heard from Prima (ms; 0: never, or kept before P119). */
+  menuAt: number;
+  /** Prima has been opened in this page: it stays loaded in the background. */
+  mounted: boolean;
+  setMounted: (on: boolean) => void;
   /** Where Prima is: '#clock', '#@hr', '#home'. */
   hash: string;
   view: string;
@@ -60,6 +68,9 @@ export function cleanMenu(raw: unknown): PrimaMenu | null {
 export const usePrima = create<PrimaState>((set, get) => ({
   userId: null,
   menu: null,
+  menuAt: 0,
+  mounted: false,
+  setMounted: (mounted) => set({ mounted }),
   hash: "",
   view: "",
   space: null,
@@ -67,23 +78,27 @@ export const usePrima = create<PrimaState>((set, get) => ({
   load: (userId) => {
     if (get().userId === userId) return;
     let menu: PrimaMenu | null = null;
+    let menuAt = 0;
     try {
-      menu = cleanMenu(JSON.parse(localStorage.getItem(key(userId)) ?? "null"));
+      const raw = JSON.parse(localStorage.getItem(key(userId)) ?? "null") as { menu?: unknown; at?: unknown } | null;
+      menu = cleanMenu(raw && "menu" in raw ? raw.menu : raw);
+      menuAt = raw && typeof raw.at === "number" ? raw.at : 0;
     } catch {
       menu = null;
     }
-    set({ userId, menu });
+    set({ userId, menu, menuAt, mounted: false });
   },
   setMenu: (menu) => {
     const userId = get().userId;
+    const at = Date.now();
     if (userId) {
       try {
-        localStorage.setItem(key(userId), JSON.stringify(menu));
+        localStorage.setItem(key(userId), JSON.stringify({ menu, at }));
       } catch {
         /* private mode: kept until the page reloads */
       }
     }
-    set({ menu });
+    set({ menu, menuAt: at });
   },
   setRoute: (r) => set({ hash: r.hash, view: r.view, space: r.space }),
   setFrame: (frame) => set({ frame }),
@@ -105,4 +120,11 @@ export function primaGo(hash: string): boolean {
 export function allScreens(menu: PrimaMenu | null): PrimaScreen[] {
   if (!menu) return [];
   return [...menu.screens, ...menu.apps.flatMap((a) => a.screens)];
+}
+
+/** P119: how long a menu read from Prima is trusted before it is read again in the background. */
+export const MENU_FRESH_MS = 6 * 60 * 60 * 1000;
+
+export function menuIsFresh(menuAt: number, now = Date.now()): boolean {
+  return menuAt > 0 && now - menuAt < MENU_FRESH_MS;
 }

@@ -150,4 +150,9 @@ export const NOTIFY_P114: Record<string, string> = {
   "Remove {email}?": "Buang {email}?",
   "Its mail stops showing here and the office forgets its sign-in. Nothing is deleted in the mailbox itself.":
     "E-melnya tidak lagi dipaparkan di sini dan pejabat melupakan log masuknya. Tiada apa dipadam dalam peti mel itu sendiri.",
+  // P119: the sidebar in five groups
+  "Your desk and what needs you today: tasks, approvals, chat, your AI and your mail.":
+    "Meja anda dan apa yang memerlukan anda hari ini: tugasan, kelulusan, sembang, AI anda dan e-mel anda.",
+  "Files and documents, forms and reports, and the steps work follows.":
+    "Fail dan dokumen, borang dan laporan, dan langkah yang diikuti kerja.",
 };

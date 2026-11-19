@@ -62,7 +62,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
   },
   // ---------------------------------------------------------------- Work
   {
-    id: "tasks", route: "/tasks", title: "Tugasan", group: "Work",
+    id: "tasks", route: "/tasks", title: "Tugasan", group: "Today",
     states: [
       { key: "new", how: "Klik Tugasan baharu: komposer tugasan dibuka (apa yang anda perlukan, cara, siapa dan bila)" },
       { key: "sheet", how: "Klik kad tugasan: helaiannya dengan pelan, hasil dan garis masa" },
@@ -70,16 +70,16 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     targets: [t("tasks.new", "Tugasan baharu"), t("tasks.columns", "Lajur papan"), t("tasks.card", "Kad tugasan"), t("tasks.search", "Cari")],
   },
   {
-    id: "approvals", route: "/approvals", title: "Kelulusan", group: "Work", states: [],
+    id: "approvals", route: "/approvals", title: "Kelulusan", group: "Today", states: [],
     targets: [t("approvals.card", "Keputusan yang menunggu"), t("approvals.actions", "Lulus, sentiasa benarkan atau tolak"), t("approvals.history", "Sejarah")],
   },
   {
-    id: "chat", route: "/chat", title: "Sembang", group: "Work",
+    id: "chat", route: "/chat", title: "Sembang", group: "Today",
     states: [{ key: "conversation", how: "Pilih ejen: perbualan skrin penuh terbuka" }],
     targets: [t("chat.agents", "Pilih ejen"), t("chat.composer", "Taip, atau tahan mikrofon")],
   },
   {
-    id: "mail", route: "/mail", title: "Microsoft 365", group: "Work", who: "Mereka yang ada AI sendiri atau pembantu peribadi",
+    id: "mail", route: "/mail", title: "Microsoft 365", group: "Today", who: "Mereka yang ada AI sendiri atau pembantu peribadi",
     states: [],
     targets: [t("mail.drafts", "Menunggu kelulusan anda")],
   },
@@ -111,7 +111,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
   },
   // ---------------------------------------------------------------- Library
   {
-    id: "files", route: "/files", title: "Perpustakaan: Semak imbas", group: "Library",
+    id: "files", route: "/files", title: "Perpustakaan: Semak imbas", group: "Work",
     states: [{ key: "sheet", how: "Klik fail: pratonton dan apa yang dibaca daripadanya" }],
     targets: [
       t("files.company", "Pilih syarikat"), t("files.upload", "Muat naik fail, folder atau zip"), t("files.report", "Laporan muat naik"),
@@ -121,28 +121,28 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     ],
   },
   {
-    id: "documents", route: "/documents", title: "Dokumen", group: "Library",
+    id: "documents", route: "/documents", title: "Dokumen", group: "Work",
     states: [{ key: "editor", how: "Buka dokumen: editor dengan medan dan pratonton" }],
     targets: [t("documents.new", "Dokumen baharu"), t("documents.list", "Dokumen dan semakannya")],
   },
   {
-    id: "sops", route: "/sops", title: "SOP", group: "Library", states: [],
+    id: "sops", route: "/sops", title: "SOP", group: "Work", states: [],
     targets: [t("sops.new", "SOP baharu"), t("sops.list", "SOP ikut skop")],
   },
   {
-    id: "library", route: "/library", title: "Garis panduan", group: "Library", states: [],
+    id: "library", route: "/library", title: "Garis panduan", group: "Work", states: [],
     targets: [t("library.upload", "Muat naik garis panduan"), t("library.sources", "Sumber dan status"), t("library.search", "Cuba cari"), t("library.sharepoint", "SharePoint dan OneDrive")],
   },
   {
-    id: "templates", route: "/templates", title: "Templat", group: "Library", states: [],
+    id: "templates", route: "/templates", title: "Templat", group: "Work", states: [],
     targets: [t("templates.new", "Templat baharu"), t("templates.list", "Templat")],
   },
   {
-    id: "packs", route: "/packs", title: "Pek", group: "Library", states: [],
+    id: "packs", route: "/packs", title: "Pek", group: "Work", states: [],
     targets: [t("packs.new", "Pek baharu"), t("packs.list", "Pek dan kemajuannya")],
   },
   {
-    id: "company-kit", route: "/company-kit", title: "Kit syarikat", group: "Library", states: [],
+    id: "company-kit", route: "/company-kit", title: "Kit syarikat", group: "Work", states: [],
     targets: [t("company-kit.fields", "Fakta syarikat"), t("company-kit.save", "Simpan")],
   },
   // ---------------------------------------------------------------- AI team
@@ -257,7 +257,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
   },
   // ---------------------------------------------------------------- Developer
   {
-    id: "feedbacks", route: "/feedbacks", title: "Maklum balas", group: "Feedback", who: "Pemilik, pengurusan dan pembangun sistem", states: [],
+    id: "feedbacks", route: "/feedbacks", title: "Maklum balas", group: "Settings", who: "Pemilik, pengurusan dan pembangun sistem", states: [],
     targets: [],
   },
   // ---------------------------------------------------------------- Help
