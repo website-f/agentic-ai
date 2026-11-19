@@ -318,6 +318,10 @@ export const useApp = () => useContext(Ctx);
 const inOffice = (api as { office?: boolean }).office === true;
 // P117: shown inside the office page, under the office's own sidebar (office-embed.ts).
 const framed = inOffice && inFrame;
+// P119: the office reads this person's Prima menu ahead of time, so its sidebar lists Prima's apps before Prima is
+// opened: /prima/?menu=1 framed by the office only works out the menu and sends it (office-embed.ts). Nothing else
+// runs: no clock-in, no survey sync, no tracking, no screen, no prefetch.
+const menuProbe = framed && new URLSearchParams(window.location.search).has('menu');
 
 // P90: the sections, their small groups and the search words live in nav-catalog.ts; NavMenu.tsx draws the menu.
 
@@ -879,12 +883,13 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   const { bump } = useContext(RefreshContext);
   // Opening the system signed in clocks staff in; the clock runs until they sign out, idle or asleep (Fauzan, 27 Oct 2026).
   useEffect(() => {
+    if (menuProbe) return;
     api.staffSessionStart().then(bump, () => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me.user.id]);
   // Site surveys made with no signal are sent when the app is open with a signal, whatever screen is showing.
   useEffect(() => {
-    if (me.user.integration || me.user.role === 'site_device' || me.user.role === 'guard') return;
+    if (menuProbe || me.user.integration || me.user.role === 'site_device' || me.user.role === 'guard') return;
     const send = () => void syncSurveys(me.user.id).catch(() => undefined);
     send();
     // Keep this person's company, lead and site names on the phone, so the survey screen opens even with no signal
@@ -1116,7 +1121,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   }, []);
   // P90: the screens opened lately, for "Recently opened" on the home screen (this browser only).
   useEffect(() => {
-    rememberView(me.user.id, route.view);
+    if (!menuProbe) rememberView(me.user.id, route.view);
   }, [me.user.id, route.view]);
   // Phones show four tabs; the rest and Switch person live under More.
   const tabNav = nav.length > 5 ? nav.slice(0, 4) : nav;
@@ -1131,6 +1136,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   }, []);
 
   useEffect(() => {
+    if (menuProbe) return;
     const t = setInterval(
       () =>
         api
@@ -1192,7 +1198,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   const navKey = nav.map((n) => n.view).join(',');
   const canOpen = useCallback((v: ViewName) => navKey.split(',').includes(v), [navKey]);
   // P103: once the first screen is up, fetch the code of the other screens in this person's menu.
-  useEffect(() => prefetchMenuScreens(navKey.split(',') as ViewName[]), [navKey]);
+  useEffect(() => (menuProbe ? undefined : prefetchMenuScreens(navKey.split(',') as ViewName[])), [navKey]);
   const menuKey = nav.map((n) => `${n.view}:${n.label}`).join(',');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const menu = useMemo(() => {
@@ -1228,7 +1234,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     [routeOfHash, go],
   );
   useEffect(() => {
-    if (!framed) return;
+    if (!framed || menuProbe) return;
     const hash = route.view === 'home' && route.space ? `#@${route.space}` : `#${route.view}`;
     tellOffice({ type: 'route', hash, view: route.view, space, label: menu.find((n) => n.view === route.view)?.label ?? '' });
   }, [route, space, menu]);
@@ -1490,6 +1496,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   'it-extraction',
   ].includes(route.view);
 
+  if (menuProbe) return null;
   return (
     <Ctx.Provider value={ctx}>
       {nav.some((n) => n.view === 'clock') && <StaffTracker />}
