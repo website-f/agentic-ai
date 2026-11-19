@@ -117,6 +117,7 @@ import { ALL_NAV, navItemFor, pathAllowed } from "@/nav";
 import { LazyStartRunDialog as StartRunDialog } from "@/pages/workflows/start-run-lazy";
 import { whenText } from "@/pages/forms/words";
 
+import { ClockCard } from "@/components/clock-card";
 import { MyHierarchy, MyHierarchyLink } from "@/components/my-hierarchy";
 
 import { AskPanel } from "./ask";
@@ -247,6 +248,8 @@ export function DeskHome({ desk, onTab, customizing, onCustomize }: {
   return (
     <div className="grid min-w-0 gap-6 sm:gap-7">
       <CommandBar desk={desk} />
+      {/* P117: clock in from here; it opens Prima's clock inside the office. */}
+      <ClockCard />
       {layout.sections.filter((s) => !s.hidden && blocks[s.id] != null).map((s) => (
         <div key={s.id} className="min-w-0" data-desk-section={s.id}>{blocks[s.id]}</div>
       ))}

@@ -9,12 +9,12 @@
  * Prima, in the Prima company the owner set for their branch here ("Prima companies").
  * P82: every owner (the developer is one) opens Prima as its top record (the CEO) at once. */
 import {
-  ArrowSquareOutIcon, BooksIcon, CheckCircleIcon, EyeIcon, LinkIcon, MicrosoftOutlookLogoIcon, ShieldCheckIcon, UsersThreeIcon,
+  BooksIcon, CheckCircleIcon, EyeIcon, LinkIcon, MicrosoftOutlookLogoIcon, ShieldCheckIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 
 import { Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLang, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
+import { cleanMenu, primaGo, usePrima } from "@/lib/prima-embed";
 import { handPrimaLanguage, primaScreen } from "@/lib/prima-screen";
 import { meQuery } from "@/lib/queries";
 import { ROLE_INFO, type Role } from "@/lib/types";
@@ -56,30 +57,62 @@ export function PrimaPage() {
   return <PrimaSetup status={status.data} loading={status.isLoading} />;
 }
 
-/** Prima itself, filling the page under the office header (computers); a button on phones.
- * Owners get a slim bar above it to link people. */
+/** P117 (Fitri, 19 Nov 2026: one office, Prima inside): Prima itself, filling the page under the
+ * office header, with the office's sidebar as its menu (lib/prima-embed.ts). Prima hides its own
+ * menu when framed here (apps/prima/apps/web/src/office-embed.ts). The address follows the
+ * screen open in Prima (/prima#clock, /prima#@hr), and the sidebar, the phone's Clock in tab or
+ * a link with an address opens that screen in the Prima already showing. (P71 had Prima open as
+ * its own full page instead; Prima-only members and the phone app still do.) */
 function PrimaFrame() {
   const t = useT();
-  const { data: me } = useSuspenseQuery(meQuery);
-  const owner = me.permissions.includes("org.manage");
-  // P71: Prima opens as its own full page, a module of the office (its menu has "Back to the
-  // office"), not framed inside this one: one menu at a time, on every screen size. Owners
-  // stop here once a day only if they come to link people (?people=1 shows that instead).
-  useEffect(() => {
+  const navigate = useNavigate();
+  const hash = useRouterState({ select: (st) => st.location.hash });
+  const frame = useRef<HTMLIFrameElement>(null);
+  const reported = useRef("");
+  const setMenu = usePrima((st) => st.setMenu);
+  const setRoute = usePrima((st) => st.setRoute);
+  const setFrame = usePrima((st) => st.setFrame);
+  // The language and the first screen are handed over before Prima starts.
+  const [src] = useState(() => {
     handPrimaLanguage(useLang.getState().lang);
-    window.location.assign(APP + primaScreen(window.location.hash));
-  }, []);
+    return APP + primaScreen(window.location.hash);
+  });
+  useEffect(() => {
+    const on = (e: MessageEvent) => {
+      const w = frame.current?.contentWindow;
+      if (e.origin !== window.location.origin || !w || e.source !== w) return;
+      const d = e.data as { source?: unknown; type?: unknown; hash?: unknown; view?: unknown; space?: unknown } | null;
+      if (!d || d.source !== "prima") return;
+      if (d.type === "menu") {
+        const menu = cleanMenu(d);
+        if (menu) setMenu(menu);
+      } else if (d.type === "route" && typeof d.hash === "string" && /^#@?[a-z][a-z0-9-]{0,39}$/.test(d.hash)) {
+        setRoute({ hash: d.hash, view: typeof d.view === "string" ? d.view : "", space: typeof d.space === "string" ? d.space : null });
+        reported.current = d.hash.slice(1);
+        void navigate({ to: "/prima", hash: d.hash.slice(1), replace: true });
+      }
+    };
+    window.addEventListener("message", on);
+    return () => window.removeEventListener("message", on);
+  }, [navigate, setMenu, setRoute]);
+  useEffect(() => {
+    setFrame(frame.current?.contentWindow ?? null);
+    return () => setFrame(null);
+  }, [setFrame]);
+  // The address changed from outside Prima (the Clock in tab, a link): open that screen in it.
+  useEffect(() => {
+    if (!hash || hash === reported.current) return;
+    primaGo(`#${hash}`);
+  }, [hash]);
   return (
-    <Page>
-      <PageHeader title={t("Prima")} icon={ShieldCheckIcon}
-        description={t("Opening Prima…")} />
-      <div className="flex flex-wrap gap-2">
-        <Button asChild size="lg"><a href={APP + primaScreen(window.location.hash)} onClick={() => handPrimaLanguage(useLang.getState().lang)}><ArrowSquareOutIcon size={18} /> {t("Open Prima Secure")}</a></Button>
-        {owner ? (
-          <Button asChild size="lg" variant="secondary"><Link to="/prima" search={{ people: 1 }}><UsersThreeIcon size={16} /> {t("People in Prima")}</Link></Button>
-        ) : null}
-      </div>
-    </Page>
+    <iframe
+      ref={frame}
+      src={src}
+      title={t("Prima")}
+      allow="camera; geolocation; clipboard-write"
+      onLoad={() => setFrame(frame.current?.contentWindow ?? null)}
+      className="block w-full border-0 bg-bg h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-4.5rem-env(safe-area-inset-bottom))] md:h-[calc(100dvh-3.5rem-env(safe-area-inset-top))]"
+    />
   );
 }
 

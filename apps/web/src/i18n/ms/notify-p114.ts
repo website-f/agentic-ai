@@ -128,4 +128,12 @@ export const NOTIFY_P114: Record<string, string> = {
   "Make my AI": "Buat AI saya",
   "Open chats": "Buka sembang",
   "Search by name, email or place": "Cari mengikut nama, e-mel atau tempat",
+  // P117: Prima inside the office: clocking in from My workspace, the sidebar's Prima group
+  "My clock": "Jam saya",
+  "Clocked in since {time}": "Daftar masuk sejak {time}",
+  "Clocked in": "Sudah daftar masuk",
+  "Not clocked in": "Belum daftar masuk",
+  "Open my clock to clock out or see today.": "Buka jam saya untuk daftar keluar atau lihat hari ini.",
+  "Clock in here, without leaving the office.": "Daftar masuk di sini, tanpa meninggalkan pejabat.",
+  "Prima home": "Laman utama Prima",
 };

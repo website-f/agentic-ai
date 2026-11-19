@@ -25,8 +25,9 @@ export const useAiFab = create<{ open: boolean; setOpen: (open: boolean) => void
   setOpen: (open) => set({ open }),
 }));
 
-/** Pages that already are a chat with the AI: no button on top of them. */
-const NOT_ON = ["/my-worker", "/twin", "/chat"];
+/** Pages that already are a chat with the AI, and Prima inside the office (its own launcher with
+ * Arisha sits in that corner): no button on top of them. */
+const NOT_ON = ["/my-worker", "/twin", "/chat", "/prima"];
 
 export function AiFab() {
   const t = useT();

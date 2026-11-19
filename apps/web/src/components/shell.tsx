@@ -30,6 +30,7 @@ import { create } from "zustand";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
 import { AiFab } from "@/components/ai-fab";
 import { GettingStartedChip } from "@/components/getting-started-chip";
+import { PrimaNav } from "@/components/prima-nav";
 import { useBackClose } from "@/lib/back-close";
 import { useLiveEvents } from "@/lib/live";
 import { meQuery, systemStatusQuery } from "@/lib/queries";
@@ -353,6 +354,10 @@ function Sidebar({ drawer = false, onPick }: { drawer?: boolean; onPick?: () => 
               {open ? (
                 <p className="hidden px-2.5 pb-1.5 text-[11.5px] leading-snug text-muted wide:block">{t(section.hint)}</p>
               ) : null}
+              {/* P117: Prima's own apps and screens, opened inside the office page. */}
+              {section.title === "Prima" ? (
+                <div className={cn(!open && "wide:hidden")}><PrimaNav /></div>
+              ) : (
               <ul className={cn("grid gap-0.5", !open && "wide:hidden")}>
                 {section.items.map((item) => {
                   const active = isActive(pathname, item.to);
@@ -386,6 +391,7 @@ function Sidebar({ drawer = false, onPick }: { drawer?: boolean; onPick?: () => 
                   );
                 })}
               </ul>
+              )}
             </div>
           );
         })}

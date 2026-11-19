@@ -16,8 +16,9 @@ import { navItemFor } from "@/nav";
 import { Feedback, type FeedbackPage } from "./core";
 import { RulesPanel } from "./rules-panel";
 
-// Pages without the button: signing in, and the client presentation.
-const NO_BUTTON = ["/login", "/setup", "/change-password", "/two-step-setup", "/present", "/erased"];
+// Pages without the button: signing in, and the client presentation. P117: and Prima inside the
+// office, whose own launcher (Arisha, feedback, rules) sits in the same corner.
+const NO_BUTTON = ["/login", "/setup", "/change-password", "/two-step-setup", "/present", "/erased", "/prima"];
 
 function pageInfo(path: string, t: (s: string) => string): FeedbackPage {
   const item = navItemFor(path);
