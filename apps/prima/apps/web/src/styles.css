@@ -185,6 +185,10 @@ textarea {
   grid-template-columns: var(--rail) 1fr;
   min-height: 100%;
 }
+/* P117: inside the office page: the office's sidebar is the menu, so no rail and no phone tabs. */
+.shell.embedded {
+  grid-template-columns: 1fr;
+}
 .rail {
   background: var(--surface);
   border-right: 1px solid var(--line);

@@ -14,7 +14,7 @@ import { AlertBell } from './AlertBell';
 import { ArishaReviewQueue } from './ArishaReviewQueue';
 import { ConfidentialityGate } from './Confidential';
 import { Launcher } from './Launcher';
-import { LANGS, LangCtx, saveLang, savedLang, startTranslator, useLang, type Lang } from './i18n';
+import { LANGS, LangCtx, saveLang, savedLang, startTranslator, tr, useLang, type Lang } from './i18n';
 import { HomeView } from './views/Home';
 import { ReportProblemButton } from './views/ReportProblem';
 import { GuardPhoneApp } from './views/GuardPhone';
@@ -23,6 +23,7 @@ import { SurveysView } from './views/Surveys';
 import { forgetOwner, lastOwner, rememberSetup, syncSurveys } from './survey/offline';
 import { NavMenu } from './NavMenu';
 import { AppGrid, AppSwitcher, SpacePhoneBar, SpaceRailHead, SpotSearch } from './Spaces';
+import { framed as inFrame, onOfficeGo, tellOffice } from './office-embed';
 import { LaunchpadView, SpaceRoute } from './views/SpaceRoute';
 import { appsOf, rememberView, spaceLayout, spaceOf, usesApps, type SpaceId } from './nav-catalog';
 import { asTop, myName, officeNarrowed, primaOnly } from './office-access';
@@ -315,6 +316,8 @@ export const useApp = () => useContext(Ctx);
  */
 /** P71: opened inside the Agentic Office (its sign-in, its menu link back). */
 const inOffice = (api as { office?: boolean }).office === true;
+// P117: shown inside the office page, under the office's own sidebar (office-embed.ts).
+const framed = inOffice && inFrame;
 
 // P90: the sections, their small groups and the search words live in nav-catalog.ts; NavMenu.tsx draws the menu.
 
@@ -1201,6 +1204,47 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup, canOpen, menu, apps, openSpace }), [me, companyId, company, go, isGroup, canOpen, menu, apps, openSpace]);
   // P91: the side menu shows the open app's screens only (or, on the home screen, the everyday screens).
   const railItems = useMemo(() => (apps ? (spaceLayout(menu, space ?? 'home')?.groups.flatMap((g) => g.items) ?? []) : menu), [apps, menu, space]);
+  // P117: inside the office page the office's sidebar opens screens and apps (the same '#clock' and '#@hr' addresses),
+  // and Prima tells it what this person has and where they are, so its sidebar lists and marks them.
+  const routeOfHash = useCallback(
+    (raw: string): Route | null => {
+      const h = raw.replace(/^#/, '');
+      if (apps && h.startsWith('@')) {
+        const id = h.slice(1) as SpaceId;
+        if (id === 'home') return { view: 'home' };
+        return spaceLayout(menu, id) ? { view: 'home', space: id } : null;
+      }
+      if (h === 'home' && apps) return { view: 'home' };
+      return VIEW_TOKENS.includes(h as ViewName) && navKey.split(',').includes(h) ? { view: h as ViewName } : null;
+    },
+    [apps, navKey, menu],
+  );
+  useEffect(
+    () =>
+      onOfficeGo((h) => {
+        const r = routeOfHash(h);
+        if (r) go(r);
+      }),
+    [routeOfHash, go],
+  );
+  useEffect(() => {
+    if (!framed) return;
+    const hash = route.view === 'home' && route.space ? `#@${route.space}` : `#${route.view}`;
+    tellOffice({ type: 'route', hash, view: route.view, space, label: menu.find((n) => n.view === route.view)?.label ?? '' });
+  }, [route, space, menu]);
+  // In the person's Prima language: the office shows the labels as they come.
+  const { lang: primaLang } = useLang();
+  const officeMenu = useMemo(() => {
+    const item = (n: { view: ViewName; label: string }) => ({ view: n.view, label: tr(n.label, primaLang) });
+    return {
+      lang: primaLang,
+      apps: apps ? appsOf(menu).map((a) => ({ id: a.id, title: tr(a.title, primaLang), screens: a.groups.flatMap((g) => g.items.map(item)) })) : [],
+      screens: apps ? (spaceLayout(menu, 'home')?.groups.flatMap((g) => g.items.map(item)) ?? []) : menu.map(item),
+    };
+  }, [apps, menu, primaLang]);
+  useEffect(() => {
+    if (framed) tellOffice({ type: 'menu', ...officeMenu });
+  }, [officeMenu]);
   const [appsOpen, setAppsOpen] = useState(false);
   // P96: the phone's Back closes the More and Apps sheets.
   useBackClose(moreOpen, () => {
@@ -1456,7 +1500,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       {!me.user.integration && (
         <Launcher key={me.user.id} user={asTop(me) ? { ...me.user, name: myName(me) } : me.user} view={route.view} viewLabel={nav.find((n) => n.view === route.view)?.label ?? route.view} menu={nav.map((n) => n.label)} />
       )}
-      <div className="shell">
+      <div className={framed ? 'shell embedded' : 'shell'}>
+        {!framed && (
         <aside className="rail">
           <div className="brand">
             <div className="brand-mark">P</div>
@@ -1511,6 +1556,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             </div>
           </div>
         </aside>
+        )}
         <div className="main">
           {!me.user.integration && <CleanupReceiptRecovery key={`${me.user.id}:${route.view}`} owner={me.user.id}/>}
           {api.mode === 'demo' && (
@@ -1566,9 +1612,11 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             </span>
             {/* P86: the draft review queue sits in the top bar as a pop-over, not a strip of its own above it. */}
             {!me.user.integration && <ArishaReviewQueue key={`review-${me.user.id}`} user={me.user} companies={me.companies} />}
-            <button className="btn btn-sm hide-sm" onClick={onSignOut}>
-              {api.mode === 'demo' ? 'Switch person' : 'Sign out'}
-            </button>
+            {!framed && (
+              <button className="btn btn-sm hide-sm" onClick={onSignOut}>
+                {api.mode === 'demo' ? 'Switch person' : 'Sign out'}
+              </button>
+            )}
           </header>
           {/* P90: every screen sits in one page frame (padding, width, rhythm), even one that draws no .page of its own. */}
           {apps && space && <SpacePhoneBar id={space} menu={menu} current={route.view === 'home' ? null : route.view} onHome={() => openSpace(null)} onSpace={openSpace} onView={(v) => go({ view: v })} />}
@@ -1577,6 +1625,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             <Suspense fallback={<Loading what="the screen" />}>{view}</Suspense>
           </div>
         </div>
+        {!framed && (
         <nav className="tabs" aria-label="Main">
           {/* P91: with apps, the phone's tabs are Home, Apps, Search, the person's own clock or work, and More. */}
           {apps && (
@@ -1615,6 +1664,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             </button>
           )}
         </nav>
+        )}
         {moreOpen && (
           <>
             <div
