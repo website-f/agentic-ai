@@ -26,6 +26,7 @@ import { MovementView } from './Movement';
 import { LOCATION_PROBLEM_TEXT, locationProblem, queryPermission, type LocationProblem, type PermState } from './checkin-permissions';
 import type { MapCircle, MapPoint } from './GeoMap';
 import { clockChanged } from './StaffTracker';
+import { fuse, settled, SETTLE, usable, type Reading } from './location-fix';
 import '../styles/checkin.css';
 
 const GeoMap = lazy(() => import('./GeoMap'));
@@ -164,16 +165,16 @@ export function MyCheckinCard() {
 type Fix = { lat: number; lng: number; accuracyM: number };
 type Loc =
   | { phase: 'idle' }
-  | { phase: 'asking'; accuracy: number | null }
+  | { phase: 'asking'; accuracy: number | null; readings?: number }
   | { phase: 'problem'; problem: LocationProblem }
   | { phase: 'rough'; fix: Fix; text: string }
   | { phase: 'checking'; fix: Fix }
   | { phase: 'ready'; fix: Fix; preview: CheckinPreview };
 type TestPlace = 'at' | 'away' | 'rough' | 'device';
 
-/** Readings better than this are taken at once; otherwise the best in a few seconds. */
-const GOOD_M = 25;
-const WAIT_MS = 12_000;
+/** P120: readings are gathered and combined (location-fix.ts); these are the old single-reading limits' heirs. */
+const GOOD_M = SETTLE.goodM;
+const WAIT_MS = SETTLE.waitMs;
 /**
  * P93: when the best after WAIT_MS is still too rough, keep looking (the phone's GPS often needs half a minute indoors)
  * and show how close it is, instead of failing; only after this long is the person asked to move and try again.
@@ -243,39 +244,46 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
     stopWatch.current();
     if (api.mode === 'demo' && test !== 'device') return void check(testFix());
     if (!navigator.geolocation) return setLoc({ phase: 'problem', problem: 'unsupported' });
-    setLoc({ phase: 'asking', accuracy: null });
-    let best: GeolocationPosition | null = null;
+    setLoc({ phase: 'asking', accuracy: null, readings: 0 });
+    // P120: every reading is kept and combined (location-fix.ts): cached and jumping readings dropped, the precise
+    // cluster averaged by accuracy, taken once it is precise and steady (or the best there is at the time limit).
+    const started = Date.now();
+    const readings: Reading[] = [];
+    const rules = { ...SETTLE, goodM: Math.min(GOOD_M, me.maxAccuracyM), maxM: me.maxAccuracyM, waitMs: WAIT_MS };
     let done = false;
-    let longTimer = 0;
-    const finish = (final = false) => {
+    const current = () => fuse(usable(readings, started));
+    const finish = () => {
       if (done) return;
-      // Nothing usable yet: keep waiting a while longer, showing the accuracy so far.
-      if (!final && (!best || best.coords.accuracy > me.maxAccuracyM)) {
-        longTimer = window.setTimeout(() => finish(true), LONG_WAIT_MS - WAIT_MS);
-        return;
-      }
       done = true;
       stopWatch.current();
-      if (!best) return setLoc({ phase: 'problem', problem: 'timeout' });
-      const fix = { lat: best.coords.latitude, lng: best.coords.longitude, accuracyM: Math.round(best.coords.accuracy) };
+      const f = current();
+      if (!f) return setLoc({ phase: 'problem', problem: 'timeout' });
+      const fix = { lat: f.lat, lng: f.lng, accuracyM: f.accuracyM };
       // Rough readings are never sent as a check-in: the person tries again (the server refuses them too).
       if (fix.accuracyM > me.maxAccuracyM)
         return setLoc({ phase: 'rough', fix, text: `Your location is only accurate to about ${fix.accuracyM} m; it must be within ${me.maxAccuracyM} m.` });
       void check(fix);
     };
+    const review = () => {
+      if (done) return;
+      const elapsed = Date.now() - started;
+      if (settled(usable(readings, started), elapsed, rules) || elapsed >= LONG_WAIT_MS) finish();
+    };
     const id = navigator.geolocation.watchPosition(
       (p) => {
         setPerm('granted');
-        if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
-        setLoc({ phase: 'asking', accuracy: Math.round(best.coords.accuracy) });
-        if (best.coords.accuracy <= GOOD_M) finish(true);
-        // Already waited the first few seconds and this one is usable: take it.
-        else if (longTimer && best.coords.accuracy <= me.maxAccuracyM) finish(true);
+        // The phone's own time of the reading; a clock far off is replaced by now (the search is under a minute).
+        const at = Math.abs(p.timestamp - Date.now()) < 120_000 ? p.timestamp : Date.now();
+        readings.push({ lat: p.coords.latitude, lng: p.coords.longitude, accuracyM: p.coords.accuracy, at });
+        const f = current();
+        if (!done) setLoc({ phase: 'asking', accuracy: f ? f.accuracyM : null, readings: f?.used ?? 0 });
+        review();
       },
       (err) => {
         const problem = locationProblem(err);
-        // P93: a slow phone that already gave a reading: use the best one so far instead of failing.
-        if (problem !== 'denied' && best) return finish(true);
+        // P93: a slow phone that already gave a reading: use what there is instead of failing.
+        if (problem !== 'denied' && current()) return finish();
+        if (problem === 'timeout' && !done) return; // keep listening until the time limit
         done = true;
         stopWatch.current();
         if (problem === 'denied') setPerm('denied');
@@ -283,11 +291,19 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: LONG_WAIT_MS },
     );
-    const timer = window.setTimeout(() => finish(), WAIT_MS);
+    // Readings may stop coming while the phone holds still: look again every second, and stop at the time limit.
+    const tick = window.setInterval(review, 1000);
+    const limit = window.setTimeout(() => {
+      if (!done && !current()) {
+        done = true;
+        stopWatch.current();
+        setLoc({ phase: 'problem', problem: 'timeout' });
+      } else finish();
+    }, LONG_WAIT_MS + 500);
     stopWatch.current = () => {
       navigator.geolocation.clearWatch(id);
-      window.clearTimeout(timer);
-      window.clearTimeout(longTimer);
+      window.clearInterval(tick);
+      window.clearTimeout(limit);
     };
   };
 
@@ -395,8 +411,9 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
                   ? 'Hold the phone still for a few seconds.'
                   : loc.accuracy > me.maxAccuracyM
                     ? `Accurate to about ${loc.accuracy} m so far; waiting for ${me.maxAccuracyM} m or better. Stay near a window or step outside.`
-                    : `Accurate to about ${loc.accuracy} m so far.`}
+                    : `Accurate to about ${loc.accuracy} m so far. Hold still: a few more readings make it exact.`}
               </p>
+              {loc.readings ? <p className="ss-note">{loc.readings === 1 ? '1 reading' : `${loc.readings} readings`} combined</p> : null}
             </div>
           )}
 
