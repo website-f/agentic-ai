@@ -9,7 +9,9 @@ and cite the SharePoint link. A sync every few hours (and "Sync now") follows ch
 
 Who may connect, sync or disconnect: owners and admins (org.manage / brain.manage), for every
 company or one; a company's manager (agents.manage, scoped to their company) for their own
-company. Turning files into SOP drafts needs org.manage, like every SOP draft (P24: drafts
+company. P120: anyone else asks for a folder for one of their companies (POST /requests); the
+person above them approves it on the Approvals page and it is connected in the asker's name
+(org/requests.py). Turning files into SOP drafts needs org.manage, like every SOP draft (P24: drafts
 are never seen by agents until a person approves them).
 """
 
@@ -95,6 +97,13 @@ class ConnectIn(LinkIn):
     branch_id: str | None = None  # None: every company
 
 
+class AskIn(LinkIn):
+    """P120: a folder asked for by someone who may not connect it (for one of their companies)."""
+
+    branch_id: str | None = None  # None: their own company
+    note: str = Field(default="", max_length=1000)
+
+
 class PreviewOut(BaseModel):
     name: str
     is_folder: bool
@@ -132,6 +141,8 @@ class SourceOut(BaseModel):
 class LinkedOut(BaseModel):
     sources: list[SourceOut]
     can_connect: bool
+    # P120: may ask for a folder instead (someone above them approves it).
+    can_request: bool = False
     can_draft_sops: bool
     max_files: int
 
@@ -319,6 +330,7 @@ async def list_linked(
             if library.sees_linked(reader, s.branch_id)
         ],
         can_connect=may_connect(principal),
+        can_request=not may_connect(principal) and bool(principal.scope.branch_ids),
         can_draft_sops=can(principal.role, "org.manage"),
         max_files=settings.sharepoint_max_files,
     )
@@ -452,6 +464,95 @@ async def connect_link(
     await db.commit()
     await _start(background, s.id)
     return await _source_out(db, principal, s)
+
+
+@router.post("/requests", status_code=status.HTTP_201_CREATED)
+async def ask_for_link(
+    body: AskIn,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """P120: someone who may not connect folders asks for one. The link is opened now with
+    their own Microsoft 365 sign-in (it must exist and be theirs to open); the person above them
+    approves it on the Approvals page (org/requests.py)."""
+    from ...org import requests as asks
+    from ...org.models import PersonRequest
+    from .person_requests import fail, one_out
+
+    url = _link(body.url)
+    sc = principal.scope
+    branch_id = body.branch_id or principal.branch_id
+    b = await db.get(Branch, branch_id) if branch_id else None
+    if b is None or b.workspace_id != principal.workspace_id:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "bad_branch", "Pick a company.")
+    if not sc.everything and not sc.in_branch(branch_id):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN, "outside_scope", "Pick one of your own companies."
+        )
+    if may_manage(principal, branch_id):
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "may_connect",
+            "You can link this folder yourself: use Link a folder.",
+        )
+    g = await _my_files_graph(db, principal)
+    try:
+        item = await links.resolve(g, url)
+    except MicrosoftError as e:
+        raise _graph_fail(e) from e
+    if item.is_folder is False and not links.supported(item.name):
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "link_not_supported",
+            "That link opens a file the Library cannot read. Link a folder, or a Word, Excel, "
+            "PowerPoint, PDF, text or CSV file.",
+        )
+    linked_now = await db.scalar(
+        select(LinkedSource.id).where(
+            LinkedSource.workspace_id == principal.workspace_id,
+            LinkedSource.drive_id == item.drive_id,
+            LinkedSource.item_id == item.item_id,
+        )
+    )
+    if linked_now is not None:
+        raise api_error(
+            status.HTTP_409_CONFLICT, "already_linked", "That folder is in the Library already."
+        )
+    waiting = await db.scalars(
+        select(PersonRequest).where(
+            PersonRequest.workspace_id == principal.workspace_id,
+            PersonRequest.kind == asks.LIBRARY_LINK,
+            PersonRequest.status == "pending",
+        )
+    )
+    if any(
+        (r.data or {}).get("drive_id") == item.drive_id
+        and (r.data or {}).get("item_id") == item.item_id
+        for r in waiting.all()
+    ):
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "already_asked",
+            "Someone asked for this folder already. It waits for approval.",
+        )
+    data = {
+        "url": url,
+        "web_url": item.web_url or url,
+        "name": item.name,
+        "is_folder": item.is_folder,
+        "provider": links.provider_of(url),
+        "drive_id": item.drive_id,
+        "item_id": item.item_id,
+    }
+    try:
+        r = await asks.ask(
+            db, principal, asks.LIBRARY_LINK, item.name or url, data, branch_id, body.note
+        )
+    except asks.RequestError as e:
+        raise fail(e) from e
+    await db.commit()
+    await asks.tell_asked(db, r, principal.user.name or principal.user.email)
+    return await one_out(db, principal, r)
 
 
 @router.post("/{source_id}/sync", status_code=status.HTTP_202_ACCEPTED)

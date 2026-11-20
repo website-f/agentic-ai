@@ -1,10 +1,10 @@
 import {
-  CopyIcon, CrownSimpleIcon, DotsThreeIcon, EnvelopeSimpleIcon, EyeIcon, FileXlsIcon, IdentificationCardIcon, KeyIcon, MicrosoftOutlookLogoIcon,
+  ArrowLeftIcon, ArrowRightIcon, CopyIcon, CrownSimpleIcon, DotsThreeIcon, EnvelopeSimpleIcon, EyeIcon, FileXlsIcon, IdentificationCardIcon, KeyIcon, MicrosoftOutlookLogoIcon,
   PencilSimpleIcon, ShieldCheckIcon, ShieldSlashIcon, TrashIcon, TreeStructureIcon, UserGearIcon, UserPlusIcon, UsersIcon, UsersThreeIcon, XIcon,
 } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
+import { useNavigate, useParams, useRouterState, useSearch } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -38,9 +38,9 @@ import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, 
 import { ImportMembersDialog } from "./members-import";
 import { addsDepartments, BulkManagerDialog, editsLines, editsOrg, HodBadge, ManagesField, NewDepartment, OrgFields, OrgLine, saveManages, TeamDialog } from "./members-org";
 
-const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", "staff", "operator", "approver", "viewer", "management", "hr"];
+const ROLES: Role[] = ["owner", "admin", "branch_manager", "group_hod", "hod", "supervisor", "staff", "operator", "approver", "viewer", "management", "hr"];
 // What a branch manager or HOD may hand out (mirrors api/routers/members.py TEAM_ROLES).
-const TEAM_ROLES: Partial<Record<Role, Role[]>> = { branch_manager: ["hod", "supervisor", "staff"], hod: ["supervisor", "staff"] };
+const TEAM_ROLES: Partial<Record<Role, Role[]>> = { branch_manager: ["hod", "supervisor", "staff"], group_hod: ["hod", "supervisor", "staff"], hod: ["supervisor", "staff"] };
 const NONE = "none";
 
 // Roles that are not tied to a branch or department (the English keeps its plural).
@@ -260,12 +260,14 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
 }
 
 /** Role and place for one member, or (P82) for everyone ticked in the table at once. */
-function AccessDialog({ members, me, open, onOpenChange, onDone }: {
+function AccessDialog({ members, me, open, onOpenChange, onDone, inline }: {
   members: Member[];
   me: Me;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onDone?: () => void;
+  /** P120: on the member's own page, not in a dialog (Save stays on the page). */
+  inline?: boolean;
 }) {
   const t = useT();
   const qc = useQueryClient();
@@ -328,14 +330,11 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
       } else bulkToast(r.done, r.skipped, r.first);
       onDone?.();
       onOpenChange(false);
+      if (inline && one) void qc.invalidateQueries({ queryKey: memberKey(one.user_id) });
     },
   });
   const options = one && !roles.includes(one.role) ? [one.role, ...roles] : roles;
-  return (
-    <ResponsiveDialog open={open} onOpenChange={onOpenChange}
-      title={one ? t("Access for {name}", { name: one.name }) : t("Access for {n} people", { n: members.length })}
-      description={one ? undefined : t("Everyone ticked gets this role and place. Anyone the rules stop is skipped and keeps what they have.")}
-      footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Cancel")}</Button><Button loading={save.isPending} onClick={() => save.mutate()}>{t("Save")}</Button></>}>
+  const fields = (
       <div className="grid gap-4">
         <div className="grid gap-1.5">
           <span className="text-[13px] font-medium">{t("Role")}</span>
@@ -356,6 +355,23 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
         {editsLibrary ? <LibraryAccessFields value={libraryValue} onChange={setLibraryValue} role={role} /> : null}
         <FormError message={save.error ? errorMessage(save.error) : null} />
       </div>
+  );
+  if (inline) {
+    return (
+      <div className="grid gap-4">
+        {fields}
+        <div className="sticky bottom-0 z-10 -mx-4 flex justify-end gap-2 border-t border-border bg-surface/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:px-5">
+          <Button loading={save.isPending} onClick={() => save.mutate()}>{t("Save changes")}</Button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}
+      title={one ? t("Access for {name}", { name: one.name }) : t("Access for {n} people", { n: members.length })}
+      description={one ? undefined : t("Everyone ticked gets this role and place. Anyone the rules stop is skipped and keeps what they have.")}
+      footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Cancel")}</Button><Button loading={save.isPending} onClick={() => save.mutate()}>{t("Save")}</Button></>}>
+      {fields}
     </ResponsiveDialog>
   );
 }
@@ -631,6 +647,10 @@ function MemberSheet({ member, me, onClose }: { member: Member; me: Me; onClose:
         {line(t("Joined"), <span className="tabular">{when(member.joined_at)}</span>)}
         {member.agents ? line(t("Personal agents"), <span className="tabular">{member.agents}</span>) : null}
       </dl>
+      <Link to="/settings/members/$userId" params={{ userId: member.user_id }} onClick={onClose}
+        className="hit mt-5 mr-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:underline">
+        <ArrowRightIcon size={15} /> {t("Open their page")}
+      </Link>
       {me.permissions.includes("office.view") ? (
         <Link to="/organization" search={{ view: "hierarchy", focus: member.user_id } as never} onClick={onClose}
           className="hit mt-5 inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:underline">
@@ -663,6 +683,9 @@ export function MembersTable({ control, me, withAddImport }: { control: TableCon
   const [bulkManager, setBulkManager] = useState(false);
   const [bulkPrima, setBulkPrima] = useState(false);
   const [viewing, setViewing] = useState<Member | null>(null);
+  // P120 (Fitri, 20 Nov 2026: "when clicking each member open a full page"): a row opens their page.
+  const goTo = useNavigate();
+  const openPage = (m: Member) => void goTo({ to: "/settings/members/$userId", params: { userId: m.user_id } });
   const [adding, setAdding] = useState(false);
   const [addKey, setAddKey] = useState(0);
   const [importing, setImporting] = useState(false);
@@ -762,12 +785,12 @@ export function MembersTable({ control, me, withAddImport }: { control: TableCon
         }
         exportName={t("members")}
         exportRows={() => everyMember(filters)}
-        onOpen={setViewing}
+        onOpen={openPage}
         onAdd={withAddImport && canAdd ? () => { setAddKey((k) => k + 1); setAdding(true); } : undefined}
         addLabel={t("Add member")}
         onImport={withAddImport && canAdd ? () => setImporting(true) : undefined}
         importLabel={t("Import from Excel")}
-        actions={(m) => <MemberActions member={m} me={me} onView={() => setViewing(m)} />}
+        actions={(m) => <MemberActions member={m} me={me} onView={() => openPage(m)} />}
         selection={canAdd ? { selected, onChange: setSelected, canSelect: (m) => m.user_id !== me.user.id } : undefined}
         bulkRemove={canAdd ? {
           run: removeTicked,
@@ -913,7 +936,7 @@ export function MembersPage() {
               <div key={r} className="grid content-start gap-1 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
                 <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
                   <span className="min-w-0 flex-1">{t(ROLE_INFO[r].label)}</span>
-                  {SCOPED_ROLES.includes(r) ? <Pill tone="info">{r === "staff" ? t("Own agents") : r === "branch_manager" ? t("Their branches") : t("One department")}</Pill> : null}
+                  {SCOPED_ROLES.includes(r) ? <Pill tone="info">{r === "staff" ? t("Own agents") : r === "branch_manager" || r === "group_hod" ? t("Their branches") : t("One department")}</Pill> : null}
                 </p>
                 <p className="text-[12.5px] text-muted">{t(ROLE_INFO[r].blurb)}</p>
                 <p className="text-[12px] text-muted tabular">{count ? (count === 1 ? t("1 member") : t("{n} members", { n: count })) : t("Nobody yet")}</p>
@@ -926,6 +949,139 @@ export function MembersPage() {
       {importing ? (
         <ImportMembersDialog open onOpenChange={setImporting} roles={assignable(me)} lockBranch={allowedBranches(me)} />
       ) : null}
+    </Page>
+  );
+}
+
+// ---------------------------------------------------------------- P120 a member's own page
+
+const memberKey = (id: string) => [...keys.members, "one", id] as const;
+
+/** P120 (Fitri, 20 Nov 2026: "when clicking each member, open a full page to assign by hand"):
+ * one member on a page of their own. Who they are and where they sit, their line (who they report
+ * to and everyone under them), and, for whoever may change them, every setting on the page:
+ * role and companies, who they report to and the people under them (searchable), job title,
+ * the departments they head, what they reach and their Library. The same rules as the dialog. */
+export function MemberPage() {
+  const t = useT();
+  const { userId } = useParams({ strict: false }) as { userId?: string };
+  const { data: me } = useSuspenseQuery(meQuery);
+  const id = userId ?? "";
+  const { data: member, isLoading, error } = useQuery({
+    queryKey: memberKey(id),
+    queryFn: () => api<Member>(`/api/members/${id}`),
+    enabled: !!id,
+  });
+  const { data: team = [] } = useQuery({
+    queryKey: [...memberKey(id), "team"],
+    queryFn: () => api<Member[]>(`/api/members/${id}/team`),
+    enabled: !!member,
+  });
+  const back = (
+    <Link to="/settings/members" className="hit inline-flex w-fit items-center gap-1.5 text-[13px] font-medium text-muted hover:text-fg">
+      <ArrowLeftIcon size={14} /> {t("Members")}
+    </Link>
+  );
+  if (isLoading) {
+    return (
+      <Page wide>
+        {back}
+        <Skeleton className="h-24 rounded-[var(--radius-md)]" />
+        <Skeleton className="h-96 rounded-[var(--radius-md)]" />
+      </Page>
+    );
+  }
+  if (error || !member) {
+    return (
+      <Page>
+        {back}
+        <p role="alert" className="text-danger">{error ? errorMessage(error) : t("That member is not here.")}</p>
+      </Page>
+    );
+  }
+  const isMe = member.user_id === me.user.id;
+  const editable = !isMe && assignable(me).includes(member.role) && hasAny(me, "members.manage", "team.manage");
+  const when = (iso: string) => new Date(iso).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" });
+  const line = (label: string, value: ReactNode) => (
+    <div className="contents">
+      <dt className="text-muted">{label}</dt>
+      <dd className="min-w-0 break-words">{value}</dd>
+    </div>
+  );
+  return (
+    <Page wide>
+      {back}
+      <div className="flex min-w-0 flex-wrap items-center gap-4">
+        <span className="grid size-14 shrink-0 place-items-center rounded-full bg-accent-soft text-[18px] font-semibold text-accent ring-1 ring-accent/15">
+          {initials(member.name)}
+        </span>
+        <div className="grid min-w-0 flex-1 gap-1">
+          <h1 className="flex flex-wrap items-center gap-2 text-[22px] font-semibold tracking-tight">
+            <span className="min-w-0 break-words">{member.name}</span>
+            {isMe ? <Pill tone="accent">{t("You")}</Pill> : null}
+          </h1>
+          {member.job_title ? <p className="text-[13.5px] font-medium text-accent">{member.job_title}</p> : null}
+          <p className="text-[13px] break-all text-muted">{member.email}</p>
+          <div className="flex flex-wrap items-center gap-1.5"><RolePill role={member.role} /><StatusPill member={member} /><AccessBadges member={member} /></div>
+        </div>
+        <MemberActions member={member} me={me} />
+      </div>
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-start">
+        <div className="grid min-w-0 gap-5">
+          {editable ? (
+            <section aria-label={t("Role, place and access")} className="grid gap-3 rounded-[var(--radius-lg)] border border-border bg-surface px-4 pt-4 sm:px-5">
+              <div className="grid gap-0.5">
+                <h2 className="text-[15px] font-semibold">{t("Role, place and access")}</h2>
+                <p className="text-[12.5px] text-muted">{t("Change anything here, then Save changes at the bottom.")}</p>
+              </div>
+              <AccessDialog key={`${member.user_id}:${member.role}:${member.reports_to_user_id ?? ""}`} members={[member]} me={me} open onOpenChange={() => undefined} inline />
+            </section>
+          ) : (
+            <p className="rounded-[var(--radius-md)] border border-border bg-surface-2/40 px-4 py-3 text-[13px] text-muted">
+              {isMe ? t("This is you. Ask an owner or admin to change your own role or place.") : t("You can see this member. Owners, admins and their managers change them.")}
+            </p>
+          )}
+        </div>
+        <aside className="grid min-w-0 gap-4">
+          <section aria-label={t("Details")} className="rounded-[var(--radius-lg)] border border-border bg-surface p-4">
+            <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-3 text-[13.5px]">
+              {line(t("Company"), <Branches member={member} />)}
+              {line(t("Department"), member.department_name ?? <span className="text-muted">-</span>)}
+              {line(t("Reports to"), member.reports_to_name ?? <span className="text-muted">{t("Nobody yet")}</span>)}
+              {member.heads_department ? line(t("Head of department (HOD)"), <HodBadge member={member} />) : null}
+              {member.library_scope === "department" ? line(t("Library"), t("Own department only")) : null}
+              {line(t("Sign-in"), <SignIn member={member} />)}
+              {line(t("Joined"), <span className="tabular">{when(member.joined_at)}</span>)}
+            </dl>
+          </section>
+          <section aria-label={t("People under them")} className="grid gap-2 rounded-[var(--radius-lg)] border border-border bg-surface p-4">
+            <h2 className="flex items-center gap-1.5 text-[13.5px] font-semibold">
+              <UsersThreeIcon size={15} className="text-accent" />
+              {team.length === 1 ? t("1 person reports to them") : t("{n} people report to them", { n: team.length })}
+            </h2>
+            {team.length ? (
+              <ul className="grid max-h-80 gap-1 overflow-y-auto">
+                {team.map((p) => (
+                  <li key={p.user_id}>
+                    <Link to="/settings/members/$userId" params={{ userId: p.user_id }} className="flex min-w-0 items-center gap-2 rounded-sm px-1.5 py-1 hover:bg-surface-2">
+                      <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-[10.5px] font-semibold text-accent">{initials(p.name)}</span>
+                      <span className="grid min-w-0 flex-1">
+                        <span className="truncate text-[13px] font-medium">{p.name}</span>
+                        {p.job_title ? <span className="truncate text-[11.5px] text-muted">{p.job_title}</span> : null}
+                      </span>
+                      {p.manages ? <span className="shrink-0 text-[11.5px] text-muted tabular">+{p.manages}</span> : null}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-[12.5px] text-muted">{t("Nobody reports to them yet.")}</p>}
+            <Link to="/organization" search={{ view: "hierarchy", focus: member.user_id } as never}
+              className="hit inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:underline">
+              <TreeStructureIcon size={15} /> {t("Show on the organization chart")}
+            </Link>
+          </section>
+        </aside>
+      </div>
     </Page>
   );
 }

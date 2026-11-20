@@ -273,6 +273,26 @@ async def _p109_needs(db: AsyncSession, principal: Principal, add: Any) -> None:
     from ...org.models import FileHandoff
 
     ws, me = principal.workspace_id, principal.user.id
+    # P120: people's requests waiting for me (I was asked first; the office's managers, the
+    # ones of people who report to no one).
+    from ...org.models import PersonRequest
+
+    first = PersonRequest.approver_id == me
+    if can(principal.role, "org.manage"):
+        first = or_(first, PersonRequest.approver_id.is_(None))
+    await add(
+        "requests",
+        select(PersonRequest.id).where(
+            PersonRequest.workspace_id == ws,
+            PersonRequest.status == "pending",
+            PersonRequest.requested_by != me,
+            first,
+        ),
+        (PersonRequest.id, PersonRequest.title, PersonRequest.created_at),
+        "/approvals",
+        {"tab": "people"},
+        lambda i: {"tab": "people", "request": i},
+    )
     await add(
         "handoffs_check",
         select(FileHandoff.id).where(

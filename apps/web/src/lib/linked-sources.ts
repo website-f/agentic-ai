@@ -35,6 +35,8 @@ export interface LinkedSource {
 export interface LinkedList {
   sources: LinkedSource[];
   can_connect: boolean;
+  /** P120: may ask for a folder (the person above them approves it). */
+  can_request?: boolean;
   can_draft_sops: boolean;
   max_files: number;
 }

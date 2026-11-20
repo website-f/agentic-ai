@@ -54,6 +54,10 @@ ROLES = (
     "admin",
     "branch_manager",
     "hod",
+    # P120 (Fitri, 20 Nov 2026: "HOD is for one company, so create another HOD role that
+    # manages several branches/companies"): a head of department over every company they are
+    # added to. Sees and runs those companies like a branch manager, with an HOD's powers.
+    "group_hod",
     "supervisor",
     "staff",
     "operator",
@@ -68,7 +72,9 @@ ROLES = (
 # Office roles (P9) see and act only inside their scope (api/scope.py): a branch manager
 # their branch, a HOD and a supervisor their department, staff their own agents. The
 # workspace roles (owner, admin, operator, approver, viewer) see the whole workspace.
-SCOPED_ROLES = frozenset({"branch_manager", "hod", "supervisor", "staff"})
+SCOPED_ROLES = frozenset({"branch_manager", "group_hod", "hod", "supervisor", "staff"})
+# P120: the scoped roles that see and run whole companies (each company they are added to).
+COMPANY_ROLES = frozenset({"branch_manager", "group_hod"})
 
 _ADMIN = {
     "read",
@@ -111,6 +117,19 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "admin": frozenset(_ADMIN),
     # Manage agents, work, approvals, logins and their own people, within the branch.
     "branch_manager": frozenset(
+        {
+            "read",
+            "office.view",
+            "work.write",
+            "approvals.decide",
+            "agents.manage",
+            "vault.manage",
+            "team.manage",
+            "assistants.use",
+        }
+    ),
+    # P120: an HOD's powers over every company they are added to.
+    "group_hod": frozenset(
         {
             "read",
             "office.view",

@@ -34,7 +34,7 @@ import { api } from "@/lib/api";
 import { cn, timeAgo } from "@/lib/utils";
 
 export interface NeedItem {
-  key: "approvals" | "assigned" | "blocked" | "reviews" | "documents" | "failed" | "drafts" | "skills" | "routines" | "services" | "mail_backup" | "handoffs_check" | "handoffs_in" | "mentions";
+  key: "approvals" | "assigned" | "blocked" | "reviews" | "documents" | "failed" | "drafts" | "skills" | "routines" | "services" | "mail_backup" | "handoffs_check" | "handoffs_in" | "mentions" | "requests";
   count: number;
   to: string;
   search: Record<string, string>;
@@ -76,6 +76,8 @@ const LOOK: Record<NeedItem["key"], { icon: Icon; label: string; one: string; to
   handoffs_check: { icon: ArrowsLeftRightIcon, label: msg("{n} files you uploaded for other companies to check"), one: msg("File to check and hand over"), tone: "text-info" },
   handoffs_in: { icon: TrayArrowDownIcon, label: msg("{n} files uploaded for your company"), one: msg("File uploaded for your company"), tone: "text-accent" },
   mentions: { icon: AtIcon, label: msg("{n} mentions in feedback comments"), one: msg("Mentioned in feedback"), tone: "text-accent" },
+  // P120: people's requests waiting for my approval (a SharePoint folder for the Library).
+  requests: { icon: SealCheckIcon, label: msg("{n} requests from your people to approve"), one: msg("Request to approve"), tone: "text-warn" },
 };
 
 const chip = "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] tabular";

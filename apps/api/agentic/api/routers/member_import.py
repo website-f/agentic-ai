@@ -74,6 +74,8 @@ ROLE_WORDS: dict[str, str] = {
     "pengurus": "branch_manager",
     "bm": "branch_manager",
     "hod": "hod",
+    "group hod": "group_hod",
+    "hod kumpulan": "group_hod",
     "head": "hod",
     "head of dept": "hod",
     "ketua": "hod",
@@ -754,6 +756,7 @@ def _in_scope(principal: Principal, org: Org) -> Org:
 ROLE_BLURBS = {
     "branch_manager": "Runs one company: its agents, work and people.",
     "hod": "Runs one department.",
+    "group_hod": "Heads a department across several companies: runs every company added.",
     "supervisor": "Follows one department's work.",
     "staff": "Works with their own agents.",
 }

@@ -190,7 +190,7 @@ def test_who_gives_which_role():
 
     assert members.assignable_roles(p("owner")) == list(ROLES)
     assert members.assignable_roles(p("admin")) == [r for r in ROLES if r != "owner"]
-    leadership = ["branch_manager", "hod", "supervisor", "staff", "management", "hr"]
+    leadership = ["branch_manager", "hod", "group_hod", "supervisor", "staff", "management", "hr"]
     assert members.assignable_roles(p("management")) == leadership
     assert members.assignable_roles(p("hr")) == leadership
     assert members.assignable_roles(p("branch_manager")) == ["hod", "supervisor", "staff"]

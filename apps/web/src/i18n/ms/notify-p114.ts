@@ -155,4 +155,143 @@ export const NOTIFY_P114: Record<string, string> = {
     "Meja anda dan apa yang memerlukan anda hari ini: tugasan, kelulusan, sembang, AI anda dan e-mel anda.",
   "Files and documents, forms and reports, and the steps work follows.":
     "Fail dan dokumen, borang dan laporan, dan langkah yang diikuti kerja.",
+  // P120: hierarchy, people's requests, group HOD, select all, member page, chart.
+  "Hide the people under {name}":
+    "Sembunyikan orang di bawah {name}",
+  "Show the people under {name}":
+    "Tunjukkan orang di bawah {name}",
+  "1 under them":
+    "1 di bawahnya",
+  "{n} under them":
+    "{n} di bawahnya",
+  "· {n} in your whole line":
+    "· {n} dalam seluruh barisan anda",
+  "The people under you":
+    "Orang di bawah anda",
+  "You can give tasks to everyone in your line and follow their work.":
+    "Anda boleh memberi tugasan kepada semua orang dalam barisan anda dan mengikuti kerja mereka.",
+  "{n} requests from your people to approve":
+    "{n} permohonan daripada orang anda untuk diluluskan",
+  "Request to approve":
+    "Permohonan untuk diluluskan",
+  "Approved. {name} is told.":
+    "Diluluskan. {name} dimaklumkan.",
+  "Declined. {name} is told why.":
+    "Ditolak. {name} dimaklumkan sebabnya.",
+  "Request cancelled.":
+    "Permohonan dibatalkan.",
+  "{name} asked {when}":
+    "{name} memohon {when}",
+  "Open it in SharePoint":
+    "Buka dalam SharePoint",
+  "Waiting for {name} to decide.":
+    "Menunggu keputusan {name}.",
+  "{name} decided {when}":
+    "{name} memutuskan {when}",
+  "Your reason":
+    "Sebab anda",
+  "Why you approve or decline it (they see this)":
+    "Sebab anda meluluskan atau menolaknya (mereka nampak ini)",
+  "Write at least {n} letters.":
+    "Tulis sekurang-kurangnya {n} huruf.",
+  "Cancel my request":
+    "Batalkan permohonan saya",
+  "No requests from people":
+    "Tiada permohonan daripada orang",
+  "When someone asks for something that needs approval (such as a SharePoint folder for the Library), the person above them decides it here.":
+    "Apabila seseorang memohon sesuatu yang memerlukan kelulusan (seperti folder SharePoint untuk Pustaka), orang di atasnya memutuskannya di sini.",
+  "Waiting for you ({n})":
+    "Menunggu anda ({n})",
+  "Nothing from your people waits for you.":
+    "Tiada apa-apa daripada orang anda yang menunggu anda.",
+  "My requests":
+    "Permohonan saya",
+  "Decided lately":
+    "Diputuskan baru-baru ini",
+  "All {n}":
+    "Semua {n}",
+  "Clear all":
+    "Kosongkan semua",
+  "Select the {n} found":
+    "Pilih {n} yang ditemui",
+  "Select all ({n})":
+    "Pilih semua ({n})",
+  "{n} of {total} picked":
+    "{n} daripada {total} dipilih",
+  "SharePoint or OneDrive folder for the Library":
+    "Folder SharePoint atau OneDrive untuk Pustaka",
+  "Group HOD":
+    "Ketua jabatan kumpulan",
+  "A head of department over several companies: runs the agents, work, approvals and people of each company they are added to.":
+    "Ketua jabatan bagi beberapa syarikat: menguruskan ejen, kerja, kelulusan dan orang bagi setiap syarikat yang dia ditambah.",
+  "Your AI waits here before risky actions, and your people's requests wait here for your decision.":
+    "AI anda menunggu di sini sebelum tindakan berisiko, dan permohonan orang anda menunggu keputusan anda di sini.",
+  "From AI":
+    "Daripada AI",
+  "From people":
+    "Daripada orang",
+  "AI history":
+    "Sejarah AI",
+  "Pick one or more companies":
+    "Pilih satu atau lebih syarikat",
+  "The form is added to each company picked.":
+    "Borang ditambah kepada setiap syarikat yang dipilih.",
+  "Everyone in each company":
+    "Semua orang dalam setiap syarikat",
+  "{name} added to {n} companies. Everyone it is for sees it under Forms.":
+    "{name} ditambah kepada {n} syarikat. Semua orang yang berkenaan melihatnya di bawah Borang.",
+  "Ask for a SharePoint folder":
+    "Mohon folder SharePoint",
+  "Paste a SharePoint or OneDrive folder link. The person you report to approves it on their Approvals page, then its files join the Library.":
+    "Tampal pautan folder SharePoint atau OneDrive. Orang yang anda laporkan kepadanya meluluskannya di halaman Kelulusan, kemudian failnya masuk ke Pustaka.",
+  "What is in it, and why the team needs it (optional)":
+    "Apa isinya, dan mengapa pasukan memerlukannya (pilihan)",
+  "Why you ask":
+    "Mengapa anda memohon",
+  "Ask for approval":
+    "Mohon kelulusan",
+  "My folder requests":
+    "Permohonan folder saya",
+  "Open their page":
+    "Buka halaman mereka",
+  "That member is not here.":
+    "Ahli itu tiada di sini.",
+  "Role, place and access":
+    "Peranan, tempat dan akses",
+  "Change anything here, then Save changes at the bottom.":
+    "Ubah apa-apa di sini, kemudian Simpan perubahan di bawah.",
+  "This is you. Ask an owner or admin to change your own role or place.":
+    "Ini anda. Minta pemilik atau admin untuk mengubah peranan atau tempat anda sendiri.",
+  "You can see this member. Owners, admins and their managers change them.":
+    "Anda boleh melihat ahli ini. Pemilik, admin dan pengurus mereka yang mengubahnya.",
+  "1 person reports to them":
+    "1 orang melapor kepadanya",
+  "{n} people report to them":
+    "{n} orang melapor kepadanya",
+  "Nobody reports to them yet.":
+    "Belum ada sesiapa melapor kepadanya.",
+  "Add someone under {name}":
+    "Tambah seseorang di bawah {name}",
+  "Add someone under them":
+    "Tambah seseorang di bawahnya",
+  "Now reports to {name}":
+    "Kini melapor kepada {name}",
+  "Reports to no one yet":
+    "Belum melapor kepada sesiapa",
+  "Pick the person who reports to {name}. They move from whoever they report to now.":
+    "Pilih orang yang melapor kepada {name}. Mereka berpindah daripada orang yang mereka laporkan sekarang.",
+  "Search for a person":
+    "Cari seseorang",
+  "There is nobody you may move under them.":
+    "Tiada sesiapa yang boleh anda pindahkan ke bawahnya.",
+  "Save changes":
+    "Simpan perubahan",
+  "Sent to {name} for approval.":
+    "Dihantar kepada {name} untuk kelulusan.",
+  "Sent for approval.":
+    "Dihantar untuk kelulusan.",
+  "For which company":
+    "Untuk syarikat mana",
+  "{name} now reports to {boss}.":
+    "{name} kini melapor kepada {boss}.",
 };

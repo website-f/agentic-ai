@@ -10,6 +10,7 @@ Role = Literal[
     "admin",
     "branch_manager",
     "hod",
+    "group_hod",
     "supervisor",
     "staff",
     "operator",
@@ -290,6 +291,9 @@ class MyHierarchyOut(BaseModel):
     chain: list[HierarchyPerson]
     reports: list[HierarchyPerson]
     below: int  # everyone under me, down every line
+    # P120: everyone under me down every line (each with who they report to), for the tree on
+    # My workspace; at most LINE_SHOWN of them.
+    line: list[HierarchyPerson] = []
 
 
 class PrimaAccessIn(BaseModel):

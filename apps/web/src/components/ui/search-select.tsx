@@ -4,6 +4,10 @@
  * - `SearchSelect`: pick one. A button that opens a list with a search box on top.
  * - `MultiSelect`: pick many. The picked ones show as chips (each with its own remove button);
  *   the list stays open while you tick, with "Pick all shown" / "Clear" and a count.
+ *   P120 (Fitri, 20 Nov 2026: "make it select all and unpick all ... I don't see any pick all
+ *   button ... make it nicely done"): the field itself says "Select all" / "Clear all" (no need to
+ *   open it), everything picked reads as one chip ("All 68"), and the open list starts with a
+ *   "Select all" tick box (ticked, part-ticked or empty) and a count with Done at the bottom.
  * - `MultiFilter` (P111): pick many as a list filter: one compact button ("All companies",
  *   the one picked, or "3 picked") with the same list.
  *
@@ -13,7 +17,7 @@
  * inside dialogs and sheets. An optional `action` row at the end (always shown) runs something
  * else, such as "+ New department".
  */
-import { CaretDownIcon, CheckIcon, MagnifyingGlassIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CheckIcon, MagnifyingGlassIcon, MinusIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import { Command } from "cmdk";
 import { Dialog, Popover } from "radix-ui";
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -254,13 +258,15 @@ export function SearchSelect({ value, onValueChange, options, label, placeholder
 }
 
 /** Pick many: chips for the picked ones, a list that stays open while you tick. */
-export function MultiSelect({ value, onValueChange, options, label, placeholder, searchPlaceholder, emptyText, disabled, size = "md", className, action, id, maxChips = 6, locked }: BaseProps & {
+export function MultiSelect({ value, onValueChange, options, label, placeholder, searchPlaceholder, emptyText, disabled, size = "md", className, action, id, maxChips = 6, locked, selectAll = true }: BaseProps & {
   value: string[];
   onValueChange: (value: string[]) => void;
   /** Chips shown before "+N more". */
   maxChips?: number;
   /** Values that cannot be removed here (shown without a remove button), with why. */
   locked?: Record<string, string>;
+  /** P120: a "Select all" / "Clear all" button on the field itself (off for lists of people). */
+  selectAll?: boolean;
 }) {
   const t = useT();
   const [open, setOpenRaw] = useState(false);
@@ -275,8 +281,13 @@ export function MultiSelect({ value, onValueChange, options, label, placeholder,
     if (locked?.[v] && picked.has(v)) return;
     onValueChange(picked.has(v) ? value.filter((x) => x !== v) : [...value, v]);
   };
-  const chips = value.slice(0, maxChips);
-  const more = value.length - chips.length;
+  const selectable = options.filter((o) => !o.disabled);
+  const allOn = selectable.length > 1 && selectable.every((o) => picked.has(o.value));
+  const keep = value.filter((v) => !!locked?.[v]);
+  // Everything picked (and more than the chips hold): one chip says so.
+  const asAll = allOn && value.length > maxChips;
+  const chips = asAll ? [] : value.slice(0, maxChips);
+  const more = asAll ? 0 : value.length - chips.length;
   const nameOf = (v: string) => byValue.get(v)?.label ?? v;
   const opener = openKeys(setOpen, setQuery);
   const trigger = (
@@ -290,8 +301,19 @@ export function MultiSelect({ value, onValueChange, options, label, placeholder,
     </button>
   );
   return (
-    <div className={cn("flex min-h-10 w-full max-w-full min-w-0 flex-wrap items-center gap-1 rounded-sm border border-border bg-surface p-1", disabled && "opacity-60", className)}
+    <div className={cn("flex min-h-10 w-full max-w-full min-w-0 flex-wrap items-center gap-1 rounded-sm border border-border bg-surface p-1 transition-colors focus-within:border-accent focus-within:ring-3 focus-within:ring-accent/20", disabled && "opacity-60", className)}
       role="group" aria-label={label}>
+      {asAll ? (
+        <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full bg-accent-soft py-0.5 pr-1 pl-2.5 text-[12.5px] font-medium text-accent">
+          <span className="min-w-0 truncate">{t("All {n}", { n: value.length })}</span>
+          {keep.length < value.length ? (
+            <button type="button" disabled={disabled} aria-label={t("Clear all")} onClick={() => onValueChange(keep)}
+              className="grid size-6 shrink-0 place-items-center rounded-full hover:bg-accent/15 sm:size-5">
+              <XIcon size={11} weight="bold" />
+            </button>
+          ) : null}
+        </span>
+      ) : null}
       {chips.map((v) => (
         <span key={v} className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full bg-accent-soft py-0.5 pr-1 pl-2.5 text-[12.5px] font-medium text-accent">
           <span className="min-w-0 truncate">{nameOf(v)}</span>
@@ -311,13 +333,20 @@ export function MultiSelect({ value, onValueChange, options, label, placeholder,
           isPicked={(v) => picked.has(v)} onPick={(o) => toggle(o.value)}
           action={action ? { label: action.label, onSelect: (typed) => { setOpen(false); action.onSelect(typed); } } : undefined}
           header={<ManyHeader value={value} onValueChange={onValueChange} options={options} query={query} locked={locked} />}
-          footer={<DoneFooter onDone={() => setOpen(false)} />} />
+          footer={<DoneFooter count={value.length} total={selectable.length} onDone={() => setOpen(false)} />} />
       </Popup>
+      {selectAll && selectable.length > 1 && !disabled ? (
+        <button type="button" onClick={() => onValueChange(allOn ? keep : [...value, ...selectable.map((o) => o.value).filter((v) => !picked.has(v))])}
+          className="ml-auto shrink-0 rounded-sm px-2 py-1 text-[12.5px] font-medium text-accent hover:bg-accent-soft/60 focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none">
+          {allOn ? t("Clear all") : t("Select all")}
+        </button>
+      ) : null}
     </div>
   );
 }
 
-/** The count, "Pick all" (or "Pick these N" while searching, "Unpick these") and "Clear". */
+/** P120: a "Select all" tick box for what the list shows (ticked, part-ticked or empty; while
+ * searching it picks the matches only) and "Clear all". */
 function ManyHeader({ value, onValueChange, options, query, locked }: {
   value: string[];
   onValueChange: (value: string[]) => void;
@@ -328,34 +357,41 @@ function ManyHeader({ value, onValueChange, options, query, locked }: {
   const t = useT();
   const picked = new Set(value);
   const shown = filterOptions(options, query).filter((o) => !o.disabled);
-  const allShownOn = shown.length > 0 && shown.every((o) => picked.has(o.value));
+  const on = shown.filter((o) => picked.has(o.value)).length;
+  const state = !shown.length || on === 0 ? "none" : on === shown.length ? "all" : "some";
+  const ids = shown.map((o) => o.value);
+  const flip = () => {
+    if (state === "all") onValueChange(value.filter((v) => !ids.includes(v) || !!locked?.[v]));
+    else onValueChange([...value, ...ids.filter((v) => !picked.has(v))]);
+  };
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5 text-[12.5px]">
-      <span className="text-muted tabular" aria-live="polite">{value.length === 1 ? t("1 picked") : t("{n} picked", { n: value.length })}</span>
-      {shown.length ? (
-        <button type="button" className="font-medium text-accent hover:underline"
-          onClick={() => {
-            const ids = shown.map((o) => o.value);
-            if (allShownOn) onValueChange(value.filter((v) => !ids.includes(v) || !!locked?.[v]));
-            else onValueChange([...value, ...ids.filter((v) => !picked.has(v))]);
-          }}>
-          {allShownOn ? t("Unpick these") : query ? t("Pick these {n}", { n: shown.length }) : t("Pick all")}
+    <div className="flex shrink-0 items-center gap-2 border-b border-border px-1 py-1">
+      {shown.length > 1 || (shown.length === 1 && query) ? (
+        <button type="button" role="checkbox" aria-checked={state === "all" ? true : state === "some" ? "mixed" : false} onClick={flip}
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-sm px-2.5 text-left text-[13.5px] font-medium hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none sm:min-h-9">
+          <span aria-hidden className={cn("grid size-4 shrink-0 place-items-center rounded-[4px]", state === "none" ? "border border-border" : "bg-accent text-accent-fg")}>
+            {state === "all" ? <CheckIcon size={11} weight="bold" /> : state === "some" ? <MinusIcon size={11} weight="bold" /> : null}
+          </span>
+          <span className="min-w-0 truncate">{query ? t("Select the {n} found", { n: shown.length }) : t("Select all ({n})", { n: shown.length })}</span>
         </button>
-      ) : null}
-      {value.length ? (
-        <button type="button" className="font-medium text-muted hover:text-fg hover:underline"
-          onClick={() => onValueChange(value.filter((v) => !!locked?.[v]))}>
-          {t("Clear")}
+      ) : <span className="flex-1" />}
+      {value.some((v) => !locked?.[v]) ? (
+        <button type="button" onClick={() => onValueChange(value.filter((v) => !!locked?.[v]))}
+          className="shrink-0 rounded-sm px-2.5 py-1.5 text-[12.5px] font-medium text-muted hover:bg-surface-2 hover:text-fg">
+          {t("Clear all")}
         </button>
       ) : null}
     </div>
   );
 }
 
-function DoneFooter({ onDone }: { onDone: () => void }) {
+function DoneFooter({ onDone, count, total }: { onDone: () => void; count?: number; total?: number }) {
   const t = useT();
   return (
-    <div className="flex shrink-0 justify-end border-t border-border px-3 py-2">
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border px-3 py-2">
+      <span className="text-[12.5px] text-muted tabular" aria-live="polite">
+        {count === undefined ? null : total ? t("{n} of {total} picked", { n: count, total }) : count === 1 ? t("1 picked") : t("{n} picked", { n: count })}
+      </span>
       <button type="button" onClick={onDone}
         className="inline-flex h-9 items-center rounded-sm bg-accent px-4 text-[13px] font-medium text-accent-fg hover:opacity-90">
         {t("Done")}
@@ -401,7 +437,7 @@ export function MultiFilter({ value, onValueChange, options, label, allLabel, se
       <PickList label={label} options={options} query={query} onQuery={setQuery} searchPlaceholder={searchPlaceholder} emptyText={emptyText}
         isPicked={(v) => picked.has(v)} onPick={(o) => toggle(o.value)}
         header={<ManyHeader value={value} onValueChange={onValueChange} options={options} query={query} />}
-        footer={<DoneFooter onDone={() => setOpen(false)} />} />
+        footer={<DoneFooter count={value.length} total={options.filter((o) => !o.disabled).length} onDone={() => setOpen(false)} />} />
     </Popup>
   );
 }

@@ -2,18 +2,20 @@
 task moves on the board.
 
 Managing (memberships.reports_to_user_id): a member reports to at most one manager in a
-workspace. A manager "manages" their direct reports (not the reports of their reports). P111:
-anyone may have people reporting to them on the organization chart, but only the roles in
-MANAGER_ROLES give those people tasks (may_assign) or follow their work. Nobody is placed under
-anyone automatically: imported members report to no one until a person with members.manage sets it.
+workspace. P120 (Fitri, 20 Nov 2026: "in the hierarchy they should be able to assign everyone
+under them, all of it"): a person manages everyone below them on the organization chart, their
+direct reports and their reports' reports down the whole line (`below`), whatever their role (a
+store head in the staff role with storekeepers under them gives them tasks and follows their
+work). Nobody is placed under anyone automatically: imported members report to no one until a
+person who edits the chart sets it.
 
 Who may give a person a task (`may_assign`), the rule the API enforces:
 - anyone who may write work (work.write) gives themselves a task;
 - whoever manages all members (members.manage: owner, admin, management, HR by default) gives
   anyone in the workspace a task;
-- a branch manager gives a task to the people of their branch and to their direct reports;
-- an HOD or a supervisor gives a task to their direct reports;
-- anyone else (staff, operators) to no one but themselves.
+- a branch manager gives a task to the people of their branch;
+- anyone gives a task to everyone below them on the organization chart (P120: the whole line);
+- nobody else.
 
 A person's task never starts an agent run (agents/launch.py refuses a task without an
 agent). Its moves are PERSON_MOVES; "done" by the assignee on a task someone else gave them
@@ -26,10 +28,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.security import can
+from ..core.security import COMPANY_ROLES, can
 from ..i18n import Msg
 from ..models import Membership, Task, User
 from .branches import member_in_branches
@@ -37,7 +39,7 @@ from .branches import member_in_branches
 log = logging.getLogger(__name__)
 
 MANAGER_ROLES = frozenset(
-    {"owner", "admin", "management", "hr", "branch_manager", "hod", "supervisor"}
+    {"owner", "admin", "management", "hr", "branch_manager", "group_hod", "hod", "supervisor"}
 )
 
 # The moves a person's task may make by hand (drag or button). No "failed": people do not
@@ -113,6 +115,45 @@ async def direct_reports(db: AsyncSession, workspace_id: str, user_id: str) -> l
     )
 
 
+# P120: how deep a reporting line is followed, and at most how many people it gives.
+LINE_DEPTH = 12
+LINE_CAP = 5000
+
+
+async def below(db: AsyncSession, workspace_id: str, user_id: str) -> set[str]:
+    """Everyone under this person on the organization chart: their direct reports, their
+    reports' reports and so on down the line (one recursive query; never the person)."""
+    first = (
+        select(Membership.user_id.label("uid"), literal(1).label("depth"))
+        .where(Membership.workspace_id == workspace_id, Membership.reports_to_user_id == user_id)
+        .cte("line_below", recursive=True)
+    )
+    line = first.union(
+        select(Membership.user_id, first.c.depth + 1)
+        .join(first, Membership.reports_to_user_id == first.c.uid)
+        .where(Membership.workspace_id == workspace_id, first.c.depth < LINE_DEPTH)
+    )
+    rows = await db.scalars(select(line.c.uid).distinct().limit(LINE_CAP))
+    return {u for u in rows.all() if u and u != user_id}
+
+
+async def above(db: AsyncSession, workspace_id: str, user_id: str) -> list[str]:
+    """Who this person reports to, and who that one reports to, up the line, nearest first."""
+    out: list[str] = []
+    cur = user_id
+    for _ in range(LINE_DEPTH):
+        nxt = await db.scalar(
+            select(Membership.reports_to_user_id).where(
+                Membership.workspace_id == workspace_id, Membership.user_id == cur
+            )
+        )
+        if not nxt or nxt == user_id or nxt in out:
+            break
+        out.append(nxt)
+        cur = nxt
+    return out
+
+
 async def managers_of(db: AsyncSession, workspace_id: str, user_ids: set[str]) -> set[str]:
     """The managers the given people report to (who follows their tasks)."""
     if not user_ids:
@@ -128,14 +169,15 @@ async def managers_of(db: AsyncSession, workspace_id: str, user_ids: set[str]) -
 
 
 def assignable_where(a: Actor, team: list[str]) -> Any:
-    """SQL on Membership: the people this actor may give a task to (self included)."""
+    """SQL on Membership: the people this actor may give a task to (self included). `team`:
+    everyone below them on the chart (`below`, P120)."""
     me = Membership.user_id == a.user_id
     if can(a.role, "members.manage"):
         return Membership.workspace_id == a.workspace_id
     parts: list[Any] = [me]
     if team:
         parts.append(Membership.user_id.in_(team))
-    if a.role == "branch_manager" and a.branch_id:
+    if a.role in COMPANY_ROLES and a.branch_id:
         parts.append(member_in_branches(a.branch_ids or (a.branch_id,)))
     return or_(*parts)
 
@@ -148,14 +190,15 @@ async def may_assign(db: AsyncSession, a: Actor, user_id: str) -> Membership:
         raise PeopleError(400, "bad_person", "Pick someone who is a member here.")
     if user_id == a.user_id or can(a.role, "members.manage"):
         return m
-    if m.reports_to_user_id == a.user_id and a.role in MANAGER_ROLES:
+    if a.role in COMPANY_ROLES and set(m.branch_ids) & set(a.branch_ids or (a.branch_id,)):
         return m
-    if a.role == "branch_manager" and set(m.branch_ids) & set(a.branch_ids or (a.branch_id,)):
+    # P120: anyone above them on the chart, however far up the line.
+    if m.reports_to_user_id and a.user_id in await above(db, a.workspace_id, user_id):
         return m
     raise PeopleError(
         403,
         "cannot_assign",
-        "You can give tasks only to yourself and the people you manage.",
+        "You can give tasks only to yourself and the people under you on the organization chart.",
     )
 
 

@@ -15,6 +15,18 @@ export function lockedBranchId(me: Me): string | null {
   return me.scope && me.scope.kind !== "all" ? me.scope.branch_id : null;
 }
 
+/** P120: the companies a scoped role is held to (null: every company). A branch manager or
+ * group HOD has each company they were added to (Fitri, 20 Nov 2026: "HOD with many branches
+ * added, but still can only see one company"); an HOD or supervisor their department's company;
+ * staff each company they work in. */
+export function lockedBranchIds(me: Me): string[] | null {
+  const sc = me.scope;
+  if (!sc || sc.kind === "all") return null;
+  if (sc.kind === "department") return sc.branch_id ? [sc.branch_id] : [];
+  const ids = (sc.branches ?? []).map((b) => b.id);
+  return ids.length ? ids : sc.branch_id ? [sc.branch_id] : [];
+}
+
 export interface Companies {
   /** Every company this person may see, in the switcher's order. */
   branches: Branch[];
@@ -40,11 +52,13 @@ export function useCompanies(): Companies {
   const lastId = useBranch((s) => s.lastId);
   const setBranchId = useBranch((s) => s.setBranchId);
   const setLastId = useBranch((s) => s.setLastId);
-  const lock = lockedBranchId(me);
+  const lock = lockedBranchIds(me);
+  const lockKey = lock?.join(",") ?? "";
   const branches = useMemo(() => {
-    const mine = lock ? every.filter((b) => b.id === lock) : every;
+    const ids = lockKey ? lockKey.split(",") : null;
+    const mine = ids ? every.filter((b) => ids.includes(b.id)) : every;
     return mine.length ? mine : every;
-  }, [every, lock]);
+  }, [every, lockKey]);
   const canAll = branches.length > 1;
   // Nothing chosen yet (or a company that was deleted): several companies start on "All".
   const chosen = branches.find((b) => b.id === branchId) ?? null;

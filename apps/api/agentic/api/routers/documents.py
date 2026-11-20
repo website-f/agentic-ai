@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import launch, runtime
 from ...core.db import get_db
-from ...core.security import can
+from ...core.security import COMPANY_ROLES, can
 from ...documents import docx_template, provenance, service
 from ...documents.fill import KIT_FIELDS, KIT_KEYS, clean_fields, detect_fields
 from ...engine import gateway
@@ -66,7 +66,7 @@ def _kit_editable(principal: Principal, branch_id: str) -> bool:
     if can(principal.role, "org.manage"):
         return True
     sc = principal.scope
-    return principal.role == "branch_manager" and sc.in_branch(branch_id)
+    return principal.role in COMPANY_ROLES and sc.in_branch(branch_id)
 
 
 def _kit_out(b: Branch, kit: CompanyKit | None, principal: Principal) -> KitOut:

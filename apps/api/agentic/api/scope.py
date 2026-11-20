@@ -23,10 +23,11 @@ task, see its agent's transcript or approvals, or reach its files.
 
 People's tasks (P97): a task may be for a person (`assignee_user_id`) instead of an agent.
 Besides what each scope saw before, a person sees the tasks given to them, and a manager
-(branch manager, HOD, supervisor) the tasks of the people who report to them (`team`: their
-direct reports, loaded with the session). A branch manager also sees their branch's people's
-tasks (the task carries the person's branch). Nothing else widens: no one sees a person's
-task because of their department alone, and staff see only their own.
+the tasks of the people who report to them (`team`, loaded with the session; P120: everyone
+below them on the organization chart, down the whole line, for any scoped role, staff too). A
+branch manager also sees their branch's people's tasks (the task carries the person's branch).
+Nothing else widens: no one sees a person's task because of their department alone, and staff
+see only their own and those of the people under them.
 
 Several branches (P98): a member may work in more than one branch (membership_branches,
 teams/branches.py). `branch_ids` is all of them (home first); every branch rule here and in
@@ -43,7 +44,7 @@ from typing import Any
 
 from sqlalchemy import ColumnElement, and_, false, or_, select
 
-from ..core.security import SCOPED_ROLES
+from ..core.security import COMPANY_ROLES, SCOPED_ROLES
 from ..i18n import Msg
 from ..models import Agent, Approval, Task
 from ..teams.task_models import ASSIGNEE, TaskPerson
@@ -55,7 +56,7 @@ class Scope:
     user_id: str
     branch_id: str | None = None
     department_id: str | None = None
-    # P97: the people who report to this person (their direct reports in this workspace).
+    # P97: the people who report to this person. P120: everyone below them on the chart.
     team: frozenset[str] = frozenset()
     # P98: every branch they work in (the home branch_id included).
     branch_ids: frozenset[str] = frozenset()
@@ -77,11 +78,12 @@ class Scope:
         if role not in SCOPED_ROLES:
             return cls("all", user_id, team=team)
         every = frozenset(b for b in (branch_id, *branch_ids) if b)
-        if role == "branch_manager":
+        if role in COMPANY_ROLES:  # P120: a group HOD too, over each of their companies
             return cls("branch", user_id, branch_id, department_id, team, every)
         if role in ("hod", "supervisor"):
             return cls("department", user_id, branch_id, department_id, team, every)
-        return cls("own", user_id, branch_id, department_id, branch_ids=every)  # manage no one
+        # P120: staff may have people under them on the organization chart (`team`).
+        return cls("own", user_id, branch_id, department_id, team, every)
 
     @classmethod
     def of_member(cls, m: Any, team: frozenset[str] = frozenset()) -> "Scope":

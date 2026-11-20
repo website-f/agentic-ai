@@ -572,6 +572,11 @@ from .routers import my_notifications as my_notifications_router  # noqa: E402
 
 app.include_router(my_notifications_router.router)
 
+# P120: people's requests that someone above them approves (the Approvals page).
+from .routers import person_requests as person_requests_router  # noqa: E402
+
+app.include_router(person_requests_router.router)
+
 # P94: only the API process holds the PC sockets (devices/hub.py); the worker reaches them
 # through /internal/devices/*. Set here, not when a module is imported.
 from ..devices import bridge as _devices_bridge  # noqa: E402

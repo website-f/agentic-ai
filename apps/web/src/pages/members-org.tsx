@@ -179,7 +179,7 @@ export function ManagesField({ member, members, value, onChange }: {
     <div className="grid gap-1.5">
       <span className="text-[13px] font-medium">{t("People under them")}</span>
       {team.isLoading ? <Skeleton className="h-10" /> : (
-        <MultiSelect value={current} onValueChange={onChange} label={t("People under them")} placeholder={t("Pick the people who report to them")}
+        <MultiSelect selectAll={false} value={current} onValueChange={onChange} label={t("People under them")} placeholder={t("Pick the people who report to them")}
           searchPlaceholder={t("Search by name, email, company or department")} options={options} maxChips={8} />
       )}
       {now.length ? (

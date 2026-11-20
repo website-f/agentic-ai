@@ -49,6 +49,7 @@ const page = {
   settings: lazyRouteComponent(() => import("@/pages/settings"), "SettingsPage"),
   rolesAccess: lazyRouteComponent(() => import("@/pages/roles-access"), "RolesAccessPage"),
   members: lazyRouteComponent(() => import("@/pages/members"), "MembersPage"),
+  member: lazyRouteComponent(() => import("@/pages/members"), "MemberPage"),
   aiUse: lazyRouteComponent(() => import("@/pages/ai-use"), "AiUsePage"),
   notifications: lazyRouteComponent(() => import("@/pages/notifications"), "NotificationsPage"),
   storage: lazyRouteComponent(() => import("@/pages/storage"), "StoragePage"),
@@ -334,6 +335,12 @@ const membersRoute = createRoute({
   validateSearch: (s: Record<string, unknown>): { add?: number } => ({ add: s.add ? Number(s.add) : undefined }),
   component: page.members,
 });
+// P120: one member on a page of their own (a row of Members opens it).
+const memberRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/settings/members/$userId",
+  component: page.member,
+});
 
 // P36: each person's daily AI allowance and what staff may use their AI for.
 const aiUseRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/ai-use", component: page.aiUse });
@@ -425,7 +432,11 @@ const tasksRoute = createRoute({
 const approvalsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/approvals",
-  validateSearch: (s: Record<string, unknown>): { tab?: "pending" | "history" } => ({ tab: s.tab === "history" ? "history" : undefined }),
+  // P120: "people" is the requests from people (a folder for the Library), `request` opens one.
+  validateSearch: (s: Record<string, unknown>): { tab?: "pending" | "history" | "people"; request?: string } => ({
+    tab: s.tab === "history" || s.tab === "people" ? s.tab : undefined,
+    request: str(s.request),
+  }),
   loader: ({ context, preload }) => prefetch((p) => p.warmApprovals(context.queryClient, preload)),
   component: page.approvals,
 });
@@ -961,6 +972,7 @@ const routeTree = rootRoute.addChildren([
     organizationRoute,
     settingsRoute,
     membersRoute,
+    memberRoute,
     aiUseRoute,
     notificationsRoute,
     rolesAccessRoute,

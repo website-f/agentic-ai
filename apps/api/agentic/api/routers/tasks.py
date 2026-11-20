@@ -695,12 +695,13 @@ def _assignee_where(value: str) -> Any:
 
 
 async def team_ids(db: AsyncSession, principal: Principal) -> list[str]:
-    """The person and their direct reports (P97)."""
+    """The person and everyone below them on the organization chart (P97; P120: the whole
+    line). Workspace roles carry no team with the session: it is read here."""
     if principal.team or principal.scope.kind != "all":
         return [principal.user.id, *sorted(principal.team)]
     return [
         principal.user.id,
-        *await people.direct_reports(db, principal.workspace_id, principal.user.id),
+        *sorted(await people.below(db, principal.workspace_id, principal.user.id)),
     ]
 
 

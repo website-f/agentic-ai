@@ -565,7 +565,7 @@ function Comments({ feedbackId }: { feedbackId: string }) {
           className="w-full resize-y rounded-[var(--radius-sm)] border border-border bg-surface px-3 py-2 text-[13.5px] outline-none focus:border-accent" />
         <div className="grid gap-1.5">
           <span className="text-[12.5px] font-medium">{t("Mention")}</span>
-          <MultiSelect value={mentions} onValueChange={pick} label={t("Mention")} placeholder={t("Pick people to tell")}
+          <MultiSelect selectAll={false} value={mentions} onValueChange={pick} label={t("Mention")} placeholder={t("Pick people to tell")}
             searchPlaceholder={t("Search people")}
             options={others.map((r) => ({ value: r.user_id, label: r.name, hint: roleLabel(t, r.role) }))} />
           <p className="text-[12px] text-muted">{t("They are told in the app and by email, with a link to this feedback.")}</p>

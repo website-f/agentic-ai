@@ -12,6 +12,10 @@
  * reader sees is the server's (lib/hierarchy.ts). No chart library: plain boxes and lines.
  * P113: everyone sees the whole organization; branch managers and HODs change the boxes of
  * their own people (`editable`), and everyone else gets a "View only" note and no menus.
+ * P120 (Fitri, 20 Nov 2026: "the canvas for the hierarchy: we can add and search the user and
+ * expand accordingly"): a + on each box they may change adds someone under that person (search
+ * by name, title, company or department); the box opens and the new person is shown. A box's
+ * menu also opens the person's own page in Members.
  */
 import {
   ArrowsInIcon,
@@ -23,13 +27,15 @@ import {
   EyeIcon,
   MagnifyingGlassMinusIcon,
   MagnifyingGlassPlusIcon,
+  PlusIcon,
   TreeStructureIcon,
+  UserCircleIcon,
   UserSwitchIcon,
   UsersThreeIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -48,6 +54,7 @@ import {
   buildForest,
   descendantsOf,
   filterPeople,
+  hierarchyKey,
   orgChartQuery,
   placeOf,
   setReportsTo,
@@ -79,6 +86,10 @@ interface ChartCtx {
   toggle: (id: string) => void;
   onChangeManager: (p: OrgPerson) => void;
   onTeam: (p: OrgPerson) => void;
+  /** P120: add someone under this person (a search). */
+  onAdd: (p: OrgPerson) => void;
+  /** P120: the box's menu opens the person's page in Members. */
+  canOpenPage: boolean;
 }
 
 /** The chart with its tools. `initialFocus`: a person to find first (My workspace's link). */
@@ -93,6 +104,7 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
   const [zoom, setZoom] = useState(1);
   const [changing, setChanging] = useState<OrgPerson | null>(null);
   const [team, setTeam] = useState<OrgPerson | null>(null);
+  const [adding, setAdding] = useState<OrgPerson | null>(null);
   const area = useRef<HTMLDivElement>(null);
 
   const all = useMemo(() => data?.people ?? [], [data]);
@@ -151,6 +163,8 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
     toggle: (id) => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; }),
     onChangeManager: setChanging,
     onTeam: setTeam,
+    onAdd: setAdding,
+    canOpenPage: me.permissions.includes("members.manage") || me.permissions.includes("team.manage") || me.permissions.includes("office.view"),
   };
 
   if (isLoading) return <div className="grid gap-3"><Skeleton className="h-11" /><Skeleton className="h-96" /></div>;
@@ -256,6 +270,15 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
 
       {changing ? <ChangeManagerDialog person={changing} people={all} above={above} onClose={() => setChanging(null)} /> : null}
       {team ? <TeamFor person={team} me={me} editable={!!team.editable || team.user_id === me.user.id} onClose={() => setTeam(null)} /> : null}
+      {adding ? (
+        <AddUnderDialog boss={adding} people={all} onClose={() => setAdding(null)}
+          onAdded={(id) => {
+            // Open the box the person went under (and every box above it), then show them.
+            const up = [adding.user_id, ...ancestorsOf(all, adding.user_id)];
+            setCollapsed((c) => new Set([...c].filter((x) => !up.includes(x))));
+            setFocus(id);
+          }} />
+      ) : null}
     </div>
   );
 }
@@ -384,7 +407,14 @@ function PersonBox({ person, ctx, count, toggle }: { person: OrgPerson; ctx: Cha
       <div className="flex items-start gap-2.5 px-3 pt-2.5 pb-3.5">
         <Avatar person={person} me={isMe} />
         <span className="min-w-0 flex-1"><Lines person={person} ctx={ctx} /></span>
-        <BoxMenu person={person} ctx={ctx} />
+        <span className="-mt-1 -mr-1.5 flex shrink-0 items-center">
+          {mayAdd(person, ctx) ? (
+            <Button variant="ghost" size="icon-sm" onClick={() => ctx.onAdd(person)} aria-label={t("Add someone under {name}", { name: person.name })} title={t("Add someone under {name}", { name: person.name })}>
+              <PlusIcon size={15} weight="bold" />
+            </Button>
+          ) : null}
+          <BoxMenu person={person} ctx={ctx} />
+        </span>
       </div>
       {count || person.heads_department ? (
         <div className="flex flex-wrap items-center gap-1.5 border-t border-border/70 px-3 py-1.5 pb-3 text-[11.5px] text-muted">
@@ -420,26 +450,78 @@ function TeamBox({ people, ctx }: { people: OrgPerson[]; ctx: ChartCtx }) {
   );
 }
 
+/** P120: whether this reader may put people under this box (the server checks each one). */
+function mayAdd(person: OrgPerson, ctx: ChartCtx): boolean {
+  return ctx.canEdit && !person.limited && (!!person.editable || person.user_id === ctx.me);
+}
+
 function BoxMenu({ person, ctx }: { person: OrgPerson; ctx: ChartCtx }) {
   const t = useT();
+  const navigate = useNavigate();
   // P113: only on the boxes this reader may change (the server's `editable`), and their own
-  // box for the people under them; nothing for those who only look.
+  // box for the people under them; nothing for those who only look. P120: anyone who sees a
+  // person in full opens their page in Members.
   const isMe = person.user_id === ctx.me;
-  if (!ctx.canEdit || person.limited || !(person.editable || isMe)) return null;
+  const edits = ctx.canEdit && !person.limited && (person.editable || isMe);
+  const opens = ctx.canOpenPage && !person.limited;
+  if (!edits && !opens) return null;
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="-mt-1 -mr-1.5 shrink-0" aria-label={t("Options for {name}", { name: person.name })}>
+        <Button variant="ghost" size="icon-sm" className="shrink-0" aria-label={t("Options for {name}", { name: person.name })}>
           <DotsThreeIcon size={18} weight="bold" />
         </Button>
       </MenuTrigger>
       <MenuContent>
-        {!isMe && person.editable ? (
+        {opens ? (
+          <MenuItem icon={<UserCircleIcon />} onSelect={() => void navigate({ to: "/settings/members/$userId", params: { userId: person.user_id } })}>{t("Open their page")}</MenuItem>
+        ) : null}
+        {edits && !isMe && person.editable ? (
           <MenuItem icon={<UserSwitchIcon />} onSelect={() => ctx.onChangeManager(person)}>{t("Change reports to")}</MenuItem>
         ) : null}
-        <MenuItem icon={<UsersThreeIcon />} onSelect={() => ctx.onTeam(person)}>{t("People under them")}</MenuItem>
+        {edits ? <MenuItem icon={<PlusIcon />} onSelect={() => ctx.onAdd(person)}>{t("Add someone under them")}</MenuItem> : null}
+        {edits ? <MenuItem icon={<UsersThreeIcon />} onSelect={() => ctx.onTeam(person)}>{t("People under them")}</MenuItem> : null}
       </MenuContent>
     </Menu>
+  );
+}
+
+/** P120: put one more person under `boss`: search everyone the reader may move (never the boss,
+ * nor anyone above the boss: that would be a loop). The server checks every rule again. */
+function AddUnderDialog({ boss, people, onClose, onAdded }: { boss: OrgPerson; people: OrgPerson[]; onClose: () => void; onAdded: (id: string) => void }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const [value, setValue] = useState("");
+  const up = useMemo(() => new Set(ancestorsOf(people, boss.user_id)), [people, boss.user_id]);
+  const options = useMemo(() => people
+    .filter((p) => p.user_id !== boss.user_id && !up.has(p.user_id) && !p.limited && p.editable && p.reports_to_user_id !== boss.user_id)
+    .map((p) => ({
+      value: p.user_id,
+      label: p.name,
+      hint: [p.job_title, placeOf(p), p.reports_to_user_id ? t("Now reports to {name}", { name: people.find((q) => q.user_id === p.reports_to_user_id)?.name ?? p.reports_to_name ?? "" }) : t("Reports to no one yet")].filter(Boolean).join(" · "),
+      keywords: [p.job_title ?? "", p.branch_name ?? "", p.department_name ?? ""],
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label)), [people, boss.user_id, up, t]);
+  const save = useMutation({
+    mutationFn: () => setReportsTo(value, boss.user_id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: hierarchyKey });
+      toast.success(t("{name} now reports to {boss}.", { name: options.find((o) => o.value === value)?.label ?? "", boss: boss.name }));
+      onAdded(value);
+      onClose();
+    },
+  });
+  return (
+    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={t("Add someone under {name}", { name: boss.name })}
+      description={t("Pick the person who reports to {name}. They move from whoever they report to now.", { name: boss.name })}
+      footer={<><Button variant="outline" onClick={onClose}>{t("Cancel")}</Button><Button disabled={!value} loading={save.isPending} onClick={() => save.mutate()}>{t("Add")}</Button></>}>
+      <div className="grid gap-3">
+        <SearchSelect value={value} onValueChange={setValue} label={t("Person")} placeholder={t("Search for a person")}
+          searchPlaceholder={t("Search by name, title, company or department")} emptyText={t("Nobody matches.")} options={options} />
+        {!options.length ? <p className="text-[12.5px] text-muted">{t("There is nobody you may move under them.")}</p> : null}
+        <FormError message={save.error ? errorMessage(save.error) : null} />
+      </div>
+    </ResponsiveDialog>
   );
 }
 

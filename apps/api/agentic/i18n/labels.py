@@ -13,6 +13,7 @@ ROLES: dict[str, str] = {  # the same names the app shows (lib/types ROLE_INFO)
     "admin": "Admin",
     "branch_manager": "Branch manager",
     "hod": "Head of department",
+    "group_hod": "Group HOD",
     "supervisor": "Supervisor",
     "staff": "Staff",
     "operator": "Operator",

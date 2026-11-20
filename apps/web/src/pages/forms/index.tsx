@@ -69,6 +69,7 @@ import {
   type Schedule,
   type Submission,
 } from "@/lib/forms";
+import { lockedBranchIds } from "@/lib/company";
 import { branchesQuery, meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -595,8 +596,9 @@ function Hands({ f, onClose }: { f: CompanyForm; onClose: () => void }) {
 function useCompanies() {
   const { data: me } = useQuery(meQuery);
   const { data: branches = [] } = useQuery(branchesQuery);
-  const mine = me?.scope?.branch_id;
-  return mine ? branches.filter((b) => b.id === mine) : branches;
+  // P120: each company a scoped manager has (a group HOD or branch manager of several).
+  const mine = me ? lockedBranchIds(me) : null;
+  return mine ? branches.filter((b) => mine.includes(b.id)) : branches;
 }
 
 const ANY = "_any";
@@ -627,22 +629,78 @@ function WhereFields({ branchId, setBranchId, deptId, setDeptId, lockCompany }: 
   );
 }
 
+/** P120 (Fitri, 20 Nov 2026: "in Forms I don't see any pick-all button to pick all companies"):
+ * a new form for one company, several, or all of them (Select all). Whoever runs the whole office
+ * picking every company makes one form for every company (no company: everyone fills it); a
+ * manager of several companies gets one form in each. "Who fills it in" picks a department only
+ * when one company is picked (departments belong to a company). */
+function WhereFieldsMany({ branchIds, setBranchIds, deptId, setDeptId }: {
+  branchIds: string[];
+  setBranchIds: (v: string[]) => void;
+  deptId: string;
+  setDeptId: (v: string) => void;
+}) {
+  const t = useT();
+  const companies = useCompanies();
+  const one = branchIds.length === 1 ? companies.find((b) => b.id === branchIds[0]) : undefined;
+  const depts = one?.departments ?? [];
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-1.5">
+        <span className="text-[13px] font-medium">{t("Companies")}</span>
+        <CompanyPicker multiple label={t("Companies")} value={branchIds} companies={companies} placeholder={t("Pick one or more companies")}
+          onValueChange={(v) => { setBranchIds(v); setDeptId(ANY); }} />
+        {branchIds.length > 1 ? <span className="text-[12px] text-muted">{t("The form is added to each company picked.")}</span> : null}
+      </div>
+      <label className="grid gap-1.5">
+        <span className="text-[13px] font-medium">{t("Who fills it in")}</span>
+        <Select label={t("Who fills it in")} value={one ? deptId : ANY} onValueChange={setDeptId} disabled={!one}
+          options={[{ value: ANY, label: branchIds.length > 1 ? t("Everyone in each company") : t("Everyone in the company") }, ...depts.map((d) => ({ value: d.id, label: d.name }))]} />
+      </label>
+    </div>
+  );
+}
+
+/** Where a new form goes: [null] (every company, one form) or each picked company. */
+function useTargets(branchIds: string[]): (string | null)[] {
+  const { data: me } = useQuery(meQuery);
+  const companies = useCompanies();
+  const whole = me?.scope?.kind === "all";
+  const all = companies.length > 1 && companies.every((b) => branchIds.includes(b.id));
+  return whole && all ? [null] : branchIds;
+}
+
 function AddForm({ onClose }: { onClose: () => void }) {
   const t = useT();
   const qc = useQueryClient();
   const companies = useCompanies();
   const { data: starters = [] } = useQuery(startersQuery);
   const [mode, setMode] = useState<"ready" | "own">("ready");
-  const [branchId, setBranchId] = useState(companies[0]?.id ?? "");
+  const [picked, setBranchIds] = useState<string[] | null>(null);
+  const branchIds = picked ?? (companies[0] ? [companies[0].id] : []);
+  const targets = useTargets(branchIds);
   const [deptId, setDeptId] = useState(ANY);
-  const done = (f: CompanyForm) => {
-    toast.success(t("{name} added. Everyone it is for sees it under Forms.", { name: f.name }));
+  const dept = branchIds.length === 1 && deptId !== ANY ? deptId : null;
+  const done = (made: CompanyForm[]) => {
+    const f = made[0];
+    if (!f) return;
+    toast.success(made.length > 1
+      ? t("{name} added to {n} companies. Everyone it is for sees it under Forms.", { name: f.name, n: made.length })
+      : t("{name} added. Everyone it is for sees it under Forms.", { name: f.name }));
     void qc.invalidateQueries({ queryKey: formKeys.all });
   };
   const add = useMutation({
-    mutationFn: (key: string) => addStarter(key, branchId || null, deptId === ANY ? null : deptId),
+    // One company after another, so a refusal names where it stopped (the ones before stay).
+    mutationFn: async (key: string) => {
+      const made: CompanyForm[] = [];
+      for (const b of targets) made.push(await addStarter(key, b, dept));
+      return made;
+    },
     onSuccess: done,
-    onError: (e) => toast.error(errorMessage(e)),
+    onError: (e) => {
+      void qc.invalidateQueries({ queryKey: formKeys.all });
+      toast.error(errorMessage(e));
+    },
   });
   return (
     <ResponsiveDialog
@@ -658,7 +716,7 @@ function AddForm({ onClose }: { onClose: () => void }) {
           options={[{ value: "ready", label: t("Ready-made") }, { value: "own", label: t("Our own form") }]} />
         {mode === "ready" ? (
           <>
-            <WhereFields branchId={branchId} setBranchId={setBranchId} deptId={deptId} setDeptId={setDeptId} />
+            <WhereFieldsMany branchIds={branchIds} setBranchIds={setBranchIds} deptId={deptId} setDeptId={setDeptId} />
             <ul className="grid gap-2">
               {starters.map((s) => (
                 <li key={s.key} className="flex min-w-0 flex-wrap items-center gap-3 rounded-sm border border-border p-3">
@@ -668,7 +726,7 @@ function AddForm({ onClose }: { onClose: () => void }) {
                     <span className="text-[12.5px] text-muted">{s.description}</span>
                     <span className="text-[12px] text-muted">{scheduleText(t, s.schedule)}</span>
                   </div>
-                  <Button size="sm" variant="outline" loading={add.isPending && add.variables === s.key} disabled={!branchId} onClick={() => add.mutate(s.key)}>
+                  <Button size="sm" variant="outline" loading={add.isPending && add.variables === s.key} disabled={!targets.length || add.isPending} onClick={() => add.mutate(s.key)}>
                     <PlusIcon size={14} /> {t("Add")}
                   </Button>
                 </li>
@@ -677,7 +735,7 @@ function AddForm({ onClose }: { onClose: () => void }) {
             <p className="text-[12.5px] text-muted">{t("Each is built in the company's language, with its name on top. Change the schedule after adding it.")}</p>
           </>
         ) : (
-          <FormEditor branchId={branchId} setBranchId={setBranchId} deptId={deptId} setDeptId={setDeptId} onSaved={(f) => { done(f); onClose(); }} />
+          <FormEditor branchIds={branchIds} setBranchIds={setBranchIds} targets={targets} deptId={deptId} setDeptId={setDeptId} onSaved={(made) => { done(made); onClose(); }} />
         )}
       </div>
     </ResponsiveDialog>
@@ -697,6 +755,7 @@ function EditForm({ f, onClose }: { f: CompanyForm; onClose: () => void }) {
         setBranchId={setBranchId}
         deptId={deptId}
         setDeptId={setDeptId}
+        targets={[branchId || null]}
         onSaved={() => {
           void qc.invalidateQueries({ queryKey: formKeys.all });
           toast.success(t("Saved."));
@@ -707,13 +766,18 @@ function EditForm({ f, onClose }: { f: CompanyForm; onClose: () => void }) {
   );
 }
 
-function FormEditor({ form, branchId, setBranchId, deptId, setDeptId, onSaved }: {
+function FormEditor({ form, branchId = "", setBranchId, branchIds, setBranchIds, targets, deptId, setDeptId, onSaved }: {
   form?: CompanyForm;
-  branchId: string;
-  setBranchId: (v: string) => void;
+  /** Changing a form: its one company. */
+  branchId?: string;
+  setBranchId?: (v: string) => void;
+  /** P120: a new form: the companies picked, and where it goes (useTargets). */
+  branchIds?: string[];
+  setBranchIds?: (v: string[]) => void;
+  targets: (string | null)[];
   deptId: string;
   setDeptId: (v: string) => void;
-  onSaved: (f: CompanyForm) => void;
+  onSaved: (made: CompanyForm[]) => void;
 }) {
   const t = useT();
   const [name, setName] = useState(form?.name ?? "");
@@ -725,12 +789,16 @@ function FormEditor({ form, branchId, setBranchId, deptId, setDeptId, onSaved }:
   const upload = useUpload((added) => {
     setFile(added[0] ?? null);
     if (!name && added[0]) setName(added[0].name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " "));
-  }, branchId || null);
+  }, (form ? branchId : targets[0]) || null);
   const save = useMutation({
-    mutationFn: () => {
-      const body = { name: name.trim(), kind, description, guide, schedule: s, department_id: deptId === ANY ? null : deptId };
-      if (form) return changeForm(form.id, { ...body, ...(file && file.id !== form.template?.id ? { file_id: file.id } : {}) });
-      return addForm({ ...body, branch_id: branchId || null, file_id: file?.id ?? null });
+    mutationFn: async () => {
+      const one = form || targets.length === 1;
+      const body = { name: name.trim(), kind, description, guide, schedule: s, department_id: one && deptId !== ANY ? deptId : null };
+      if (form) return [await changeForm(form.id, { ...body, ...(file && file.id !== form.template?.id ? { file_id: file.id } : {}) })];
+      // One company after another; the blank form is copied for each (the server does that).
+      const made: CompanyForm[] = [];
+      for (const b of targets) made.push(await addForm({ ...body, branch_id: b, file_id: file?.id ?? null }));
+      return made;
     },
     onSuccess: onSaved,
   });
@@ -785,13 +853,17 @@ function FormEditor({ form, branchId, setBranchId, deptId, setDeptId, onSaved }:
         <Field label={t("Due on")} type="date" value={s.due_on ?? ""} onChange={(e) => setS({ ...s, due_on: e.target.value })} />
       ) : null}
       {s.every !== "none" ? <p className="-mt-2 text-[12.5px] text-muted">{scheduleText(t, s)}</p> : null}
-      <WhereFields branchId={branchId} setBranchId={setBranchId} deptId={deptId} setDeptId={setDeptId} lockCompany={!!form} />
+      {form || !branchIds || !setBranchIds ? (
+        <WhereFields branchId={branchId} setBranchId={setBranchId ?? (() => undefined)} deptId={deptId} setDeptId={setDeptId} lockCompany={!!form} />
+      ) : (
+        <WhereFieldsMany branchIds={branchIds} setBranchIds={setBranchIds} deptId={deptId} setDeptId={setDeptId} />
+      )}
       <Field label={t("Short description (optional)")} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
       <TextareaField label={t("How to fill it in (optional)")} value={guide} onChange={(e) => setGuide(e.target.value)} rows={3} maxLength={8000}
         hint={t("Shown to people and read by the AI, e.g. which receipts to attach, the amount limits, who signs.")} />
       <FormError message={save.error ? errorMessage(save.error) : null} />
       <div className="flex justify-end gap-2">
-        <Button disabled={!name.trim() || upload.isPending} loading={save.isPending} onClick={() => save.mutate()}>
+        <Button disabled={!name.trim() || upload.isPending || !targets.length} loading={save.isPending} onClick={() => save.mutate()}>
           {form ? t("Save") : <><PlusIcon size={15} /> {t("Add the form")}</>}
         </Button>
       </div>

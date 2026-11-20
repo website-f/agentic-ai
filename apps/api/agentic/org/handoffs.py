@@ -27,7 +27,7 @@ from typing import Any
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.security import can
+from ..core.security import COMPANY_ROLES, can
 from ..models import Branch, Department, DocFile, Membership, User
 from ..teams.branches import member_in_branches
 from . import heads
@@ -70,7 +70,7 @@ async def recipients(db: AsyncSession, workspace_id: str, branch_id: str) -> lis
             .join(User, User.id == Membership.user_id)
             .where(
                 Membership.workspace_id == workspace_id,
-                Membership.role == "branch_manager",
+                Membership.role.in_(sorted(COMPANY_ROLES)),
                 member_in_branches([branch_id]),
                 active,
             )
@@ -108,7 +108,7 @@ def incoming_where(principal: Any) -> Any:
         FileHandoff.target_branch_id.in_(headed),
         FileHandoff.notified.contains([uid]),
     ]
-    if principal.role == "branch_manager" and principal.scope.branch_ids:
+    if principal.role in COMPANY_ROLES and principal.scope.branch_ids:
         parts.append(FileHandoff.target_branch_id.in_(sorted(principal.scope.branch_ids)))
     return and_(ws, or_(*parts))
 

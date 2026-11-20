@@ -143,4 +143,4 @@ export const assigneeOf = (t: Task): AssigneeRef | null =>
   t.assignee_user_id ? `user:${t.assignee_user_id}` : t.assignee_agent_id ? `agent:${t.assignee_agent_id}` : null;
 
 /** Roles that can have people reporting to them (server: MANAGER_ROLES). */
-export const MANAGER_ROLES: Role[] = ["owner", "admin", "management", "hr", "branch_manager", "hod", "supervisor"];
+export const MANAGER_ROLES: Role[] = ["owner", "admin", "management", "hr", "branch_manager", "group_hod", "hod", "supervisor"];

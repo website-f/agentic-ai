@@ -24,7 +24,16 @@ from .test_teams import team_temporal  # noqa: F401
 from .test_twins import ANSWERS, staff_in
 
 # P92: management and HR run the whole workspace like an admin, so they manage others too.
-MANAGERS = {"owner", "admin", "branch_manager", "hod", "supervisor", "management", "hr"}
+MANAGERS = {
+    "owner",
+    "admin",
+    "branch_manager",
+    "group_hod",
+    "hod",
+    "supervisor",
+    "management",
+    "hr",
+}
 
 
 def test_assistants_are_for_people_who_manage_others():

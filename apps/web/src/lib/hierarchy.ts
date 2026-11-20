@@ -51,6 +51,8 @@ export interface MyHierarchy {
   chain: OrgPerson[];
   reports: OrgPerson[];
   below: number;
+  /** P120: everyone under me down every line (managers before their people). */
+  line?: OrgPerson[];
 }
 
 /** Under the members key: any change to a member refreshes the chart too. */

@@ -137,14 +137,16 @@ async def test_who_reports_to_whom_and_heads(client):
     finally:
         await hana.aclose()
 
-    # A manager made staff manages no one any more; a removed one leaves no one under them.
+    # P120: a manager made staff keeps the people under them (the chart decides, not the
+    # role); a removed one leaves no one under them.
     r = await client.patch(
         f"/api/members/{ids['bea']}",
         json={"role": "staff", "branch_id": o["branch"]["id"]},
         headers=h,
     )
     assert r.status_code == 200
-    assert (await client.get(f"/api/members/{ids['bea']}/team")).json() == []
+    bea = {m["name"] for m in (await client.get(f"/api/members/{ids['bea']}/team")).json()}
+    assert bea == {"Omar"}  # Hana took Tom under her above
     jh = {"content-type": "application/json", **h}
     assert (await client.delete(f"/api/members/{ids['hana']}", headers=jh)).status_code == 204
     async with SessionLocal() as db:

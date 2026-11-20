@@ -54,6 +54,7 @@ TRACK_OF_ROLE: dict[str, Track] = {
     "admin": "owner",
     "branch_manager": "management",
     "hod": "management",
+    "group_hod": "management",
     "supervisor": "management",
     "operator": "management",
     "staff": "staff",

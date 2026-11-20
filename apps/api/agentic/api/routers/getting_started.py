@@ -62,6 +62,7 @@ GROUP_OF_ROLE: dict[str, Group] = {
     "operator": "admin",
     "branch_manager": "branch",
     "hod": "hod",
+    "group_hod": "branch",
     "supervisor": "hod",
     "staff": "staff",
     "approver": "staff",

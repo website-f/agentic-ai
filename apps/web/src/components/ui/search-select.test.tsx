@@ -97,7 +97,7 @@ describe("MultiSelect", { timeout: 20_000 }, () => {
     fireEvent.click(await screen.findByRole("option", { name: /Alpha/ }));
     fireEvent.click(screen.getByRole("option", { name: /Beta/ }));
     expect(screen.getByRole("option", { name: /Beta/ })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByText("2 picked")).toBeInTheDocument();
+    expect(screen.getByText(/^2 of \d+ picked$/)).toBeInTheDocument();
     expect(screen.getByTestId("many")).toHaveTextContent("br_a,br_b");
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(screen.queryByRole("combobox")).toBeNull();
@@ -109,12 +109,26 @@ describe("MultiSelect", { timeout: 20_000 }, () => {
     render(<Many start={["br_a"]} />);
     fireEvent.click(screen.getByRole("button", { name: "Branches: 1 picked. Change" }));
     fireEvent.change(await screen.findByRole("combobox"), { target: { value: "bhd" } });
-    fireEvent.click(screen.getByRole("button", { name: "Pick these 4" }));
+    // P120: a "Select all" tick box: part-ticked here, it picks the ones found.
+    const some = screen.getByRole("checkbox", { name: "Select the 4 found" });
+    expect(some).toHaveAttribute("aria-checked", "mixed");
+    fireEvent.click(some);
     expect(screen.getByTestId("many")).toHaveTextContent("br_a,br_b,br_c,br_d");
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "johor" } });
-    fireEvent.click(screen.getByRole("button", { name: "Unpick these" }));
+    const found = screen.getByRole("checkbox", { name: /^Select the \d+ found$/ });
+    expect(found).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(found);
     expect(screen.getByTestId("many")).toHaveTextContent(/^br_a,br_c,br_d$/);
-    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    expect(screen.getByTestId("many").textContent).toBe("");
+  });
+
+  it("selects all and clears all from the field itself, without opening it", () => {
+    render(<Many start={["br_a"]} />);
+    const group = screen.getByRole("group", { name: "Branches" });
+    fireEvent.click(within(group).getByRole("button", { name: "Select all" }));
+    expect(screen.getByTestId("many").textContent!.split(",")).toHaveLength(BRANCHES.length);
+    fireEvent.click(within(group).getByRole("button", { name: "Clear all" }));
     expect(screen.getByTestId("many").textContent).toBe("");
   });
 
@@ -122,7 +136,7 @@ describe("MultiSelect", { timeout: 20_000 }, () => {
     render(<Many start={["br_a", "br_b"]} locked={{ br_a: "Their department's company" }} />);
     expect(screen.queryByRole("button", { name: "Remove Alpha Sdn Bhd" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Branches: 2 picked. Change" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Clear" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Clear all" }));
     expect(screen.getByTestId("many")).toHaveTextContent(/^br_a$/);
   });
 

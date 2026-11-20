@@ -122,12 +122,10 @@ describe("Members", { timeout: 30_000 }, () => {
     expect(bulkBodies).toEqual([{ user_ids: ["u1", "u2"], action: "remove" }]);
   });
 
-  it("opens a member's details from the row", async () => {
-    show();
+  it("opens a member's own page from the row (P120)", async () => {
+    const router = show();
     fireEvent.click(await screen.findByText("Person 003"));
-    const sheet = await screen.findByRole("dialog");
-    expect(within(sheet).getByText("p3@example.com")).toBeInTheDocument();
-    expect(within(sheet).getByText("Finance")).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/members/u3"));
   });
 
   it("opens the member Prima's \"Open in Members\" points at (?focus=)", async () => {

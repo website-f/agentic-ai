@@ -80,7 +80,7 @@ describe("CompanyPicker", { timeout: 20_000 }, () => {
     fireEvent.keyDown(search, { key: "Enter" });
     expect(out()).toBe("br_c");
     fireEvent.change(search, { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "Pick all" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all (3)" }));
     expect(out()).toBe("br_c,br_a,br_b");
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     const group = screen.getByRole("group", { name: "Companies" });
@@ -88,7 +88,7 @@ describe("CompanyPicker", { timeout: 20_000 }, () => {
     fireEvent.click(within(group).getByRole("button", { name: "Remove BETA BHD" }));
     expect(out()).toBe("br_c,br_a");
     fireEvent.click(within(group).getByRole("button", { name: /Companies: 2 picked/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(out()).toBe("");
   });
 
@@ -156,7 +156,7 @@ describe("TableFilter multiple", { timeout: 20_000 }, () => {
     fireEvent.click(screen.getByRole("option", { name: /ALPHA SDN BHD/ }));
     fireEvent.click(screen.getByRole("option", { name: /CAHAYA BHD/ }));
     expect(out()).toBe("br_a,br_c|2");
-    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(out()).toBe("|0");
   });
 });

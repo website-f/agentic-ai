@@ -12,7 +12,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.access import is_prima_only, prima_only_allows
 from ..core.config import settings
 from ..core.db import get_db
-from ..core.security import can, new_token, role_permissions, token_hash, use_settings
+from ..core.security import (
+    SCOPED_ROLES,
+    can,
+    new_token,
+    role_permissions,
+    token_hash,
+    use_settings,
+)
 from ..engine import acting
 from ..i18n import Msg, explicit_lang, lookup, normalize, set_lang
 from ..i18n.labels import role_label
@@ -248,17 +255,12 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
     # P36: model calls this request makes are this person's (their daily AI allowance).
     acting.set_person(user.id)
     team: frozenset[str] = frozenset()
-    if m.role in SCOPED_MANAGERS:  # P97: workspace roles see everything already
-        team = frozenset(
-            (
-                await db.scalars(
-                    select(Membership.user_id).where(
-                        Membership.workspace_id == session.workspace_id,
-                        Membership.reports_to_user_id == user.id,
-                    )
-                )
-            ).all()
-        )
+    if m.role in SCOPED_ROLES:  # P97: workspace roles see everything already
+        # P120: everyone below them on the organization chart, down the whole line, whatever
+        # their role (a staff member with people under them follows and gives them work).
+        from ..teams.people import below
+
+        team = frozenset(await below(db, session.workspace_id, user.id))
     return Principal(
         user=user,
         workspace_id=session.workspace_id,
@@ -273,10 +275,6 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         prima_modules=tuple(m.prima_modules) if m.prima_modules is not None else None,
         library_dept_only=dept_scope.applies(m.role, m.library_scope),
     )
-
-
-# P97: the scoped roles that may have people reporting to them (teams/people.py).
-SCOPED_MANAGERS = frozenset({"branch_manager", "hod", "supervisor"})
 
 
 def _require_two_factor(principal: Principal) -> None:

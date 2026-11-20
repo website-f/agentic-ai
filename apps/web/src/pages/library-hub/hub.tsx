@@ -82,7 +82,7 @@ export function useLibraryTabs(): LibraryTab[] {
   const { data: me } = useQuery(meQuery);
   // P109: "For other companies" for the people who upload for others or receive files (the
   // workspace roles and managers); staff only once it is switched on for them.
-  const receives = !!me && (me.scope?.kind === "all" || ["hod", "branch_manager", "supervisor"].includes(me.role));
+  const receives = !!me && (me.scope?.kind === "all" || ["hod", "group_hod", "branch_manager", "supervisor"].includes(me.role));
   const { data: targets } = useQuery({ ...targetsQuery, enabled: !!me && !receives });
   return LIBRARY_TABS.filter((tab) => {
     if (tab.to === "/handoffs" && !receives && !targets?.allowed) return false;
@@ -161,10 +161,11 @@ export function LibraryTabs({ className, bar = false, browse }: { className?: st
 function SharePointShortcut({ tab }: { tab: LibraryPath }) {
   const t = useT();
   const { data } = useQuery({ ...linkedQuery, enabled: tab !== "/library" });
-  if (tab === "/library" || !data?.can_connect) return null;
+  // P120: staff ask for a folder there (the person above them approves it).
+  if (tab === "/library" || !(data?.can_connect || data?.can_request)) return null;
   return (
     <Button variant="outline" asChild>
-      <Link to="/library" hash="sharepoint"><CloudIcon size={16} /> {t("Link SharePoint or OneDrive")}</Link>
+      <Link to="/library" hash="sharepoint"><CloudIcon size={16} /> {data.can_connect ? t("Link SharePoint or OneDrive") : t("Ask for a SharePoint folder")}</Link>
     </Button>
   );
 }

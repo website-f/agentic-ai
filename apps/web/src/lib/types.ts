@@ -5,6 +5,7 @@ export type Role =
   | "admin"
   | "branch_manager"
   | "hod"
+  | "group_hod"
   | "supervisor"
   | "staff"
   | "operator"
@@ -14,7 +15,7 @@ export type Role =
   | "hr";
 
 /** Office roles see a slice of the workspace (P9). */
-export const SCOPED_ROLES: Role[] = ["branch_manager", "hod", "supervisor", "staff"];
+export const SCOPED_ROLES: Role[] = ["branch_manager", "group_hod", "hod", "supervisor", "staff"];
 
 export interface Scope {
   kind: "all" | "branch" | "department" | "own";
@@ -145,6 +146,8 @@ export const ROLE_INFO: Record<Role, { label: string; blurb: string }> = {
   admin: { label: msg("Admin"), blurb: msg("Members, organization, AI keys and policies.") },
   branch_manager: { label: msg("Branch manager"), blurb: msg("Runs their branches (one or more): agents, work, approvals, logins and people.") },
   hod: { label: msg("Head of department"), blurb: msg("Runs one department: its agents, work, approvals and people.") },
+  // P120: an HOD over several companies (each one they are added to).
+  group_hod: { label: msg("Group HOD"), blurb: msg("A head of department over several companies: runs the agents, work, approvals and people of each company they are added to.") },
   supervisor: { label: msg("Supervisor"), blurb: msg("Gives the department's agents work and decides what they ask. Does not change agents.") },
   staff: { label: msg("Staff"), blurb: msg("Has personal agents: creates them, gives them work, answers them.") },
   operator: { label: msg("Operator"), blurb: msg("Creates and assigns work across the workspace, instructs agents.") },

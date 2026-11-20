@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { ApprovalCard } from "@/components/approval-card";
 import { EmptyState, Page, PageHeader } from "@/components/page";
+import { PeopleRequests } from "@/components/people-requests";
 import { DataTable, filterOf, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
@@ -14,9 +15,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { locale, msg, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { meQuery } from "@/lib/queries";
+import { requestsQuery } from "@/lib/requests";
 import { approvalsQuery, workKeys, type Approval } from "@/lib/work";
 
-type Tab = "pending" | "history";
+type Tab = "pending" | "history" | "people";
 
 /** Waiting approvals are a short inbox of cards to decide on. */
 function Waiting({ canDecide }: { canDecide: boolean }) {
@@ -145,16 +147,18 @@ export function ApprovalsPage() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canDecide = me.permissions.includes("approvals.decide");
-  const search = useSearch({ strict: false }) as { tab?: Tab };
+  const search = useSearch({ strict: false }) as { tab?: Tab; request?: string };
   const navigate = useNavigate();
-  const tab: Tab = search.tab === "history" ? "history" : "pending";
+  const tab: Tab = search.tab === "history" || search.tab === "people" ? search.tab : "pending";
   const { data: pending } = useQuery(approvalsQuery("pending"));
+  // P120: people's requests (always asked: the count shows on the tab).
+  const { data: asks } = useQuery(requestsQuery);
   const [historyTotal, setHistoryTotal] = useState<number | undefined>(undefined);
   return (
     <Page>
       <PageHeader
         title={t("Approvals")}
-        description={canDecide ? t("Agents stop and wait here before risky actions, and when they need an answer from you.") : t("Your role can see decisions but not make them. Ask an approver or admin.")}
+        description={canDecide ? t("Your AI waits here before risky actions, and your people's requests wait here for your decision.") : t("Your role can see decisions but not make them. Ask an approver or admin.")}
       />
       <Segmented<Tab>
         guide="approvals.history"
@@ -163,11 +167,12 @@ export function ApprovalsPage() {
         value={tab}
         onChange={(v) => navigate({ to: "/approvals", search: { tab: v }, replace: true })}
         options={[
-          { value: "pending", label: t("Waiting"), count: pending?.length },
-          { value: "history", label: t("History"), count: tab === "history" ? historyTotal : undefined },
+          { value: "pending", label: t("From AI"), count: pending?.length },
+          { value: "people", label: t("From people"), count: asks?.to_decide.length },
+          { value: "history", label: t("AI history"), count: tab === "history" ? historyTotal : undefined },
         ]}
       />
-      {tab === "pending" ? <Waiting canDecide={canDecide} /> : <History onTotal={setHistoryTotal} />}
+      {tab === "pending" ? <Waiting canDecide={canDecide} /> : tab === "people" ? <PeopleRequests open={search.request} /> : <History onTotal={setHistoryTotal} />}
     </Page>
   );
 }

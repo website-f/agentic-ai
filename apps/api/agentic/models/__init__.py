@@ -2363,7 +2363,7 @@ from ..mailbox.models import ExternalMailAccount, MailBackupJob  # noqa: E402, F
 from ..microsoft.meeting_models import TeamsMeeting  # noqa: E402, F401
 
 # P109: who heads which departments, and files uploaded for other companies (org/models.py).
-from ..org.models import DepartmentHead, FileHandoff  # noqa: E402, F401
+from ..org.models import DepartmentHead, FileHandoff, PersonRequest  # noqa: E402, F401
 
 # P80: SharePoint and OneDrive folders in the Library (agentic/sharepoint/models.py).
 from ..sharepoint.models import LinkedFile, LinkedSource  # noqa: E402, F401

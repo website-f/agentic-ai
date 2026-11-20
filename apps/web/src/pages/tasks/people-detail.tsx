@@ -178,7 +178,7 @@ export function PeopleTaskDetail({ task, detail, canWrite }: { task: Task; detai
 
       <Section icon={UsersThreeIcon} title={t("Assigned to")} note={assignees.length > 1 ? t("{n} people", { n: assignees.length }) : undefined}>
         {canWrite ? (
-          <MultiSelect value={assignees.map((a) => a.user_id)} label={t("Assigned to")} options={personOpts} searchPlaceholder={t("Search by name or place")} emptyText={t("Nobody matches.")}
+          <MultiSelect selectAll={false} value={assignees.map((a) => a.user_id)} label={t("Assigned to")} options={personOpts} searchPlaceholder={t("Search by name or place")} emptyText={t("Nobody matches.")}
             onValueChange={(ids) => { if (ids.length) who.mutate({ assignee_user_ids: ids }); else toast(t("Pick at least one person.")); }} />
         ) : (
           <ul className="flex min-w-0 flex-wrap gap-2">
@@ -189,7 +189,7 @@ export function PeopleTaskDetail({ task, detail, canWrite }: { task: Task; detai
 
       <Section icon={EyeIcon} title={t("Watchers")} note={watchers.length ? String(watchers.length) : undefined}>
         {canWrite ? (
-          <MultiSelect value={watchers.map((w) => w.user_id)} label={t("Watchers")} options={watchOpts} placeholder={t("Nobody yet")} searchPlaceholder={t("Search by name or place")} emptyText={t("Nobody matches.")}
+          <MultiSelect selectAll={false} value={watchers.map((w) => w.user_id)} label={t("Watchers")} options={watchOpts} placeholder={t("Nobody yet")} searchPlaceholder={t("Search by name or place")} emptyText={t("Nobody matches.")}
             onValueChange={(ids) => who.mutate({ watcher_user_ids: ids })} />
         ) : watchers.length ? (
           <p className="text-[13px]">{watchers.map((w) => w.name).join(", ")}</p>

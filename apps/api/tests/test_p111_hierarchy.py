@@ -53,14 +53,15 @@ async def test_reporting_lines_rules_and_titles(client):
     r = await _set(client, ids["tom"], ids["omar"])
     assert r.status_code == 200, r.text
     assert r.json()["reports_to_user_id"] == ids["omar"]
-    # ... but their role still gives them no power over those people.
+    # ... and P120 (Fitri, 20 Nov 2026): gives them tasks, whatever their role; not the others.
     async with SessionLocal() as db:
         ws = (await db.scalars(select(Workspace))).one().id
         omar = await db.get(Membership, (ws, ids["omar"]))
         actor = people.Actor(ws, ids["omar"], "staff", omar.branch_id)
+        assert (await people.may_assign(db, actor, ids["tom"])).user_id == ids["tom"]
         try:
-            await people.may_assign(db, actor, ids["tom"])
-            raise AssertionError("staff gave a task to the person under them")
+            await people.may_assign(db, actor, ids["sara"])
+            raise AssertionError("staff gave a task to someone not under them")
         except people.PeopleError as e:
             assert e.status == 403
 

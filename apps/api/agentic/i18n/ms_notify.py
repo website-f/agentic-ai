@@ -103,4 +103,39 @@ MS_NOTIFY: dict[str, str] = {
     "This is how the office tells you when your AI needs you.": (
         "Beginilah pejabat memberitahu anda apabila AI anda memerlukan anda."
     ),
+    # P120
+    "Group HOD": "Ketua jabatan kumpulan",
+    "A group HOD needs at least one company.": (
+        "Ketua jabatan kumpulan memerlukan sekurang-kurangnya satu syarikat."
+    ),
+    "You can give tasks only to yourself and the people under you on the organization chart.": (
+        "Anda hanya boleh memberi tugasan kepada diri sendiri dan orang di bawah anda dalam "
+        "carta organisasi."
+    ),
+    "Pick one of your own companies.": "Pilih salah satu syarikat anda sendiri.",
+    "You can link this folder yourself: use Link a folder.": (
+        "Anda boleh memautkan folder ini sendiri: gunakan Pautkan folder."
+    ),
+    "That folder is in the Library already.": "Folder itu sudah ada dalam Pustaka.",
+    "Someone asked for this folder already. It waits for approval.": (
+        "Seseorang sudah memohon folder ini. Ia menunggu kelulusan."
+    ),
+    "That request is not here.": "Permohonan itu tiada di sini.",
+    "Approved: {title}": "Diluluskan: {title}",
+    "Declined: {title}": "Ditolak: {title}",
+    "Waiting for your approval: {title}": "Menunggu kelulusan anda: {title}",
+    "{name} asked. Open Approvals to approve or decline it.": (
+        "{name} memohon. Buka Kelulusan untuk meluluskan atau menolaknya."
+    ),
+    "{name} decided it.": "{name} telah memutuskannya.",
+    "You have {n} requests waiting already. Wait for an answer, or cancel one.": (
+        "Anda sudah mempunyai {n} permohonan yang menunggu. Tunggu jawapan, atau batalkan satu."
+    ),
+    "Write a short reason for your decision.": "Tulis sebab ringkas bagi keputusan anda.",
+    "This request was decided already.": "Permohonan ini sudah diputuskan.",
+    "You cannot decide your own request.": "Anda tidak boleh memutuskan permohonan anda sendiri.",
+    "Only the person who asked can cancel it.": "Hanya orang yang memohon boleh membatalkannya.",
+    "The person who asked is no longer active here. Decline it.": (
+        "Orang yang memohon tidak lagi aktif di sini. Tolaknya."
+    ),
 }

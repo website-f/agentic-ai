@@ -207,13 +207,13 @@ export function PeopleTaskForm({ prefill, onClose }: { prefill: ComposerPrefill;
           </div>
 
           <Part icon={UsersThreeIcon} title={t("Assign to")} hint={t("One or more people. Each one is told, with a link.")}>
-            <MultiSelect value={assignees} onValueChange={setPicked} options={options} label={t("Assign to")} placeholder={t("Pick one or more people")}
+            <MultiSelect selectAll={false} value={assignees} onValueChange={setPicked} options={options} label={t("Assign to")} placeholder={t("Pick one or more people")}
               searchPlaceholder={t("Search by name or place")} emptyText={t("Nobody matches.")} />
             {!loadingPeople && people.length <= 1 ? <p className="text-[12px] text-muted">{t("You can give tasks to yourself and the people who report to you.")}</p> : null}
           </Part>
 
           <Part icon={EyeIcon} title={t("Watchers")} hint={t("Optional. They follow it and see every change.")}>
-            <MultiSelect value={watchers} onValueChange={setWatchers} options={watchOptions} label={t("Watchers")} placeholder={t("Nobody yet")}
+            <MultiSelect selectAll={false} value={watchers} onValueChange={setWatchers} options={watchOptions} label={t("Watchers")} placeholder={t("Nobody yet")}
               searchPlaceholder={t("Search by name or place")} emptyText={t("Nobody matches.")} />
           </Part>
 

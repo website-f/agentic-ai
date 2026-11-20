@@ -61,7 +61,11 @@ router = APIRouter(prefix="/api/members", tags=["members"])
 
 
 # P9: what a branch manager or HOD may hand out to their own people ("team.manage").
-TEAM_ROLES = {"branch_manager": {"hod", "supervisor", "staff"}, "hod": {"supervisor", "staff"}}
+TEAM_ROLES = {
+    "branch_manager": {"hod", "supervisor", "staff"},
+    "group_hod": {"hod", "supervisor", "staff"},  # P120
+    "hod": {"supervisor", "staff"},
+}
 
 
 def _out(
@@ -275,6 +279,12 @@ async def _placement(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "branch_required",
             "A branch manager needs a branch.",
+        )
+    if role == "group_hod" and not branch_id:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "branch_required",
+            "A group HOD needs at least one company.",
         )
     if role in ("hod", "supervisor") and not department_id:
         raise api_error(
@@ -665,6 +675,9 @@ async def hierarchy(
     )
 
 
+LINE_SHOWN = 400  # P120: people of my line sent to My workspace
+
+
 @router.get("/hierarchy/mine")
 async def my_hierarchy(
     principal: Principal = Depends(require("read")),
@@ -679,11 +692,26 @@ async def my_hierarchy(
     full, _ = chart.visible(principal)
     chain = org_chart.chain_up(chart.parent, me)
     reports = chart.children.get(me, [])
+    below = org_chart.below(chart.children, me)
+    # P120: the whole line under me, nearest first (a breadth-first walk keeps every manager
+    # ahead of their people, so a cut list still builds a tree).
+    line: list[str] = []
+    seen, frontier = {me}, list(reports)
+    while frontier and len(line) < LINE_SHOWN:
+        nxt: list[str] = []
+        for uid in frontier:
+            if uid in seen or uid not in chart.by:
+                continue
+            seen.add(uid)
+            line.append(uid)
+            nxt.extend(chart.children.get(uid, []))
+        frontier = nxt
     return MyHierarchyOut(
         me=chart.person(me, False),
         chain=[chart.person(uid, uid not in full) for uid in chain],
         reports=[chart.person(uid, False) for uid in reports],
-        below=len(org_chart.below(chart.children, me)),
+        below=len(below),
+        line=[chart.person(uid, False) for uid in line[:LINE_SHOWN]],
     )
 
 
@@ -981,8 +1009,8 @@ async def set_manager(
 ) -> Membership:
     """One person reports to `manager_id` (None: to no one), with every rule; the caller
     commits. P111: the manager is any active member here (the organization chart: a store head
-    in the staff role has storekeepers under them); what a manager may do for the people
-    under them still comes from their role (teams/people.py MANAGER_ROLES, api/deps.py). No
+    in the staff role has storekeepers under them); P120: they give tasks to and follow the work
+    of everyone below them, whatever their role (teams/people.py `below`, api/deps.py). No
     one reports to themselves, no loops, and nobody changes who they report to themselves.
     P113: branch managers and HODs too, for their own people (_check_line, _check_lead)."""
     _line_editor(principal)
@@ -1420,15 +1448,8 @@ async def change_access(
         now = await dept_heads.headed_ids(db, principal.workspace_id, user_id)
         if m.department_id in now:
             await dept_heads.set_heads(db, m, [d for d in now if d != m.department_id])
-    if role not in people.MANAGER_ROLES and m.role in people.MANAGER_ROLES:
-        # P97: a role that manages no one: the people who reported to them report to no one.
-        for r in await db.scalars(
-            select(Membership).where(
-                Membership.workspace_id == m.workspace_id,
-                Membership.reports_to_user_id == user_id,
-            )
-        ):
-            r.reports_to_user_id = None
+    # P120: the people under them stay under them whatever their new role (the organization
+    # chart decides who manages whom, not the role).
     m.role, m.department_id = role, department_id
     set_branches(m, branch_id, every)
     if role == "owner" and (m.access != AGENTIC or m.prima_modules is not None):
@@ -1922,3 +1943,18 @@ async def member_prima(
         )
     )
     return out
+
+
+# Registered last: "/{user_id}" must not catch "/hierarchy", "/prima-modules" and the rest.
+@router.get("/{user_id}")
+async def member_one(
+    user_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> MemberOut:
+    """P120: one member, for their own page (a row of Members opens it), with the same rules as
+    the list: someone outside the reader's part of the office is not here."""
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    return await _one_out(db, principal, user_id)

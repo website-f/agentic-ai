@@ -1,7 +1,9 @@
 /** P80: SharePoint and OneDrive folders in the Library. A manager pastes a folder's link, sees
  * what it opens (the folder's name and how many files will be read), picks who it is for, and
  * connects it. The files stay in SharePoint; only their searchable text is kept, so agents find
- * and cite them with the SharePoint link. Each folder is synced every few hours (or now). */
+ * and cite them with the SharePoint link. Each folder is synced every few hours (or now).
+ * P120: anyone else pastes a link and asks; the person above them approves it on the Approvals
+ * page, and it is connected in their name. */
 import {
   ArrowSquareOutIcon,
   ArrowsClockwiseIcon,
@@ -28,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { t as tr, useT } from "@/i18n";
 import { ApiError, errorMessage } from "@/lib/api";
 import { libraryKeys } from "@/lib/library";
+import { askForFolder, requestKeys, requestsQuery, STATUS_LABEL } from "@/lib/requests";
 import {
   connectLink,
   disconnectLinked,
@@ -67,8 +70,114 @@ function useScopeOptions() {
   if (!sc || sc.kind === "all") {
     return [{ value: EVERY, label: t("Every company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))];
   }
-  const mine = branches.find((b) => b.id === sc.branch_id);
-  return mine ? [{ value: mine.id, label: mine.name }] : [];
+  // P120: each of their companies (a branch manager or group HOD of several), home first.
+  const ids = sc.branches?.length ? sc.branches.map((b) => b.id) : sc.branch_id ? [sc.branch_id] : [];
+  return ids.flatMap((id) => {
+    const b = branches.find((x) => x.id === id);
+    return b ? [{ value: b.id, label: b.name }] : [];
+  });
+}
+
+/** P120: the Microsoft 365 sign-in a link is opened with: connected, and allowed to read files. */
+function useMsReady() {
+  const config = useQuery(microsoftConfigQuery);
+  const account = useQuery({ ...microsoftAccountQuery, enabled: !!config.data?.configured });
+  return { config, account, loading: config.isLoading || account.isLoading };
+}
+
+function MsGate({ config, account }: ReturnType<typeof useMsReady>) {
+  const t = useT();
+  const reconnect = useReconnect();
+  if (!config.data?.configured) {
+    return <p className="text-[13px] text-muted">{t("Microsoft 365 is not set up yet. An admin sets it up in Channels > Microsoft 365.")}</p>;
+  }
+  const first = !account.data?.connected;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-warn/30 bg-warn/6 p-3">
+      <p className="min-w-0 flex-1 basis-64 text-[13px]">
+        {first
+          ? t("Connect your Microsoft 365 first. Folders are opened with your own sign-in, so only what you can already open is read.")
+          : t("Reconnect Microsoft 365 once to allow SharePoint. Microsoft asks you to allow reading your files (read only).")}
+      </p>
+      <Button size="sm" loading={reconnect.isPending} onClick={() => reconnect.mutate()} className="max-sm:w-full">
+        {first ? t("Connect Microsoft 365") : t("Reconnect Microsoft 365 to allow SharePoint")}
+      </Button>
+    </div>
+  );
+}
+
+/** P120: someone who may not connect folders asks for one; the person above them decides. */
+function RequestForm() {
+  const t = useT();
+  const qc = useQueryClient();
+  const ms = useMsReady();
+  const options = useScopeOptions();
+  const { data: asks } = useQuery(requestsQuery);
+  const [url, setUrl] = useState("");
+  const [note, setNote] = useState("");
+  const [picked, setPicked] = useState<string | null>(null);
+  const company = picked && options.some((o) => o.value === picked) ? picked : (options[0]?.value ?? null);
+  const ask = useMutation({
+    mutationFn: () => askForFolder(url, company, note),
+    onSuccess: (r) => {
+      setUrl("");
+      setNote("");
+      void qc.invalidateQueries({ queryKey: requestKeys.all });
+      toast.success(r.approver_name ? tr("Sent to {name} for approval.", { name: r.approver_name }) : tr("Sent for approval."));
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.code === "files_not_allowed") void qc.invalidateQueries({ queryKey: microsoftAccountQuery.queryKey });
+      toast.error(errorMessage(e));
+    },
+  });
+  const mine = (asks?.mine ?? []).filter((r) => r.kind === "library_link").slice(0, 5);
+  if (ms.loading) return <Skeleton className="h-20 rounded-[var(--radius-md)]" />;
+  const ready = ms.config.data?.configured && ms.account.data?.connected && ms.account.data.files_ok !== false;
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (looksLikeLink(url)) ask.mutate();
+    else toast.error(t("Paste a link that starts with https:// on sharepoint.com, onedrive.live.com or 1drv.ms."));
+  };
+  return (
+    <div className="grid gap-3">
+      <p className="text-[13px] text-muted">{t("Paste a SharePoint or OneDrive folder link. The person you report to approves it on their Approvals page, then its files join the Library.")}</p>
+      {ready ? (
+        <form onSubmit={submit} className="grid gap-2">
+          <div className="flex flex-wrap gap-2 max-sm:[&>*]:w-full">
+            <label className="relative min-w-0 flex-1 basis-64">
+              <span className="sr-only">{t("SharePoint or OneDrive link")}</span>
+              <LinkIcon size={16} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
+              <Input value={url} onChange={(e) => setUrl(e.target.value)} inputMode="url" autoComplete="off"
+                placeholder={t("Paste a SharePoint or OneDrive folder link")} className="pl-9" />
+            </label>
+            {options.length > 1 ? (
+              <SearchSelect value={company ?? ""} onValueChange={setPicked} options={options} label={t("For which company")} searchPlaceholder={t("Search companies")} className="sm:w-56" />
+            ) : null}
+          </div>
+          <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} placeholder={t("What is in it, and why the team needs it (optional)")} aria-label={t("Why you ask")} />
+          <div className="flex justify-end">
+            <Button type="submit" loading={ask.isPending} disabled={!url.trim() || !company} className="max-sm:w-full">
+              <CloudIcon size={16} /> {t("Ask for approval")}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <MsGate {...ms} />
+      )}
+      {mine.length ? (
+        <ul className="grid gap-1.5" aria-label={t("My folder requests")}>
+          {mine.map((r) => (
+            <li key={r.id} className="flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--radius-sm)] border border-border px-3 py-2 text-[13px]">
+              <FolderSimpleIcon size={15} className="shrink-0 text-accent" />
+              <span className="min-w-0 flex-1 truncate font-medium">{r.title}</span>
+              <Pill tone={STATUS_LABEL[r.status].tone}>{t(STATUS_LABEL[r.status].label)}</Pill>
+              {r.status === "declined" && r.decision_note ? <span className="basis-full text-[12px] break-words text-muted">{r.decision_note}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function StatusPill({ s }: { s: LinkedSource }) {
@@ -82,9 +191,8 @@ function StatusPill({ s }: { s: LinkedSource }) {
 function ConnectForm({ maxFiles }: { maxFiles: number }) {
   const t = useT();
   const qc = useQueryClient();
-  const config = useQuery(microsoftConfigQuery);
-  const account = useQuery({ ...microsoftAccountQuery, enabled: !!config.data?.configured });
-  const reconnect = useReconnect();
+  const ms = useMsReady();
+  const { config, account } = ms;
   const options = useScopeOptions();
   const [url, setUrl] = useState("");
   const [preview, setPreview] = useState<LinkPreview | null>(null);
@@ -113,24 +221,7 @@ function ConnectForm({ maxFiles }: { maxFiles: number }) {
   });
 
   if (config.isLoading || account.isLoading) return <Skeleton className="h-20 rounded-[var(--radius-md)]" />;
-  if (!config.data?.configured) {
-    return <p className="text-[13px] text-muted">{t("Microsoft 365 is not set up yet. An admin sets it up in Channels > Microsoft 365.")}</p>;
-  }
-  if (!account.data?.connected || account.data.files_ok === false) {
-    const first = !account.data?.connected;
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-warn/30 bg-warn/6 p-3">
-        <p className="min-w-0 flex-1 basis-64 text-[13px]">
-          {first
-            ? t("Connect your Microsoft 365 first. Folders are opened with your own sign-in, so only what you can already open is read.")
-            : t("Reconnect Microsoft 365 once to allow SharePoint. Microsoft asks you to allow reading your files (read only).")}
-        </p>
-        <Button size="sm" loading={reconnect.isPending} onClick={() => reconnect.mutate()} className="max-sm:w-full">
-          {first ? t("Connect Microsoft 365") : t("Reconnect Microsoft 365 to allow SharePoint")}
-        </Button>
-      </div>
-    );
-  }
+  if (!config.data?.configured || !account.data?.connected || account.data.files_ok === false) return <MsGate {...ms} />;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -343,13 +434,13 @@ export function LinkedSources() {
     if (data && window.location.hash === "#sharepoint") document.getElementById("sharepoint")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [data]);
   if (isLoading) return <Skeleton className="h-28 rounded-[var(--radius-md)]" />;
-  if (!data || (!data.can_connect && !data.sources.length)) return null;
+  if (!data || (!data.can_connect && !data.can_request && !data.sources.length)) return null;
   return (
     <Card id="sharepoint" data-guide="library.sharepoint" className="scroll-mt-24">
       <CardHeader icon={<IconTile icon={CloudIcon} size="sm" />} title={t("SharePoint and OneDrive")}
         description={t("Files stay in SharePoint. Only their searchable text is kept here, so agents find and cite them.")} />
       <CardBody className="grid gap-4">
-        {data.can_connect ? <ConnectForm maxFiles={data.max_files} /> : null}
+        {data.can_connect ? <ConnectForm maxFiles={data.max_files} /> : data.can_request ? <RequestForm /> : null}
         {data.sources.length ? (
           <ul className="grid gap-3">
             {data.sources.map((s) => <SourceCard key={s.id} s={s} canDraft={data.can_draft_sops} />)}
