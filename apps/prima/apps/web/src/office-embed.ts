@@ -54,3 +54,35 @@ export function onOfficeGo(open: (hash: string) => void): () => void {
   window.addEventListener('message', on);
   return () => window.removeEventListener('message', on);
 }
+
+/**
+ * P122 (Fitri, 21 Nov 2026: "when I click any of Prima's menu items it shows Loading Prima Secure App; make it one
+ * system"): the office opens Prima ahead of time, hidden (/prima/?warm=1), so it is already signed in and drawn when the
+ * person first goes to it. Until the office first shows it ({ source: 'office', type: 'show' } or a 'go'), Prima does
+ * only what any screen does to draw: it does not start the person's working session (the clock-in on opening the
+ * system), send waiting surveys, track location or poll the clock. Opened any other way, it is shown from the start.
+ */
+const warmStart = framed && new URLSearchParams(window.location.search).has('warm');
+let officeShown = !warmStart;
+const shownListeners = new Set<() => void>();
+if (warmStart) {
+  const onShow = (e: MessageEvent) => {
+    if (e.origin !== window.location.origin || e.source !== window.parent) return;
+    const d = e.data as { source?: unknown; type?: unknown } | null;
+    if (!d || d.source !== 'office' || (d.type !== 'show' && d.type !== 'go')) return;
+    officeShown = true;
+    window.removeEventListener('message', onShow);
+    for (const l of shownListeners) l();
+  };
+  window.addEventListener('message', onShow);
+}
+
+/** False only while Prima waits, opened ahead by the office and not yet shown (see above). */
+export function isShown(): boolean {
+  return officeShown;
+}
+
+export function onShown(listener: () => void): () => void {
+  shownListeners.add(listener);
+  return () => shownListeners.delete(listener);
+}

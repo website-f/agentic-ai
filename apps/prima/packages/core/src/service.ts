@@ -1774,6 +1774,9 @@ export const UNIFORM_REQUEST_RULE = {
   source: 'Fauzan, 6 and 11 Nov 2026',
 } as const;
 
+/** P122 (speed): outside the class, so the class has no load-time work and a browser build can leave it out. */
+const ROSTER_STATUSES: ReadonlySet<string> = new Set(Object.keys(ROSTER_STATUS_LABEL));
+
 export class PrimaService {
   constructor(
     private store: Store,
@@ -32743,7 +32746,6 @@ export class PrimaService {
     return r.slice(0, 500);
   }
 
-  private static readonly ROSTER_STATUSES = new Set(Object.keys(ROSTER_STATUS_LABEL));
 
   /** People of the company for the checker: join/leave dates, guard card and firearm permit validity. */
   private async rosterPeople(companyId: Id, personIds: Id[]): Promise<RosterPerson[]> {
@@ -32923,7 +32925,7 @@ export class PrimaService {
     for (const d of list) {
       if (!companyPeople.has(d.personId)) throw new BadRequest('A person on the roster is not in this company.');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date ?? '') || d.date.slice(0, 7) !== month) throw new BadRequest(`Each date must be in ${month}.`);
-      if (!PrimaService.ROSTER_STATUSES.has(d.planned)) throw new BadRequest('Unknown roster status.');
+      if (!ROSTER_STATUSES.has(d.planned)) throw new BadRequest('Unknown roster status.');
       const k = `${d.personId}|${d.date}`;
       if (seen.has(k)) throw new BadRequest(`One status per person per day (${d.date} is entered twice).`);
       seen.add(k);
@@ -33025,7 +33027,7 @@ export class PrimaService {
     const siteSupervisor = user.role === 'supervisor' && user.siteIds.includes(site.id);
     if (role !== 'om' && !siteSupervisor) throw new AccessDenied('attendance.lock', '(the OM or the site supervisor records the day)');
     if (user.personId && user.personId === d.personId) throw new AccessDenied('attendance.lock', '(nobody records their own day)');
-    if (!PrimaService.ROSTER_STATUSES.has(actual)) throw new BadRequest('Unknown roster status.');
+    if (!ROSTER_STATUSES.has(actual)) throw new BadRequest('Unknown roster status.');
     if (d.date > this.today()) throw new BadRequest('The day has not come yet.');
     if (d.actual) throw new BadRequest('The day is already recorded; propose a correction with evidence.');
     // O1 / PO-5 (review of PR #141, D3): leave comes from HR's approved leave records and unpaid days are the OD/OGM's
@@ -33049,7 +33051,7 @@ export class PrimaService {
     const { d, site, role } = await this.rosterDayFor(user, dayId);
     if (role !== 'om') throw new AccessDenied('attendance.lock', '(the OM proposes a correction)');
     if (!d.actual) throw new BadRequest('Record the day first.');
-    if (!PrimaService.ROSTER_STATUSES.has(input?.to) || input.to === d.actual) throw new BadRequest('Choose the corrected status.');
+    if (!ROSTER_STATUSES.has(input?.to) || input.to === d.actual) throw new BadRequest('Choose the corrected status.');
     const evidence = String(input.evidence ?? '').trim();
     if (!evidence) throw new BadRequest('Give the evidence (attendance record, letter, photo).');
     const reason = this.rosterReason(input.reason);

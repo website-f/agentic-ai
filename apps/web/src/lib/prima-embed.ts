@@ -5,9 +5,9 @@
  * and screens, already in their Prima language) and which screen is open; the office's sidebar
  * lists and marks them and opens them with the same addresses Prima reads ('#clock', '#@hr').
  * What Prima has is kept per person on this device, so the sidebar shows it before Prima opens.
- * P119: it is also read ahead of time (components/prima-host.tsx PrimaMenuProbe: Prima's menu-only
- * mode, nothing else runs), and Prima stays open in the background once opened (`mounted`), so
- * coming back to it is instant. */
+ * P119: Prima stays open in the background once opened (`mounted`), so coming back to it is instant.
+ * P122: Prima itself is opened ahead, hidden, a moment after the office is up (`warm`,
+ * components/prima-host.tsx PrimaWarm), so even the first visit opens at once. */
 import { create } from "zustand";
 
 export interface PrimaScreen {
@@ -35,6 +35,9 @@ interface PrimaState {
   /** Prima has been opened in this page: it stays loaded in the background. */
   mounted: boolean;
   setMounted: (on: boolean) => void;
+  /** P122: Prima is being opened ahead, hidden (not yet known to work for this person). */
+  warm: boolean;
+  setWarm: (on: boolean) => void;
   /** Where Prima is: '#clock', '#@hr', '#home'. */
   hash: string;
   view: string;
@@ -71,6 +74,8 @@ export const usePrima = create<PrimaState>((set, get) => ({
   menuAt: 0,
   mounted: false,
   setMounted: (mounted) => set({ mounted }),
+  warm: false,
+  setWarm: (warm) => set({ warm }),
   hash: "",
   view: "",
   space: null,
@@ -86,7 +91,7 @@ export const usePrima = create<PrimaState>((set, get) => ({
     } catch {
       menu = null;
     }
-    set({ userId, menu, menuAt, mounted: false });
+    set({ userId, menu, menuAt, mounted: false, warm: false });
   },
   setMenu: (menu) => {
     const userId = get().userId;

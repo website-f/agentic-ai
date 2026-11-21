@@ -65,14 +65,52 @@ function barcodeReaderFiles(): Plugin {
   };
 }
 
+/**
+ * P122 (speed): the server-connected build never runs the in-browser test backend (api/demo.ts and, through it, the
+ * whole of @prima/core's services), but a static import kept it all in the first file people download (7.6 MB). Outside
+ * the demo build the import resolves to an empty stand-in, so the app loads only the small rule helpers it uses.
+ */
+const NO_DEMO = '\0prima-no-demo';
+function noDemoBackend(): Plugin {
+  return {
+    name: 'prima:no-demo-backend',
+    enforce: 'pre',
+    resolveId(id, importer) {
+      return id === './demo' && importer && /[\\/]src[\\/]api[\\/]index\.ts$/.test(importer) ? NO_DEMO : null;
+    },
+    load(id) {
+      return id === NO_DEMO ? 'export class DemoApi { constructor() { throw new Error("The test backend is only in the demo build."); } }' : null;
+    },
+  };
+}
+
 export default defineConfig(({ command, mode }) => (checkApiUrl(command, mode), {
   // Agentic Office serves Prima under a sub-path (PRIMA_BASE=/prima/); the default is the site root.
   base: mode === 'demo' ? './' : process.env.PRIMA_BASE || '/',
-  plugins: [react(), ...(mode === 'demo' ? [viteSingleFile()] : [receiptReaderFiles(), barcodeReaderFiles()])],
+  plugins: [react(), ...(mode === 'demo' ? [viteSingleFile()] : [noDemoBackend(), receiptReaderFiles(), barcodeReaderFiles()])],
   resolve: {
     alias: { '@prima/core': fileURLToPath(new URL('../../packages/core/src/index.ts', import.meta.url)) },
   },
   define: { __DEMO__: JSON.stringify(mode === 'demo') },
-  build: { outDir: mode === 'demo' ? 'dist-demo' : 'dist', chunkSizeWarningLimit: 2000 },
+  build: {
+    outDir: mode === 'demo' ? 'dist-demo' : 'dist',
+    chunkSizeWarningLimit: 2000,
+    // P122 (speed): the parts that rarely change (React and the translations) are their own files, so after an
+    // update a returning person downloads only what changed, not the whole app again. (Icons stay with the screens that use
+    // them: one icons file would carry every screen's icons.)
+    rollupOptions:
+      mode === 'demo'
+        ? {}
+        : {
+            output: {
+              manualChunks(id: string) {
+                const p = id.replace(/\\/g, '/');
+                if (/\/node_modules\/(react|react-dom|scheduler)\//.test(p)) return 'react';
+                if (p.endsWith('/src/i18n.ts')) return 'i18n';
+                return undefined;
+              },
+            },
+          },
+  },
   server: { proxy: { '/api': 'http://localhost:3000' } },
 }));

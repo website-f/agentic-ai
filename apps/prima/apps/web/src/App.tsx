@@ -1,7 +1,7 @@
 import { Select } from './SearchSelect';
 import { installScrollStrips } from './scroll-strip';
 import { CleanupReceiptRecovery } from './views/ItCleanup';
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
 import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch } from '@prima/core';
 import { ApiError, api, type Me } from './api';
 import { ArrowLeftIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon, XIcon } from '@phosphor-icons/react';
@@ -23,7 +23,7 @@ import { SurveysView } from './views/Surveys';
 import { forgetOwner, lastOwner, rememberSetup, syncSurveys } from './survey/offline';
 import { NavMenu } from './NavMenu';
 import { AppGrid, AppSwitcher, SpacePhoneBar, SpaceRailHead, SpotSearch } from './Spaces';
-import { framed as inFrame, onOfficeGo, tellOffice } from './office-embed';
+import { framed as inFrame, isShown, onOfficeGo, onShown, tellOffice } from './office-embed';
 import { LaunchpadView, SpaceRoute } from './views/SpaceRoute';
 import { appsOf, rememberView, spaceLayout, spaceOf, usesApps, type SpaceId } from './nav-catalog';
 import { asTop, myName, officeNarrowed, primaOnly } from './office-access';
@@ -931,15 +931,17 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   const dept = me.user.department;
   const leader = isGroupLeader(me.user);
   const { bump } = useContext(RefreshContext);
+  // P122: opened ahead by the office (office-embed.ts, ?warm=1), Prima waits to be shown before it does any of this.
+  const shown = useSyncExternalStore(onShown, isShown);
   // Opening the system signed in clocks staff in; the clock runs until they sign out, idle or asleep (Fauzan, 27 Oct 2026).
   useEffect(() => {
-    if (menuProbe) return;
+    if (menuProbe || !shown) return;
     api.staffSessionStart().then(bump, () => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me.user.id]);
+  }, [me.user.id, shown]);
   // Site surveys made with no signal are sent when the app is open with a signal, whatever screen is showing.
   useEffect(() => {
-    if (menuProbe || me.user.integration || me.user.role === 'site_device' || me.user.role === 'guard') return;
+    if (menuProbe || !shown || me.user.integration || me.user.role === 'site_device' || me.user.role === 'guard') return;
     const send = () => void syncSurveys(me.user.id).catch(() => undefined);
     send();
     // Keep this person's company, lead and site names on the phone, so the survey screen opens even with no signal
@@ -956,7 +958,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       window.removeEventListener('online', send);
       window.clearInterval(timer);
     };
-  }, [me.user.id, me.user.integration, me.user.role]);
+  }, [me.user.id, me.user.integration, me.user.role, shown]);
   const first = (leader ? ROLE_FIRST.leader : ROLE_FIRST[dept ? `${role}:${dept}` : role]) ?? ROLE_FIRST[role] ?? [];
   // Staff clock in daily, so My clock sits right after the first screen (Fauzan, 26 Oct 2026).
   const rank = (v: ViewName) =>
@@ -1192,7 +1194,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   }, []);
 
   useEffect(() => {
-    if (menuProbe) return;
+    if (menuProbe || !shown) return;
     const t = setInterval(
       () =>
         api
@@ -1202,7 +1204,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       30_000,
     );
     return () => clearInterval(t);
-  }, []);
+  }, [shown]);
 
   // P91: the app the open screen sits in (null = the home screen and the everyday screens).
   const spaceOfRoute = useCallback(
@@ -1256,7 +1258,9 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   const navKey = nav.map((n) => n.view).join(',');
   const canOpen = useCallback((v: ViewName) => navKey.split(',').includes(v), [navKey]);
   // P103: once the first screen is up, fetch the code of the other screens in this person's menu.
-  useEffect(() => (menuProbe ? undefined : prefetchMenuScreens(navKey.split(',') as ViewName[])), [navKey]);
+  // P122: opened ahead by the office, the menu's screens are fetched once Prima is first shown, not while the person works
+  // in the office.
+  useEffect(() => (menuProbe || !shown ? undefined : prefetchMenuScreens(navKey.split(',') as ViewName[])), [navKey, shown]);
   const menuKey = nav.map((n) => `${n.view}:${n.label}`).join(',');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const menu = useMemo(() => {
@@ -1563,7 +1567,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   if (menuProbe) return null;
   return (
     <Ctx.Provider value={ctx}>
-      {nav.some((n) => n.view === 'clock') && <StaffTracker />}
+      {shown && nav.some((n) => n.view === 'clock') && <StaffTracker />}
       {/* Each person accepts the confidentiality rule before using Prima (Fauzan, 28 Oct 2026). */}
       <ConfidentialityGate userId={me.user.id} />
       {/* P80: one launcher, bottom right: Arisha (everyone who opens Prima; she teaches and guides, never decides) and

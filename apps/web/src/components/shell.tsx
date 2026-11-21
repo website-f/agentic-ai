@@ -30,7 +30,7 @@ import { create } from "zustand";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
 import { AiFab } from "@/components/ai-fab";
 import { GettingStartedChip } from "@/components/getting-started-chip";
-import { PrimaHost, PrimaMenuProbe } from "@/components/prima-host";
+import { PrimaHost, PrimaWarm } from "@/components/prima-host";
 import { PrimaNav } from "@/components/prima-nav";
 import { useBackClose } from "@/lib/back-close";
 import { useLiveEvents } from "@/lib/live";
@@ -951,7 +951,7 @@ export function AppShell() {
       <MobileTabBar />
       <NavDrawer />
       <AiFab />
-      <PrimaMenuProbe />
+      <PrimaWarm />
       <LazyCommandPalette />
       <LazyTaskComposerHost />
       <LazyHelpAskSheet />

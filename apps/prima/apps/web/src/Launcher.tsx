@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { BookOpenTextIcon, ChatCircleDotsIcon, MegaphoneSimpleIcon, XIcon } from '@phosphor-icons/react';
 import type { User } from '@prima/core';
-import { Arisha, useArishaReady } from './Arisha';
+import { useArishaReady } from './arisha-ready';
+
+// P122 (speed): Arisha's panel and her guides load the first time she is opened, not with every screen.
+const Arisha = lazy(() => import('./Arisha').then((m) => ({ default: m.Arisha })));
 import { ArishaAvatar } from './ArishaAvatar';
 import { useLang, type Lang } from './i18n';
 
@@ -72,6 +75,16 @@ export function Launcher({ user, view, viewLabel, menu }: { user: User; view: st
   const feedback = useOfficeFeedback();
   const [sheet, setSheet] = useState(false);
   const [arishaOpen, setArishaOpen] = useState(false);
+  const [arishaUsed, setArishaUsed] = useState(false);
+  useEffect(() => {
+    if (arishaOpen) setArishaUsed(true);
+  }, [arishaOpen]);
+  // Fetched quietly once the screen has settled, so opening her is instant.
+  useEffect(() => {
+    if (!arisha.ready) return;
+    const t = window.setTimeout(() => void import('./Arisha').catch(() => undefined), 8000);
+    return () => window.clearTimeout(t);
+  }, [arisha.ready]);
   const button = useRef<HTMLButtonElement | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const sheetId = useId();
@@ -170,7 +183,8 @@ export function Launcher({ user, view, viewLabel, menu }: { user: User; view: st
           )}
         </button>
       </div>
-      {arisha.ready && (
+      {arisha.ready && (arishaOpen || arishaUsed) && (
+        <Suspense fallback={null}>
         <Arisha
           key={user.id}
           user={user}
@@ -182,6 +196,7 @@ export function Launcher({ user, view, viewLabel, menu }: { user: User; view: st
           serverOn={arisha.serverOn}
           sample={arisha.sample}
         />
+        </Suspense>
       )}
     </>
   );

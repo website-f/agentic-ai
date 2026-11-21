@@ -44,7 +44,23 @@ export default defineConfig({
       injectRegister: false,
       manifest: false, // public/manifest.webmanifest is the single source
       injectManifest: {
-        globPatterns: ["**/*.{js,css,html,svg,png,woff2,webmanifest}"],
+        // P122 (speed): only the app shell is installed ahead (the start page, the shared code, the
+        // styles, the Latin fonts and the icons). Every page's own code is kept the first time it
+        // opens (sw.ts, cache first: its name changes with its content). Installing all 430 files
+        // ahead re-downloaded ~2 MB after every update, crowding out the pages people were opening.
+        globPatterns: [
+          "index.html",
+          "theme-init.js",
+          "manifest.webmanifest",
+          "favicon.svg",
+          "icons/*.png",
+          "assets/index-*.{js,css}",
+          "assets/vendor-*.js",
+          "assets/core-*.js",
+          "assets/rolldown-runtime-*.js",
+          "assets/geist-latin-wght-*.woff2",
+          "assets/geist-mono-latin-wght-*.woff2",
+        ],
         // P104: the guide's screenshots and videos (~15 MB) load when the guide shows them,
         // never in the background install, whatever their format.
         globIgnores: ["guide-media/**"],

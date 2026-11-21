@@ -1,73 +1,60 @@
 /** P119 (Fitri, 19 Nov 2026: "opening Prima is too slow ... make the sidebar already there so when
- * going to Prima it just shows Prima home"):
+ * going to Prima it just shows Prima home"), P122 (21 Nov 2026: "when I click any of Prima's menu
+ * items it shows Loading Prima Secure App ... make them one system"):
  *
- * - PrimaMenuProbe: shortly after the office opens, Prima's menu-only mode (/prima/?menu=1, framed
- *   and hidden) works out this person's Prima apps and screens and sends them; nothing else runs
- *   in it (no clock-in, no tracking, no screens). The sidebar's Prima group is then complete
- *   before Prima is ever opened. Read again after MENU_FRESH_MS, at most once a page load.
- * - PrimaHost: Prima itself under the office's header, opened the first time /prima is visited
- *   and then kept loaded while the person moves around the office, so coming back is instant. It
- *   is only shown on /prima. (P117 made Prima open inside the office; see pages/prima.tsx.) */
+ * - PrimaWarm: a moment after the office is up, Prima itself is opened hidden (/prima/?warm=1): it
+ *   signs in, draws its home and sends this person's apps and screens for the sidebar. Until it is
+ *   first shown it starts nothing of the person's day (apps/prima office-embed.ts: no clock-in, no
+ *   survey sending, no tracking, no screen prefetch). Once it has sent a menu it stays, as if
+ *   opened (`mounted`), so the first click on a Prima screen shows it at once. No menu within
+ *   WARM_GIVE_UP_MS (no Prima for this person, or Prima down): the hidden frame is let go.
+ * - PrimaHost: Prima under the office's header, only shown on /prima, kept loaded while the person
+ *   moves around the office. (P117 made Prima open inside the office; see pages/prima.tsx.) */
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
 import { useLang, useT } from "@/i18n";
-import { cleanMenu, menuIsFresh, primaGo, usePrima } from "@/lib/prima-embed";
+import { cleanMenu, primaGo, usePrima } from "@/lib/prima-embed";
 import { handPrimaLanguage, primaScreen } from "@/lib/prima-screen";
 import { meQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 const APP = "/prima/";
-const PROBE_AFTER_MS = 2500;
-const PROBE_GIVE_UP_MS = 45_000;
+const WARM_AFTER_MS = 2500;
+const WARM_GIVE_UP_MS = 60_000;
 
-let probedThisLoad = false;
+let warmedThisLoad = false;
 
-export function PrimaMenuProbe() {
+export function PrimaWarm() {
   const { data: me } = useSuspenseQuery(meQuery);
   const load = usePrima((s) => s.load);
-  const menuAt = usePrima((s) => s.menuAt);
   const mounted = usePrima((s) => s.mounted);
-  const setMenu = usePrima((s) => s.setMenu);
-  const frame = useRef<HTMLIFrameElement>(null);
-  const [on, setOn] = useState(false);
+  const warm = usePrima((s) => s.warm);
+  const setWarm = usePrima((s) => s.setWarm);
   useEffect(() => load(me.user.id), [load, me.user.id]);
-  // Read when nothing fresh is known, a moment after the office is up, once per page load.
+  // Once per page load, a moment after the office is up (its own first screen comes first).
   useEffect(() => {
-    if (probedThisLoad || mounted || menuIsFresh(menuAt)) return;
+    if (warmedThisLoad || mounted) return;
     const t = window.setTimeout(() => {
-      probedThisLoad = true;
-      setOn(true);
-    }, PROBE_AFTER_MS);
+      warmedThisLoad = true;
+      setWarm(true);
+    }, WARM_AFTER_MS);
     return () => window.clearTimeout(t);
-  }, [menuAt, mounted]);
+  }, [mounted, setWarm]);
+  // Prima never answered with a menu: let the hidden frame go.
   useEffect(() => {
-    if (!on) return;
-    const done = () => setOn(false);
-    const onMsg = (e: MessageEvent) => {
-      const w = frame.current?.contentWindow;
-      if (e.origin !== window.location.origin || !w || e.source !== w) return;
-      const d = e.data as { source?: unknown; type?: unknown } | null;
-      if (d?.source !== "prima" || d.type !== "menu") return;
-      const menu = cleanMenu(d);
-      if (menu) setMenu(menu);
-      done();
-    };
-    window.addEventListener("message", onMsg);
-    const t = window.setTimeout(done, PROBE_GIVE_UP_MS); // Prima not linked or not running: stop quietly
-    return () => {
-      window.removeEventListener("message", onMsg);
-      window.clearTimeout(t);
-    };
-  }, [on, setMenu]);
-  if (!on || mounted) return null;
-  return <iframe ref={frame} src={`${APP}?menu=1#home`} title="" aria-hidden tabIndex={-1} className="hidden" />;
+    if (!warm || mounted) return;
+    const t = window.setTimeout(() => setWarm(false), WARM_GIVE_UP_MS);
+    return () => window.clearTimeout(t);
+  }, [warm, mounted, setWarm]);
+  return null;
 }
 
 export function PrimaHost() {
   const mounted = usePrima((s) => s.mounted);
-  return mounted ? <PrimaFrame /> : null;
+  const warm = usePrima((s) => s.warm);
+  return mounted || warm ? <PrimaFrame /> : null;
 }
 
 function PrimaFrame() {
@@ -79,16 +66,27 @@ function PrimaFrame() {
   const setMenu = usePrima((s) => s.setMenu);
   const setRoute = usePrima((s) => s.setRoute);
   const setFrame = usePrima((s) => s.setFrame);
+  const setMounted = usePrima((s) => s.setMounted);
   const frame = useRef<HTMLIFrameElement>(null);
   const reported = useRef("");
   const shown = pathname === "/prima" && !people;
   const shownRef = useRef(shown);
-  shownRef.current = shown;
-  // The language and the first screen are handed over before Prima starts.
+  useEffect(() => {
+    shownRef.current = shown;
+  }, [shown]);
+  // The language and the first screen are handed over before Prima starts. P122: opened ahead
+  // (not on /prima), it starts warm: drawn, but nothing of the person's day until it is shown.
   const [src] = useState(() => {
     handPrimaLanguage(useLang.getState().lang);
-    return APP + (primaScreen(window.location.hash) || "#home");
+    return shown ? APP + (primaScreen(window.location.hash) || "#home") : `${APP}?warm=1#home`;
   });
+  const tellShown = () => {
+    try {
+      frame.current?.contentWindow?.postMessage({ source: "office", type: "show" }, window.location.origin);
+    } catch {
+      /* not loaded yet: told again when it loads */
+    }
+  };
   useEffect(() => {
     const on = (e: MessageEvent) => {
       const w = frame.current?.contentWindow;
@@ -97,7 +95,11 @@ function PrimaFrame() {
       if (!d || d.source !== "prima") return;
       if (d.type === "menu") {
         const menu = cleanMenu(d);
-        if (menu) setMenu(menu);
+        if (menu) {
+          setMenu(menu);
+          // P122: Prima works for this person: kept, as if opened, so /prima shows it at once.
+          setMounted(true);
+        }
       } else if (d.type === "route" && typeof d.hash === "string" && /^#@?[a-z][a-z0-9-]{0,39}$/.test(d.hash)) {
         setRoute({ hash: d.hash, view: typeof d.view === "string" ? d.view : "", space: typeof d.space === "string" ? d.space : null });
         reported.current = d.hash.slice(1);
@@ -107,7 +109,11 @@ function PrimaFrame() {
     };
     window.addEventListener("message", on);
     return () => window.removeEventListener("message", on);
-  }, [navigate, setMenu, setRoute]);
+  }, [navigate, setMenu, setRoute, setMounted]);
+  // P122: shown for the first time (it was opened ahead): Prima starts the person's day now.
+  useEffect(() => {
+    if (shown) tellShown();
+  }, [shown]);
   // The address changed from outside Prima (the sidebar, the Clock in tab, a link): open that screen in it.
   useEffect(() => {
     if (!shown || !hash || hash === reported.current) return;
@@ -122,7 +128,10 @@ function PrimaFrame() {
       allow="camera; geolocation; clipboard-write"
       aria-hidden={!shown}
       tabIndex={shown ? undefined : -1}
-      onLoad={() => setFrame(frame.current?.contentWindow ?? null)}
+      onLoad={() => {
+        setFrame(frame.current?.contentWindow ?? null);
+        if (shownRef.current) tellShown();
+      }}
       className={cn(
         "w-full border-0 bg-bg h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-4.5rem-env(safe-area-inset-bottom))] md:h-[calc(100dvh-3.5rem-env(safe-area-inset-top))]",
         shown ? "block" : "hidden",

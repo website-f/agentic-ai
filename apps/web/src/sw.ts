@@ -16,6 +16,27 @@ clientsClaim();
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
+// P122 (speed): every other file the app loads (a page's code, translations, fonts) is kept the
+// first time it is fetched and served from here after that. Its name carries a hash of its
+// content, so a kept copy is never out of date; an update brings new names. The oldest are let
+// go past KEEP, so copies from old versions do not pile up.
+const ASSETS = "assets-v1";
+const KEEP = 600;
+registerRoute(
+  ({ url, request }) => request.method === "GET" && url.origin === self.location.origin && url.pathname.startsWith("/assets/"),
+  async ({ request }) => {
+    const cache = await caches.open(ASSETS);
+    const hit = await cache.match(request);
+    if (hit) return hit;
+    const res = await fetch(request);
+    if (res.ok && res.type === "basic") {
+      await cache.put(request, res.clone());
+      void cache.keys().then((keys) => Promise.all(keys.slice(0, Math.max(0, keys.length - KEEP)).map((k) => cache.delete(k))));
+    }
+    return res;
+  },
+);
+
 // Client-side routes load the cached shell; API calls always go to the network.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("/index.html"), {

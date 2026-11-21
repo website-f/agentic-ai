@@ -16,10 +16,9 @@ function render({ arishaReady, widget, lang = 'en' }) {
   const deps = {
     react: React,
     '@phosphor-icons/react': { BookOpenTextIcon: icon('book'), ChatCircleDotsIcon: icon('chat'), MegaphoneSimpleIcon: icon('megaphone'), XIcon: icon('x') },
-    './Arisha': {
-      useArishaReady: () => ({ serverOn: arishaReady, sample: null, ready: arishaReady }),
-      Arisha: (p) => React.createElement('section', { 'data-arisha-panel': '', hidden: !p.open }),
-    },
+    // P122: readiness is its own small file; the panel (./Arisha) is fetched the first time she is opened.
+    './arisha-ready': { useArishaReady: () => ({ serverOn: arishaReady, sample: null, ready: arishaReady }) },
+    './Arisha': { Arisha: (p) => React.createElement('section', { 'data-arisha-panel': '', hidden: !p.open }) },
     './ArishaAvatar': { ArishaAvatar: () => React.createElement('img', { alt: '', 'data-avatar': '' }) },
     './i18n': { useLang: () => ({ lang }) },
   };
@@ -47,8 +46,11 @@ test('with Arisha and the office feedback on, one button opens a menu of the thr
   assert.match(html, /data-face="arisha"/);
   // Never in the office's own screenshots of the page; never translated by the page translator.
   assert.match(html, /class="launcher" data-feedback-ignore="" data-no-translate="true"/);
-  // Arisha's panel is there, closed, so the conversation survives closing it.
-  assert.match(html, /data-arisha-panel="" hidden=""/);
+  // P122: her panel is fetched and mounted the first time she is opened (then kept, closed, so the conversation
+  // survives closing it); a screen that never opens her never downloads it.
+  assert.doesNotMatch(html, /data-arisha-panel/);
+  assert.match(source, /lazy\(\(\) => import\('\.\/Arisha'\)/);
+  assert.match(source, /arishaOpen \|\| arishaUsed/);
 });
 
 test('without the widget (or feedback off for this person) the launcher is just Arisha', () => {
