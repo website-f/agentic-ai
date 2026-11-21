@@ -96,7 +96,7 @@ async def services_in_use(db: AsyncSession, ws_id: str) -> list[dict[str, Any]]:
 
 
 async def _ws(db: AsyncSession, principal: Principal) -> Workspace:
-    ws = await db.get(Workspace, principal.workspace_id, with_for_update=True)
+    ws = await db.get(Workspace, principal.workspace_id, with_for_update={"key_share": True})
     assert ws is not None
     return ws
 

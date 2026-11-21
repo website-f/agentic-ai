@@ -704,7 +704,17 @@ async def process_file(
     else:
         scan.note(f, found)
     model_text = scan.mask(out.text, found)
+    # P122 (speed): saved before the model reads it (the status is still "reading", so nothing
+    # treats the file as ready). Left unsaved, the model call wrote it and then held the file's
+    # row locked for the whole call and any wait for a free model: on the live server a person
+    # attaching that file to a task, moving it or filing it waited up to two and a half minutes.
+    await db.commit()
     info = await understand(db, f, model_text, hint)
+    # What someone else may have changed while the model read (filed it, attached it to a task).
+    await db.refresh(
+        f,
+        ["folder", "department_id", "library", "restricted", "quarantined", "branch_id", "task_id"],
+    )
     pinned = from_import(f)
     if info:
         if not pinned:

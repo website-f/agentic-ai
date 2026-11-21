@@ -313,7 +313,10 @@ async def _saved_folders(
     """The folders people created ({path, branch_id}), empty or not."""
     q = select(Workspace.settings).where(Workspace.id == workspace_id)
     if lock:
-        q = q.with_for_update()
+        # P122 (speed): FOR NO KEY UPDATE. Writers of the settings still wait for each other, but
+        # the workspace's new rows (tasks, files, mail, audit), whose foreign key checks share
+        # the row, no longer wait behind this lock (or this lock behind them).
+        q = q.with_for_update(key_share=True)
     settings = await db.scalar(q) or {}
     out: list[dict[str, Any]] = []
     for e in settings.get(FOLDERS_KEY) or []:

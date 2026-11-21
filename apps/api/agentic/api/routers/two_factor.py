@@ -251,7 +251,9 @@ async def set_policy(
     set it up on their next request."""
     _owner_only(principal)
     ws = await db.scalar(
-        select(Workspace).where(Workspace.id == principal.workspace_id).with_for_update()
+        select(Workspace)
+        .where(Workspace.id == principal.workspace_id)
+        .with_for_update(key_share=True)  # P122: no key update
     )
     assert ws is not None
     before = two_factor.policy(ws.settings)

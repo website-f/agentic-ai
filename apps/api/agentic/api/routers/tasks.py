@@ -1633,6 +1633,11 @@ async def list_approvals(
             response=response,
         )
     names = await _names(db, {a.decided_by for a in rows if a.decided_by})
+    # P122 (speed): the page's tasks and agents in two queries; approval_out's db.get then finds
+    # them in the session instead of asking the database twice per row.
+    if rows:
+        (await db.scalars(select(Task).where(Task.id.in_({a.task_id for a in rows})))).all()
+        (await db.scalars(select(Agent).where(Agent.id.in_({a.agent_id for a in rows})))).all()
     return [await approval_out(db, a, names) for a in rows]
 
 

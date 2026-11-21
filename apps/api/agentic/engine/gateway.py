@@ -514,8 +514,11 @@ LOCAL_MAX_CHARS = 8000
 
 
 def cheap_groups(*texts: str) -> tuple[str, ...]:
-    """Side jobs: the free local model first when the prompt fits it, else straight to fast."""
-    return ("local", "fast") if sum(map(len, texts)) <= LOCAL_MAX_CHARS else ("fast",)
+    """Side jobs: the fast cloud models first; the free local model only when none of them can
+    answer and the prompt fits it. P122 (speed): local-first made every reading wait on the
+    server's own processor: on the live server 750 of 772 local tries in three days ran out
+    the full 120 s (file reading, Help answers, Outlook reply drafts) before the cloud answered."""
+    return ("fast", "local") if sum(map(len, texts)) <= LOCAL_MAX_CHARS else ("fast",)
 
 
 # ---------------------------------------------------------------- the answer cache (P52)

@@ -124,7 +124,7 @@ async def _request(workspace_id: str, key: str, label: str, what: str) -> None:
 
     try:
         async with SessionLocal() as db:
-            ws = await db.get(Workspace, workspace_id, with_for_update=True)
+            ws = await db.get(Workspace, workspace_id, with_for_update={"key_share": True})
             if ws is None:
                 return
             settings = dict(ws.settings or {})

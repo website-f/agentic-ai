@@ -391,7 +391,7 @@ async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
     # uq_skills_ws_name, and each wrote the workspace settings back whole over changes made
     # meanwhile. Lock the workspace row and read its settings again: one at a time, each
     # seeing what the one before it wrote (the lock goes at the commit below).
-    await db.refresh(ws, ["settings"], with_for_update=True)
+    await db.refresh(ws, ["settings"], with_for_update={"key_share": True})
     settings = dict(ws.settings or {})
     if _current(settings, all_names):
         await db.commit()  # the one before us did it

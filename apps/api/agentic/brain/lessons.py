@@ -340,7 +340,7 @@ async def _distil(
         r = await gateway.chat_first(
             db,
             agent.workspace_id,
-            ("local", "fast"),
+            ("fast", "local"),  # P122: the cloud first; the local model is a slow last resort
             [{"role": "system", "content": DISTIL}, {"role": "user", "content": user}],
             task="brain.lesson",
             max_tokens=500,

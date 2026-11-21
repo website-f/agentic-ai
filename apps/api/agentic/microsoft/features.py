@@ -542,6 +542,9 @@ async def make_task(
     _add_action(item, {"kind": "task", "label": t.title, "task_id": t.id})
     for f in saved:
         f.task_id = f.task_id or t.id
+    # P122 (speed): the task and its files are saved before the agent starts, so starting it
+    # (skills, the first model call) does not hold the files' rows locked.
+    await db.commit()
     try:
         await launch.launch(db, t, "system:mail")
     except launch.LaunchError as e:

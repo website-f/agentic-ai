@@ -167,8 +167,9 @@ async def test_local_side_jobs_and_chat_backup(client, llm, temporal):
         )
         assert reply.provider_name == "Tiny"
         assert llm.requests[-1].get("reasoning_effort") == "none"  # qwen3 thinking off
-    # A prompt longer than the local model's window skips it instead of being cut.
-    assert gateway.cheap_groups("x" * 2000) == ("local", "fast")
+    # P122: the fast cloud models first, the local model only as the last resort; a prompt longer
+    # than the local model's window skips it instead of being cut.
+    assert gateway.cheap_groups("x" * 2000) == ("fast", "local")
     assert gateway.cheap_groups("x" * 6000, "y" * 6000) == ("fast",)
 
     # Chat backup mode: the agent's own group has no models, so the local model answers.

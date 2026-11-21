@@ -374,7 +374,7 @@ async def apply(
                 created_at=now,
             )
         )
-    await db.refresh(ws, ["settings"], with_for_update=True)
+    await db.refresh(ws, ["settings"], with_for_update={"key_share": True})
     settings = dict(ws.settings or {})
     imports = dict(settings.get(IMPORTS) or {})
     imports[plan.name] = {
