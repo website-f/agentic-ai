@@ -80,6 +80,184 @@
   justify-content: space-between;
 }
 
+/* P122: the person on the check-in map: a live dot while searching, then a pin that drops in with a small bounce, with
+   a ring pulsing out from it. Colours come from the tone (GeoMap sets --you); reduced motion keeps them still. */
+.ci-you {
+  background: none;
+  border: 0;
+}
+/* While the map flies, Leaflet stretches the drawn circles instead of redrawing them: they fade out for the flight and
+   back in, drawn afresh, when it lands (GeoMap adds ci-flying). */
+.ci-map .leaflet-overlay-pane {
+  transition: opacity 220ms ease;
+}
+.ci-map.ci-flying .leaflet-overlay-pane {
+  opacity: 0;
+  transition-duration: 60ms;
+}
+.ci-you-in {
+  position: absolute;
+  inset: 0;
+  display: block;
+  --ax: 50%;
+  --ay: 50%;
+}
+.ci-you-in[data-kind='pin'] {
+  /* The pin's tip, where the ring starts (GeoMap anchors the 28 px pin at 14, 26). */
+  --ax: 14px;
+  --ay: 26px;
+}
+.ci-you-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: var(--you, var(--primary));
+  border: 3px solid #fff;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.35);
+}
+.ci-you-halo {
+  position: absolute;
+  left: var(--ax);
+  top: var(--ay);
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border-radius: 50%;
+  border: 2px solid var(--you, var(--primary));
+  background: color-mix(in srgb, var(--you, var(--primary)) 30%, transparent);
+  pointer-events: none;
+  animation: ci-halo 1.8s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+.ci-you-in[data-kind='pin'] .ci-you-halo {
+  /* Flat on the ground under the pin. */
+  animation-name: ci-halo-ground;
+  animation-delay: 0.65s;
+  opacity: 0;
+}
+@keyframes ci-halo {
+  from {
+    transform: scale(0.7);
+    opacity: 0.85;
+  }
+  to {
+    transform: scale(3.4);
+    opacity: 0;
+  }
+}
+@keyframes ci-halo-ground {
+  from {
+    transform: scale(0.6, 0.3);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(3.6, 1.5);
+    opacity: 0;
+  }
+}
+.ci-drop {
+  position: absolute;
+  inset: 0;
+  display: block;
+  transform-origin: 50% 100%;
+  animation: ci-drop 700ms cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+@keyframes ci-drop {
+  0% {
+    transform: translateY(-46px);
+    opacity: 0;
+  }
+  45% {
+    transform: translateY(0) scale(1.06, 0.9);
+    opacity: 1;
+  }
+  62% {
+    transform: translateY(-9px) scale(0.97, 1.04);
+  }
+  78% {
+    transform: translateY(0) scale(1.02, 0.97);
+  }
+  90% {
+    transform: translateY(-2px);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+.ci-mapwrap {
+  position: relative;
+  animation: ci-in 260ms ease both;
+}
+.ci-map-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.ci-map-badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--badge, var(--primary));
+  animation: ci-blink 1.2s ease-in-out infinite;
+}
+.ci-map-badge[data-tone='warn'] {
+  --badge: var(--warn);
+}
+.ci-map-badge[data-tone='ok'] {
+  --badge: var(--ok);
+}
+@keyframes ci-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+.ci-ask[data-compact] {
+  padding: 4px 8px 0;
+}
+.ci-phone-hint {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: var(--r-md, 12px);
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--line));
+  background: var(--accent-soft);
+  text-align: left;
+}
+.ci-phone-hint > svg {
+  flex: none;
+  color: var(--primary);
+  margin-top: 2px;
+}
+.ci-phone-hint-title {
+  margin: 0;
+  font-weight: 650;
+}
+.ci-phone-hint-sub {
+  margin: 2px 0 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
 /* ---------- The check-in card ---------- */
 .ci-card {
   display: flex;
@@ -764,6 +942,18 @@
   .ci-radar::after {
     animation: none;
     opacity: 0;
+  }
+  /* P122: the pin is simply there, with a still ring; no drop, bounce or pulse. */
+  .ci-drop,
+  .ci-mapwrap,
+  .ci-map-badge::before {
+    animation: none;
+  }
+  .ci-you-halo,
+  .ci-you-in[data-kind='pin'] .ci-you-halo {
+    animation: none;
+    opacity: 0.35;
+    transform: scale(1.8);
   }
   .ci-card-icon,
   .ci-kind,

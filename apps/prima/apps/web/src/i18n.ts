@@ -5398,6 +5398,42 @@ const ROWS: Row[] = [
   // P121: the guide's show-all buttons: P121: the guide's show-all buttons
   ['forms', 'borang', null],
   ['See all', 'Lihat semua', null],
+  // P122: the check-in location on a computer or a phone, the live map and the "use the phone" hint (CheckIn.tsx, checkin-permissions.ts)
+  ['Use the phone instead', 'Gunakan telefon sebagai ganti', 'Guna phone sebagai ganti'],
+  ['Your phone has GPS and finds you to within a few metres. Open Prima on your phone and check in or out there.', 'Telefon anda mempunyai GPS dan dapat mengesan lokasi anda hingga beberapa meter. Buka Prima di telefon anda dan daftar masuk atau keluar di sana.', 'Phone anda ada GPS dan boleh detect location anda sampai beberapa meter. Buka Prima di phone anda dan check in atau check out di situ.'],
+  ['Computer (Wi-Fi only)', 'Komputer (Wi-Fi sahaja)', null],
+  ['Asking this computer for its location. This takes a few seconds.', 'Meminta lokasi daripada komputer ini. Ini mengambil masa beberapa saat.', 'Minta location dari komputer ini. Ambil masa beberapa saat.'],
+  ['Stay near a window or step outside.', 'Berdiri dekat tingkap atau keluar sebentar.', 'Duduk dekat tingkap atau keluar sekejap.'],
+  ['A computer finds itself from Wi-Fi, so it may not get closer than this.', 'Komputer mengesan lokasinya melalui Wi-Fi, jadi ketepatannya mungkin tidak menjadi lebih baik daripada ini.', 'Komputer detect location melalui Wi-Fi, jadi mungkin tak jadi lebih tepat dari ini.'],
+  ['This computer could not find its location; its location setting is probably off.', 'Komputer ini tidak dapat mengesan lokasinya; tetapan lokasinya mungkin dimatikan.', 'Komputer ini tak dapat detect location; setting location mungkin off.'],
+  ['This computer gave no location in time.', 'Komputer ini tidak memberikan lokasi dalam masa yang ditetapkan.', 'Komputer ini tak bagi location dalam masa yang ditetapkan.'],
+  ['Turn on Windows location: Settings > Privacy & security > Location, with Location services and "Let desktop apps access your location" on.', 'Hidupkan lokasi Windows: Settings > Privacy & security > Location, dengan Location services dan "Let desktop apps access your location" dihidupkan.', 'Hidupkan location Windows: Settings > Privacy & security > Location, dengan Location services dan "Let desktop apps access your location" on.'],
+  ['Turn on Location Services: System Settings > Privacy & Security > Location Services, on for your browser too.', 'Hidupkan Location Services: System Settings > Privacy & Security > Location Services, termasuk untuk pelayar anda.', 'Hidupkan Location Services: System Settings > Privacy & Security > Location Services, termasuk untuk browser anda.'],
+  ["Turn on location in the computer's settings.", 'Hidupkan lokasi dalam tetapan komputer.', 'Hidupkan location dalam settings komputer.'],
+  ['Turn on Wi-Fi, even without connecting: nearby networks let the computer find itself.', 'Hidupkan Wi-Fi, walaupun tanpa menyambung: rangkaian berdekatan membantu komputer mengesan lokasinya.', 'Hidupkan Wi-Fi, walaupun tak connect: network berdekatan bantu komputer detect location.'],
+  ['Then tap Try again.', 'Kemudian tekan Cuba lagi.', 'Lepas tu tekan Cuba lagi.'],
+  ['This computer has no GPS: it guesses where it is from Wi-Fi or the internet connection, often kilometres off.', 'Komputer ini tiada GPS: ia meneka lokasinya daripada Wi-Fi atau sambungan internet, selalunya tersasar beberapa kilometer.', 'Komputer ini tiada GPS: ia teka location dari Wi-Fi atau internet, selalunya lari beberapa kilometer.'],
+  ['Finding your location on the map', 'Mencari lokasi anda pada peta', 'Cari location anda atas peta'],
+  ['Your location and the places you may check in at', 'Lokasi anda dan tempat anda boleh daftar masuk', 'Location anda dan tempat anda boleh check in'],
+  ['You (rough guess)', 'Anda (anggaran kasar)', null],
+  ['You', 'Anda', null],
+  ['Nearest check-in place', 'Tempat daftar masuk terdekat', 'Tempat check-in terdekat'],
+  ['Hold the phone still for a few seconds.', 'Pegang telefon tanpa bergerak selama beberapa saat.', 'Pegang phone diam-diam beberapa saat.'],
+  ['No location yet', 'Belum ada lokasi', 'Belum ada location'],
+  ['Enable location', 'Hidupkan lokasi', 'Hidupkan location'],
+  ['Your browser will ask to use your location. Choose Allow (and Precise, if asked).', 'Pelayar anda akan meminta untuk menggunakan lokasi anda. Pilih Benarkan (dan Tepat, jika ditanya).', 'Browser anda akan minta guna location anda. Pilih Allow (dan Precise, kalau ditanya).'],
+  ['Finding where you are.', 'Mencari di mana anda berada.', 'Cari di mana anda berada.'],
+  ['Checking your place…', 'Menyemak tempat anda…', 'Check tempat anda…'],
+  ['Step near a window or outside, away from tall buildings.', 'Pergi dekat tingkap atau ke luar, jauh dari bangunan tinggi.', 'Pergi dekat tingkap atau keluar, jauh dari bangunan tinggi.'],
+  ['Turn on precise location (iPhone: Precise Location; Android: Location accuracy).', 'Hidupkan lokasi tepat (iPhone: Precise Location; Android: Location accuracy).', 'Hidupkan precise location (iPhone: Precise Location; Android: Location accuracy).'],
+  ['Turn on Wi-Fi: it helps the phone find itself, even without connecting.', 'Hidupkan Wi-Fi: ia membantu telefon mengesan lokasinya, walaupun tanpa menyambung.', 'Hidupkan Wi-Fi: ia bantu phone detect location, walaupun tak connect.'],
+  ['Location is blocked for Prima. Allow it with the steps below, then tap Try again.', 'Lokasi disekat untuk Prima. Benarkan dengan langkah di bawah, kemudian tekan Cuba lagi.', 'Location di-block untuk Prima. Allow dengan langkah di bawah, lepas tu tekan Cuba lagi.'],
+  ['Your phone could not find its location. Turn on Location (GPS) in the phone settings, step near a window or outside, then try again.', 'Telefon anda tidak dapat mengesan lokasinya. Hidupkan Lokasi (GPS) dalam tetapan telefon, pergi dekat tingkap atau ke luar, kemudian cuba lagi.', 'Phone anda tak dapat detect location. Hidupkan Location (GPS) dalam settings phone, pergi dekat tingkap atau keluar, lepas tu cuba lagi.'],
+  ['Finding your location took too long. Step near a window or outside, then try again.', 'Mencari lokasi anda mengambil masa terlalu lama. Pergi dekat tingkap atau ke luar, kemudian cuba lagi.', 'Cari location anda ambil masa terlalu lama. Pergi dekat tingkap atau keluar, lepas tu cuba lagi.'],
+  ['This browser cannot give a location. Use Chrome, Edge or Safari.', 'Pelayar ini tidak dapat memberikan lokasi. Gunakan Chrome, Edge atau Safari.', 'Browser ini tak dapat bagi location. Guna Chrome, Edge atau Safari.'],
+  ['Looking up the address…', 'Mencari alamat…', null],
+  ['Address not looked up here', 'Alamat tidak dicari di sini', null],
+  ['No street address found for this point', 'Tiada alamat jalan ditemui untuk titik ini', null],
 ];
 
 const DICT = new Map<string, [string, string]>();
@@ -5822,6 +5858,11 @@ const PATTERNS: Pat[] = [
         ? `PIC dimaklumkan apabila guard tidak hadir atau clock-in gagal semakan, setiap ${m[1]} minit sehingga seseorang bertindak. Lock setiap hari selepas menyemaknya. Tiada apa di sini bayar, potong atau ambil tindakan disiplin secara automatik. Clock-in datang hanya dari device site dengan semakan muka; ia tidak ditaip di sini. Shift ditambah di Roster.`
         : `PIC dimaklumkan apabila pengawal tidak hadir atau daftar masuk gagal semakan, setiap ${m[1]} minit sehingga seseorang bertindak. Kunci setiap hari selepas menyemaknya. Tiada apa di sini membayar, memotong atau mengambil tindakan tatatertib secara automatik. Daftar masuk datang hanya dari peranti tapak dengan semakan muka; ia tidak ditaip di sini. Syif ditambah di Jadual Tugas.`,
   ],
+  // P122: the check-in search, in metres or km (CheckIn.tsx)
+  [/^Accurate to about ([\d.]+ k?m) so far; waiting for (\d+) m or better\.$/, (m, x) => (x ? `Tepat kira-kira ${m[1]} setakat ini; tunggu ${m[2]} m atau lebih baik.` : `Tepat kira-kira ${m[1]} setakat ini; menunggu ${m[2]} m atau lebih baik.`)],
+  [/^Accurate to about (\d+) m so far\. Hold still: a few more readings make it exact\.$/, (m, x) => (x ? `Tepat kira-kira ${m[1]} m setakat ini. Jangan gerak: beberapa reading lagi akan buat ia tepat.` : `Tepat kira-kira ${m[1]} m setakat ini. Jangan bergerak: beberapa bacaan lagi akan menjadikannya tepat.`)],
+  [/^(\d+) readings? combined$/, (m, x) => `${m[1]} ${x ? 'reading' : 'bacaan'} digabungkan`],
+  [/^Your location is only accurate to about ([\d.]+ k?m); it must be within (\d+) m to check in\.$/, (m, x) => (x ? `Location anda hanya tepat kira-kira ${m[1]}; mesti dalam ${m[2]} m untuk check in.` : `Lokasi anda hanya tepat kira-kira ${m[1]}; ia mesti dalam lingkungan ${m[2]} m untuk daftar masuk.`)],
 ];
 
 /** One piece of screen text in the chosen language; text not in the table is returned as it is. */

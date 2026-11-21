@@ -86,6 +86,48 @@ export const LOCATION_PROBLEM_TEXT: Record<LocationProblem, string> = {
   unsupported: 'This browser cannot give a location. Use Chrome, Edge or Safari.',
 };
 
+/**
+ * P122 (owner, 21 Nov 2026, clocking in from the office computer): a phone finds itself by GPS; a computer has none and
+ * guesses from Wi-Fi or the internet connection, and finds nothing at all when its location setting is off. So the help
+ * differs: a computer is told where its location switch is, to turn on Wi-Fi, or to use the phone instead.
+ */
+export type Device = 'phone' | 'computer';
+
+/** Phone or computer: by the system (Windows and Mac are computers; an iPad counts as a phone, it has the same
+ * settings); otherwise a touch screen with a coarse pointer (finger) is a phone. */
+export function deviceKind(p: Platform, coarsePointer = false): Device {
+  if (p.ownApp || p.os === 'android' || p.os === 'ios') return 'phone';
+  if (p.os === 'windows' || p.os === 'mac') return 'computer';
+  return coarsePointer ? 'phone' : 'computer';
+}
+
+/** Where a computer's location switch is. */
+export function computerLocationSwitch(os: Platform['os']): string {
+  if (os === 'windows') return 'Turn on Windows location: Settings > Privacy & security > Location, with Location services and "Let desktop apps access your location" on.';
+  if (os === 'mac') return 'Turn on Location Services: System Settings > Privacy & Security > Location Services, on for your browser too.';
+  return "Turn on location in the computer's settings.";
+}
+
+export const COMPUTER_WIFI = 'Turn on Wi-Fi, even without connecting: nearby networks let the computer find itself.';
+
+/** What went wrong and how to fix it, for this kind of device. */
+export function locationProblemText(problem: LocationProblem, device: Device, os: Platform['os']): string {
+  if (device === 'phone' || problem === 'denied' || problem === 'unsupported') return LOCATION_PROBLEM_TEXT[problem];
+  const first = problem === 'unavailable' ? 'This computer could not find its location; its location setting is probably off.' : 'This computer gave no location in time.';
+  return `${first} ${computerLocationSwitch(os)} ${COMPUTER_WIFI} Then tap Try again.`;
+}
+
+/** What to do when the location came but is too rough to check in with. */
+export function roughTips(device: Device, os: Platform['os']): string[] {
+  if (device === 'computer')
+    return ['This computer has no GPS: it guesses where it is from Wi-Fi or the internet connection, often kilometres off.', computerLocationSwitch(os), COMPUTER_WIFI];
+  return [
+    'Step near a window or outside, away from tall buildings.',
+    'Turn on precise location (iPhone: Precise Location; Android: Location accuracy).',
+    'Turn on Wi-Fi: it helps the phone find itself, even without connecting.',
+  ];
+}
+
 export interface HelpGuide {
   id: string;
   title: string;

@@ -149,3 +149,87 @@ export function settled(readings: Reading[], elapsedMs: number, rules: SettleRul
   if (now.accuracyM <= rules.goodM && now.used >= 3 && steady) return true;
   return elapsedMs >= rules.waitMs && now.accuracyM <= rules.maxM && (steady || elapsedMs >= rules.waitMs * 2);
 }
+
+/*
+ * P122 (owner, 21 Nov 2026: "Finding your location took too long", clocking in from the office computer): a computer
+ * has no GPS, so the browser's answer comes from Wi-Fi or the internet connection and is often kilometres wide. Such a
+ * reading never joins the check-in point (`usable` drops anything rougher than WORST_M), but it is a real answer: the
+ * screen shows it on the map and says how rough it is and what to do, instead of "took too long". It is never sent.
+ */
+
+/** Real coordinates and a real accuracy, however rough. */
+const sane = (r: Reading) =>
+  Number.isFinite(r.lat) &&
+  Number.isFinite(r.lng) &&
+  Math.abs(r.lat) <= 90 &&
+  Math.abs(r.lng) <= 180 &&
+  !(r.lat === 0 && r.lng === 0) &&
+  Number.isFinite(r.accuracyM) &&
+  r.accuracyM > 0;
+
+/** The most precise single reading, however rough, taken at most `maxAgeMs` before `since` (the quick first answer may
+ * come from the browser's memory, up to a minute old). The newest wins a tie. Null with none. For showing only. */
+export function bestReading(readings: Reading[], since: number, maxAgeMs = 60_000): Reading | null {
+  let best: Reading | null = null;
+  for (const r of readings) {
+    if (!sane(r) || r.at < since - maxAgeMs) continue;
+    if (!best || r.accuracyM < best.accuracyM || (r.accuracyM === best.accuracyM && r.at > best.at)) best = r;
+  }
+  return best;
+}
+
+export interface Estimate {
+  lat: number;
+  lng: number;
+  accuracyM: number;
+  /** Readings combined into it (0: one rough reading shown as it is). */
+  used: number;
+  /** Made by `fuse` from usable readings (only such a point can become a check-in). */
+  fused: boolean;
+}
+
+/** Where the person seems to be now, for the map: the fused point, or else the best rough reading. */
+export function bestEstimate(readings: Reading[], since: number): Estimate | null {
+  const f = fuse(usable(readings, since));
+  const raw = bestReading(readings, since);
+  if (f && (!raw || f.accuracyM <= raw.accuracyM)) return { lat: f.lat, lng: f.lng, accuracyM: f.accuracyM, used: f.used, fused: true };
+  if (raw) return { lat: raw.lat, lng: raw.lng, accuracyM: Math.max(1, Math.round(raw.accuracyM)), used: 0, fused: false };
+  return null;
+}
+
+export type LocateEnd =
+  | { kind: 'fix'; lat: number; lng: number; accuracyM: number }
+  | { kind: 'rough'; lat: number; lng: number; accuracyM: number }
+  | { kind: 'none'; problem: 'denied' | 'unavailable' | 'timeout' };
+
+/**
+ * How a search ends. 'fix': the fused point (P120 rules), within `maxM`, to be checked by the server. 'rough': readings
+ * came but none good enough; the best of them is shown with its real accuracy, never sent. 'none': no reading at all;
+ * why, from the browser's last error code (1 denied, 2 unavailable: location switched off; otherwise no answer in time).
+ */
+export function locateEnd(readings: Reading[], since: number, maxM: number, errorCode?: number | null): LocateEnd {
+  if (errorCode === 1) return { kind: 'none', problem: 'denied' };
+  const f = fuse(usable(readings, since));
+  if (f && f.accuracyM <= maxM) return { kind: 'fix', lat: f.lat, lng: f.lng, accuracyM: f.accuracyM };
+  const e = bestEstimate(readings, since);
+  if (e) return { kind: 'rough', lat: e.lat, lng: e.lng, accuracyM: e.accuracyM };
+  return { kind: 'none', problem: errorCode === 2 ? 'unavailable' : 'timeout' };
+}
+
+export interface Place {
+  lat: number;
+  lng: number;
+  radiusM: number;
+  label: string;
+}
+
+/** The check-in place nearest to a point: metres to its pin and beyond its circle (0 inside). Null with no places. */
+export function nearestPlace<P extends Place>(point: { lat: number; lng: number }, places: P[]): { place: P; distanceM: number; outsideByM: number } | null {
+  let out: { place: P; distanceM: number; outsideByM: number } | null = null;
+  for (const p of places) {
+    const d = distanceM(point, p);
+    const outside = Math.max(0, d - p.radiusM);
+    if (!out || outside < out.outsideByM || (outside === out.outsideByM && d < out.distanceM)) out = { place: p, distanceM: d, outsideByM: outside };
+  }
+  return out;
+}

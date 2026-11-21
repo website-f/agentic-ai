@@ -3,12 +3,13 @@
  * help when the browser blocked it), a reading accurate to 100 m or better, the server's verdict on a map, the face check
  * when the clock waits for one, then confirm. The server decides in or out of the area; the screen only shows it.
  */
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AirplaneTiltIcon,
   ArrowClockwiseIcon,
   CheckCircleIcon,
   CrosshairIcon,
+  DeviceMobileIcon,
   MapPinIcon,
   ProhibitIcon,
   ShieldCheckIcon,
@@ -23,10 +24,21 @@ import { Chip, Drawer, ErrorNotice, Loading, useAction, useLoad, type Tone } fro
 import { PermissionHelp } from './PermissionHelp';
 import { ClockPhotoStep, type ClockPhoto } from './ClockPhoto';
 import { MovementView } from './Movement';
-import { LOCATION_PROBLEM_TEXT, locationProblem, queryPermission, type LocationProblem, type PermState } from './checkin-permissions';
-import type { MapCircle, MapPoint } from './GeoMap';
+import {
+  detectPlatform,
+  deviceKind,
+  LOCATION_PROBLEM_TEXT,
+  locationProblem,
+  locationProblemText,
+  queryPermission,
+  roughTips,
+  type Device,
+  type LocationProblem,
+  type PermState,
+} from './checkin-permissions';
+import type { MapCircle, MapTone } from './GeoMap';
 import { clockChanged } from './StaffTracker';
-import { fuse, settled, SETTLE, usable, type Reading } from './location-fix';
+import { bestEstimate, fuse, locateEnd, nearestPlace, settled, SETTLE, usable, type Reading } from './location-fix';
 import '../styles/checkin.css';
 
 const GeoMap = lazy(() => import('./GeoMap'));
@@ -165,12 +177,13 @@ export function MyCheckinCard() {
 type Fix = { lat: number; lng: number; accuracyM: number };
 type Loc =
   | { phase: 'idle' }
-  | { phase: 'asking'; accuracy: number | null; readings?: number }
+  | { phase: 'asking'; accuracy: number | null; readings?: number; spot?: Fix | null }
   | { phase: 'problem'; problem: LocationProblem }
   | { phase: 'rough'; fix: Fix; text: string }
   | { phase: 'checking'; fix: Fix }
   | { phase: 'ready'; fix: Fix; preview: CheckinPreview };
-type TestPlace = 'at' | 'away' | 'rough' | 'device';
+type TestPlace = 'at' | 'away' | 'rough' | 'wifi' | 'device';
+type GeoSource = Pick<Geolocation, 'watchPosition' | 'clearWatch' | 'getCurrentPosition'>;
 
 /** P120: readings are gathered and combined (location-fix.ts); these are the old single-reading limits' heirs. */
 const GOOD_M = SETTLE.goodM;
@@ -180,6 +193,66 @@ const WAIT_MS = SETTLE.waitMs;
  * and show how close it is, instead of failing; only after this long is the person asked to move and try again.
  */
 const LONG_WAIT_MS = 45_000;
+/**
+ * P122: a computer has no GPS; its Wi-Fi or network guess does not get better by waiting. With nothing within the
+ * limit by then, it stops here and shows the guess with what to do (good readings still settle by the P120 rules).
+ */
+const COMPUTER_WAIT_MS = 20_000;
+
+/** Demo only: a pretend device sending the readings of the chosen test place, so the real search and its map run on
+ * screen: a rough first guess, then closer readings. 'wifi': a computer with only a Wi-Fi guess, kilometres wide. */
+function demoGeo(target: Fix, wifi: boolean): GeoSource {
+  const timers = new Set<number>();
+  const later = (ms: number, f: () => void) => {
+    const t = window.setTimeout(() => {
+      timers.delete(t);
+      f();
+    }, ms);
+    timers.add(t);
+  };
+  const pos = (north: number, east: number, accuracy: number) =>
+    ({
+      coords: { latitude: target.lat + north / 111_320, longitude: target.lng + east / (111_320 * Math.cos((target.lat * Math.PI) / 180)), accuracy, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
+      timestamp: Date.now(),
+    }) as unknown as GeolocationPosition;
+  return {
+    getCurrentPosition(ok) {
+      later(300, () => ok(wifi ? pos(1800, -900, 4200) : pos(900, 600, 2400)));
+    },
+    watchPosition(ok, fail) {
+      if (wifi) {
+        later(1300, () => ok(pos(1500, -700, 3900)));
+        later(2800, () => fail?.({ code: 3, message: 'Timeout', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError));
+      } else {
+        const closer: [number, number, number][] = [
+          [260, -180, 650],
+          [60, 40, 140],
+          [12, -8, 35],
+        ];
+        closer.forEach(([n, e, a], i) => later(900 + i * 700, () => ok(pos(n, e, a))));
+        for (let i = 0; i < 10; i++) later(3000 + i * 500, () => ok(pos(Math.sin(i) * 2, Math.cos(i) * 2, target.accuracyM)));
+      }
+      return 1;
+    },
+    clearWatch() {
+      timers.forEach((t) => window.clearTimeout(t));
+      timers.clear();
+    },
+  };
+}
+
+/** P122: on a computer, the phone (with GPS) is the better way to check in. */
+function PhoneHint() {
+  return (
+    <div className="ci-phone-hint">
+      <DeviceMobileIcon size={24} aria-hidden="true" />
+      <div>
+        <p className="ci-phone-hint-title">Use the phone instead</p>
+        <p className="ci-phone-hint-sub">Your phone has GPS and finds you to within a few metres. Open Prima on your phone and check in or out there.</p>
+      </div>
+    </div>
+  );
+}
 
 function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => void; onDone: () => void }) {
   const m = me.mine!;
@@ -199,6 +272,13 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
   const [result, setResult] = useState<{ at: string; text: string; already: boolean; clockId: string | null } | null>(null);
   const stopWatch = useRef<() => void>(() => undefined);
   const act = useAction();
+  // P122: phone or computer, for the right help (a computer has no GPS; its location switch is in its settings).
+  const here = useMemo(() => {
+    const p = detectPlatform(navigator.userAgent, navigator.maxTouchPoints ?? 0);
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    return { os: p.os, device: deviceKind(p, coarse) };
+  }, []);
+  const dev: Device = api.mode === 'demo' && test === 'wifi' ? 'computer' : here.device;
 
   useEffect(() => {
     let live = true;
@@ -237,71 +317,97 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
     const t = m.targets[0] ?? { lat: 3.139, lng: 101.6869, radiusM: 150 };
     if (test === 'at') return { lat: t.lat + 0.0002, lng: t.lng - 0.0001, accuracyM: 9 };
     if (test === 'away') return { lat: t.lat + 0.018, lng: t.lng, accuracyM: 14 };
+    if (test === 'wifi') return { lat: t.lat, lng: t.lng, accuracyM: 4200 };
     return { lat: t.lat, lng: t.lng, accuracyM: 240 };
   };
 
+  const roughText = (accuracyM: number) => `Your location is only accurate to about ${fmtM(accuracyM)}; it must be within ${me.maxAccuracyM} m to check in.`;
+
   const locate = () => {
     stopWatch.current();
-    if (api.mode === 'demo' && test !== 'device') return void check(testFix());
-    if (!navigator.geolocation) return setLoc({ phase: 'problem', problem: 'unsupported' });
-    setLoc({ phase: 'asking', accuracy: null, readings: 0 });
+    // Demo 'rough': the server's own accuracy check, at once.
+    if (api.mode === 'demo' && test === 'rough') return void check(testFix());
+    const geo: GeoSource | undefined = api.mode === 'demo' && test !== 'device' ? demoGeo(testFix(), test === 'wifi') : navigator.geolocation;
+    if (!geo) return setLoc({ phase: 'problem', problem: 'unsupported' });
+    setLoc({ phase: 'asking', accuracy: null, readings: 0, spot: null });
     // P120: every reading is kept and combined (location-fix.ts): cached and jumping readings dropped, the precise
     // cluster averaged by accuracy, taken once it is precise and steady (or the best there is at the time limit).
     const started = Date.now();
     const readings: Reading[] = [];
     const rules = { ...SETTLE, goodM: Math.min(GOOD_M, me.maxAccuracyM), maxM: me.maxAccuracyM, waitMs: WAIT_MS };
+    const device = dev;
     let done = false;
+    // P122: the browser's last error code (1 denied, 2 unavailable, 3 timeout), to say why when no reading came at all.
+    let lastError: number | null = null;
     const current = () => fuse(usable(readings, started));
     const finish = () => {
       if (done) return;
       done = true;
       stopWatch.current();
-      const f = current();
-      if (!f) return setLoc({ phase: 'problem', problem: 'timeout' });
-      const fix = { lat: f.lat, lng: f.lng, accuracyM: f.accuracyM };
+      // P122: readings that came are never reported as "took too long": a good one is checked, a rough one is shown
+      // with its real accuracy; only with no reading at all is it a problem (denied, switched off, or no answer).
+      const end = locateEnd(readings, started, me.maxAccuracyM, lastError);
+      if (end.kind === 'none') {
+        if (end.problem === 'denied') setPerm('denied');
+        return setLoc({ phase: 'problem', problem: end.problem });
+      }
+      const fix = { lat: end.lat, lng: end.lng, accuracyM: end.accuracyM };
       // Rough readings are never sent as a check-in: the person tries again (the server refuses them too).
-      if (fix.accuracyM > me.maxAccuracyM)
-        return setLoc({ phase: 'rough', fix, text: `Your location is only accurate to about ${fix.accuracyM} m; it must be within ${me.maxAccuracyM} m.` });
+      if (end.kind === 'rough' || fix.accuracyM > me.maxAccuracyM) return setLoc({ phase: 'rough', fix, text: roughText(fix.accuracyM) });
       void check(fix);
     };
     const review = () => {
       if (done) return;
       const elapsed = Date.now() - started;
-      if (settled(usable(readings, started), elapsed, rules) || elapsed >= LONG_WAIT_MS) finish();
+      if (settled(usable(readings, started), elapsed, rules) || elapsed >= LONG_WAIT_MS) return finish();
+      const f = current();
+      if (device === 'computer' && elapsed >= COMPUTER_WAIT_MS && (!f || f.accuracyM > me.maxAccuracyM) && bestEstimate(readings, started)) finish();
     };
-    const id = navigator.geolocation.watchPosition(
-      (p) => {
-        setPerm('granted');
-        // The phone's own time of the reading; a clock far off is replaced by now (the search is under a minute).
-        const at = Math.abs(p.timestamp - Date.now()) < 120_000 ? p.timestamp : Date.now();
-        readings.push({ lat: p.coords.latitude, lng: p.coords.longitude, accuracyM: p.coords.accuracy, at });
-        const f = current();
-        if (!done) setLoc({ phase: 'asking', accuracy: f ? f.accuracyM : null, readings: f?.used ?? 0 });
-        review();
-      },
-      (err) => {
-        const problem = locationProblem(err);
-        // P93: a slow phone that already gave a reading: use what there is instead of failing.
-        if (problem !== 'denied' && current()) return finish();
-        if (problem === 'timeout' && !done) return; // keep listening until the time limit
+    const take = (p: GeolocationPosition) => {
+      if (done) return;
+      setPerm('granted');
+      // The phone's own time of the reading; a clock far off is replaced by now (the search is under a minute).
+      const at = Math.abs(p.timestamp - Date.now()) < 120_000 ? p.timestamp : Date.now();
+      readings.push({ lat: p.coords.latitude, lng: p.coords.longitude, accuracyM: p.coords.accuracy, at });
+      const f = current();
+      // P122: the map shows the best there is from the first reading on, even a rough one (never sent as such).
+      const e = bestEstimate(readings, started);
+      setLoc({ phase: 'asking', accuracy: e ? e.accuracyM : null, readings: f?.used ?? 0, spot: e ? { lat: e.lat, lng: e.lng, accuracyM: e.accuracyM } : null });
+      review();
+    };
+    const fail = (err: GeolocationPositionError, fromWatch: boolean) => {
+      if (done) return;
+      const problem = locationProblem(err);
+      if (problem === 'denied' || err.code === 2 || lastError == null) lastError = err.code;
+      if (problem === 'denied') {
         done = true;
         stopWatch.current();
-        if (problem === 'denied') setPerm('denied');
-        setLoc({ phase: 'problem', problem });
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: LONG_WAIT_MS },
-    );
+        setPerm('denied');
+        return setLoc({ phase: 'problem', problem });
+      }
+      // The quick first answer failing says nothing yet: the watch keeps looking.
+      if (!fromWatch) return;
+      // P93/P122: a slow device that already gave a reading (even a rough one): use what there is instead of failing.
+      if (bestEstimate(readings, started)) return finish();
+      if (problem === 'timeout') return; // keep listening until the time limit
+      done = true;
+      stopWatch.current();
+      setLoc({ phase: 'problem', problem });
+    };
+    const id = geo.watchPosition(take, (err) => fail(err, true), { enableHighAccuracy: true, maximumAge: 0, timeout: LONG_WAIT_MS });
+    // P122: a quick first answer (Wi-Fi or network, or one the browser already has, up to a minute old) in parallel, so
+    // the map shows where the person is at once. It goes through the same rules: too old or too rough, it is shown only.
+    try {
+      geo.getCurrentPosition(take, (err) => fail(err, false), { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 });
+    } catch {
+      /* the watch still runs */
+    }
     // Readings may stop coming while the phone holds still: look again every second, and stop at the time limit.
     const tick = window.setInterval(review, 1000);
-    const limit = window.setTimeout(() => {
-      if (!done && !current()) {
-        done = true;
-        stopWatch.current();
-        setLoc({ phase: 'problem', problem: 'timeout' });
-      } else finish();
-    }, LONG_WAIT_MS + 500);
+    const limit = window.setTimeout(finish, LONG_WAIT_MS + 500);
     stopWatch.current = () => {
-      navigator.geolocation.clearWatch(id);
+      done = true;
+      geo.clearWatch(id);
       window.clearInterval(tick);
       window.clearTimeout(limit);
     };
@@ -315,6 +421,30 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
 
   const preview = loc.phase === 'ready' ? loc.preview : null;
   const fix = loc.phase === 'ready' || loc.phase === 'rough' || loc.phase === 'checking' ? loc.fix : null;
+  // P122: the map from the first reading on: the person's best point now, with its accuracy, and the check-in places.
+  const searching = loc.phase === 'asking';
+  const spot: Fix | null = loc.phase === 'asking' ? (loc.spot ?? null) : fix;
+  const places = preview?.targets ?? m.targets;
+  const near = spot ? nearestPlace(spot, places) : null;
+  const youTone: MapTone = preview ? (preview.outcome === 'blocked' ? 'crit' : preview.verdict === 'out_of_area' ? 'warn' : 'ok') : loc.phase === 'rough' ? 'warn' : 'info';
+  // The person and the nearest place, when it is close enough to show both (a place 300 km away would hide the person).
+  const fitTo = spot
+    ? [
+        { lat: spot.lat, lng: spot.lng, radiusM: spot.accuracyM },
+        ...(near && !searching && near.distanceM <= Math.max(5000, spot.accuracyM * 3) ? [{ lat: near.place.lat, lng: near.place.lng, radiusM: near.place.radiusM }] : []),
+      ]
+    : [];
+  const placeFrom = preview ? (preview.matched ?? preview.nearest) : null;
+  const askingText =
+    loc.phase !== 'asking'
+      ? ''
+      : loc.accuracy == null
+        ? dev === 'computer'
+          ? 'Asking this computer for its location. This takes a few seconds.'
+          : 'Hold the phone still for a few seconds.'
+        : loc.accuracy > me.maxAccuracyM
+          ? `Accurate to about ${fmtM(loc.accuracy)} so far; waiting for ${me.maxAccuracyM} m or better. ${dev === 'computer' ? 'A computer finds itself from Wi-Fi, so it may not get closer than this.' : 'Stay near a window or step outside.'}`
+          : `Accurate to about ${loc.accuracy} m so far. Hold still: a few more readings make it exact.`;
   const reasonOk = !preview?.reasonNeeded || reason.trim().length >= me.reasonMin;
 
   const submit = () =>
@@ -360,6 +490,7 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
                     ['at', 'At the place'],
                     ['away', '2 km away'],
                     ['rough', 'Rough GPS'],
+                    ['wifi', 'Computer (Wi-Fi only)'],
                     ['device', "This device's GPS"],
                   ] as const
                 ).map(([k, l]) => (
@@ -379,7 +510,7 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
               <p className="ci-ask-title">{loc.phase === 'problem' ? 'No location yet' : 'Enable location'}</p>
               <p className="ci-ask-sub">
                 {loc.phase === 'problem'
-                  ? LOCATION_PROBLEM_TEXT[loc.problem]
+                  ? locationProblemText(loc.problem, dev, here.os)
                   : perm === 'prompt' || perm === 'unknown'
                     ? 'Your browser will ask to use your location. Choose Allow (and Precise, if asked).'
                     : 'Finding where you are.'}
@@ -387,6 +518,7 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
               <button type="button" className="btn btn-primary" onClick={locate}>
                 <CrosshairIcon size={18} aria-hidden="true" /> {loc.phase === 'problem' ? 'Try again' : 'Enable location'}
               </button>
+              {loc.phase === 'problem' && dev === 'computer' && (loc.problem === 'unavailable' || loc.problem === 'timeout') && <PhoneHint />}
             </div>
           )}
 
@@ -403,37 +535,64 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
           )}
 
           {loc.phase === 'asking' && (
-            <div className="ci-ask" data-busy="">
-              <span className="ci-radar" aria-hidden="true" />
+            <div className="ci-ask" data-busy="" data-compact={spot ? '' : undefined}>
+              {!spot && <span className="ci-radar" aria-hidden="true" />}
               <p className="ci-ask-title">Finding your location…</p>
-              <p className="ci-ask-sub">
-                {loc.accuracy == null
-                  ? 'Hold the phone still for a few seconds.'
-                  : loc.accuracy > me.maxAccuracyM
-                    ? `Accurate to about ${loc.accuracy} m so far; waiting for ${me.maxAccuracyM} m or better. Stay near a window or step outside.`
-                    : `Accurate to about ${loc.accuracy} m so far. Hold still: a few more readings make it exact.`}
-              </p>
+              <p className="ci-ask-sub">{askingText}</p>
               {loc.readings ? <p className="ss-note">{loc.readings === 1 ? '1 reading' : `${loc.readings} readings`} combined</p> : null}
             </div>
           )}
 
           {loc.phase === 'checking' && (
-            <div className="ci-ask" data-busy="">
-              <span className="ci-radar" aria-hidden="true" />
+            <div className="ci-ask" data-busy="" data-compact={spot ? '' : undefined}>
+              {!spot && <span className="ci-radar" aria-hidden="true" />}
               <p className="ci-ask-title">Checking your place…</p>
             </div>
           )}
 
           {loc.phase === 'rough' && (
+            <p className="notice" data-tone="warn">
+              {loc.text}
+            </p>
+          )}
+
+          {loc.phase === 'ready' && preview && <Verdict preview={preview} kind={kind} />}
+
+          {/* P122: one map from the first reading to the verdict: the live dot glides and its circle shrinks while
+              searching, then the pin drops in with a pulsing ring and the map flies to the person and the nearest place. */}
+          {spot && (
+            <div className="ci-mapwrap">
+              <Suspense fallback={<MapFallback />}>
+                <GeoMap
+                  label={searching ? 'Finding your location on the map' : 'Your location and the places you may check in at'}
+                  height={260}
+                  circles={places.map((t): MapCircle => ({ lat: t.lat, lng: t.lng, radiusM: t.radiusM, tone: 'primary', label: `${t.label} (${fmtM(t.radiusM)})` }))}
+                  you={{ lat: spot.lat, lng: spot.lng, accuracyM: spot.accuracyM, tone: youTone, label: loc.phase === 'rough' ? 'You (rough guess)' : 'You' }}
+                  youPin={loc.phase === 'checking' || loc.phase === 'ready'}
+                  animatePoint
+                  pulse
+                  flyTo
+                  follow={searching}
+                  fitTo={fitTo}
+                  fitKey={searching ? 'search' : `fix:${spot.lat},${spot.lng}`}
+                />
+              </Suspense>
+              {searching && (
+                <span className="ci-map-badge" data-tone={spot.accuracyM > me.maxAccuracyM ? 'warn' : 'ok'} aria-hidden="true">
+                  ±{fmtM(spot.accuracyM)}
+                </span>
+              )}
+            </div>
+          )}
+
+          {loc.phase === 'rough' && (
             <div className="ci-blocked">
-              <p className="notice" data-tone="warn">
-                {loc.text}
-              </p>
               <ul className="ci-tips">
-                <li>Step near a window or outside, away from tall buildings.</li>
-                <li>Turn on precise location (iPhone: Precise Location; Android: Location accuracy).</li>
-                <li>Turn on Wi-Fi: it helps the phone find itself, even without connecting.</li>
+                {roughTips(dev, here.os).map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
               </ul>
+              {dev === 'computer' && <PhoneHint />}
               <button type="button" className="btn btn-primary" onClick={locate}>
                 <ArrowClockwiseIcon size={18} aria-hidden="true" /> Try again
               </button>
@@ -442,18 +601,11 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
 
           {loc.phase === 'ready' && preview && (
             <>
-              <Verdict preview={preview} kind={kind} />
-              <Suspense fallback={<MapFallback />}>
-                <GeoMap
-                  label="Your location and the places you may check in at"
-                  height={260}
-                  circles={preview.targets.map((t): MapCircle => ({ lat: t.lat, lng: t.lng, radiusM: t.radiusM, tone: 'primary', label: `${t.label} (${fmtM(t.radiusM)})` }))}
-                  points={[{ lat: loc.fix.lat, lng: loc.fix.lng, accuracyM: loc.fix.accuracyM, tone: preview.verdict === 'out_of_area' ? 'warn' : 'ok', label: 'You' } satisfies MapPoint]}
-                  fitKey={`${loc.fix.lat},${loc.fix.lng}`}
-                />
-              </Suspense>
               <p className="ci-address">
-                <MapPinIcon size={15} aria-hidden="true" /> {addressText(preview)} · ±{loc.fix.accuracyM} m
+                <MapPinIcon size={15} aria-hidden="true" />
+                <span>
+                  {`${addressText(preview)} · ±${fmtM(loc.fix.accuracyM)}${placeFrom ? ` · Nearest check-in place: ${placeFrom.label}, ${fmtM(placeFrom.distanceM)}` : ''}`}
+                </span>
               </p>
               {preview.outcome === 'blocked' ? (
                 <div className="ci-blocked">
