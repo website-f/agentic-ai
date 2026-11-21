@@ -500,10 +500,27 @@ def event_full(e: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------- Teams Approvals
 
 
+# P122: Graph gives no "made in" field. SharePoint's built-in approvals (a file or list item sent
+# for sign-off) name or link the SharePoint site; anything else was made in the Approvals app in
+# Teams (or by a flow) and is shown as Teams.
+_SHAREPOINT = re.compile(r"\.sharepoint\.(com|us|cn)\b|\bsharepoint\b", re.I)
+_LINK = re.compile(r"https://[^\s<>\"')\]]+")
+
+
+def approval_source(a: dict[str, Any]) -> str:
+    text = " ".join(str(a.get(k) or "") for k in ("displayName", "description"))
+    return "sharepoint" if _SHAREPOINT.search(text) else "teams"
+
+
 def approval_row(a: dict[str, Any]) -> dict[str, Any]:
     roles = [str(r) for r in ((a.get("viewPoint") or {}).get("roles") or [])]
     state = str(a.get("state") or "").lower()
+    kind = str(a.get("approvalType") or "basic")
+    link = _LINK.search(str(a.get("description") or ""))
     return {
+        "source": approval_source(a),  # teams | sharepoint
+        "link": link.group(0) if link else "",
+        "all_must_approve": kind.lower().endswith("awaitall"),
         "id": a.get("id"),
         "title": a.get("displayName") or tr("(no title)"),
         "description": a.get("description") or "",
@@ -513,7 +530,10 @@ def approval_row(a: dict[str, Any]) -> dict[str, Any]:
         "created_at": a.get("createdDateTime"),
         "completed_at": a.get("completedDateTime"),
         "kind": a.get("approvalType") or "basic",
-        "options": [str(o) for o in a.get("responseOptions") or ["Approve", "Reject"]],
+        "options": [
+            str(o)
+            for o in a.get("responseOptions") or a.get("responsePrompts") or ["Approve", "Reject"]
+        ],
         "i_approve": any(r.lower() == "approver" for r in roles),
         "i_own": any(r.lower() == "owner" for r in roles),
     }

@@ -2059,3 +2059,8 @@ MS.update({k: v for k, v in MS_AI_USAGE.items() if k not in MS})
 from .ms_notify import MS_NOTIFY  # noqa: E402
 
 MS.update({k: v for k, v in MS_NOTIFY.items() if k not in MS})
+
+# P122: connecting another email account from the address alone.
+from .ms_mail_connect import MS_MAIL_CONNECT  # noqa: E402
+
+MS.update({k: v for k, v in MS_MAIL_CONNECT.items() if k not in MS})

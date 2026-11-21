@@ -22,7 +22,7 @@ import {
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, IconTile } from "@/components/page";
@@ -56,12 +56,20 @@ import {
   type MailAccounts,
   type Provider,
 } from "@/lib/m365";
+import { myMailboxesQuery } from "@/lib/microsoft";
 import { cn } from "@/lib/utils";
 
-const PROVIDER_LABEL: Record<Provider, string> = {
+const ConnectAccountDialog = lazy(() => import("./connect").then((m) => ({ default: m.ConnectAccountDialog })));
+
+export const PROVIDER_LABEL: Record<Provider, string> = {
   gmail: "Gmail",
   yahoo: "Yahoo Mail",
   outlook: "Outlook.com / Hotmail",
+  aol: "AOL Mail",
+  icloud: "iCloud Mail",
+  zoho: "Zoho Mail",
+  gmx: "GMX",
+  yandex: "Yandex Mail",
   cpanel: msg("cPanel / company hosting"),
   other: msg("Other (IMAP)"),
 };
@@ -70,6 +78,11 @@ const PROVIDER_NOTE: Record<Provider, string> = {
   gmail: msg("Gmail needs 2-Step Verification on, then an app password (Google Account > Security > App passwords). Use that 16-letter app password here, not your normal password."),
   yahoo: msg("Yahoo needs an app password (Account security > Generate app password). Use it here, not your normal password."),
   outlook: msg("For a personal Outlook.com or Hotmail address. Microsoft may refuse password sign-in for these accounts; if the test fails, move the mail with Outlook itself."),
+  aol: msg("AOL needs an app password (Account security > Generate app password). Use it here, not your normal password."),
+  icloud: msg("iCloud needs an app-specific password (Apple Account > Sign-In and Security > App-Specific Passwords)."),
+  zoho: msg("Turn on IMAP access in Zoho Mail settings. With two-factor sign-in on, use an app password."),
+  gmx: msg("Turn on IMAP access in your GMX settings first, then use your normal password."),
+  yandex: msg("Yandex needs an app password for mail (Yandex ID > Security > App passwords)."),
   cpanel: msg("Usually mail.yourdomain.com, port 993, with your full email address as the user name and the mailbox password. Your hosting's Email Accounts > Connect Devices page shows the exact server."),
   other: msg("Your provider's IMAP server, port 993 (SSL) or 143 (STARTTLS), and the password or app password it gives for mail apps."),
 };
@@ -85,6 +98,7 @@ export function OtherEmailAccounts() {
       return d && ([...d.accounts.map((a) => a.backup), d.google.backup].some(backupActive)) ? 4000 : false;
     },
   });
+  const places = useQuery(myMailboxesQuery);
   const [adding, setAdding] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
@@ -131,7 +145,28 @@ export function OtherEmailAccounts() {
       ) : (
         <ul className="grid gap-3">{accounts.map((a) => <AccountCard key={a.id} a={a} />)}</ul>
       )}
-      {adding ? <AccountDialog presets={q.data.presets} onClose={() => setAdding(false)} /> : null}
+      {adding ? (
+        <Suspense fallback={null}>
+          <ConnectAccountDialog google={google} personalMsOk={!!places.data?.personal_ms_ok}
+            hasMain={!!places.data?.accounts.some((a) => a.primary && a.connected)} onClose={() => setAdding(false)} />
+        </Suspense>
+      ) : null}
+    </div>
+  );
+}
+
+/** P122: one other email account on the Microsoft 365 page's Work or Personal tab (Gmail with
+ * Google sign-in: "google"). The office copies its attachments; its mail is read in its own app. */
+export function OtherAccountView({ id }: { id: string }) {
+  const t = useT();
+  const q = useQuery(mailAccountsQuery);
+  if (q.isLoading) return <Skeleton className="h-32 rounded-[var(--radius-md)]" />;
+  const a = q.data?.accounts.find((x) => x.id === id);
+  if (!q.data || (id !== "google" && !a)) return null;
+  return (
+    <div className="grid gap-3">
+      {id === "google" ? <GoogleRow google={q.data.google} /> : <ul className="grid gap-3">{a ? <AccountCard a={a} /> : null}</ul>}
+      <p className="text-[12.5px] text-muted">{t("The office copies this account's attachments into your Files. Read and answer its mail in its own app.")}</p>
     </div>
   );
 }
@@ -208,7 +243,7 @@ function AccountCard({ a }: { a: MailAccount }) {
         <IconTile icon={EnvelopeSimpleIcon} size="sm" tone={a.status === "error" ? "warn" : "info"} />
         <div className="grid min-w-0 flex-1 gap-0.5">
           <span className="text-[14px] font-medium break-all">{a.email}</span>
-          <span className="text-[12px] text-muted">{t(PROVIDER_LABEL[a.provider])} · {a.host}:{a.port}</span>
+          <span className="text-[12px] text-muted">{t(PROVIDER_LABEL[a.provider] ?? PROVIDER_LABEL.other)} · {a.host}:{a.port}</span>
         </div>
         <Pill tone={st.tone}>{t(st.label)}</Pill>
       </div>
@@ -329,7 +364,7 @@ function AccountDialog({ account, presets, onClose }: { account?: MailAccount; p
             <Select value={provider} onValueChange={(v) => pick(v as Provider)} label={t("Provider")} options={PROVIDERS.map((p) => ({ value: p, label: t(PROVIDER_LABEL[p]) }))} />
           </div>
         ) : null}
-        <p className="rounded-sm bg-surface-2 px-3 py-2 text-[12.5px] text-muted">{t(PROVIDER_NOTE[provider])}</p>
+        <p className="rounded-sm bg-surface-2 px-3 py-2 text-[12.5px] text-muted">{t(PROVIDER_NOTE[provider] ?? PROVIDER_NOTE.other)}</p>
         {!account ? <Field label={t("Email address")} type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} error={email && !emailOk ? t("Check the email address.") : undefined} /> : null}
         <Field label={account ? t("New password (leave empty to keep it)") : provider === "gmail" || provider === "yahoo" ? t("App password") : t("Password")} type="password" autoComplete="new-password"
           value={password} onChange={(e) => setPassword(e.target.value)} />

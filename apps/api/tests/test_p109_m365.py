@@ -15,7 +15,7 @@ from sqlalchemy import select
 from agentic.core.db import SessionLocal
 from agentic.microsoft import app as ms_app
 from agentic.microsoft import http, hub
-from agentic.models import AuditLog, MicrosoftAccount
+from agentic.models import AuditLog, Membership, MicrosoftAccount, User
 
 from .conftest import csrf
 from .test_agents import llm, office, temporal  # noqa: F401
@@ -162,33 +162,51 @@ def fake_graph(ms_fake, seen: list) -> None:
                     ]
                 },
             )
-        if (
-            p == "/beta/solutions/approval/approvalItems"
-            or r.url.path == "/beta/solutions/approval/approvalItems"
-        ):
+        items = {
+            "ap1": {
+                "id": "ap1",
+                "state": "Pending",
+                "displayName": "Buy laptops",
+                "viewPoint": {"roles": ["Approver"]},
+                "owner": {"user": {"displayName": "Siti"}},
+                "responseOptions": ["Approve", "Reject"],
+                "createdDateTime": "2026-11-16T00:00:00Z",
+            },
+            "ap2": {
+                "id": "ap2",
+                "state": "Pending",
+                "displayName": "Mine",
+                "viewPoint": {"roles": ["Owner"]},
+                "responseOptions": ["Approve", "Reject"],
+            },
+            # P122: on the second page; SharePoint's own sign-off of a file.
+            "ap3": {
+                "id": "ap3",
+                "state": "Pending",
+                "approvalType": "basicAwaitAll",
+                "displayName": "Tender pricing.xlsx",
+                "description": "Sign-off requested: https://maju.sharepoint.com/sites/x/a.xlsx",
+                "viewPoint": {"roles": ["Approver"]},
+                "createdDateTime": "2026-11-17T00:00:00Z",
+            },
+        }
+        if r.url.path == "/beta/solutions/approval/approvalItems" and r.method == "POST":
+            return httpx.Response(202)
+        if r.url.path == "/beta/solutions/approval/approvalItems":
+            if "skiptoken" in str(r.url):
+                return httpx.Response(200, json={"value": [items["ap3"]]})
+            assert r.url.params.get("$orderby") == "createdDateTime desc"
             return httpx.Response(
                 200,
                 json={
-                    "value": [
-                        {
-                            "id": "ap1",
-                            "state": "Pending",
-                            "displayName": "Buy laptops",
-                            "viewPoint": {"roles": ["Approver"]},
-                            "owner": {"user": {"displayName": "Siti"}},
-                            "responseOptions": ["Approve", "Reject"],
-                            "createdDateTime": "2026-11-16T00:00:00Z",
-                        },
-                        {
-                            "id": "ap2",
-                            "state": "Pending",
-                            "displayName": "Mine",
-                            "viewPoint": {"roles": ["Owner"]},
-                            "responseOptions": ["Approve", "Reject"],
-                        },
-                    ]
+                    "value": [items["ap1"], items["ap2"]],
+                    "@odata.nextLink": "https://graph.microsoft.com/beta/solutions/approval/"
+                    "approvalItems?$skiptoken=page2",
                 },
             )
+        if r.method == "GET" and r.url.path.startswith("/beta/solutions/approval/approvalItems/"):
+            got = items.get(r.url.path.rsplit("/", 1)[-1])
+            return httpx.Response(200, json=got) if got else httpx.Response(404, json={})
         if r.url.path == "/beta/solutions/approval/approvalItems/ap1/responses":
             return httpx.Response(201, json={})
         return ms_fake.handler(r)
@@ -453,10 +471,14 @@ async def test_calendar_approvals_and_meeting_prep(client, llm, temporal, ms):
     )
     await _grant(ms_app.APPROVALS_SCOPE)
     items = (await client.get("/api/m365/approvals")).json()
-    assert [(a["id"], a["i_approve"], a["state"]) for a in items] == [
-        ("ap1", True, "pending"),
-        ("ap2", False, "pending"),
+    # P122: every page, newest first, each marked Teams or SharePoint.
+    assert [(a["id"], a["i_approve"], a["state"], a["source"]) for a in items] == [
+        ("ap3", True, "pending", "sharepoint"),
+        ("ap1", True, "pending", "teams"),
+        ("ap2", False, "pending", "teams"),
     ]
+    assert items[0]["link"] == "https://maju.sharepoint.com/sites/x/a.xlsx"
+    assert items[0]["all_must_approve"] is True and items[1]["all_must_approve"] is False
     r = await client.post(
         "/api/m365/approvals/ap2/respond", json={"response": "Approve"}, headers=csrf(client)
     )
@@ -472,6 +494,55 @@ async def test_calendar_approvals_and_meeting_prep(client, llm, temporal, ms):
     )
     assert r.status_code == 200
     assert any(b == {"response": "Reject", "comments": "Too many"} for _, _, b in seen)
+    r = await client.post(
+        "/api/m365/approvals/nope/respond", json={"response": "Approve"}, headers=csrf(client)
+    )
+    assert r.status_code == 404
+
+    # P122: a new approval in Teams, to colleagues of the same Microsoft organisation.
+    acct = await my_account()
+    async with SessionLocal() as db:
+        ws_id = acct.workspace_id
+        for uid, name, tenant in (
+            ("us-aina", "Aina", acct.tenant_id),
+            ("us-bob", "Bob Elsewhere", "other-tenant"),
+        ):
+            db.add(User(id=uid, email=f"{uid}@maju.example.com", name=name, password_hash="x"))
+            await db.flush()
+            db.add(
+                Membership(
+                    workspace_id=ws_id,
+                    user_id=uid,
+                    role="staff",
+                    ms_oid=f"oid-{uid}",
+                    ms_tenant_id=tenant,
+                )
+            )
+        await db.commit()
+    people = (await client.get("/api/m365/approvals/people")).json()
+    assert people == [{"user_id": "us-aina", "name": "Aina"}]  # not another organisation's
+    r = await client.post(
+        "/api/m365/approvals",
+        json={"title": "Buy chairs", "approvers": ["us-bob"]},
+        headers=csrf(client),
+    )
+    assert r.status_code == 400 and r.json()["code"] == "approver_unknown"
+    r = await client.post(
+        "/api/m365/approvals",
+        json={
+            "title": "Buy chairs",
+            "description": "RM 2,000",
+            "approvers": ["us-aina"],
+            "all_must_approve": True,
+        },
+        headers=csrf(client),
+    )
+    assert r.status_code == 202, r.text
+    made = next(
+        b for m, p, b in seen if m == "POST" and p == "/beta/solutions/approval/approvalItems"
+    )
+    assert made["approvalType"] == "basicAwaitAll" and made["displayName"] == "Buy chairs"
+    assert made["approvers"] == [{"user": {"id": "oid-us-aina"}}]
 
 
 async def test_only_my_own_connection_and_scopes_behind_settings(client, llm, temporal, ms):

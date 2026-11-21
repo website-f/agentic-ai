@@ -208,11 +208,32 @@ export interface MsAccount {
   shared_with: number;
   /** The account's address is the person's sign-in email. */
   is_sign_in: boolean;
+  /** P122: on a company domain or in the company's Microsoft tenant (the main one always). */
+  kind?: "work" | "personal";
 }
 
 export const msAccountsQuery = queryOptions({
   queryKey: ["microsoft", "accounts"] as const,
   queryFn: () => api<MsAccount[]>(`${MS_PATH}/accounts`),
+  staleTime: 60_000,
+});
+
+/** P122: the Work and Personal tabs of the Microsoft 365 page in one answer: the person's own
+ * Microsoft accounts (each work or personal), the company's shared mailboxes they may use
+ * (scoped by the server; staff get theirs too, not a 403), and the company's domains. */
+export interface MyMailboxes {
+  configured: boolean;
+  company_domains: string[];
+  /** Outlook.com / Hotmail can sign in with the office's app (tenant "common"). */
+  personal_ms_ok: boolean;
+  can_manage: boolean;
+  accounts: MsAccount[];
+  shared: SharedMailbox[];
+}
+
+export const myMailboxesQuery = queryOptions({
+  queryKey: ["microsoft", "my-mailboxes"] as const,
+  queryFn: () => api<MyMailboxes>(`${MS_PATH}/my-mailboxes`),
   staleTime: 60_000,
 });
 
@@ -287,6 +308,7 @@ export const mailboxesQuery = queryOptions({
   queryKey: microsoftKeys.mailboxes,
   queryFn: listMailboxes,
   retry: retryUnlessMissing,
+  staleTime: 60_000,
 });
 
 export const mailActivityQuery = (mailbox: MailboxKey) =>
@@ -294,6 +316,7 @@ export const mailActivityQuery = (mailbox: MailboxKey) =>
     queryKey: mailKeys.activity(mailbox),
     queryFn: () => listMailActivity(mailbox),
     retry: retryUnlessMissing,
+    staleTime: 20_000,
     // Live: `mail.new` refreshes it at once; this catches anything the stream missed.
     refetchInterval: 60_000,
   });

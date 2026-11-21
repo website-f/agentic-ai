@@ -15,7 +15,8 @@ import { recentChatsQuery } from "./chat-recent";
 import { myAllowanceQuery } from "./allowance";
 import { deskQuery, layoutOf, meetingsQuery, pinsQuery } from "./desk";
 import { formsQuery } from "./forms";
-import { mailActivityQuery, mailboxesQuery, microsoftAccountQuery, microsoftConfigQuery } from "./microsoft";
+import { m365SummaryQuery, mailAccountsQuery, mailListQuery } from "./m365";
+import { microsoftAccountQuery, microsoftConfigQuery, myMailboxesQuery } from "./microsoft";
 import { assignedTasksQuery, teamPeopleQuery } from "./people";
 import { reviewCountQuery } from "./provenance";
 import { branchesQuery, systemStatusQuery } from "./queries";
@@ -75,15 +76,17 @@ export function warmChat(qc: QueryClient, preload: boolean): void {
   warm(qc, preload, agentsQuery, recentChatsQuery);
 }
 
-/** Microsoft 365: the connection first; once it is known to be set up, the mailboxes and the
- * account, and with the account connected, the person's own mail (the page asks for each only
- * then, one after the other). `box`: a shared mailbox in the address (its mail waits for the page). */
+/** Microsoft 365 (P122): the connection, the person's account, their Work and Personal
+ * mailboxes, their other email accounts and the tab counts, all at once (each answers even
+ * when nothing is set up; they used to wait for each other), then with the main account
+ * connected, its inbox. `box`: a shared mailbox in the address (its mail waits for the page). */
 export function warmMail(qc: QueryClient, preload: boolean, box: string | undefined): void {
-  void (async () => {
-    const config = await qc.ensureQueryData(microsoftConfigQuery);
-    if (!config?.configured) return;
-    warm(qc, preload, mailboxesQuery);
-    const account = await qc.ensureQueryData(microsoftAccountQuery);
-    if (!box && account?.connected) warm(qc, preload, mailActivityQuery("personal"));
-  })().catch(() => {});
+  warm(qc, preload, microsoftConfigQuery, microsoftAccountQuery, myMailboxesQuery, mailAccountsQuery, m365SummaryQuery());
+  if (box) return;
+  void qc
+    .ensureQueryData(microsoftAccountQuery)
+    .then((a) => {
+      if (a?.connected && a.status !== "reconnect_needed") warm(qc, preload, mailListQuery("inbox", "", false));
+    })
+    .catch(() => {});
 }

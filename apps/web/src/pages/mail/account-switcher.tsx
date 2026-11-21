@@ -6,71 +6,39 @@
  * page; everywhere else uses the main account. */
 import { CaretDownIcon, CheckIcon, PlusIcon, TrashIcon, UserIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useState } from "react";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { useT } from "@/i18n";
-import { errorMessage, setM365Account } from "@/lib/api";
-import { m365Keys } from "@/lib/m365";
-import { msAccountsQuery, nameMsAccount, removeMsAccount, startAnotherConnect, type MsAccount } from "@/lib/microsoft";
+import { errorMessage } from "@/lib/api";
+import { myMailboxesQuery, nameMsAccount, removeMsAccount, startAnotherConnect, type MsAccount } from "@/lib/microsoft";
 import { meQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
-const key = (userId: string) => `agentic.m365.account:${userId}`;
-
-function readPick(userId: string): string | null {
-  try {
-    return localStorage.getItem(key(userId));
-  } catch {
-    return null;
-  }
-}
-
-function savePick(userId: string, id: string | null) {
-  try {
-    if (id) localStorage.setItem(key(userId), id);
-    else localStorage.removeItem(key(userId));
-  } catch {
-    /* private mode: kept until the page reloads */
-  }
-}
+import { refreshMsAccounts, useMailboxPick } from "./mailbox-pick";
 
 /** "Work", "Personal", "Shared" or the person's own word. */
 export function useKindOf() {
   const t = useT();
-  return (a: MsAccount) => a.label || (a.primary ? t("Work") : a.shared_with > 0 ? t("Shared") : t("Personal"));
+  return (a: MsAccount) => a.label || (a.primary || a.kind === "work" ? t("Work") : a.shared_with > 0 ? t("Shared") : t("Personal"));
 }
 
+/** P122: the pick itself lives in ./mailbox-pick.ts (shared with the Work / Personal tabs), and
+ * the accounts come with the page's one list of mailboxes (no second request). */
 export function AccountSwitcher() {
   const t = useT();
   const qc = useQueryClient();
   const kindOf = useKindOf();
   const { data: me } = useSuspenseQuery(meQuery);
-  const accounts = useQuery(msAccountsQuery);
-  const [picked, setPicked] = useState<string | null>(() => readPick(me.user.id));
+  const accounts = useQuery(myMailboxesQuery);
+  const picked = useMailboxPick((s) => s.ms);
+  const pickMs = useMailboxPick((s) => s.pickMs);
   const [removing, setRemoving] = useState<MsAccount | null>(null);
-  const list = (accounts.data ?? []).filter((a) => a.connected);
+  const list = (accounts.data?.accounts ?? []).filter((a) => a.connected);
   const current = list.find((a) => a.id === picked && !a.primary) ?? list.find((a) => a.primary) ?? null;
-  const extraId = current && !current.primary ? current.id : null;
-  // The page's calls go to the account picked; leaving the page goes back to the main one.
-  const shown = useRef<string | null>(null);
-  useEffect(() => {
-    setM365Account(extraId);
-    if (shown.current === extraId) return; // the main account at first: nothing to reload
-    shown.current = extraId;
-    void qc.resetQueries({ queryKey: m365Keys.all });
-  }, [extraId, qc]);
-  useEffect(() => () => {
-    setM365Account(null);
-    void qc.resetQueries({ queryKey: m365Keys.all });
-  }, [qc]);
-  const pick = (a: MsAccount) => {
-    const id = a.primary ? null : a.id;
-    savePick(me.user.id, id);
-    setPicked(id);
-  };
+  const pick = (a: MsAccount) => pickMs(a.primary ? null : a.id);
   const add = useMutation({
     mutationFn: startAnotherConnect,
     onSuccess: (r) => window.location.assign(r.url),
@@ -78,7 +46,7 @@ export function AccountSwitcher() {
   });
   const rename = useMutation({
     mutationFn: ({ id, label }: { id: string; label: string }) => nameMsAccount(id, label),
-    onSuccess: () => qc.invalidateQueries({ queryKey: msAccountsQuery.queryKey }),
+    onSuccess: () => refreshMsAccounts(qc),
     onError: (e) => toast.error(errorMessage(e)),
   });
   if (!current) return null;
@@ -97,20 +65,14 @@ export function AccountSwitcher() {
         </MenuTrigger>
         <MenuContent align="start" className="w-80">
           <MenuLabel>{t("Your Microsoft accounts")}</MenuLabel>
-          {list.map((a) => {
-            const on = a.id === current.id;
+          {(["work", "personal"] as const).map((kind) => {
+            const group = list.filter((a) => (a.kind ?? (a.primary ? "work" : "personal")) === kind);
+            if (!group.length) return null;
             return (
-              <MenuItem key={a.id} onSelect={() => pick(a)} className={cn(on && "bg-accent-soft/50")}>
-                <span className="grid min-w-0 flex-1">
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="font-medium">{kindOf(a)}</span>
-                    {a.primary ? <span className="rounded-sm bg-surface-2 px-1 text-[11px] text-muted">{t("Main account")}</span> : null}
-                    {a.shared_with > 0 ? <span className="rounded-sm bg-warn/12 px-1 text-[11px] text-warn">{t("Shared with {n}", { n: a.shared_with })}</span> : null}
-                  </span>
-                  <span className="truncate text-[12px] text-muted">{a.email}</span>
-                </span>
-                {on ? <CheckIcon size={15} weight="bold" className="shrink-0 text-accent" /> : null}
-              </MenuItem>
+              <Fragment key={kind}>
+                <p className="px-2.5 pt-1.5 text-[11px] font-semibold tracking-[0.06em] text-muted uppercase">{kind === "work" ? t("Work") : t("Personal")}</p>
+                {group.map((a) => <AccountItem key={a.id} a={a} on={a.id === current.id} onPick={() => pick(a)} />)}
+              </Fragment>
             );
           })}
           {!current.primary ? (
@@ -143,12 +105,29 @@ export function AccountSwitcher() {
         onConfirm={async () => {
           if (!removing) return;
           await removeMsAccount(removing.id);
-          savePick(me.user.id, null);
-          setPicked(null);
+          pickMs(null);
           setRemoving(null);
-          await qc.invalidateQueries({ queryKey: msAccountsQuery.queryKey });
+          refreshMsAccounts(qc);
         }}
       />
     </>
+  );
+}
+
+function AccountItem({ a, on, onPick }: { a: MsAccount; on: boolean; onPick: () => void }) {
+  const t = useT();
+  const kindOf = useKindOf();
+  return (
+    <MenuItem onSelect={onPick} className={cn(on && "bg-accent-soft/50")}>
+      <span className="grid min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="font-medium">{kindOf(a)}</span>
+          {a.primary ? <span className="rounded-sm bg-surface-2 px-1 text-[11px] text-muted">{t("Main account")}</span> : null}
+          {a.shared_with > 0 ? <span className="rounded-sm bg-warn/12 px-1 text-[11px] text-warn">{t("Shared with {n}", { n: a.shared_with })}</span> : null}
+        </span>
+        <span className="truncate text-[12px] text-muted">{a.email}</span>
+      </span>
+      {on ? <CheckIcon size={15} weight="bold" className="shrink-0 text-accent" /> : null}
+    </MenuItem>
   );
 }

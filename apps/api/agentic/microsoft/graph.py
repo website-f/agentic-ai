@@ -646,17 +646,47 @@ class Graph:
             json={"comment": comment, "sendResponse": True},
         )
 
-    async def approvals(self, top: int = 50) -> list[dict[str, Any]]:
+    async def approvals(self, top: int = 300) -> list[dict[str, Any]]:
         """Teams Approvals the person created or is asked for (Graph beta, needs
-        ApprovalSolution.ReadWrite: app.APPROVALS_SCOPE), newest first."""
-        body = await self.request(
-            "GET",
-            f"{GRAPH_BETA}/solutions/approval/approvalItems",
-            params={"$top": max(1, min(top, 100))},
-        )
-        items = list(body.get("value") or [])
+        ApprovalSolution.ReadWrite: app.APPROVALS_SCOPE), newest first. This is the Approvals
+        app's own list: approvals made in Teams and SharePoint's built-in approvals alike.
+        P122: every page up to `top`, newest first (the first 60 in Microsoft's own order were
+        all SharePoint files for a busy library, so the Teams ones never showed)."""
+        url = f"{GRAPH_BETA}/solutions/approval/approvalItems"
+        cap = max(1, min(top, 500))
+        try:
+            items = await self._pages(url, cap, **{"$top": 100, "$orderby": "createdDateTime desc"})
+        except GraphError as e:
+            if getattr(e, "status", 0) != 400:  # refused the sort: the same list, sorted here
+                raise
+            items = await self._pages(url, cap, **{"$top": 100})
         items.sort(key=lambda a: str(a.get("createdDateTime") or ""), reverse=True)
         return items
+
+    async def create_approval(
+        self, title: str, description: str, approver_ids: list[str], *, all_must_approve: bool
+    ) -> None:
+        """P122: a new approval in the Approvals app in Teams, from the person, to colleagues
+        (their Microsoft object IDs). Microsoft makes it in the background (202) and tells the
+        approvers in Teams and by email."""
+        await self.request(
+            "POST",
+            f"{GRAPH_BETA}/solutions/approval/approvalItems",
+            json={
+                "approvalType": "basicAwaitAll" if all_must_approve else "basic",
+                "displayName": title,
+                "description": description,
+                "allowEmailNotification": True,
+                "allowCancel": True,
+                "approvers": [{"user": {"id": oid}} for oid in approver_ids],
+            },
+        )
+
+    async def approval(self, approval_id: str) -> dict[str, Any]:
+        """One approval, read directly (answering one no longer reads the whole list)."""
+        return await self.request(
+            "GET", f"{GRAPH_BETA}/solutions/approval/approvalItems/{_q(approval_id)}"
+        )
 
     async def respond_approval(self, approval_id: str, response: str, comment: str = "") -> None:
         """Approve or reject (one of the item's responseOptions) with an optional comment.

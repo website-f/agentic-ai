@@ -691,7 +691,7 @@ async def approvals(
     if not auth.has_scope(acct.scopes, app.APPROVALS_SCOPE):
         raise _approvals_off()
     try:
-        items = await g.approvals(60)
+        items = await g.approvals()
     except MicrosoftError as e:
         if getattr(e, "status", 0) in (401, 403):
             raise _approvals_off() from e
@@ -723,9 +723,14 @@ async def approval_respond(
     if not auth.has_scope(acct.scopes, app.APPROVALS_SCOPE):
         raise _approvals_off()
     try:
-        items = {str(a.get("id")): a for a in await g.approvals(100)}
-        item = items.get(approval_id)
-        if item is None:
+        # P122: the one approval, read directly (the list is now every page, newest first).
+        try:
+            item = await g.approval(approval_id)
+        except MicrosoftError as e:
+            if getattr(e, "status", 0) != 404:
+                raise
+            item = None
+        if not item or str(item.get("id") or "") != approval_id:
             raise api_error(
                 status.HTTP_404_NOT_FOUND, "not_found", "That was not found in Microsoft 365."
             )
@@ -745,6 +750,96 @@ async def approval_respond(
         raise _fail(e) from e
     await _sent(db, principal, "m365.approval_answered", approval_id, response=body.response)
     return {"response": body.response}
+
+
+# P122 (Fitri, 21 Nov 2026: "approvals from the Teams side need to be in there"): ask colleagues
+# for an approval in the Approvals app in Teams. The approvers are office members whose Microsoft
+# account (signed in with Microsoft, same organisation) is known here, so no directory permission
+# is needed; Microsoft notifies them in Teams and by email.
+
+
+async def _approvers(
+    db: AsyncSession, principal: Principal, tenant: str
+) -> dict[str, tuple[str, str]]:
+    """{user_id: (name, Microsoft object ID)} of the active members of this office in the same
+    Microsoft organisation, not the person themself."""
+    from sqlalchemy import select
+
+    from ...models import Membership, User
+
+    rows = await db.execute(
+        select(User.id, User.name, Membership.ms_oid)
+        .join(Membership, Membership.user_id == User.id)
+        .where(
+            Membership.workspace_id == principal.workspace_id,
+            User.is_active.is_(True),
+            Membership.ms_oid.is_not(None),
+            Membership.ms_tenant_id == tenant,
+            User.id != principal.user.id,
+        )
+        .order_by(User.name)
+    )
+    return {uid: (name, oid) for uid, name, oid in rows.all() if oid}
+
+
+@router.get("/approvals/people")
+async def approval_people(
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, str]]:
+    """Who this person may ask for an approval."""
+    acct, _ = await _mine(db, principal)
+    people = await _approvers(db, principal, acct.tenant_id)
+    return [{"user_id": uid, "name": name} for uid, (name, _oid) in people.items()]
+
+
+class NewApprovalIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    approvers: list[str] = Field(min_length=1, max_length=20)
+    all_must_approve: bool = False
+
+
+@router.post("/approvals", status_code=status.HTTP_202_ACCEPTED)
+async def approval_create(
+    body: NewApprovalIn,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """A new approval in Teams, asked by this person of the colleagues they picked."""
+    acct, g = await _mine(db, principal)
+    if not auth.has_scope(acct.scopes, app.APPROVALS_SCOPE):
+        raise _approvals_off()
+    people = await _approvers(db, principal, acct.tenant_id)
+    unknown = [u for u in body.approvers if u not in people]
+    if unknown:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "approver_unknown",
+            "Pick approvers from the list: people of your organisation who signed in with "
+            "Microsoft here.",
+        )
+    ids = list(dict.fromkeys(people[u][1] for u in body.approvers))
+    try:
+        await g.create_approval(
+            body.title.strip(),
+            body.description.strip(),
+            ids,
+            all_must_approve=body.all_must_approve,
+        )
+    except MicrosoftError as e:
+        if getattr(e, "status", 0) in (401, 403):
+            raise _approvals_off() from e
+        raise _fail(e) from e
+    await _sent(
+        db,
+        principal,
+        "m365.approval_created",
+        body.title,
+        approvers=body.approvers,
+        all_must_approve=body.all_must_approve,
+    )
+    return {"approvers": [people[u][0] for u in body.approvers]}
 
 
 # ---------------------------------------------------------------- Ask AI

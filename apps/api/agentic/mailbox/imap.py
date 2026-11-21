@@ -30,6 +30,12 @@ PRESETS: dict[str, dict[str, Any]] = {
     "gmail": {"host": "imap.gmail.com", "port": 993, "security": "ssl"},
     "yahoo": {"host": "imap.mail.yahoo.com", "port": 993, "security": "ssl"},
     "outlook": {"host": "outlook.office365.com", "port": 993, "security": "ssl"},
+    # P122: more providers the page finds from the address alone (mailbox/autoconfig.py).
+    "aol": {"host": "imap.aol.com", "port": 993, "security": "ssl"},
+    "icloud": {"host": "imap.mail.me.com", "port": 993, "security": "ssl"},
+    "zoho": {"host": "imap.zoho.com", "port": 993, "security": "ssl"},
+    "gmx": {"host": "imap.gmx.com", "port": 993, "security": "ssl"},
+    "yandex": {"host": "imap.yandex.com", "port": 993, "security": "ssl"},
     "cpanel": {"host": "", "port": 993, "security": "ssl"},
     "other": {"host": "", "port": 993, "security": "ssl"},
 }

@@ -77,4 +77,9 @@ MS_M365: dict[str, str] = {
     "Changed in Microsoft 365 from the office": "Diubah dalam Microsoft 365 dari pejabat",
     "Cancelled in Microsoft 365 from the office": "Dibatalkan dalam Microsoft 365 dari pejabat",
     "Prima answered {status}.": "Prima menjawab {status}.",
+    # P122: a new approval in Teams.
+    "Pick approvers from the list: people of your organisation who signed in with Microsoft here.": (
+        "Pilih pelulus daripada senarai: orang dalam organisasi anda yang log masuk dengan "
+        "Microsoft di sini."
+    ),
 }

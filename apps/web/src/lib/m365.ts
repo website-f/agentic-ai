@@ -65,6 +65,8 @@ export const mailListQuery = (folder: MailFolder, q: string, unread: boolean) =>
     queryKey: m365Keys.mail(folder, q, unread),
     queryFn: () => api<MailPage>(`/api/m365/mail?folder=${folder}&top=30${q ? `&q=${enc(q)}` : ""}${unread ? "&unread=true" : ""}`),
     retry: false,
+    // P122: a list just fetched (the route's prefetch, a tab switched back to) is not asked again.
+    staleTime: 20_000,
     refetchInterval: 60_000,
   });
 
@@ -194,6 +196,7 @@ export const chatsQuery = queryOptions({
   queryKey: m365Keys.chats,
   queryFn: () => api<ChatRow[]>("/api/m365/teams/chats"),
   retry: false,
+  staleTime: 15_000,
   refetchInterval: 30_000,
 });
 
@@ -270,6 +273,7 @@ export const calendarQuery = (start: string, end: string) =>
     queryKey: m365Keys.calendar(start, end),
     queryFn: () => api<CalEvent[]>(`/api/m365/calendar?start=${enc(start)}&end=${enc(end)}`),
     retry: false,
+    staleTime: 60_000,
     refetchInterval: 5 * 60_000,
   });
 
@@ -322,6 +326,12 @@ export interface TeamsApproval {
   options: string[];
   i_approve: boolean;
   i_own: boolean;
+  /** P122: made in the Approvals app in Teams, or SharePoint's sign-off of a file or item. */
+  source?: "teams" | "sharepoint";
+  /** P122: the first link in its description (the SharePoint file), when there is one. */
+  link?: string;
+  /** P122: every approver must approve (Teams' "Require a response from all approvers"). */
+  all_must_approve?: boolean;
 }
 
 export const approvalsQuery = queryOptions({
@@ -371,8 +381,8 @@ export const TONES: Tone[] = ["friendly", "formal", "short", "firm", "apologetic
 
 // ------------------------------------------------------------------------------------- other email accounts
 
-export type Provider = "gmail" | "yahoo" | "outlook" | "cpanel" | "other";
-export const PROVIDERS: Provider[] = ["gmail", "yahoo", "outlook", "cpanel", "other"];
+export type Provider = "gmail" | "yahoo" | "outlook" | "aol" | "icloud" | "zoho" | "gmx" | "yandex" | "cpanel" | "other";
+export const PROVIDERS: Provider[] = ["gmail", "yahoo", "outlook", "aol", "icloud", "zoho", "gmx", "yandex", "cpanel", "other"];
 
 export interface BackupJob {
   id: string;
@@ -421,17 +431,41 @@ export const mailAccountsQuery = queryOptions({
   queryKey: m365Keys.accounts,
   queryFn: () => api<MailAccounts>("/api/mail-accounts"),
   retry: false,
+  staleTime: 30_000,
 });
 
 export interface MailAccountIn {
   email: string;
-  provider: Provider;
-  host: string;
-  port: number;
-  security: "ssl" | "starttls";
-  username: string;
+  provider?: Provider;
+  /** P122: left out, the server uses the one it finds from the address. */
+  host?: string;
+  port?: number;
+  security?: "ssl" | "starttls";
+  username?: string;
   password: string;
 }
+
+/** P122: where an address's mail lives (POST /api/mail-accounts/discover): a well-known
+ * provider, the domain's Thunderbird autoconfig, the ISPDB, its MX, or a hosting guess. */
+export interface Discovered {
+  email: string;
+  domain: string;
+  found: boolean;
+  source: "known" | "autoconfig" | "ispdb" | "mx" | "guess" | "none";
+  provider: Provider;
+  name: string | null;
+  /** Google Workspace / Gmail, Microsoft 365 / Outlook.com: their own sign-in button. */
+  oauth: "google" | "microsoft" | null;
+  imap: { host: string; port: number; security: "ssl" | "starttls" } | null;
+  smtp: { host: string; port: number; security: "ssl" | "starttls" } | null;
+  username: string;
+  /** What the provider wants: an app password, one only with two-step sign-in on, the normal one. */
+  password: "app" | "app_if_2fa" | "normal" | "none";
+  app_password_url: string | null;
+  note: "imap_off" | "proton" | null;
+}
+
+export const discoverMail = (email: string) => api<Discovered>("/api/mail-accounts/discover", "POST", { email });
 
 export const addMailAccount = (a: MailAccountIn) => api<MailAccount>("/api/mail-accounts", "POST", a);
 export const changeMailAccount = (id: string, a: Partial<MailAccountIn>) => api<MailAccount>(`/api/mail-accounts/${enc(id)}`, "PATCH", a);

@@ -30,7 +30,7 @@ from ...core.db import SessionLocal, get_db
 from ...core.security import can
 from ...core.valkey import valkey
 from ...i18n import render, tr
-from ...microsoft import access, app, auth, graph, signin, sync
+from ...microsoft import access, app, auth, domains, graph, signin, sync
 from ...microsoft import rules as mail_rules
 from ...microsoft.errors import Forbidden, MicrosoftError, NotConfigured, NotFound
 from ...models import Agent, Branch, MailItem, MicrosoftAccount, SharedMailbox
@@ -716,8 +716,12 @@ class AccountLabelIn(BaseModel):
     label: str = Field(default="", max_length=40)
 
 
-async def _account_row(db: AsyncSession, principal: Principal, a: Any) -> dict[str, Any]:
-    """One of my accounts, and how many other people here connected the same one (shared)."""
+async def _account_row(
+    db: AsyncSession, principal: Principal, a: Any, kind: str | None = None
+) -> dict[str, Any]:
+    """One of my accounts, and how many other people here connected the same one (shared).
+    P122: `kind` is "work" (the main account, or one on a company domain or in the company's
+    Microsoft tenant) or "personal" (microsoft/domains.py)."""
     others = 0
     if a.ms_user_id:
         others = int(
@@ -742,7 +746,17 @@ async def _account_row(db: AsyncSession, principal: Principal, a: Any) -> dict[s
         "last_sync_at": a.last_sync_at,
         "shared_with": others,
         "is_sign_in": a.email.lower() == principal.user.email.lower(),
+        "kind": kind or ("work" if a.is_primary else "personal"),
     }
+
+
+async def _kinds(db: AsyncSession, principal: Principal, rows: list[Any]) -> tuple[Any, list[str]]:
+    """P122: (kind of one account, the company's domains) for this person's accounts."""
+    cfg = await app.load(db, principal.workspace_id)
+    company = await domains.company_domains(db, principal.workspace_id, principal.user.email)
+    main = next((a for a in rows if a.is_primary), None)
+    tenants = domains.work_tenants(main, cfg.app_tenant() if cfg.configured else None)
+    return (lambda a: domains.kind_of(a, company, tenants)), company
 
 
 @router.get(f"{BASE}/accounts")
@@ -751,7 +765,44 @@ async def my_accounts(
 ) -> list[dict[str, Any]]:
     """Every Microsoft account I connected, the main one first; never anyone else's."""
     rows = await access.accounts_of(db, principal.workspace_id, principal.user.id)
-    return [await _account_row(db, principal, a) for a in rows]
+    kind, _company = await _kinds(db, principal, rows)
+    return [await _account_row(db, principal, a, kind(a)) for a in rows]
+
+
+@router.get(f"{BASE}/my-mailboxes")
+async def my_mailboxes(
+    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """P122: the Microsoft 365 page's Work and Personal tabs in one answer: my own Microsoft
+    accounts (each "work" or "personal"), the company's shared mailboxes I may use (the P34
+    rules: owner, admins, management and HR; the company's branch managers; the owner of the
+    agent assigned to it), the company's domains, and whether personal Microsoft accounts
+    (outlook.com, hotmail) can sign in with the office's app at all."""
+    cfg = await app.load(db, principal.workspace_id)
+    rows = await access.accounts_of(db, principal.workspace_id, principal.user.id)
+    kind, company = await _kinds(db, principal, rows)
+    shared = (
+        await db.scalars(
+            select(SharedMailbox)
+            .where(
+                access.shared_where(
+                    principal.workspace_id, principal.user.id, principal.role, principal.branch_ids
+                )
+            )
+            .order_by(SharedMailbox.created_at)
+        )
+        if cfg.configured
+        else []
+    )
+    return {
+        "configured": cfg.configured,
+        "company_domains": company,
+        # Outlook.com / Hotmail sign in only when the app accepts personal accounts ("common").
+        "personal_ms_ok": cfg.configured and cfg.tenant == "common",
+        "can_manage": can(principal.role, "channels.manage"),
+        "accounts": [await _account_row(db, principal, a, kind(a)) for a in rows],
+        "shared": [await _mailbox_out(db, mb) for mb in shared],
+    }
 
 
 async def _my_account(db: AsyncSession, principal: Principal, account_id: str) -> Any:
@@ -774,7 +825,10 @@ async def name_account(
     acct = await _my_account(db, principal, account_id)
     acct.label = body.label.strip()
     await db.commit()
-    return await _account_row(db, principal, acct)
+    kind, _company = await _kinds(
+        db, principal, await access.accounts_of(db, principal.workspace_id, principal.user.id)
+    )
+    return await _account_row(db, principal, acct, kind(acct))
 
 
 @router.delete(f"{BASE}/accounts/{{account_id}}", status_code=status.HTTP_204_NO_CONTENT)

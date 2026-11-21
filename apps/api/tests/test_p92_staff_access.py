@@ -290,6 +290,8 @@ STAFF_OK = {
     "/api/library/linked", "/api/mail/activity", "/api/me/allowance", "/api/me/needs",
     "/api/me/notifications",  # P114: their own notification settings
     "/api/integrations/microsoft/accounts",  # P118: their own Microsoft accounts only
+    # P122: their own accounts, and only the shared mailboxes the P34 rules give them
+    "/api/integrations/microsoft/my-mailboxes",
     "/api/requests",  # P120: their own requests (and their people's, to decide)
     "/api/mail-accounts",  # P109: their own other email accounts only (test_p109_mail_accounts)
     "/api/m365/summary",  # P109b: their own Microsoft 365 tile ("not connected" until they are)

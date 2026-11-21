@@ -7,7 +7,12 @@
  * approvals|accounts (none: mail).
  * P109b: full screen at /m365 (./frame.tsx) with a Back to where the person came from (?from=),
  * its own tabs (bottom tabs on a phone) and "New Teams meeting" (./meeting.tsx; ?new=meeting
- * opens it, as the desk's tile does). */
+ * opens it, as the desk's tile does).
+ * P122: Work and Personal above the mail (./places.tsx), each mailbox one click away: the main
+ * account, extra Microsoft accounts, the company's shared mailboxes the person may use, Gmail
+ * and other email; "Connect another account" with only an address (./connect.tsx). Faster: the
+ * connection, account, mailboxes and summary are asked for together (no waterfall), the AI's
+ * activity only when it shows, and Teams, the drafts and the dialogs load when needed. */
 import {
   AlarmIcon,
   ArrowsClockwiseIcon,
@@ -25,9 +30,9 @@ import {
   VideoCameraIcon,
   type Icon,
 } from "@phosphor-icons/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { safeFrom } from "@/components/chat/links";
@@ -36,23 +41,21 @@ import { Button } from "@/components/ui/button";
 import { ListCard, Meta } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
-import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locale, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
-import { calendarDraftsQuery, draftsQuery } from "@/lib/assistants";
-import { m365Keys, m365SummaryQuery, summaryKey } from "@/lib/m365";
+import { m365Keys, m365SummaryQuery, mailAccountsQuery, summaryKey, type MailAccount } from "@/lib/m365";
+import type { MailKind } from "@/lib/mail-kind";
 import {
   actionLink,
   CATEGORY_CHIP,
   CATEGORY_TONE,
   isMissingApi,
   mailActivityQuery,
-  mailboxesQuery,
   mailKeys,
   microsoftAccountQuery,
   microsoftConfigQuery,
-  providerOf,
+  myMailboxesQuery,
   startMicrosoftConnect,
   STATUS_LABEL,
   STATUS_TONE,
@@ -67,19 +70,23 @@ import {
 import { canAssist } from "@/lib/my-ai";
 import { meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
-import { CalendarDraftCard, DraftCard } from "@/pages/assistants";
 
 import { AccountSwitcher } from "./account-switcher";
 import { M365Frame, type FrameTab } from "./frame";
 import { OutlookInbox } from "./inbox";
+import { useM365Routing, useMailboxPick } from "./mailbox-pick";
 import { MeetingComposerHost, useMeetingComposer } from "./meeting";
 import { MicrosoftAbilities, MissingServer, OutlookConnection, useMsReturn } from "./outlook";
-import { TeamsPanel } from "./teams";
+import { buildPlaces, MailPlaces, type Place } from "./places";
 
-// P109: the heavier tabs load when opened.
+// P109: the heavier tabs load when opened. P122: Teams and the drafts too (the drafts' cards
+// come from the My assistants page), and another email account's card.
 const OutlookCalendar = lazy(() => import("./calendar").then((m) => ({ default: m.OutlookCalendar })));
 const TeamsApprovals = lazy(() => import("./approvals").then((m) => ({ default: m.TeamsApprovals })));
 const OtherEmailAccounts = lazy(() => import("./accounts").then((m) => ({ default: m.OtherEmailAccounts })));
+const OtherAccountView = lazy(() => import("./accounts").then((m) => ({ default: m.OtherAccountView })));
+const TeamsPanel = lazy(() => import("./teams").then((m) => ({ default: m.TeamsPanel })));
+const WaitingDrafts = lazy(() => import("./waiting-drafts").then((m) => ({ default: m.WaitingDrafts })));
 
 type M365App = "mail" | "teams" | "calendar" | "approvals" | "accounts";
 const APPS: M365App[] = ["mail", "teams", "calendar", "approvals", "accounts"];
@@ -113,28 +120,70 @@ export function MailPage() {
   const qc = useQueryClient();
   const search = useSearch({ from: "/m365" });
   const navigate = useNavigate({ from: "/m365" });
-  const { data: me } = useQuery(meQuery);
-  const perms = me?.permissions ?? [];
-  const assist = canAssist(perms);
-  const canManage = perms.includes("channels.manage");
+  const { data: me } = useSuspenseQuery(meQuery);
+  const assist = canAssist(me.permissions);
   const back = useBack(search.from);
   const clearMs = useCallback(() => void navigate({ search: (s) => ({ ...s, ms: undefined, msg: undefined }), replace: true }), [navigate]);
   useMsReturn(search, clearMs);
 
+  // P122: asked for together, not one after the other (each answers even when not set up).
   const config = useQuery(microsoftConfigQuery);
   const configured = !!config.data?.configured;
-  const account = useQuery({ ...microsoftAccountQuery, enabled: configured });
+  const account = useQuery(microsoftAccountQuery);
   const connected = !!account.data?.connected && account.data.status !== "reconnect_needed";
-  const summary = useQuery(m365SummaryQuery(connected));
-  // Shared mailboxes this person may see (the server scopes the list); none when not allowed.
-  const boxes = useQuery({ ...mailboxesQuery, enabled: configured });
-  const shared = useMemo(() => (boxes.error ? [] : boxes.data ?? []), [boxes.data, boxes.error]);
+  const summary = useQuery(m365SummaryQuery());
+  const mm = useQuery(myMailboxesQuery);
+  const others = useQuery(mailAccountsQuery);
+
+  // Which mailbox is shown (./mailbox-pick.ts): a shared one (?box=), another email account, or
+  // one of the person's own Microsoft accounts (the main one unless an extra one is picked).
+  const extraIds = useMemo(() => mm.data?.accounts.filter((a) => !a.primary && a.connected).map((a) => a.id), [mm.data]);
+  const extraId = useM365Routing(me.user.id, extraIds);
+  const other = useMailboxPick((s) => s.other);
+  const chosenTab = useMailboxPick((s) => s.tab);
+  const pickMs = useMailboxPick((s) => s.pickMs);
+  const pickOther = useMailboxPick((s) => s.pickOther);
+  const setTab = useMailboxPick((s) => s.setTab);
+  const shared = useMemo(() => mm.data?.shared ?? [], [mm.data]);
   const box = search.box && shared.some((b) => b.id === search.box) ? search.box : "personal";
   const current = shared.find((b) => b.id === box) ?? null;
-  const setBox = (v: string) => void navigate({ search: (s) => ({ ...s, box: v === "personal" ? undefined : v }), replace: true });
+  const setBox = (v: string | undefined) => void navigate({ search: (s) => ({ ...s, box: v }), replace: true });
+  const otherOk = !!other && (other === "google" ? !!others.data?.google.account : !!others.data?.accounts.some((a) => a.id === other));
+  const places = useMemo(() => buildPlaces(t, mm.data, account.data, others.data), [t, mm.data, account.data, others.data]);
+  const selected = box !== "personal" ? `box:${box}` : otherOk ? (other === "google" ? "google" : `x:${other}`) : extraId ? `ms:${extraId}` : "main";
+  const place = places.find((p) => p.key === selected) ?? places[0];
+  const tab: MailKind = chosenTab ?? place?.kind ?? "work";
+  const pick = (p: Place) => {
+    if (p.type === "shared") {
+      pickMs(null);
+      setBox(p.id ?? undefined);
+      return;
+    }
+    if (search.box) setBox(undefined);
+    if (p.type === "other") {
+      pickMs(null);
+      pickOther(p.id);
+    } else pickMs(p.type === "ms" ? p.id : null);
+  };
+  const onTab = (k: MailKind) => {
+    const first = places.find((p) => p.kind === k);
+    if (first && place?.kind !== k) pick(first);
+    else setTab(k);
+  };
+  const onAdded = (a: MailAccount) => {
+    if (search.box) setBox(undefined);
+    pickMs(null);
+    pickOther(a.id);
+  };
 
-  const ready = configured && (box !== "personal" || !!account.data?.connected);
-  const activity = useQuery({ ...mailActivityQuery(box), enabled: ready });
+  const mainShown = selected === "main";
+  // P109: Outlook itself (live from Microsoft), or what the AI did with each mail.
+  const [mailView, setMailView] = useState<"inbox" | "activity">("inbox");
+  const app: M365App = APPS.includes(search.app as M365App) ? (search.app as M365App) : "mail";
+  const inTab = !!place && place.kind === tab;
+  // P122: the AI's activity only when it shows (it used to be asked for under the live inbox too).
+  const activityShown = app === "mail" && inTab && configured && (box !== "personal" || (mainShown && connected && mailView === "activity"));
+  const activity = useQuery({ ...mailActivityQuery(box), enabled: activityShown });
   const [filter, setFilter] = useState<Filter>("all");
   const items = useMemo(() => activity.data ?? [], [activity.data]);
   const counts = useMemo(() => {
@@ -144,12 +193,7 @@ export function MailPage() {
   }, [items]);
   const shown = filter === "all" ? items : items.filter((m) => m.status === filter);
 
-  const options = [{ value: "personal", label: t("My Outlook") }, ...shared.map((b) => ({ value: b.id, label: b.display_name || b.address }))];
-  const app: M365App = APPS.includes(search.app as M365App) ? (search.app as M365App) : "mail";
   const setApp = (v: M365App) => void navigate({ search: (s) => ({ ...s, app: v === "mail" ? undefined : v }), replace: true });
-  // P109: Outlook itself (live from Microsoft), or what the AI did with each mail.
-  const [mailView, setMailView] = useState<"inbox" | "activity">("inbox");
-  const personalOk = box === "personal" && connected;
   const sum = summary.data;
   const tabs: FrameTab<M365App>[] = [
     { value: "mail", label: t("Outlook"), icon: EnvelopeSimpleIcon, count: sum?.unread_mail },
@@ -171,6 +215,8 @@ export function MailPage() {
     void qc.invalidateQueries({ queryKey: m365Keys.all });
     void qc.invalidateQueries({ queryKey: mailKeys.all });
     void qc.invalidateQueries({ queryKey: summaryKey });
+    void qc.invalidateQueries({ queryKey: myMailboxesQuery.queryKey });
+    void qc.invalidateQueries({ queryKey: m365Keys.accounts });
   };
 
   const actions = connected ? (
@@ -197,32 +243,27 @@ export function MailPage() {
           )
         ) : (
           <>
+            {/* P122: Work and Personal, each mailbox one click away, above the mail. */}
+            {app === "mail" ? (
+              <MailPlaces places={places} selected={selected} tab={tab} onTab={onTab} onPick={pick} mm={mm.data} google={others.data?.google} onAdded={onAdded} />
+            ) : null}
             {/* P102: what is connected and what the AI may do, then what waits for a yes. */}
-            {app === "mail" && connected && account.data ? <MicrosoftAbilities account={account.data} /> : null}
-            {app === "mail" || app === "teams" ? <WaitingDrafts assist={assist} /> : null}
-            {app === "teams" ? <NeedsOutlook><TeamsPanel /></NeedsOutlook>
+            {app === "mail" && inTab && mainShown && connected && account.data ? <MicrosoftAbilities account={account.data} /> : null}
+            {app === "mail" || app === "teams" ? <Suspense fallback={null}><WaitingDrafts assist={assist} /></Suspense> : null}
+            {app === "teams" ? <NeedsOutlook><Suspense fallback={tabFallback}><TeamsPanel /></Suspense></NeedsOutlook>
               : app === "calendar" ? <NeedsOutlook><Suspense fallback={tabFallback}><OutlookCalendar /></Suspense></NeedsOutlook>
               : app === "approvals" ? <NeedsOutlook><Suspense fallback={tabFallback}><TeamsApprovals /></Suspense></NeedsOutlook>
               : app === "accounts" ? <Suspense fallback={tabFallback}><OtherEmailAccounts /></Suspense>
+              : !inTab ? null
+              : place?.type === "other" && place.id ? <Suspense fallback={tabFallback}><OtherAccountView id={place.id} /></Suspense>
               : <>
-            {options.length > 1 ? (
-              options.length <= 4 ? (
-                <Segmented label={t("Mailbox")} value={box} onChange={setBox} className="w-full sm:w-fit" options={options} />
-              ) : (
-                <div className="grid gap-1.5 sm:max-w-sm">
-                  <span className="text-[13px] font-medium">{t("Mailbox")}</span>
-                  <Select value={box} onValueChange={setBox} label={t("Mailbox")} options={options} />
-                </div>
-              )
-            ) : null}
+            {box === "personal" ? (mainShown ? <PersonalMailbox /> : null) : current ? <SharedStatus box={current} /> : null}
 
-            {box === "personal" ? <PersonalMailbox /> : current ? <SharedStatus box={current} /> : null}
-
-            {personalOk ? (
+            {mainShown && connected ? (
               <Segmented<"inbox" | "activity"> size="sm" label={t("View")} value={mailView} onChange={setMailView} className="w-full sm:w-fit [&>button]:flex-1"
                 options={[{ value: "inbox", label: t("My mail") }, { value: "activity", label: t("What my AI did") }]} />
             ) : null}
-            {personalOk && mailView === "inbox" ? <OutlookInbox /> : !ready ? null : (
+            {box === "personal" && (extraId || (connected && mailView === "inbox")) ? <OutlookInbox /> : !activityShown ? null : (
               <Section title={t("Recent mail")} description={t("Newest first. Chips show what the AI did; open one to see the task, the file or the draft.")}
                 actions={items.length ? (
                   <Segmented<Filter> size="sm" label={t("Which mail")} value={filter} onChange={setFilter} className="w-full sm:w-fit"
@@ -244,14 +285,7 @@ export function MailPage() {
                 )}
               </Section>
             )}
-
             </>}
-            {!shared.length && canManage && app === "mail" ? (
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-muted">
-                <UsersFourIcon size={15} className="shrink-0" /> {t("Shared mailboxes (accounts@, tender@) are added on Channels > Microsoft 365.")}
-                <Link to="/channels" className="font-medium text-accent hover:underline">{t("Open Channels")}</Link>
-              </p>
-            ) : null}
           </>
         )}
       <MeetingComposerHost />
@@ -271,9 +305,8 @@ function ErrorLine({ error, onRetry }: { error: unknown; onRetry: () => void }) 
 }
 
 /** P109: a tab that reads the person's own Outlook: connect it first. */
-function NeedsOutlook({ children }: { children: React.ReactNode }) {
-  const config = useQuery(microsoftConfigQuery);
-  const account = useQuery({ ...microsoftAccountQuery, enabled: !!config.data?.configured });
+function NeedsOutlook({ children }: { children: ReactNode }) {
+  const account = useQuery(microsoftAccountQuery);
   if (account.isLoading) return tabFallback;
   if (!account.data?.connected || account.data.status === "reconnect_needed") return <PersonalMailbox />;
   return <>{children}</>;
@@ -282,8 +315,7 @@ function NeedsOutlook({ children }: { children: React.ReactNode }) {
 /** My Outlook: connect it (empty state), or its status line when connected. */
 function PersonalMailbox() {
   const t = useT();
-  const config = useQuery(microsoftConfigQuery);
-  const account = useQuery({ ...microsoftAccountQuery, enabled: !!config.data?.configured });
+  const account = useQuery(microsoftAccountQuery);
   const connect = useMutation({
     mutationFn: startMicrosoftConnect,
     onSuccess: (r) => { window.location.href = r.url; },
@@ -323,34 +355,6 @@ function SharedStatus({ box }: { box: SharedMailbox }) {
       {bad ? <Pill tone="warn">{t("Needs attention")}</Pill> : paused ? <Pill>{t("Paused")}</Pill> : null}
       {bad && box.last_error ? <p className="w-full text-[12.5px] break-words text-danger">{box.last_error}</p> : null}
     </div>
-  );
-}
-
-/** Emails and Teams messages the AI drafted, and calendar changes it proposed, waiting for the
- * person (the same cards as My assistants). P102: Teams messages too, on both tabs. */
-function WaitingDrafts({ assist }: { assist: boolean }) {
-  const t = useT();
-  const drafts = useQuery({ ...draftsQuery("pending"), retry: false });
-  const events = useQuery({ ...calendarDraftsQuery("pending"), retry: false });
-  const mail = (drafts.data ?? []).filter((d) => providerOf(d) !== "google");
-  const cal = (events.data ?? []).filter((d) => providerOf(d) === "microsoft");
-  if (!mail.length && !cal.length) return null;
-  // Grouped by mailbox: a person's own Outlook, and each shared mailbox they approve for.
-  const labels = [...new Set([...mail, ...cal].map((d) => d.mailbox_label ?? ""))];
-  return (
-    <Section guide="mail.drafts" title={<span id="mail-drafts" className="scroll-mt-20">{t("Waiting for your approval")}</span>}
-      description={t("Emails, Teams messages and calendar changes your AI prepared. Read each one, change it if you like, then press Send or Confirm. Nothing is sent or booked until you do.")}
-      actions={assist ? <Link to="/assistants" search={{ tab: "drafts" }} className="text-[13px] text-accent hover:underline">{t("All drafts")} →</Link> : null}>
-      <div className="grid gap-4">
-        {labels.map((label) => (
-          <div key={label || "-"} className="grid gap-3">
-            {labels.length > 1 && label ? <p className="text-[12px] font-semibold tracking-[0.06em] text-muted uppercase">{label}</p> : null}
-            {mail.filter((d) => (d.mailbox_label ?? "") === label).map((d) => <DraftCard key={d.id} d={d} />)}
-            {cal.filter((d) => (d.mailbox_label ?? "") === label).map((d) => <CalendarDraftCard key={d.id} d={d} />)}
-          </div>
-        ))}
-      </div>
-    </Section>
   );
 }
 

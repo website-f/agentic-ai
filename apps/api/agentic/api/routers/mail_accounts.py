@@ -6,7 +6,9 @@ The password is write-only: stored encrypted (core/crypto, bound to the row), ne
 and deleted with the account on disconnect.
 
 GET    /api/mail-accounts                      my accounts, Gmail (Google sign-in), backups
-POST   /api/mail-accounts                      add one (tested at once)
+POST   /api/mail-accounts/discover             P122: an address in, its mail server out
+POST   /api/mail-accounts                      add one (tested at once; P122: with no server
+                                               given, the server found from the address)
 PATCH  /api/mail-accounts/{id}                 change the server or password (tested again)
 POST   /api/mail-accounts/{id}/test
 DELETE /api/mail-accounts/{id}                 disconnect: the stored password is deleted
@@ -29,7 +31,7 @@ from ...core import crypto
 from ...core.db import get_db
 from ...core.fence import fence
 from ...i18n import render, tr
-from ...mailbox import backup, imap
+from ...mailbox import autoconfig, backup, imap
 from ...mailbox.models import ExternalMailAccount, MailBackupJob
 from ...models import GoogleAccount
 from ...services import audit
@@ -39,7 +41,9 @@ router = APIRouter(prefix="/api/mail-accounts", tags=["mail-accounts"])
 
 MAX_ACCOUNTS = 10
 STALE = timedelta(minutes=15)  # a running backup not heard of for this long can be resumed
-Provider = Literal["gmail", "yahoo", "outlook", "cpanel", "other"]
+Provider = Literal[
+    "gmail", "yahoo", "outlook", "aol", "icloud", "zoho", "gmx", "yandex", "cpanel", "other"
+]
 
 
 def now() -> datetime:
@@ -148,6 +152,20 @@ async def list_accounts(
     }
 
 
+class DiscoverIn(BaseModel):
+    email: EmailStr
+
+
+@router.post("/discover")
+async def discover(
+    body: DiscoverIn,
+    principal: Principal = Depends(require("work.write")),
+) -> dict[str, Any]:
+    """P122: where this address's mail lives, so the person types only their address (and
+    the password the provider wants). Only the domain is looked up; the answer is cached."""
+    return await autoconfig.discover(str(body.email))
+
+
 class AccountIn(BaseModel):
     email: EmailStr
     provider: Provider = "other"
@@ -227,16 +245,33 @@ async def add_account(
             status.HTTP_409_CONFLICT, "exists", "That email account is already connected."
         )
     preset = imap.PRESETS.get(body.provider) or {}
+    port, security, username = body.port, body.security, body.username
+    provider = body.provider
+    if not (body.host or preset.get("host")):
+        # P122: no server typed: the one found from the address (mailbox/autoconfig.py).
+        found = await autoconfig.discover(email)
+        if not found["imap"]:
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST,
+                "no_server",
+                "The mail server for {domain} was not found. Open Advanced and type it.",
+                domain=found["domain"],
+            )
+        preset = found["imap"]
+        port, security = int(preset["port"]), preset["security"]
+        username = username or found["username"]
+        if provider == "other" and found["provider"] in imap.PRESETS:
+            provider = found["provider"]
     host = _host(body.host or str(preset.get("host") or ""))
     a = ExternalMailAccount(
         workspace_id=principal.workspace_id,
         user_id=principal.user.id,
         email=email,
-        provider=body.provider,
+        provider=provider,
         host=host,
-        port=body.port,
-        security=body.security,
-        username=(body.username.strip() or email)[:254],
+        port=port,
+        security=security,
+        username=(username.strip() or email)[:254],
     )
     db.add(a)
     await db.flush()
