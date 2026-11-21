@@ -18,6 +18,7 @@ import {
   CaretRightIcon,
   CheckCircleIcon,
   CursorClickIcon,
+  FlowArrowIcon,
   DesktopIcon,
   DeviceMobileIcon,
   FilmStripIcon,
@@ -50,11 +51,12 @@ import { plain, type PageDoc, type Recipe } from "@/guide/content";
 import { groupedPages, searchGuide, shotKeys, shotOf, useManifest, videoOf, type Device } from "@/guide/data";
 import { FlowVideo } from "@/guide/flow-video";
 import { useGuideText } from "@/guide/lang";
+import { PRIMA_SOP_PAGE, pick, searchPrimaSops, usePrimaSops } from "@/guide/prima-sops";
 import type { GuideManifest } from "@/guide/manifest";
 import { PAGE_ICONS, Rich, stateLabel } from "@/guide/rich";
 import type { GuidePage as GuidePageInfo } from "@/guide/targets";
 import { whereOf } from "@/guide/where";
-import { locale, useT } from "@/i18n";
+import { locale, useLang, useT } from "@/i18n";
 import { useBackClose } from "@/lib/back-close";
 import { meQuery } from "@/lib/queries";
 import { startTour } from "@/tours/store";
@@ -62,6 +64,8 @@ import { tourFor } from "@/tours/tours";
 import { useTheme } from "@/lib/stores";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
+
+import { PrimaSopChapter } from "./prima-sop";
 
 // ---------------------------------------------------------------- leaving
 
@@ -187,6 +191,20 @@ function PageIndex({ current, onPick }: { current?: string; onPick?: () => void 
                 </li>
               );
             })}
+            {g.group === "Prima" ? (
+              <li>
+                <Link
+                  to="/guide/$page"
+                  params={{ page: PRIMA_SOP_PAGE }}
+                  onClick={onPick}
+                  aria-current={current === PRIMA_SOP_PAGE ? "page" : undefined}
+                  className={cn(link, current === PRIMA_SOP_PAGE ? "bg-accent-soft font-medium text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}
+                >
+                  <FlowArrowIcon size={18} weight={current === PRIMA_SOP_PAGE ? "fill" : "regular"} className="shrink-0" />
+                  <span className="min-w-0 truncate">{t("Prima SOP and workflows")}</span>
+                </Link>
+              </li>
+            ) : null}
           </ul>
         </div>
       ))}
@@ -195,7 +213,7 @@ function PageIndex({ current, onPick }: { current?: string; onPick?: () => void 
 }
 
 /** Phones and tablets: the chapter list, the search and the switches live in one drawer. */
-function ChapterDrawer({ current, query, onQuery }: { current?: GuidePageInfo; query: string; onQuery: (q: string) => void }) {
+function ChapterDrawer({ current, query, onQuery }: { current?: string; query: string; onQuery: (q: string) => void }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   useBackClose(open, () => setOpen(false)); // the phone's Back closes the drawer
@@ -231,7 +249,7 @@ function ChapterDrawer({ current, query, onQuery }: { current?: GuidePageInfo; q
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border px-2 pt-3 [-webkit-overflow-scrolling:touch]"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.25rem)" }}
           >
-            {query.trim().length > 1 ? <SearchResults query={query} onPick={close} compact /> : <PageIndex current={current?.id} onPick={close} />}
+            {query.trim().length > 1 ? <SearchResults query={query} onPick={close} compact /> : <PageIndex current={current} onPick={close} />}
           </div>
         </Drawer.Content>
       </Drawer.Portal>
@@ -253,7 +271,38 @@ function SearchResults({ query, onPick, compact }: { query: string; onPick?: () 
       }),
     [query, gt, t],
   );
+  const lang = useLang((s) => s.lang);
+  const sops = usePrimaSops();
+  const flows = useMemo(() => searchPrimaSops(sops, query).slice(0, compact ? 8 : 12), [sops, query, compact]);
+  const flowList = flows.length ? (
+    <div className={cn("grid", compact ? "gap-0.5 pt-3" : "gap-2 pt-4")}>
+      <p className={cn("text-[11.5px] font-semibold tracking-[0.08em] text-muted uppercase", compact && "px-3")}>{t("Prima SOP and workflows")}</p>
+      <ul className={cn("grid", compact ? "gap-0.5" : "gap-2")}>
+        {flows.map((f) => (
+          <li key={f.id}>
+            <Link
+              to="/guide/$page"
+              params={{ page: PRIMA_SOP_PAGE }}
+              search={{ flow: f.id }}
+              onClick={onPick}
+              className={cn(
+                "grid min-h-11 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-[var(--radius-md)] px-3 py-3 transition-colors hover:bg-surface-2",
+                !compact && "border border-border bg-surface hover:border-accent/40",
+              )}
+            >
+              <IconTile icon={FlowArrowIcon} size="sm" />
+              <span className="grid min-w-0 gap-0.5">
+                <span className="text-[15px] font-medium">{pick(f.title, lang)}</span>
+                <span className="line-clamp-2 text-[13.5px] text-muted">{pick(f.purpose, lang)}</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : null;
   if (!hits.length) {
+    if (flowList) return flowList;
     return (
       <p className={cn("text-[14px] text-muted", compact ? "px-3 py-2" : "py-6 text-center")}>
         {t('Nothing in the guide matches "{q}". Try one word, such as "approve" or "budget".', { q: query.trim() })}
@@ -261,6 +310,7 @@ function SearchResults({ query, onPick, compact }: { query: string; onPick?: () 
     );
   }
   return (
+    <>
     <ul className={cn("grid", compact ? "gap-0.5" : "gap-2")} aria-label={t("Search results")}>
       {hits.map((h) => {
         const IconCmp = PAGE_ICONS[h.page.id] ?? BookBookmarkIcon;
@@ -288,6 +338,8 @@ function SearchResults({ query, onPick, compact }: { query: string; onPick?: () 
         );
       })}
     </ul>
+    {flowList}
+    </>
   );
 }
 
@@ -366,6 +418,25 @@ function GuideHome({ manifest }: { manifest: GuideManifest | null }) {
         <section key={g.group} className="grid gap-3" aria-label={gt.groupLabel(g.group)}>
           <h2 className="text-[19px] font-semibold">{gt.groupLabel(g.group)}</h2>
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {g.group === "Prima" ? (
+              <li className="min-w-0">
+                <Link
+                  to="/guide/$page"
+                  params={{ page: PRIMA_SOP_PAGE }}
+                  className="group flex h-full min-w-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-accent/40 bg-accent-soft/40 transition-[border-color,box-shadow] duration-200 hover:border-accent hover:shadow-[var(--shadow-soft)]"
+                >
+                  <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 p-3.5">
+                    <IconTile icon={FlowArrowIcon} size="sm" />
+                    <span className="grid min-w-0 gap-1">
+                      <span className="text-[15px] font-medium">{t("Prima SOP and workflows")}</span>
+                      <span className="line-clamp-3 text-[13.5px] leading-snug text-muted">
+                        {t("Every Prima flow: who starts it, each step and who does it, and the screen where it is done.")}
+                      </span>
+                    </span>
+                  </div>
+                </Link>
+              </li>
+            ) : null}
             {g.pages.map((p) => {
               const doc = gt.docs[p.id];
               const IconCmp = PAGE_ICONS[p.id] ?? BookBookmarkIcon;
@@ -683,6 +754,20 @@ function PageDocView({ page, manifest }: { page: GuidePageInfo; manifest: GuideM
           ) : null}
         </section>
         <WhereBox page={page} />
+        {page.id === "prima" ? (
+          <Link
+            to="/guide/$page"
+            params={{ page: PRIMA_SOP_PAGE }}
+            className="grid min-h-11 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-[var(--radius-md)] border border-accent/40 bg-accent-soft/40 p-4 transition-colors hover:border-accent"
+          >
+            <IconTile icon={FlowArrowIcon} size="sm" />
+            <span className="grid min-w-0 gap-0.5">
+              <span className="text-[15px] font-semibold">{t("Prima SOP and workflows")}</span>
+              <span className="text-[13.5px] text-muted">{t("Every Prima flow: who starts it, each step and who does it, and the screen where it is done.")}</span>
+            </span>
+            <CaretRightIcon size={16} className="text-muted" />
+          </Link>
+        ) : null}
       </header>
 
       <DocSection title={t("Steps")} icon={<ListNumbersIcon size={20} weight="duotone" className="text-accent" />}>
@@ -886,10 +971,12 @@ export function GuidePage() {
   const t = useT();
   const gt = useGuideText();
   const params = useParams({ strict: false }) as { page?: string };
-  const search = useSearch({ strict: false }) as { q?: string };
+  const search = useSearch({ strict: false }) as { q?: string; flow?: string };
   const manifest = useManifest();
   const [query, setQuery] = useState(search.q ?? "");
   const page = params.page ? gt.pageById(params.page) : undefined;
+  const sopPage = params.page === PRIMA_SOP_PAGE;
+  const currentId = page?.id ?? (sopPage ? PRIMA_SOP_PAGE : undefined);
   const searching = query.trim().length > 1;
   const leave = useLeave();
 
@@ -918,13 +1005,13 @@ export function GuidePage() {
             <LanguageSwitch size="md" />
             <ThemeButton />
           </div>
-          <ChapterDrawer current={page} query={query} onQuery={setQuery} />
+          <ChapterDrawer current={currentId} query={query} onQuery={setQuery} />
         </div>
       </header>
 
       <div className="mx-auto flex w-full max-w-[100rem]">
         <aside className="sticky top-[calc(4rem+1px+env(safe-area-inset-top))] hidden h-[calc(100dvh-4rem-1px-env(safe-area-inset-top))] w-72 shrink-0 overflow-y-auto overscroll-contain border-r border-border px-3 pt-6 pb-10 lg:block">
-          <PageIndex current={page?.id} />
+          <PageIndex current={currentId} />
         </aside>
         <main
           id="guide-main"
@@ -944,6 +1031,8 @@ export function GuidePage() {
               </div>
               <SearchResults query={query} onPick={() => setQuery("")} />
             </div>
+          ) : sopPage ? (
+            <PrimaSopChapter flow={search.flow} />
           ) : params.page && !page ? (
             <EmptyState
               icon={BookOpenTextIcon}

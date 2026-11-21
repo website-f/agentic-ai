@@ -54,6 +54,7 @@ import { SIGNIN_EMAIL } from "./signin-email";
 import { ROLES_ACCESS } from "./roles-access";
 import { LESSONS } from "./lessons";
 import { STAFF_PHONE } from "./staff-phone";
+import { PRIMA_SOP_GUIDE } from "./prima-sop-guide";
 import { TABLES } from "./tables";
 import { TEAM } from "./team";
 import { ROLES_P98 } from "./roles-p98";
@@ -161,4 +162,5 @@ export const MS: Record<string, string> = {
   ...ROLES_ACCESS,
   ...LESSONS,
   ...STAFF_PHONE,
+  ...PRIMA_SOP_GUIDE,
 };

@@ -734,8 +734,10 @@ const guideRoute = createRoute({
 const guidePageRoute = createRoute({
   getParentRoute: () => guideFrameRoute,
   path: "/guide/$page",
-  validateSearch: (s: Record<string, unknown>): { state?: string; device?: "desktop" | "mobile" } => ({
+  // P121b: flow names one Prima SOP on /guide/prima-sop.
+  validateSearch: (s: Record<string, unknown>): { state?: string; device?: "desktop" | "mobile"; flow?: string } => ({
     state: str(s.state),
+    flow: str(s.flow),
     device: s.device === "mobile" || s.device === "desktop" ? s.device : undefined,
   }),
   component: page.guide,

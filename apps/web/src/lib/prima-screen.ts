@@ -1,7 +1,8 @@
 /** P92: a Prima screen named in the office's /prima address (/prima#clock from the phone's
- * Clock in tab) is passed on to Prima, which opens on it. Only a plain screen name is passed. */
+ * Clock in tab) is passed on to Prima, which opens on it. Only a plain screen name is passed,
+ * P121b: or a screen and one of its tabs or flows (/prima#purchasing/store, /prima#sop/equip-uniform-request). */
 export function primaScreen(hash: string): string {
-  return /^#@?[a-z][a-z0-9-]{0,39}$/.test(hash) ? hash : "";
+  return /^#@?[a-z][a-z0-9-]{0,39}(?:\/[A-Za-z0-9][A-Za-z0-9_-]{0,79})?$/.test(hash) ? hash : "";
 }
 
 /** P97: Prima opens in the office's language (Prima's own "BM + English" counts as Malay, so it
