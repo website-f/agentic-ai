@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { api } from '../api';
-import { Chip, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
+import { Chip, Drawer, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { OpForm, type Field } from './ItPolicyPanel';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Pembaharuan Lesen KDN 2027 (Part W, Fauzan's answers 14 Nov 2026). KDN's own yearly checklist as the paper list,
@@ -73,9 +76,11 @@ function paperFields(p: Paper): Field[] {
 
 export function KdnRenewalPanel() {
   const { data, error } = useLoad(() => api.kdnAct('board', {}) as Promise<Board>, []);
+  const [openId, setOpenId] = useState<string | null>(null);
   if (error) return null; // not this person's screen
   if (!data) return <Loading what="KDN renewal" />;
   const w = data.window;
+  const opened = openId ? data.rows.find((r) => r.licenceId === openId) : undefined;
   return (
     <section className="panel">
       <div className="panel-head">
@@ -83,6 +88,7 @@ export function KdnRenewalPanel() {
         <span className="muted small">
           Tetingkap {dateLabel(w.opens)} hingga {dateLabel(w.closes)} · Ikrar anti rasuah {data.pledges.filed}/{data.pledges.of}
         </span>
+        <SopHelp id="gov-kdn-renewal-2027" />
       </div>
       <p className="muted small">
         Sesi Hari Bertemu Pelanggan:{' '}
@@ -91,15 +97,63 @@ export function KdnRenewalPanel() {
       <p className="notice" data-tone="info">
         Prima merekod sahaja: tiada log masuk eSIMS, tiada penghantaran dan tiada bayaran dari sini. {data.giftLine.bm}
       </p>
-      <div className="list">
-        {data.rows.length === 0 && <p className="muted">Tiada lesen KDN.</p>}
-        {data.rows.map((r) => (
-          <KdnRow key={r.licenceId} r={r} b={data} />
-        ))}
-      </div>
+      {/* P107: one row per company in a table; a row opens its papers and steps in a drawer (was every row open in a list). */}
+      <DataTable
+        label="KDN licence renewals"
+        stateKey="gov.renewals.kdn"
+        rows={data.rows}
+        rowKey={(r) => r.licenceId}
+        columns={KDN_COLUMNS}
+        filters={KDN_FILTERS}
+        onRowClick={(r) => setOpenId(r.licenceId)}
+        rowTone={(r) => (r.late ? 'crit' : undefined)}
+        empty={<p className="muted">Tiada lesen KDN.</p>}
+      />
+      {opened && (
+        <Drawer title={opened.companyName} sub={`Pembaharuan Lesen KDN ${w.year}`} onClose={() => setOpenId(null)}>
+          <KdnRow r={opened} b={data} />
+        </Drawer>
+      )}
     </section>
   );
 }
+
+const KDN_COLUMNS: DtColumn<Row>[] = [
+  { id: 'company', label: 'Company', value: (r) => r.companyName, render: (r) => <strong>{r.companyName}</strong>, phone: 'title' },
+  {
+    id: 'stage',
+    label: 'Stage',
+    value: (r) => STAGE[r.stage][1],
+    render: (r) => (
+      <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+        <Chip tone={STAGE[r.stage][0]}>{STAGE[r.stage][1]}</Chip>
+        {r.late && <Chip tone="crit">Lewat: kepada {r.late}</Chip>}
+      </span>
+    ),
+    phone: 'sub',
+  },
+  { id: 'ref', label: 'Reference', value: (r) => r.reference, hideBelow: 1100 },
+  { id: 'expires', label: 'Expires', value: (r) => r.expiresOn, sort: 'date', render: (r) => (r.expiresOn ? dateLabel(r.expiresOn) : 'tiada rekod') },
+  { id: 'papers', label: 'Papers', value: (r) => (r.papers.of ? r.papers.ready / r.papers.of : 0), sort: 'number', search: false, render: (r) => `${r.papers.ready}/${r.papers.of}` },
+  {
+    id: 'appointment',
+    label: 'Appointment',
+    value: (r) => r.appointment?.on ?? null,
+    sort: 'date',
+    render: (r) =>
+      r.appointment
+        ? `Sesi ${r.appointment.session}, ${dateLabel(r.appointment.on)} ${r.appointment.time}`
+        : r.countdown.nextSession
+          ? `Sesi seterusnya ${r.countdown.nextSession.no} dalam ${r.countdown.daysToNext} hari`
+          : '–',
+    hideBelow: 1000,
+  },
+  { id: 'sst', label: 'SST', value: (r) => (r.sst ? 'disahkan' : 'belum'), hideBelow: 1200 },
+];
+const KDN_FILTERS: DtFilter<Row>[] = [
+  { id: 'stage', label: 'Stage', value: (r) => STAGE[r.stage][1] },
+  { id: 'late', label: 'Late', value: (r) => (r.late ? r.late : 'no'), options: [{ value: 'no', label: 'Not late' }, { value: 'DCoS', label: 'DCoS' }, { value: 'CoS', label: 'CoS' }, { value: 'CEO', label: 'CEO' }] },
+];
 
 function KdnRow({ r, b }: { r: Row; b: Board }) {
   const act = useAction();

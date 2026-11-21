@@ -8,6 +8,7 @@ import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { ProofPicker } from './Proof';
 import '../styles/leadership.css';
+import { SopHelp } from '../sop/SopHelp';
 
 const STATUS: Record<string, { label: string; tone: Tone }> = {
   on_time: { label: 'Sent on time', tone: 'ok' },
@@ -60,12 +61,14 @@ export function ReportsView() {
         title="Reports to the Director Office"
         sub="Weekly and monthly reports each company and central department sends. The Director Office Administrator sets the list and follows who has sent."
         actions={
-          data.canEdit &&
-          data.editList && (
-            <button className="btn btn-primary" onClick={() => setEditing(true)}>
-              Change the report list
-            </button>
-          )
+          <>
+            <SopHelp id="board-monthly-report" />
+            {data.canEdit && data.editList && (
+              <button className="btn btn-primary" onClick={() => setEditing(true)}>
+                Change the report list
+              </button>
+            )}
+          </>
         }
       />
       {editing && data.editList && <ReportListEditor list={data.editList} departments={data.departments} onDone={() => setEditing(false)} />}

@@ -1,5 +1,6 @@
 import { Select } from '../SearchSelect';
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { DataTable, type DtColumn, type DtFilter } from "../DataTable";
 import {
   NC_OUTCOME_LABEL,
   NC_SOURCE_LABEL,
@@ -8,7 +9,7 @@ import {
   type NcSource,
 } from "@prima/core";
 import { api, type QmsOpsBoard } from "../api";
-import { Chip, ErrorNotice, Kpi, dateLabel, useAction } from "../ui";
+import { Chip, Drawer, ErrorNotice, Kpi, dateLabel, useAction } from "../ui";
 
 /**
  * Quality operations (Fauzan, 5 Nov 2026 "Build any not build"): service faults, supplier ratings, quality objectives,
@@ -57,6 +58,121 @@ const RESULT_LABEL: Record<SupplierRow["rating"]["state"], string> = {
   ...SUPPLIER_RESULT_LABEL,
 };
 
+/**
+ * P107: a long quality list as a table; a row opens its full line (details and the forms for the next step) in a
+ * drawer, the same line the list showed before. The row is looked up again after each step.
+ */
+function OpenTable<T>(p: {
+  label: string;
+  stateKey: string;
+  rows: T[];
+  rowKey: (r: T) => string;
+  columns: DtColumn<T>[];
+  filters?: DtFilter<T>[];
+  title: (r: T) => string;
+  sub?: (r: T) => string;
+  line: (r: T) => ReactNode;
+  rowTone?: (r: T) => "warn" | "crit" | "info" | undefined;
+  empty: ReactNode;
+}) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = openId ? p.rows.find((r) => p.rowKey(r) === openId) : undefined;
+  return (
+    <>
+      <DataTable
+        label={p.label}
+        stateKey={p.stateKey}
+        rows={p.rows}
+        rowKey={p.rowKey}
+        columns={p.columns}
+        filters={p.filters}
+        onRowClick={(r) => setOpenId(p.rowKey(r))}
+        rowTone={p.rowTone}
+        empty={p.empty}
+      />
+      {opened && (
+        <Drawer title={p.title(opened)} sub={p.sub?.(opened)} onClose={() => setOpenId(null)}>
+          {p.line(opened)}
+        </Drawer>
+      )}
+    </>
+  );
+}
+
+const FAULT_COLUMNS: DtColumn<FaultRow>[] = [
+  { id: "ref", label: "Reference", value: (r) => r.nc.ref, render: (r) => <span className="mono">{r.nc.ref}</span>, phone: "sub", width: "7rem" },
+  { id: "what", label: "What happened", value: (r) => r.nc.what, render: (r) => <strong>{r.nc.what}</strong>, phone: "title" },
+  { id: "source", label: "Source", value: (r) => NC_SOURCE_LABEL[r.nc.source], translate: true, hideBelow: 1100 },
+  { id: "site", label: "Site", value: (r) => r.siteName },
+  { id: "on", label: "Found on", value: (r) => r.nc.detectedOn, sort: "date" },
+  { id: "by", label: "By", value: (r) => r.nc.by, hideBelow: 1200 },
+  {
+    id: "state",
+    label: "Status",
+    value: (r) => (r.open ? "Open" : "Closed"),
+    translate: true,
+    render: (r) => (
+      <span className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+        {r.nc.serious && <Chip tone="crit">Serious</Chip>}
+        {r.nc.repeatOf.length > 0 && <Chip tone="warn">Repeat at this site</Chip>}
+        {r.needsRootCause && !r.nc.rootCause && <Chip tone="warn">Root cause needed</Chip>}
+        <Chip tone={r.open ? "warn" : "ok"}>{r.open ? "Open" : "Closed"}</Chip>
+      </span>
+    ),
+  },
+];
+const FAULT_FILTERS: DtFilter<FaultRow>[] = [
+  { id: "state", label: "Status", value: (r) => (r.open ? "open" : "closed"), options: [{ value: "open", label: "Open" }, { value: "closed", label: "Closed" }] },
+  { id: "source", label: "Source", value: (r) => r.nc.source, optionLabel: (v) => NC_SOURCE_LABEL[v as NcSource] ?? v },
+  { id: "site", label: "Site", value: (r) => r.siteName },
+  { id: "serious", label: "Serious", value: (r) => (r.nc.serious ? "yes" : "no"), options: [{ value: "yes", label: "Serious" }, { value: "no", label: "Not serious" }] },
+];
+
+const supplierState = (row: SupplierRow) => (row.blocked && row.rating.state !== "stop" ? null : row.rating.state);
+const SUPPLIER_COLUMNS: DtColumn<SupplierRow>[] = [
+  { id: "name", label: "Supplier", value: (s) => s.name, render: (s) => <strong>{s.name}</strong>, phone: "title" },
+  { id: "company", label: "Company", value: (s) => s.companyName, phone: "sub" },
+  { id: "last", label: "Last rated", value: (s) => s.rating.last?.on, sort: "date" },
+  { id: "quality", label: "Quality", value: (s) => s.rating.last?.quality, sort: "number", hideBelow: 1000 },
+  { id: "onTime", label: "On time", value: (s) => s.rating.last?.onTime, sort: "number", hideBelow: 1000 },
+  { id: "paperwork", label: "Paperwork", value: (s) => s.rating.last?.paperwork, sort: "number", hideBelow: 1000 },
+  { id: "due", label: "Next rating", value: (s) => s.rating.dueOn, sort: "date", hideBelow: 1200 },
+  {
+    id: "state",
+    label: "Status",
+    value: (s) => { const st = supplierState(s); return st ? RESULT_LABEL[st] : s.blocked ? "Blocked" : ""; },
+    translate: true,
+    render: (s) => {
+      const st = supplierState(s);
+      return (
+        <span className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+          {s.blocked && <Chip tone="crit">Blocked</Chip>}
+          {st && <Chip tone={RESULT_TONE[st]}>{RESULT_LABEL[st]}</Chip>}
+        </span>
+      );
+    },
+  },
+];
+const SUPPLIER_FILTERS: DtFilter<SupplierRow>[] = [
+  { id: "state", label: "Rating", value: (s) => s.rating.state, optionLabel: (v) => RESULT_LABEL[v as SupplierRow["rating"]["state"]] ?? v },
+  { id: "company", label: "Company", value: (s) => s.companyName },
+  { id: "blocked", label: "Blocked", value: (s) => (s.blocked ? "yes" : "no"), options: [{ value: "yes", label: "Blocked" }, { value: "no", label: "Not blocked" }] },
+];
+
+const DOCUMENT_COLUMNS: DtColumn<ItemRow>[] = [
+  { id: "code", label: "Code", value: (r) => r.item.code, render: (r) => <span className="mono">{r.item.code}</span>, phone: "sub", width: "7rem" },
+  { id: "title", label: "Document", value: (r) => r.item.title, render: (r) => <strong>{r.item.title}</strong>, phone: "title" },
+  { id: "version", label: "Version", value: (r) => r.item.version, hideBelow: 900 },
+  { id: "owner", label: "Owner", value: (r) => r.item.ownerTitle },
+  { id: "audience", label: "For", value: (r) => r.item.audience, hideBelow: 1200 },
+  { id: "review", label: "Review by", value: (r) => r.reviewDueOn, sort: "date" },
+  { id: "status", label: "Status", value: (r) => ITEM_STATUS[r.item.status][1], translate: true, render: (r) => <Chip tone={ITEM_STATUS[r.item.status][0]}>{ITEM_STATUS[r.item.status][1]}</Chip> },
+];
+const DOCUMENT_FILTERS: DtFilter<ItemRow>[] = [
+  { id: "status", label: "Status", value: (r) => ITEM_STATUS[r.item.status][1] },
+  { id: "owner", label: "Owner", value: (r) => r.item.ownerTitle },
+];
+
 // ---------- Service faults ----------
 
 export function Faults({ data }: { data: QmsOpsBoard }) {
@@ -92,14 +208,19 @@ export function Faults({ data }: { data: QmsOpsBoard }) {
           )}
         </div>
         {adding && <FaultForm data={data} onDone={() => setAdding(false)} />}
-        <div className="list">
-          {!data.faults.length && (
-            <div className="empty">Nothing recorded.</div>
-          )}
-          {data.faults.map((r) => (
-            <FaultLine key={r.nc.id} row={r} data={data} />
-          ))}
-        </div>
+        <OpenTable
+          label="Service faults"
+          stateKey="gov.quality.faults"
+          rows={data.faults}
+          rowKey={(r) => r.nc.id}
+          columns={FAULT_COLUMNS}
+          filters={FAULT_FILTERS}
+          title={(r) => `${r.nc.ref}: ${r.nc.what}`}
+          sub={(r) => r.siteName ?? ""}
+          line={(r) => <FaultLine row={r} data={data} />}
+          rowTone={(r) => (r.nc.serious && r.open ? "crit" : r.open && r.needsRootCause && !r.nc.rootCause ? "warn" : undefined)}
+          empty={<div className="empty">Nothing recorded.</div>}
+        />
       </section>
     </>
   );
@@ -439,12 +560,19 @@ export function Suppliers({ data }: { data: QmsOpsBoard }) {
         Finance can unblock it.
       </p>
       <section className="panel">
-        <div className="list">
-          {!data.suppliers.length && <div className="empty">No suppliers.</div>}
-          {data.suppliers.map((s) => (
-            <SupplierLine key={s.id} row={s} />
-          ))}
-        </div>
+        <OpenTable
+          label="Supplier ratings"
+          stateKey="gov.quality.suppliers"
+          rows={data.suppliers}
+          rowKey={(s) => s.id}
+          columns={SUPPLIER_COLUMNS}
+          filters={SUPPLIER_FILTERS}
+          title={(s) => s.name}
+          sub={(s) => s.companyName}
+          line={(s) => <SupplierLine row={s} />}
+          rowTone={(s) => (s.blocked || s.rating.state === "stop" ? "crit" : s.rating.state === "due" || s.rating.state === "not_rated" ? "warn" : undefined)}
+          empty={<div className="empty">No suppliers.</div>}
+        />
       </section>
     </>
   );
@@ -618,12 +746,28 @@ export function Items({
           )}
         </div>
         {adding && <ItemForm kind={kind} onDone={() => setAdding(false)} />}
-        <div className="list">
-          {!rows.length && <div className="empty">Nothing recorded.</div>}
-          {rows.map((r) => (
-            <ItemLine key={r.item.id} row={r} />
-          ))}
-        </div>
+        {kind === "document" ? (
+          <OpenTable
+            label="Controlled documents"
+            stateKey="gov.quality.documents"
+            rows={rows}
+            rowKey={(r) => r.item.id}
+            columns={DOCUMENT_COLUMNS}
+            filters={DOCUMENT_FILTERS}
+            title={(r) => `${r.item.code} ${r.item.title}`}
+            sub={(r) => `Version ${r.item.version}`}
+            line={(r) => <ItemLine row={r} />}
+            rowTone={(r) => (ITEM_STATUS[r.item.status][0] === "warn" ? "warn" : undefined)}
+            empty={<div className="empty">Nothing recorded.</div>}
+          />
+        ) : (
+          <div className="list">
+            {!rows.length && <div className="empty">Nothing recorded.</div>}
+            {rows.map((r) => (
+              <ItemLine key={r.item.id} row={r} />
+            ))}
+          </div>
+        )}
       </section>
     </>
   );

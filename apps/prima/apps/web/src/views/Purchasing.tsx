@@ -14,17 +14,20 @@ import {
   UserFocusIcon,
   WarningIcon,
 } from '@phosphor-icons/react';
-import type { ProofInput, PurCategory } from '@prima/core';
-import { api, type PurBoard, type PurRequestInput } from '../api';
+import { RULES, type ProofInput, type PurCategory } from '@prima/core';
+import { api, type PurBoard, type PurRequestInput, type UniformRequests } from '../api';
 import { ProofPicker } from './Proof';
 import { DeliveryProofPanel } from './DeliveryProof';
-import { UniformRequestLine } from './MyItems';
+import { REQ_LABEL as UREQ_LABEL, REQ_TONE as UREQ_TONE } from './MyItems';
 import { RecordButton, useRecordKinds } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { WitnessField, emptyWitness } from './Witness';
-import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
+import { Card, Empty, Facts, PageHead, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/biz.css';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Procurement and Inventory (Fauzan, 27 Oct 2026). A group department under the Operations General Manager, monitored by
@@ -94,7 +97,8 @@ function F({ label, children, span }: { label: string; children: ReactNode; span
 
 export function PurchasingView() {
   const { data, error } = useLoad(() => api.purBoard(), []);
-  const [tab, setTab] = useState<Tab>('requests');
+  // P121: '#purchasing/store' opens the Store tab (links from the SOP guide and the equipment requests screen).
+  const [tab, setTab] = useRouteTab<Tab>('requests', ['requests', 'suppliers', 'store']);
   const [newReq, setNewReq] = useState(false);
   if (error)
     return (
@@ -121,7 +125,9 @@ export function PurchasingView() {
         title="Procurement and Inventory"
         sub="Procurement buys all operational and cleaning equipment for the group, under the Operations General Manager."
         actions={
-          (canRaise(data.roles) || data.raiseFor.length > 0) && (
+          <>
+          <SopHelp id="equip-purchase" />
+          {(canRaise(data.roles) || data.raiseFor.length > 0) && (
             <button
               className="btn btn-primary"
               onClick={() => {
@@ -132,7 +138,8 @@ export function PurchasingView() {
               <PlusIcon size={16} weight="bold" aria-hidden="true" />
               New purchase
             </button>
-          )
+          )}
+          </>
         }
       >
         <p className="bz-note">
@@ -214,36 +221,106 @@ const companiesOf = (data: PurBoard) => {
   return [...seen.entries()].map(([id, name]) => ({ id, name }));
 };
 
+/** P107: open or finished (posted or rejected), the old Open / Show finished switch, now a filter of the table. */
+const purStage = (r: ReqRow) => (['posted', 'rejected'].includes(r.req.status) ? 'done' : 'open');
+const purStatusText = (r: ReqRow) => (mismatch(r) ? 'Invoice mismatch' : STATUS[r.req.status]);
+const paidText = (r: ReqRow) =>
+  r.req.status !== 'posted'
+    ? ''
+    : r.paid
+      ? r.paid.status === 'released'
+        ? `paid by Finance ${r.paid.releasedOn ? dateLabel(r.paid.releasedOn) : ''}`
+        : 'Finance paying'
+      : 'Finance to pay';
+
+/** P107: the purchases as a data table (search, filters, sort, pages; a card per purchase on a phone). */
+const PUR_COLUMNS: DtColumn<ReqRow>[] = [
+  {
+    id: 'title',
+    label: 'Purchase',
+    value: (r) => r.req.title,
+    phone: 'title',
+    render: (r) => (
+      <>
+        <strong>{r.req.title}</strong>
+        <span className="bz-pu-track" aria-hidden="true">
+          {flowStates(r.req.status).map((s, i) => (
+            <span key={i} data-state={s} />
+          ))}
+        </span>
+      </>
+    ),
+  },
+  { id: 'ref', label: 'Reference', value: (r) => r.req.ref, render: (r) => <span className="mono">{r.req.ref}</span>, phone: 'sub' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, hideBelow: 1100 },
+  { id: 'category', label: 'Category', value: (r) => CATEGORY[r.req.category], translate: true, hideBelow: 1300, phone: 'hidden' },
+  {
+    id: 'raised',
+    label: 'Raised on',
+    value: (r) => r.req.at.slice(0, 10),
+    sort: 'date',
+    render: (r) => (
+      <>
+        {dateLabel(r.req.at.slice(0, 10))}
+        <div className="muted small">{r.req.raisedBy}</div>
+      </>
+    ),
+  },
+  {
+    id: 'waiting',
+    label: 'Waiting for',
+    value: (r) => r.waiting ?? paidText(r),
+    hideBelow: 1200,
+    phone: 'hidden',
+    render: (r) => (r.waiting ? r.waiting : paidText(r) ? <span className="muted small">{paidText(r)}</span> : '–'),
+  },
+  {
+    id: 'amount',
+    label: 'Amount',
+    value: (r) => r.chosen?.amount ?? r.req.total,
+    sort: 'money',
+    render: (r) => (
+      <>
+        <span className="bz-amt">{rm(r.chosen?.amount ?? r.req.total)}</span>
+        <div className="bz-sub">{r.chosen ? 'chosen quote' : 'estimated'}</div>
+      </>
+    ),
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    value: purStatusText,
+    translate: true,
+    render: (r) => <Chip tone={r.canApprove ? 'warn' : r.tone}>{purStatusText(r)}</Chip>,
+  },
+];
+const PUR_FILTERS: DtFilter<ReqRow>[] = [
+  {
+    id: 'show',
+    label: 'Show',
+    value: purStage,
+    options: [
+      { value: 'open', label: 'Open purchases' },
+      { value: 'done', label: 'Finished purchases' },
+    ],
+    allLabel: 'All purchases',
+  },
+  { id: 'status', label: 'Status', value: (r) => r.req.status, options: (Object.keys(STATUS) as ReqRow['req']['status'][]).map((k) => ({ value: k, label: STATUS[k] })) },
+  { id: 'category', label: 'Category', value: (r) => r.req.category, optionLabel: (v) => CATEGORY[v as PurCategory] ?? v },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
+
 function Requests({ data, form, setForm }: { data: PurBoard; form: boolean; setForm: (open: boolean) => void }) {
-  const [all, setAll] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const [q, setQ] = useState('');
-  const needle = q.trim().toLowerCase();
-  const rows = data.requests
-    .filter((r) => all || !['posted', 'rejected'].includes(r.req.status))
-    .filter((r) => !needle || [r.req.title, r.req.ref, r.companyName, r.req.raisedBy, CATEGORY[r.req.category]].some((v) => v.toLowerCase().includes(needle)));
-  const mine = rows.filter((r) => r.canApprove);
-  const rest = rows.filter((r) => !r.canApprove);
+  // P107: the table keeps the Open / finished choice (open first, as before); the card's title follows it.
+  const table = useTableState('purchasing.requests', { f: { show: 'open' } });
+  const show = table.state.f.show ?? '';
+  // The approval queue above stays as it was (it is never finished: an approver acts on an open purchase).
+  const mine = data.requests.filter((r) => r.canApprove);
+  const rest = data.requests.filter((r) => !r.canApprove);
   const current = data.requests.find((r) => r.req.id === open);
   return (
     <>
-      <Toolbar
-        end={
-          <>
-            <div className="seg" role="group" aria-label="Which purchases">
-              <button aria-pressed={!all} onClick={() => setAll(false)}>
-                Open
-              </button>
-              <button aria-pressed={all} onClick={() => setAll(true)}>
-                Show finished
-              </button>
-            </div>
-          </>
-        }
-      >
-        <Search value={q} onChange={setQ} placeholder="Search item, reference, company or person" label="Search purchases" />
-      </Toolbar>
-
       {mine.length > 0 && (
         <Card title="Waiting for your approval" sub="Check the quotes and the online price, then approve or reject with a note." flush>
           <ul className="bz-rows">
@@ -256,28 +333,32 @@ function Requests({ data, form, setForm }: { data: PurBoard; form: boolean; setF
         </Card>
       )}
 
-      <Card title={all ? 'All purchases' : 'Open purchases'} sub={`${rest.length} purchase${rest.length === 1 ? '' : 's'}`} flush>
-        {rest.length > 0 ? (
-          <ul className="bz-rows">
-            {rest.map((r) => (
-              <li key={r.req.id}>
-                <RequestRow r={r} onOpen={() => setOpen(r.req.id)} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <Empty
-            title={needle ? 'Nothing matches the search.' : all ? 'No purchases yet.' : 'No open purchases.'}
-            action={
-              !needle && (canRaise(data.roles) || data.raiseFor.length > 0) ? (
-                <button className="btn btn-primary" onClick={() => setForm(true)}>
-                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
-                  New purchase
-                </button>
-              ) : undefined
-            }
-          />
-        )}
+      <Card title={show === 'open' ? 'Open purchases' : show === 'done' ? 'Finished purchases' : 'All purchases'} flush>
+        <DataTable
+          label="Purchases"
+          control={table}
+          rows={rest}
+          rowKey={(r) => r.req.id}
+          columns={PUR_COLUMNS}
+          filters={PUR_FILTERS}
+          searchPlaceholder="Search item, reference, company or person"
+          searchText={(r) => `${r.req.raisedBy} ${r.waiting ?? ''}`}
+          onRowClick={(r) => setOpen(r.req.id)}
+          rowTone={(r) => (mismatch(r) ? 'crit' : undefined)}
+          empty={
+            <Empty
+              title="No purchases yet."
+              action={
+                canRaise(data.roles) || data.raiseFor.length > 0 ? (
+                  <button className="btn btn-primary" onClick={() => setForm(true)}>
+                    <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                    New purchase
+                  </button>
+                ) : undefined
+              }
+            />
+          }
+        />
       </Card>
 
       {current && (
@@ -342,6 +423,12 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
   const [chosen, setChosen] = useState(r.quotes[0]?.supplierId ?? '');
   const [po, setPo] = useState('');
   const [qty, setQty] = useState<string[]>(r.lines.map((l) => String(l.qty)));
+  // P121: goods received with the supplier's DO (Part U16: number and photo, needed while grnDoRequired is on) and, per
+  // line, damaged and wrong-item pieces with a note (Part T7). The server already asked for these; the form did not.
+  const [doNo, setDoNo] = useState('');
+  const [doDoc, setDoDoc] = useState<ProofInput[]>([]);
+  const [bad, setBad] = useState(r.lines.map(() => ({ damaged: '', wrong: '', note: '' })));
+  const doNeeded = RULES.inventoryControl.value.grnDoRequired;
   const [inv, setInv] = useState({
     number: r.invoice?.number ?? '',
     amount: r.invoice ? String(r.invoice.amount) : '',
@@ -659,9 +746,44 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
             <F label="Receipt note" span>
               <input className="input" placeholder="Note (shortages, damage)" value={note} onChange={(e) => setNote(e.target.value)} />
             </F>
+            <F label={doNeeded ? "Supplier's DO number" : "Supplier's DO number (if any)"}>
+              <input className="input" placeholder="Delivery order number" value={doNo} onChange={(e) => setDoNo(e.target.value)} />
+            </F>
           </div>
+          <ProofPicker site={null} refText={`DO ${r.ref}`} items={doDoc} onChange={setDoDoc} documentsOnly required={doNeeded} />
+          <details>
+            <summary className="small">Some pieces damaged or the wrong item?</summary>
+            <p className="bz-note">Only good pieces go into the store. Damaged and wrong pieces are kept for return to the supplier and show in Finance's invoice match.</p>
+            <div className="bz-form">
+              {r.lines.map((l, i) => (
+                <F key={i} label={l.item} span>
+                  <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                    <input className="input num" style={{ maxWidth: 110 }} inputMode="numeric" placeholder="Damaged" aria-label={`Damaged ${l.item}`} value={bad[i].damaged} onChange={(e) => setBad(bad.map((x, j) => (j === i ? { ...x, damaged: e.target.value } : x)))} />
+                    <input className="input num" style={{ maxWidth: 110 }} inputMode="numeric" placeholder="Wrong item" aria-label={`Wrong item ${l.item}`} value={bad[i].wrong} onChange={(e) => setBad(bad.map((x, j) => (j === i ? { ...x, wrong: e.target.value } : x)))} />
+                    <input className="input" placeholder="What is wrong" aria-label={`What is wrong ${l.item}`} value={bad[i].note} onChange={(e) => setBad(bad.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)))} />
+                  </span>
+                </F>
+              ))}
+            </div>
+          </details>
           <div className="bz-actions">
-            <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.purStep(r.id, 'receive', { qty: qty.map(Number), note }), 'Goods received.')}>
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy || (doNeeded && (!doNo.trim() || !doDoc.length))}
+              onClick={() =>
+                act.run(
+                  () =>
+                    api.purStep(r.id, 'receive', {
+                      qty: qty.map(Number),
+                      note,
+                      ref: doNo.trim(),
+                      proof: doDoc,
+                      condition: bad.map((b) => ({ damaged: Number(b.damaged || 0), wrong: Number(b.wrong || 0), note: b.note.trim() })),
+                    }),
+                  'Goods received.',
+                )
+              }
+            >
               Goods received
             </button>
           </div>
@@ -828,18 +950,88 @@ function NewRequest({ data, onDone }: { data: PurBoard; onDone: () => void }) {
   );
 }
 
+const supChecks = (s: SupRow['supplier']): [string, boolean][] => [
+  ['Bank verified', !!s.bank.verifiedOn],
+  ['Conflict declaration', !!s.coiDeclaredOn],
+  ['Anti-bribery', !!s.abcAckOn],
+];
+const supCanBlock = (row: SupRow) => (row.role === 'finance' || row.role === 'manager' || row.role === 'proc') && !row.supplier.blocked;
+/** The supplier has a check step this person can record (Finance's bank, review or unblock; Procurement's declarations). */
+const supHasSteps = (row: SupRow) => {
+  const s = row.supplier;
+  if (row.role === 'finance') return !s.bank.verifiedOn || !!s.blocked || row.state !== 'approved';
+  return row.role === 'proc' && !s.blocked && (!s.coiDeclaredOn || !s.abcAckOn);
+};
+
+/** P107: the suppliers as one data table (not ready first, as before; the status filter splits them). */
+const SUP_COLUMNS: DtColumn<SupRow>[] = [
+  { id: 'name', label: 'Supplier', value: (r) => r.supplier.name, render: (r) => <strong>{r.supplier.name}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'ssm', label: 'SSM number', value: (r) => r.supplier.ssmNo, render: (r) => <span className="mono">{r.supplier.ssmNo}</span>, hideBelow: 1200, phone: 'hidden' },
+  { id: 'category', label: 'Category', value: (r) => r.supplier.categories.map((c) => CATEGORY[c]).join(', '), translate: true, hideBelow: 1300, phone: 'hidden' },
+  {
+    id: 'bank',
+    label: 'Bank',
+    value: (r) => r.supplier.bank.name,
+    hideBelow: 1200,
+    phone: 'hidden',
+    render: (r) => (
+      <span className="small">
+        {r.supplier.bank.name} ending {r.supplier.bank.account.slice(-4)}
+        {r.supplier.bank.verifiedOn ? `, verified by ${r.supplier.bank.verifiedBy}` : ''}
+      </span>
+    ),
+  },
+  {
+    id: 'checks',
+    label: 'Checks',
+    value: (r) => r.missing.join(', '),
+    sort: false,
+    render: (r) => (
+      <>
+        <span className="bz-chips bz-pu-checks">
+          {supChecks(r.supplier).map(([l, ok]) => (
+            <span key={l} className="bz-pu-check" data-ok={ok}>
+              {ok ? '✓' : '○'} {l}
+            </span>
+          ))}
+        </span>
+        {r.missing.length > 0 && <div className="bz-pu-warn">Missing: {r.missing.join(', ')}</div>}
+        {r.supplier.blocked && (
+          <div className="bz-pu-warn">
+            Blocked by {r.supplier.blocked.by}: {r.supplier.blocked.note}
+          </div>
+        )}
+      </>
+    ),
+  },
+  {
+    id: 'reviewed',
+    label: 'Last review',
+    value: (r) => r.supplier.reviewedOn,
+    sort: 'date',
+    hideBelow: 1100,
+    render: (r) => (r.supplier.reviewedOn ? dateLabel(r.supplier.reviewedOn) : 'never'),
+  },
+  { id: 'status', label: 'Status', value: (r) => SUP_STATE[r.state][1], translate: true, render: (r) => <Chip tone={SUP_STATE[r.state][0]}>{SUP_STATE[r.state][1]}</Chip> },
+];
+const SUP_FILTERS: DtFilter<SupRow>[] = [
+  { id: 'status', label: 'Status', value: (r) => r.state, options: (Object.keys(SUP_STATE) as SupRow['state'][]).map((k) => ({ value: k, label: SUP_STATE[k][1] })) },
+  { id: 'category', label: 'Category', value: (r) => r.supplier.categories, optionLabel: (v) => CATEGORY[v as PurCategory] ?? v },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
+
 function Suppliers({ data }: { data: PurBoard }) {
   const [form, setForm] = useState(false);
-  const [q, setQ] = useState('');
-  const needle = q.trim().toLowerCase();
-  const rows = data.suppliers.filter((s) => !needle || [s.supplier.name, s.companyName, s.supplier.ssmNo].some((v) => v.toLowerCase().includes(needle)));
-  const notReady = rows.filter((s) => s.state !== 'approved');
-  const ready = rows.filter((s) => s.state === 'approved');
+  // The Block… switch per supplier (it opens the reason box under the row, as it did under the line).
+  const [blocking, setBlocking] = useState<Record<string, boolean>>({});
+  const notReady = data.suppliers.filter((s) => s.state !== 'approved');
+  const ready = data.suppliers.filter((s) => s.state === 'approved');
   return (
     <>
-      <Toolbar
-        end={
-          (isProc(data.roles) || data.supplierFor.length > 0) && (
+      {(isProc(data.roles) || data.supplierFor.length > 0) && (
+        <Toolbar
+          end={
             <>
               <ImportButton kind="purSupplier" />
               <button className="btn btn-primary" onClick={() => setForm(true)}>
@@ -847,11 +1039,11 @@ function Suppliers({ data }: { data: PurBoard }) {
                 Add supplier
               </button>
             </>
-          )
-        }
-      >
-        <Search value={q} onChange={setQ} placeholder="Search supplier, company or SSM number" label="Search suppliers" />
-      </Toolbar>
+          }
+        >
+          {null}
+        </Toolbar>
+      )}
       <p className="notice" data-tone="info">
         A supplier can quote only when Finance has verified its bank account against a bank letter, it has signed a conflict-of-interest declaration and the
         anti-bribery acknowledgement (MACC Act s.17A), and its yearly review is current.
@@ -873,31 +1065,34 @@ function Suppliers({ data }: { data: PurBoard }) {
           </Empty>
         </Card>
       )}
-      {notReady.length > 0 && (
-        <Card title="Not ready to quote" sub={`${notReady.length} supplier${notReady.length === 1 ? '' : 's'} with checks to finish`} flush>
-          <ul className="bz-rows">
-            {notReady.map((s) => (
-              <li key={s.supplier.id}>
-                <SupplierLine s={s} />
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-      {ready.length > 0 && (
-        <Card title="Approved suppliers" sub={`${ready.length} can quote`} flush>
-          <ul className="bz-rows">
-            {ready.map((s) => (
-              <li key={s.supplier.id}>
-                <SupplierLine s={s} />
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-      {data.suppliers.length > 0 && !rows.length && (
-        <Card>
-          <Empty title="Nothing matches the search." />
+      {data.suppliers.length > 0 && (
+        <Card
+          title="Suppliers"
+          sub={`${notReady.length} supplier${notReady.length === 1 ? '' : 's'} with checks to finish · ${ready.length} can quote`}
+          flush
+        >
+          <DataTable
+            label="Suppliers"
+            stateKey="purchasing.suppliers"
+            rows={[...notReady, ...ready]}
+            rowKey={(r) => r.supplier.id}
+            columns={SUP_COLUMNS}
+            filters={SUP_FILTERS}
+            searchPlaceholder="Search supplier, company or SSM number"
+            rowTone={(r) => (SUP_STATE[r.state][0] === 'crit' ? 'crit' : SUP_STATE[r.state][0] === 'warn' ? 'warn' : undefined)}
+            actions={(r) => [
+              {
+                label: blocking[r.supplier.id] ? 'Cancel' : 'Block…',
+                hidden: !supCanBlock(r),
+                onClick: () => setBlocking((b) => ({ ...b, [r.supplier.id]: !b[r.supplier.id] })),
+              },
+            ]}
+            rowDetail={(r) =>
+              supHasSteps(r) || (supCanBlock(r) && blocking[r.supplier.id]) ? (
+                <SupplierSteps s={r} blocking={supCanBlock(r) && !!blocking[r.supplier.id]} />
+              ) : null
+            }
+          />
         </Card>
       )}
       {form && (
@@ -909,50 +1104,19 @@ function Suppliers({ data }: { data: PurBoard }) {
   );
 }
 
-function SupplierLine({ s: row }: { s: SupRow }) {
+/**
+ * P107: a supplier's check steps under its row in the table (the same buttons, comment and block reason as the old
+ * line). The Block… switch is the row's action; `blocking` opens the reason box here.
+ */
+function SupplierSteps({ s: row, blocking }: { s: SupRow; blocking: boolean }) {
   const [checkNote, setCheckNote] = useState('');
   const act = useAction();
   const [note, setNote] = useState('');
   const s = row.supplier;
-  const [tone, label] = SUP_STATE[row.state];
   const company = row.role === 'proc';
-  const [blocking, setBlocking] = useState(false);
-  const canBlock = (row.role === 'finance' || row.role === 'manager' || row.role === 'proc') && !s.blocked;
-  const checks: [string, boolean][] = [
-    ['Bank verified', !!s.bank.verifiedOn],
-    ['Conflict declaration', !!s.coiDeclaredOn],
-    ['Anti-bribery', !!s.abcAckOn],
-  ];
+  const canBlock = supCanBlock(row);
   return (
-    <div className="bz-row bz-pu-sup" data-tone={tone === 'crit' ? 'crit' : tone === 'warn' ? 'warn' : undefined}>
-      <span className="bz-row-main">
-        <span className="bz-row-title">
-          {s.name} <span className="bz-sub">{row.companyName}</span>
-        </span>
-        <span className="bz-row-meta">
-          SSM {s.ssmNo} · {s.categories.map((c) => CATEGORY[c]).join(', ')}
-        </span>
-        <span className="bz-row-meta">
-          {s.bank.name} ending {s.bank.account.slice(-4)}
-          {s.bank.verifiedOn ? `, verified by ${s.bank.verifiedBy}` : ''} · reviewed {s.reviewedOn ? dateLabel(s.reviewedOn) : 'never'}
-        </span>
-        <span className="bz-chips bz-pu-checks">
-          {checks.map(([l, ok]) => (
-            <span key={l} className="bz-pu-check" data-ok={ok}>
-              {ok ? '✓' : '○'} {l}
-            </span>
-          ))}
-        </span>
-        {row.missing.length > 0 && <span className="bz-pu-warn">Missing: {row.missing.join(', ')}</span>}
-        {s.blocked && (
-          <span className="bz-pu-warn">
-            Blocked by {s.blocked.by}: {s.blocked.note}
-          </span>
-        )}
-      </span>
-      <span className="bz-row-side">
-        <Chip tone={tone}>{label}</Chip>
-      </span>
+    <div data-no-row-click>
       <div className="bz-pu-sup-acts">
         {row.role === 'finance' && (!s.bank.verifiedOn || (!s.blocked && row.state !== 'approved')) && (
           <input
@@ -1000,11 +1164,6 @@ function SupplierLine({ s: row }: { s: SupRow }) {
           {row.role === 'finance' && s.blocked && (
             <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.purSupplierStep(s.id, 'unblock', ''), 'Supplier unblocked.')}>
               Unblock
-            </button>
-          )}
-          {canBlock && (
-            <button className="btn btn-sm btn-ghost" aria-expanded={blocking} onClick={() => setBlocking(!blocking)}>
-              {blocking ? 'Cancel' : 'Block…'}
             </button>
           )}
         </div>
@@ -1160,6 +1319,104 @@ function GoodwillBilling({ data }: { data: PurBoard }) {
   );
 }
 
+type StockRow = PurBoard['stock'][number];
+const stockFlags = (s: StockRow) => [
+  ...(s.low ? ['low'] : []),
+  ...(s.countDue ? ['countDue'] : []),
+  ...(s.countDiff !== 0 ? ['diff'] : []),
+  ...(s.item.opening && !s.item.opening.confirmed ? ['opening'] : []),
+];
+const STOCK_COLUMNS: DtColumn<StockRow>[] = [
+  {
+    id: 'item',
+    label: 'Item',
+    value: (s) => `${s.item.name}${s.item.size ? ` ${s.item.size}` : ''}`,
+    phone: 'title',
+    render: (s) => (
+      <strong className="bz-pu-item">
+        {s.item.name}
+        {s.item.size ? ` ${s.item.size}` : ''}
+      </strong>
+    ),
+  },
+  { id: 'company', label: 'Company', value: (s) => s.companyName, hideBelow: 1100, phone: 'sub' },
+  {
+    id: 'onHand',
+    label: 'In store',
+    value: (s) => s.item.onHand,
+    sort: 'number',
+    render: (s) => (
+      <>
+        <span className="bz-amt">{s.item.onHand}</span>
+        {s.low && (
+          <div>
+            <Chip tone="warn">Reorder</Chip>
+          </div>
+        )}
+      </>
+    ),
+  },
+  { id: 'out', label: 'With people', value: (s) => s.out, sort: 'number' },
+  {
+    id: 'life',
+    label: 'Life so far',
+    sort: false,
+    hideBelow: 1200,
+    phone: 'hidden',
+    className: 'small',
+    render: (s) => (
+      <>
+        {s.item.consumable
+          ? `Bought ${s.life.received} · used ${s.life.issued}`
+          : `Bought ${s.life.received} · issued ${s.life.issued} · back ${s.life.returned} · damaged ${s.life.damaged} · lost ${s.life.lost}`}
+        {s.life.unconfirmed ? ` · ${s.life.unconfirmed} not confirmed` : ''}
+      </>
+    ),
+  },
+  {
+    id: 'lastCount',
+    label: 'Last count',
+    value: (s) => s.item.lastCount?.on ?? '',
+    sort: 'date',
+    className: 'small',
+    render: (s) => (
+      <>
+        <div>{s.item.lastCount ? `${dateLabel(s.item.lastCount.on)}, counted ${s.item.lastCount.counted}, witness ${s.item.lastCount.witness}` : 'Never'}</div>
+        {(s.item.opening && !s.item.opening.confirmed) || s.countDiff !== 0 || s.countDue ? (
+          <div className="bz-chips bz-pu-cellchips">
+            {s.item.opening && !s.item.opening.confirmed && <Chip tone="warn">Opening stock to confirm</Chip>}
+            {s.countDiff !== 0 && <Chip tone="crit">{s.countDiff > 0 ? `${s.countDiff} more than the record` : `${-s.countDiff} short`}</Chip>}
+            {s.countDue && <Chip tone="warn">Count due</Chip>}
+          </div>
+        ) : null}
+      </>
+    ),
+  },
+];
+const STOCK_FILTERS: DtFilter<StockRow>[] = [
+  { id: 'company', label: 'Company', value: (s) => s.companyName },
+  {
+    id: 'flag',
+    label: 'Needs',
+    value: stockFlags,
+    options: [
+      { value: 'low', label: 'Reorder' },
+      { value: 'countDue', label: 'Count due' },
+      { value: 'diff', label: 'Count difference' },
+      { value: 'opening', label: 'Opening stock to confirm' },
+    ],
+  },
+  {
+    id: 'kind',
+    label: 'Kind',
+    value: (s) => (s.item.consumable ? 'consumable' : 'returnable'),
+    options: [
+      { value: 'returnable', label: 'Issued and returned' },
+      { value: 'consumable', label: 'Used up' },
+    ],
+  },
+];
+
 function Store({ data }: { data: PurBoard }) {
   const company = isStore(data.roles);
   // P91: Add and Import at the top of the Store tab, not under the follow-up lists.
@@ -1195,69 +1452,22 @@ function Store({ data }: { data: PurBoard }) {
         </Card>
       )}
       <Card title="Stock" sub={`${data.stock.length} item${data.stock.length === 1 ? '' : 's'} in the store`} flush>
-        <div className="table-wrap bz-pu-stock">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th className="num">In store</th>
-                <th className="num">With people</th>
-                <th>Life so far</th>
-                <th>Last count</th>
-                <th>
-                  <span className="bz-sr">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.stock.map((s) => (
-                <tr key={s.item.id}>
-                  <td>
-                    <strong className="bz-pu-item">
-                      {s.item.name}
-                      {s.item.size ? ` ${s.item.size}` : ''}
-                    </strong>
-                    {data.roles.length > 1 || !company ? <div className="muted small">{s.companyName}</div> : null}
-                  </td>
-                  <td className="num">
-                    <span className="bz-amt">{s.item.onHand}</span>
-                    {s.low && (
-                      <div>
-                        <Chip tone="warn">Reorder</Chip>
-                      </div>
-                    )}
-                  </td>
-                  <td className="num">{s.out}</td>
-                  <td className="small">
-                    {s.item.consumable
-                      ? `Bought ${s.life.received} · used ${s.life.issued}`
-                      : `Bought ${s.life.received} · issued ${s.life.issued} · back ${s.life.returned} · damaged ${s.life.damaged} · lost ${s.life.lost}`}
-                    {s.life.unconfirmed ? ` · ${s.life.unconfirmed} not confirmed` : ''}
-                  </td>
-                  <td className="small">
-                    <div>
-                      {s.item.lastCount ? `${dateLabel(s.item.lastCount.on)}, counted ${s.item.lastCount.counted}, witness ${s.item.lastCount.witness}` : 'Never'}
-                    </div>
-                    {(s.item.opening && !s.item.opening.confirmed) || s.countDiff !== 0 || s.countDue ? (
-                      <div className="bz-chips bz-pu-cellchips">
-                        {s.item.opening && !s.item.opening.confirmed && <Chip tone="warn">Opening stock to confirm</Chip>}
-                        {s.countDiff !== 0 && <Chip tone="crit">{s.countDiff > 0 ? `${s.countDiff} more than the record` : `${-s.countDiff} short`}</Chip>}
-                        {s.countDue && <Chip tone="warn">Count due</Chip>}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td>
-                    <div className="bz-pu-rowacts">
-                      {company && <CountButton itemId={s.item.id} companyId={s.item.companyId} />}
-                      <RecordButton kind="stockItem" id={s.item.id} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!data.stock.length && <Empty title="No store items yet." action={<RecordButton kind="stockItem" label="Add store item" primary />} />}
-        </div>
+        {/* P107: the store's items as a data table (search, filters, sort, pages; a card per item on a phone). */}
+        <DataTable
+          label="Stock"
+          stateKey="purchasing.stock"
+          rows={data.stock}
+          rowKey={(s) => s.item.id}
+          columns={STOCK_COLUMNS}
+          filters={STOCK_FILTERS}
+          rowEnd={(s) => (
+            <div className="bz-pu-rowacts">
+              {company && <CountButton itemId={s.item.id} companyId={s.item.companyId} />}
+              <RecordButton kind="stockItem" id={s.item.id} />
+            </div>
+          )}
+          empty={<Empty title="No store items yet." action={<RecordButton kind="stockItem" label="Add store item" primary />} />}
+        />
       </Card>
       {company && companiesOf(data).some((c) => c.id === 'goodwill') && <UniformRequestQueue data={data} />}
       {/* P105: also for the OGM, who confirms supplies requests and decides the big adjustments and disposals, and for the
@@ -1266,20 +1476,12 @@ function Store({ data }: { data: PurBoard }) {
       {companiesOf(data).some((c) => c.id === 'goodwill') && (
         <InventoryPanel items={data.stock.filter((s) => s.item.companyId === 'goodwill').map((s) => ({ id: s.item.id, label: s.item.name }))} />
       )}
-      <div className={company ? 'bz-two bz-pu-issue' : 'bz-stack'}>
+      {/* P107: the issue form above the issued list (the list is now a full-width table, not a half-width column). */}
+      <div className="bz-stack">
         {company && <IssueForm data={data} />}
-        <Card title="Issued and not yet returned" sub={data.issues.length > 50 ? `Latest 50 of ${data.issues.length}` : `${data.issues.length} issued`} flush>
-          {!data.issues.length ? (
-            <Empty title="Nothing issued." />
-          ) : (
-            <ul className="bz-rows">
-              {data.issues.slice(0, 50).map((t) => (
-                <li key={t.issue.id}>
-                  <IssueLine t={t} canReturn={company} />
-                </li>
-              ))}
-            </ul>
-          )}
+        {/* The server sends the latest 200 open issues; the table pages them all (the screen showed only the first 50). */}
+        <Card title="Issued and not yet returned" sub={`${data.issues.length} issued`} flush>
+          <IssuedTable rows={data.issues} canReturn={company} />
         </Card>
       </div>
       <GoodwillBilling data={data} />
@@ -1408,10 +1610,144 @@ function handoverText(i: Issue): string {
     .join(' · ');
 }
 
-function IssueLine({ t, canReturn }: { t: PurBoard['issues'][number]; canReturn: boolean }) {
+type IssueRow = PurBoard['issues'][number];
+const issueStateText = (i: Issue) => (i.disputed ? 'Disputed' : !i.acknowledged ? (i.handover ? handoverStage(i) : 'Not confirmed') : 'Confirmed');
+const issueStateKey = (i: Issue) => (i.disputed ? 'disputed' : !i.acknowledged ? 'unconfirmed' : 'confirmed');
+function IssueChip({ i }: { i: Issue }) {
+  return <Chip tone={i.disputed ? 'crit' : !i.acknowledged ? 'warn' : 'ok'}>{issueStateText(i)}</Chip>;
+}
+
+/** P107: the issued items as a data table; Proof and Return stay as the row's buttons and open under the row. */
+const ISSUE_COLUMNS: DtColumn<IssueRow>[] = [
+  { id: 'person', label: 'Person', value: (t) => t.issue.personName, render: (t) => <strong>{t.issue.personName}</strong>, phone: 'title' },
+  { id: 'item', label: 'Item', value: (t) => t.itemName, render: (t) => `${t.issue.qty} x ${t.itemName}`, phone: 'sub' },
+  { id: 'company', label: 'Company', value: (t) => t.companyName, hideBelow: 1200 },
+  {
+    id: 'issued',
+    label: 'Issued on',
+    value: (t) => t.issue.issuedAt.slice(0, 10),
+    sort: 'date',
+    render: (t) => (
+      <>
+        {dateLabel(t.issue.issuedAt.slice(0, 10))}
+        <div className="muted small">{t.issue.issuedBy}</div>
+      </>
+    ),
+  },
+  { id: 'serial', label: 'Serial', value: (t) => t.issue.serial, render: (t) => (t.issue.serial ? <span className="mono">{t.issue.serial}</span> : '–'), hideBelow: 1300, phone: 'hidden' },
+  {
+    id: 'state',
+    label: 'Status',
+    value: (t) => issueStateText(t.issue),
+    translate: true,
+    render: (t) => (
+      <>
+        <IssueChip i={t.issue} />
+        {t.issue.acknowledged && t.issue.confirmedAt && <div className="muted small">confirmed {dateLabel(t.issue.confirmedAt.slice(0, 10))}</div>}
+        {t.issue.handover && <div className="muted small">{handoverText(t.issue)}</div>}
+        {t.issue.disputed && <div className="bz-pu-warn">The person says: {t.issue.disputed.note}</div>}
+      </>
+    ),
+  },
+];
+const ISSUE_FILTERS: DtFilter<IssueRow>[] = [
+  {
+    id: 'state',
+    label: 'Status',
+    value: (t) => issueStateKey(t.issue),
+    options: [
+      { value: 'unconfirmed', label: 'Not confirmed' },
+      { value: 'disputed', label: 'Disputed' },
+      { value: 'confirmed', label: 'Confirmed' },
+    ],
+  },
+  { id: 'item', label: 'Item', value: (t) => t.itemName },
+  { id: 'company', label: 'Company', value: (t) => t.companyName },
+];
+
+function IssuedTable({ rows, canReturn }: { rows: IssueRow[]; canReturn: boolean }) {
+  // Which rows have the delivery proof or the return form open (each was a switch on the old line).
+  const [proof, setProof] = useState<Record<string, boolean>>({});
+  const [ret, setRet] = useState<Record<string, boolean>>({});
+  const flip = (set: typeof setProof, id: string) => set((m) => ({ ...m, [id]: !m[id] }));
+  return (
+    <DataTable
+      label="Issued and not yet returned"
+      stateKey="purchasing.issued"
+      rows={rows}
+      rowKey={(t) => t.issue.id}
+      columns={ISSUE_COLUMNS}
+      filters={ISSUE_FILTERS}
+      searchText={(t) => `${t.issue.issuedBy} ${t.issue.serial ?? ''}`}
+      searchPlaceholder="Search person, item, company or serial"
+      rowTone={(t) => (t.issue.disputed ? 'crit' : undefined)}
+      rowEnd={(t) =>
+        t.issue.handover || canReturn ? (
+          <span className="bz-actions bz-pu-rowbtns">
+            {t.issue.handover && (
+              <button className="btn btn-sm" aria-expanded={!!proof[t.issue.id]} onClick={() => flip(setProof, t.issue.id)}>
+                Proof
+              </button>
+            )}
+            {canReturn && (
+              <button className="btn btn-sm" aria-expanded={!!ret[t.issue.id]} onClick={() => flip(setRet, t.issue.id)}>
+                <ArrowCounterClockwiseIcon size={14} aria-hidden="true" />
+                Return
+              </button>
+            )}
+          </span>
+        ) : null
+      }
+      rowDetail={(t) =>
+        (t.issue.handover && proof[t.issue.id]) || (canReturn && ret[t.issue.id]) ? (
+          <div className="bz-pu-sup-acts" data-no-row-click>
+            {t.issue.handover && proof[t.issue.id] && <DeliveryProofPanel issueId={t.issue.id} />}
+            {canReturn && ret[t.issue.id] && <IssueReturnForm t={t} />}
+          </div>
+        ) : null
+      }
+      empty={<Empty title="Nothing issued." />}
+    />
+  );
+}
+
+/** Record a return: the condition and what happened (P107: shared by the issued table and the leavers' list). */
+function IssueReturnForm({ t }: { t: IssueRow }) {
   const act = useAction();
   const [condition, setCondition] = useState<'good' | 'worn' | 'damaged' | 'lost'>('good');
   const [note, setNote] = useState('');
+  return (
+    <>
+      <div className="bz-act">
+        <div className="bz-form">
+          <F label="Condition">
+            <select className="select" value={condition} onChange={(e) => setCondition(e.target.value as typeof condition)}>
+              <option value="good">Good</option>
+              <option value="worn">Worn</option>
+              <option value="damaged">Damaged</option>
+              <option value="lost">Lost</option>
+            </select>
+          </F>
+          <F label="What happened">
+            <input className="input" placeholder="What happened (damaged or lost)" value={note} onChange={(e) => setNote(e.target.value)} />
+          </F>
+        </div>
+        <div className="bz-actions">
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={act.busy}
+            onClick={() => act.run(() => api.stockReturn(t.issue.id, condition, note), 'Return recorded. Nothing is charged to the guard.')}
+          >
+            Record return
+          </button>
+        </div>
+      </div>
+      <ErrorNotice error={act.error} />
+    </>
+  );
+}
+
+function IssueLine({ t, canReturn }: { t: PurBoard['issues'][number]; canReturn: boolean }) {
   const [open, setOpen] = useState(false);
   const [proof, setProof] = useState(false);
   return (
@@ -1452,36 +1788,10 @@ function IssueLine({ t, canReturn }: { t: PurBoard['issues'][number]; canReturn:
           </span>
         )}
       </span>
-      {(proof || open || act.error) && (
+      {(proof || open) && (
         <div className="bz-pu-sup-acts">
           {proof && <DeliveryProofPanel issueId={t.issue.id} />}
-          {open && (
-            <div className="bz-act">
-              <div className="bz-form">
-                <F label="Condition">
-                  <select className="select" value={condition} onChange={(e) => setCondition(e.target.value as typeof condition)}>
-                    <option value="good">Good</option>
-                    <option value="worn">Worn</option>
-                    <option value="damaged">Damaged</option>
-                    <option value="lost">Lost</option>
-                  </select>
-                </F>
-                <F label="What happened">
-                  <input className="input" placeholder="What happened (damaged or lost)" value={note} onChange={(e) => setNote(e.target.value)} />
-                </F>
-              </div>
-              <div className="bz-actions">
-                <button
-                  className="btn btn-sm btn-primary"
-                  disabled={act.busy}
-                  onClick={() => act.run(() => api.stockReturn(t.issue.id, condition, note), 'Return recorded. Nothing is charged to the guard.')}
-                >
-                  Record return
-                </button>
-              </div>
-            </div>
-          )}
-          <ErrorNotice error={act.error} />
+          {open && <IssueReturnForm t={t} />}
         </div>
       )}
     </div>
@@ -1677,7 +1987,7 @@ function Reopen({ r }: { r: ReqRow['req'] }) {
  * Uniform requests from government Operations Managers (Fauzan, 11 Nov 2026). The store issues the uniform to the OM who
  * asked (then the patrolling officer, then the guard, who sign on the OM's phone), or refuses with a reason.
  */
-function UniformRequestQueue({ data }: { data: PurBoard }) {
+export function UniformRequestQueue({ data }: { data: PurBoard }) {
   const { data: q, error } = useLoad(() => api.uniformRequests(), []);
   if (error) return <ErrorNotice error={error} />;
   if (!q || !q.canDecide) return null;
@@ -1689,16 +1999,86 @@ function UniformRequestQueue({ data }: { data: PurBoard }) {
         {open.length > 0 && <Chip tone="warn">{open.length} waiting</Chip>}
       </div>
       {q.requests.length === 0 && <p className="muted small">No requests in the last 60 days.</p>}
-      <div className="list">
-        {q.requests.map((r) => (
-          <UniformRequestLine key={r.id} r={r}>
-            {r.status === 'open' && <DecideUniform r={r} data={data} />}
-          </UniformRequestLine>
-        ))}
-      </div>
+      {/* P107: the requests (last 60 days, from the server) as a data table; the Issue / Refuse form stays open under
+          each waiting request, as it was. */}
+      {q.requests.length > 0 && (
+        <DataTable
+          label="Uniform requests from Operations Managers"
+          stateKey="purchasing.uniform-requests"
+          rows={q.requests}
+          rowKey={(r) => r.id}
+          columns={UREQ_COLUMNS}
+          filters={UREQ_FILTERS}
+          searchText={(r) => `${r.staffNo} ${r.requestedBy}`}
+          rowTone={(r) => (r.status === 'open' ? 'warn' : undefined)}
+          rowDetail={(r) =>
+            r.status === 'open' ? (
+              <div data-no-row-click>
+                <DecideUniform r={r} data={data} />
+              </div>
+            ) : null
+          }
+        />
+      )}
     </section>
   );
 }
+
+type UReqRow = UniformRequests['requests'][number];
+const UREQ_COLUMNS: DtColumn<UReqRow>[] = [
+  { id: 'item', label: 'Item', value: (r) => r.itemName, render: (r) => <strong>{`${r.qty} x ${r.itemName}`}</strong>, phone: 'title' },
+  { id: 'person', label: 'For', value: (r) => r.personName, render: (r) => `${r.personName} (${r.staffNo})`, phone: 'sub' },
+  {
+    id: 'asked',
+    label: 'Asked on',
+    value: (r) => r.requestedAt.slice(0, 10),
+    sort: 'date',
+    render: (r) => (
+      <>
+        {dateLabel(r.requestedAt.slice(0, 10))}
+        <div className="muted small">{r.requestedBy}</div>
+      </>
+    ),
+  },
+  {
+    id: 'reason',
+    label: 'Reason',
+    value: (r) => r.reason,
+    hideBelow: 1100,
+    render: (r) => (
+      <span className="small">
+        {r.reason}
+        <span className="muted">
+          {` · ${r.history.pieces} piece${r.history.pieces === 1 ? '' : 's'} in 12 months`}
+          {r.history.last ? `, last ${dateLabel(r.history.last)}` : ''}
+          {r.early ? ' · within 6 months of the last piece' : ''}
+          {r.guardPays ? ` · guard pays, receipt ${r.guardPays.receiptNo}, RM${r.guardPays.amount.toFixed(2)}` : ''}
+        </span>
+      </span>
+    ),
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => UREQ_LABEL[r.status],
+    translate: true,
+    render: (r) => (
+      <>
+        <Chip tone={UREQ_TONE[r.status]}>{UREQ_LABEL[r.status]}</Chip>
+        {r.decided && (
+          <div className="small">
+            {r.decided.by} {dateLabel(r.decided.at.slice(0, 10))}
+            {r.decided.note ? `: ${r.decided.note}` : ''}
+          </div>
+        )}
+      </>
+    ),
+  },
+];
+const UREQ_FILTERS: DtFilter<UReqRow>[] = [
+  { id: 'status', label: 'Status', value: (r) => r.status, options: (Object.keys(UREQ_LABEL) as UReqRow['status'][]).map((k) => ({ value: k, label: UREQ_LABEL[k] })) },
+  { id: 'item', label: 'Item', value: (r) => r.itemName },
+];
 
 function DecideUniform({ r, data }: { r: { id: string; personId: string; billTo: string }; data: PurBoard }) {
   const act = useAction();

@@ -1,6 +1,7 @@
 import { Select } from '../SearchSelect';
 import{useEffect,useMemo,useReducer,useState}from'react';import{api}from'../api';import{useApp}from'../App';import{Drawer,ErrorNotice,Loading,useLoad}from'../ui';import{DataTable}from'../DataTable';
 import { ImportButton } from './ImportDrawer';
+import { SopHelp } from '../sop/SopHelp';
 import { manualItVisible } from './ItManual';
 import{createProcurementSession,decodeProcurementBoard,procurementAllowed,procurementFingerprint,exactMoney}from'../it-procurement/client';import type{ProcurementBoard,ProcurementKind,ProcurementRow}from'../it-procurement/contract';import type{ManualSession}from'../it-manual/session';
 const labels:Record<ProcurementKind,string>={po:'Issue approved purchase order',receipt:'Record actual goods receipt',invoice:'Check actual supplier invoice',advance_request:'Request a separate advance exception',advance_decision:'Review exact advance exception',payment:'Record actual payment reference'};
@@ -28,7 +29,7 @@ const actsOf=(r:ProcurementRow)=>!choice&&state.phase==='editing'&&data.configur
 return <section className="page ix-page">
  <header className="k-head">
   <div className="k-head-text"><h1>IT purchase fulfilment</h1><p className="k-head-sub">Approved PO → actual goods receipt → invoice match → payment reference. An advance needs its own current COO then CEO decisions; the earlier purchase approval is not an advance approval. This records evidence only: no bank transfer, supplier email or payment execution.</p></div>
-  <div className="k-head-actions"><button className="btn" onClick={reload}>Refresh procurement records</button></div>
+  <div className="k-head-actions"><SopHelp id="it-purchase-fulfilment"/><button className="btn" onClick={reload}>Refresh procurement records</button></div>
  </header>
  <p className="notice" data-tone="info">Only the configured Merdeka Finance team and existing authorized workflow actors can use server-offered actions. This screen does not grant general IT or company access.</p>
  {data.configuration!=='ready'&&<p role="status" className="notice" data-tone="warn">Protected procurement storage or authority mapping needs setup. No new workflow action is available.</p>}

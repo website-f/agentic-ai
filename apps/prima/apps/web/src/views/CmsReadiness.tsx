@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { api } from '../api';
 import type { CmsDeviceInput, CmsReadinessBoard } from '../api/types';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { SopHelp } from '../sop/SopHelp';
 import { PlusIcon } from '@phosphor-icons/react';
 import { ImportButton } from './ImportDrawer';
 
@@ -61,6 +62,7 @@ export function CmsReadinessView() {
           <p>{data.notice}</p>
         </div>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <SopHelp id="security-cms-readiness" />
           {data.sites.some((r) => r.canRecord) && (
             <>
               <button className="btn btn-primary" aria-expanded={picking} onClick={() => setPicking(!picking)}>

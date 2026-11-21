@@ -2,6 +2,8 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinControls, type FinDesk } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction, type Tone } from '../ui';
+import { Empty } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * Regular payments, guarantees and hostel bills (Fauzan, 2 Nov 2026). Hire purchase, building loans, bills, rent,
@@ -50,6 +52,99 @@ function useGo(companyId: string) {
   return { act, go };
 }
 
+/** P107: which table rows are opened (their detail shown under the row). */
+function useOpenRows() {
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (id: string) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  return { isOpen: (id: string) => open.has(id), toggle };
+}
+
+const block = { display: 'block' } as const;
+const kindShort = (k: string) => KIND[k]?.split(' (')[0] ?? k;
+const regStatus = (r: Reg) => (r.status === 'pending' ? 'To check' : r.status);
+const regMethod = (r: Reg) => (r.method === 'direct_debit' ? 'direct debit' : 'transfer');
+const regApprover = (r: Reg) => (r.subject === 'finance' ? 'FD or CEO' : 'COO or CEO');
+
+/** P107: the regular payments as a table; "Open" shows the next periods under the row as before. */
+const REG_COLUMNS: DtColumn<Reg>[] = [
+  {
+    id: 'name',
+    label: 'Name',
+    value: (r) => r.name,
+    phone: 'title',
+    render: (r) => (
+      <>
+        <b>{r.name}</b>
+        {(r.remaining != null || r.expiresOn) && (
+          <span className="muted small" style={block}>
+            {r.remaining != null && `${r.remaining} instalment(s) left`}
+            {r.remaining != null && r.expiresOn && ' · '}
+            {r.expiresOn && `policy ends ${dateLabel(r.expiresOn)}`}
+          </span>
+        )}
+      </>
+    ),
+  },
+  { id: 'payee', label: 'Payee', value: (r) => r.payee, phone: 'sub' },
+  {
+    id: 'kind',
+    label: 'Type',
+    value: (r) => kindShort(r.kind),
+    translate: true,
+    render: (r) => (
+      <>
+        {kindShort(r.kind)}
+        {r.body ? ` · ${r.body}` : ''}
+      </>
+    ),
+  },
+  {
+    id: 'every',
+    label: 'How often',
+    value: (r) => r.every,
+    translate: true,
+    render: (r) => (
+      <>
+        {r.every}, day {r.dueDay}
+      </>
+    ),
+  },
+  { id: 'amount', label: 'Amount', value: (r) => r.amount, sort: 'money', render: (r) => (r.amount == null ? 'amount from each bill' : rm(r.amount)) },
+  {
+    id: 'method',
+    label: 'Paid by',
+    value: regMethod,
+    translate: true,
+    hideBelow: 1100,
+    render: (r) => (
+      <>
+        {regMethod(r)}
+        <span className="muted small" style={block}>
+          approved by {regApprover(r)}
+        </span>
+      </>
+    ),
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    value: regStatus,
+    translate: true,
+    render: (r) => <Chip tone={r.status === 'active' ? 'ok' : r.status === 'pending' ? 'warn' : 'info'}>{regStatus(r)}</Chip>,
+  },
+];
+const REG_FILTERS: DtFilter<Reg>[] = [
+  { id: 'kind', label: 'Type', value: (r) => r.kind, optionLabel: kindShort },
+  { id: 'status', label: 'Status', value: regStatus },
+  { id: 'method', label: 'Paid by', value: regMethod },
+];
+
 export function RegularPayments({ v, co }: { v: FinControls; co: Co }) {
   const { act, go } = useGo(v.companyId);
   const [adding, setAdding] = useState(false);
@@ -57,6 +152,7 @@ export function RegularPayments({ v, co }: { v: FinControls; co: Co }) {
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const fin = f.kind === 'hire_purchase' || f.kind === 'loan';
   const [prep, setPrep] = useState<{ prepared: unknown[]; skipped: { name: string; reason: string }[] } | null>(null);
+  const rows = useOpenRows();
   return (
     <section className="panel">
       <div className="panel-head">
@@ -235,43 +331,36 @@ export function RegularPayments({ v, co }: { v: FinControls; co: Co }) {
           </button>
         </div>
       )}
-      <div className="list">
-        {v.regular.length === 0 && <div className="list-item muted">Nothing on the list yet.</div>}
-        {v.regular.map((r) => (
-          <RegularRow key={r.id} v={v} co={co} r={r} />
-        ))}
-      </div>
+      <DataTable
+        label="Regular payments"
+        stateKey="fin.regular"
+        rows={v.regular}
+        rowKey={(r) => r.id}
+        columns={REG_COLUMNS}
+        filters={REG_FILTERS}
+        phoneFacts={5}
+        searchText={(r) => `${r.body ?? ''} ${r.reference ?? ''} ${regApprover(r)}`}
+        rowEnd={(r) => (
+          <button className="btn btn-sm" onClick={() => rows.toggle(r.id)}>
+            {rows.isOpen(r.id) ? 'Close' : 'Open'}
+          </button>
+        )}
+        rowDetail={(r) => (rows.isOpen(r.id) ? <RegularDetail v={v} co={co} r={r} /> : null)}
+        empty={<Empty title="Nothing on the list yet." />}
+      />
     </section>
   );
 }
 
-function RegularRow({ v, co, r }: { v: FinControls; co: Co; r: Reg }) {
+/** The next periods of one regular payment (shown under its row when opened). */
+function RegularDetail({ v, co, r }: { v: FinControls; co: Co; r: Reg }) {
   const { act, go } = useGo(v.companyId);
-  const [open, setOpen] = useState(false);
   const [f, setF] = useState<Record<string, string>>({});
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const pay = useAction();
   return (
-    <div className="list-item fin-block">
-      <div className="row fin-between">
-        <div className="fin-min0">
-          <b>{r.name}</b> · {r.payee} · {KIND[r.kind]?.split(' (')[0] ?? r.kind}
-          {r.body ? ` · ${r.body}` : ''}
-          <div className="muted small">
-            {r.every}, day {r.dueDay} · {r.amount == null ? 'amount from each bill' : rm(r.amount)} · {r.method === 'direct_debit' ? 'direct debit' : 'transfer'} · approved by{' '}
-            {r.subject === 'finance' ? 'FD or CEO' : 'COO or CEO'}
-            {r.remaining != null && ` · ${r.remaining} instalment(s) left`}
-            {r.expiresOn && ` · policy ends ${dateLabel(r.expiresOn)}`}
-          </div>
-        </div>
-        <div className="row">
-          <Chip tone={r.status === 'active' ? 'ok' : r.status === 'pending' ? 'warn' : 'info'}>{r.status === 'pending' ? 'To check' : r.status}</Chip>
-          <button className="btn btn-sm" onClick={() => setOpen((x) => !x)}>
-            {open ? 'Close' : 'Open'}
-          </button>
-        </div>
-      </div>
-      {open && (
+    <div className="fin-block">
+      {
         <div className="fin-pt">
           <ErrorNotice error={act.error ?? pay.error} />
           <div className="list">
@@ -355,7 +444,7 @@ function RegularRow({ v, co, r }: { v: FinControls; co: Co; r: Reg }) {
             </div>
           )}
         </div>
-      )}
+      }
     </div>
   );
 }
@@ -446,55 +535,115 @@ export function Guarantees({ v, co }: { v: FinControls; co: Co }) {
           </button>
         </div>
       )}
-      <div className="list">
-        {v.guarantees.length === 0 && <div className="list-item muted">No guarantees on the list.</div>}
-        {v.guarantees.map((g) => (
-          <div key={g.id} className="list-item fin-block">
-            <div className="row fin-between">
-              <div>
-                <b>
-                  {g.kind} {g.number}
-                </b>{' '}
-                · {g.beneficiary} · {g.purpose}
-                <div className="muted small">
-                  {g.issuer} · {rm(g.amount)} · collateral {rm(g.collateral)} · expires {dateLabel(g.expiresOn)}
-                  {g.daysToExpiry >= 0 && g.daysToExpiry <= 60 && ` (${g.daysToExpiry} days)`}
-                  {g.refund && ` · refund seen ${dateLabel(g.refund.date)}`}
-                </div>
-              </div>
+      {/* P107: the guarantees as a table; the comment box and its buttons stay under each open guarantee. */}
+      <DataTable
+        label="IG and BG guarantees"
+        stateKey="fin.guarantees"
+        rows={v.guarantees}
+        rowKey={(g) => g.id}
+        searchText={(g) => `${g.purpose} ${g.issuer}`}
+        columns={[
+          {
+            id: 'number',
+            label: 'Guarantee',
+            value: (g) => `${g.kind} ${g.number}`,
+            phone: 'title',
+            render: (g) => (
+              <b>
+                {g.kind} {g.number}
+              </b>
+            ),
+          },
+          {
+            id: 'client',
+            label: 'Client',
+            value: (g) => g.beneficiary,
+            phone: 'sub',
+            render: (g) => (
+              <>
+                {g.beneficiary}
+                <span className="muted small" style={block}>
+                  {g.purpose}
+                </span>
+              </>
+            ),
+          },
+          { id: 'issuer', label: 'Issuer', value: (g) => g.issuer, hideBelow: 1200 },
+          { id: 'amount', label: 'Amount', value: (g) => g.amount, sort: 'money', render: (g) => rm(g.amount) },
+          { id: 'collateral', label: 'Collateral', value: (g) => g.collateral, sort: 'money', render: (g) => rm(g.collateral) },
+          {
+            id: 'expires',
+            label: 'Expires',
+            value: (g) => g.expiresOn,
+            sort: 'date',
+            render: (g) => (
+              <>
+                {dateLabel(g.expiresOn)}
+                {g.daysToExpiry >= 0 && g.daysToExpiry <= 60 && ` (${g.daysToExpiry} days)`}
+                {g.refund && (
+                  <span className="muted small" style={block}>
+                    refund seen {dateLabel(g.refund.date)}
+                  </span>
+                )}
+              </>
+            ),
+          },
+          {
+            id: 'status',
+            label: 'Status',
+            value: (g) => (g.status === 'pending' ? 'To check' : g.status),
+            translate: true,
+            render: (g) => (
               <span className="row">
                 {g.claimNow && <Chip tone="crit">Claim collateral</Chip>}
                 <Chip tone={tone(g.status)}>{g.status === 'pending' ? 'To check' : g.status}</Chip>
               </span>
+            ),
+          },
+        ]}
+        filters={[
+          { id: 'kind', label: 'Type', value: (g) => g.kind },
+          { id: 'status', label: 'Status', value: (g) => (g.status === 'pending' ? 'To check' : g.status) },
+          {
+            id: 'expiry',
+            label: 'Expires',
+            value: (g) => [g.claimNow ? 'claim' : '', g.daysToExpiry >= 0 && g.daysToExpiry <= 60 ? 'soon' : ''].filter(Boolean),
+            options: [
+              { value: 'claim', label: 'Claim collateral' },
+              { value: 'soon', label: 'Within 60 days' },
+            ],
+          },
+        ]}
+        rowDetail={(g) =>
+          co.canAct && !['ended', 'refunded', 'called'].includes(g.status) ? (
+            <div className="row">
+              <input className="input" placeholder="Comment, document or claim reference" value={f[`x-${g.id}`] ?? ''} onChange={set(`x-${g.id}`)} />
+              {g.status === 'pending' && (
+                <button className="btn btn-sm" onClick={() => go('guarantees', 'check', { guaranteeId: g.id, comment: f[`x-${g.id}`] }, 'Checked.')}>
+                  Check
+                </button>
+              )}
+              {g.status === 'active' && (
+                <button className="btn btn-sm" onClick={() => go('guarantees', 'release', { guaranteeId: g.id, doc: f[`x-${g.id}`] }, "Client's release recorded.")}>
+                  Client released it (letter)
+                </button>
+              )}
+              {g.claimNow && (
+                <button className="btn btn-sm" onClick={() => go('guarantees', 'claim', { guaranteeId: g.id, ref: f[`x-${g.id}`], docs: [g.release?.doc ?? 'Expiry', f[`x-${g.id}`]] }, 'Claim recorded. Prima looks for the refund.')}>
+                  Claim sent
+                </button>
+              )}
             </div>
-            {co.canAct && !['ended', 'refunded', 'called'].includes(g.status) && (
-              <div className="row fin-pt">
-                <input className="input" placeholder="Comment, document or claim reference" value={f[`x-${g.id}`] ?? ''} onChange={set(`x-${g.id}`)} />
-                {g.status === 'pending' && (
-                  <button className="btn btn-sm" onClick={() => go('guarantees', 'check', { guaranteeId: g.id, comment: f[`x-${g.id}`] }, 'Checked.')}>
-                    Check
-                  </button>
-                )}
-                {g.status === 'active' && (
-                  <button className="btn btn-sm" onClick={() => go('guarantees', 'release', { guaranteeId: g.id, doc: f[`x-${g.id}`] }, "Client's release recorded.")}>
-                    Client released it (letter)
-                  </button>
-                )}
-                {g.claimNow && (
-                  <button className="btn btn-sm" onClick={() => go('guarantees', 'claim', { guaranteeId: g.id, ref: f[`x-${g.id}`], docs: [g.release?.doc ?? 'Expiry', f[`x-${g.id}`]] }, 'Claim recorded. Prima looks for the refund.')}>
-                    Claim sent
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+          ) : null
+        }
+        empty={<Empty title="No guarantees on the list." />}
+      />
     </section>
   );
 }
 
 export function HostelWatch({ v }: { v: FinControls }) {
+  const rows = useOpenRows();
   if (!v.hostel.length) return null;
   return (
     <section className="panel">
@@ -505,42 +654,80 @@ export function HostelWatch({ v }: { v: FinControls }) {
         Once FWM and the COO approve, record the payment here: the account, the day and the bank reference. FWM and the company see it as paid straight
         away, with the record, and Prima looks for it on the bank statement. No slip is needed.
       </p>
-      <div className="list">
-        {v.hostel.map((b) => (
-          <HostelLine key={b.id} b={b} v={v} />
-        ))}
-      </div>
+      {/* P107: hostel bills as a table; "Record payment" opens the same small form under the row. */}
+      <DataTable
+        label="Hostel bills"
+        stateKey="fin.hostel"
+        rows={v.hostel}
+        rowKey={(b) => b.id}
+        columns={[
+          { id: 'hostel', label: 'Hostel', value: (b) => b.hostel, phone: 'title' },
+          {
+            id: 'bill',
+            label: 'Bill',
+            value: (b) => `${b.kind.toLowerCase()} ${b.period}`,
+            phone: 'sub',
+            render: (b) => (
+              <>
+                {b.kind.toLowerCase()} {b.period}
+              </>
+            ),
+          },
+          { id: 'amount', label: 'Amount', value: (b) => b.amount, sort: 'money', render: (b) => rm(b.amount) },
+          { id: 'due', label: 'Due', value: (b) => b.dueOn, sort: 'date' },
+          {
+            id: 'paid',
+            label: 'Paid on',
+            value: (b) => b.paidOn,
+            sort: 'date',
+            render: (b) => (
+              <>
+                {b.paidOn ? dateLabel(b.paidOn) : '–'}
+                {b.paidBy && <span className="muted"> · {b.paidBy}</span>}
+              </>
+            ),
+          },
+          {
+            id: 'status',
+            label: 'Status',
+            value: hostelStatus,
+            translate: true,
+            render: (b) => <Chip tone={b.unseen || b.overdue ? 'crit' : b.onStatement ? 'ok' : b.mayRecord ? 'warn' : 'info'}>{hostelStatus(b)}</Chip>,
+          },
+        ]}
+        filters={[
+          { id: 'hostel', label: 'Hostel', value: (b) => b.hostel },
+          { id: 'status', label: 'Status', value: hostelStatus },
+          { id: 'period', label: 'Month', value: (b) => b.period },
+        ]}
+        searchText={(b) => b.paidBy ?? ''}
+        rowEnd={(b) =>
+          b.mayRecord ? (
+            <button className="btn btn-sm" onClick={() => rows.toggle(b.id)}>
+              {rows.isOpen(b.id) ? 'Close' : 'Record payment'}
+            </button>
+          ) : null
+        }
+        rowDetail={(b) => (rows.isOpen(b.id) && b.mayRecord ? <HostelPay b={b} v={v} /> : null)}
+      />
     </section>
   );
 }
 
-function HostelLine({ b, v }: { b: FinControls['hostel'][number]; v: FinControls }) {
+type Hostel = FinControls['hostel'][number];
+const hostelStatus = (b: Hostel) =>
+  b.unseen ? 'Not on bank statement' : b.onStatement ? 'Seen in bank' : b.mayRecord ? 'Approved, to pay' : b.overdue ? 'Overdue' : b.status.replace('_', ' ');
+
+/** Record a hostel bill's payment (under its row when "Record payment" is pressed). */
+function HostelPay({ b, v }: { b: Hostel; v: FinControls }) {
   const act = useAction();
-  const [open, setOpen] = useState(false);
   const banks = v.statements.map((s) => s.bank);
   const [bankId, setBankId] = useState(banks.length === 1 ? banks[0].id : '');
   const [on, setOn] = useState(new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10));
   const [ref, setRef] = useState('');
   return (
-    <div className="list-item fin-stack">
-      <div className="row fin-between">
-        <span>
-          {b.hostel}: {b.kind.toLowerCase()} {b.period} · {rm(b.amount)} · due {dateLabel(b.dueOn)}
-          {b.paidOn && ` · paid ${dateLabel(b.paidOn)}`}
-          {b.paidBy && <span className="muted"> · {b.paidBy}</span>}
-        </span>
-        <span className="row">
-          <Chip tone={b.unseen || b.overdue ? 'crit' : b.onStatement ? 'ok' : b.mayRecord ? 'warn' : 'info'}>
-            {b.unseen ? 'Not on bank statement' : b.onStatement ? 'Seen in bank' : b.mayRecord ? 'Approved, to pay' : b.overdue ? 'Overdue' : b.status.replace('_', ' ')}
-          </Chip>
-          {b.mayRecord && (
-            <button className="btn btn-sm" onClick={() => setOpen(!open)}>
-              {open ? 'Close' : 'Record payment'}
-            </button>
-          )}
-        </span>
-      </div>
-      {open && b.mayRecord && (
+    <div className="fin-stack">
+      {(
         <div className="row fin-end">
           <Field label="Paid from">
             <Select className="select" value={bankId} onChange={(e) => setBankId(e.target.value)}>

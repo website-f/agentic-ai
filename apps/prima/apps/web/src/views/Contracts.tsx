@@ -18,6 +18,7 @@ import {
 } from '@prima/core';
 import { api, type ContractBoard, type PaperReadingResult } from '../api';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Steps, Toolbar } from '../kit';
+import { SopHelp } from '../sop/SopHelp';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { useApp } from '../App';
 import { RecordButton } from './RecordForm';
@@ -116,15 +117,18 @@ export function ContractsView() {
         title="Contracts"
         sub="Each site is mobilised against 12 workstreams (the 12th is CMS activation) and goes live only with the Site Ready-to-Operate Certificate. Reviews follow at day 1, 7, 14 and 30. The billing method changes only by a signed variation."
         actions={
-          data.canAdd.length > 0 && (
-            <>
-              <ImportButton kind="contract" choices={data.canAdd.map((c): [string, string] => [c.companyId, c.companyName])} />
-              <button className="btn btn-primary" onClick={() => setAdding(true)}>
-                <PlusIcon size={16} weight="bold" aria-hidden="true" />
-                New contract
-              </button>
-            </>
-          )
+          <>
+            <SopHelp id="sales-contract-golive" />
+            {data.canAdd.length > 0 && (
+              <>
+                <ImportButton kind="contract" choices={data.canAdd.map((c): [string, string] => [c.companyId, c.companyName])} />
+                <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                  New contract
+                </button>
+              </>
+            )}
+          </>
         }
       />
       <Stats>
@@ -184,7 +188,9 @@ export function ContractsView() {
           >
             {needle
               ? 'No contract matches the search.'
-              : filter !== 'all'
+              : data.canAdd.length === 0 && filter === 'all'
+                ? 'The company manager records each signed contract here; the company office and Operations then work through its mobilisation items.'
+                : filter !== 'all'
                 ? 'Nothing in this view. Choose All to see every contract, or record a signed contract to start its mobilisation.'
                 : 'Record a signed contract or letter of award to start its site mobilisation.'}
           </Empty>

@@ -7,12 +7,13 @@ import { OpForm } from './ItPolicyPanel';
 import { ProofPicker } from './Proof';
 import { saveFile } from '../save';
 import { useApp } from '../App';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * P105: the OM picks the site by name from the sites they cover (every company they see), instead of typing a site
  * record id that no screen shows. The list is read once when the form opens.
  */
-function SitePick({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+export function SitePick({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const { me } = useApp();
   const { data } = useLoad(
     () =>
@@ -115,6 +116,52 @@ const send = (op: string) => (i: Record<string, unknown>) => api.siteSuppliesAct
 const CONTRACT: Record<string, string> = { KBK: 'KBK', PKK_NEPAL: 'PKK Nepal', PKK: 'PKK Tempatan' };
 const STAGE: Record<string, string> = { prepared: 'Stok disediakan', pic: 'Disemak oleh PIC', ready: 'Sedia untuk dihantar' };
 
+/** P107: the requests' columns and filters (Malay, like the rest of this panel). */
+const statusTone = (r: Row) => (r.status === 'ditolak' ? 'crit' : r.status === 'siap' ? 'ok' : 'warn');
+const ROW_COLUMNS: DtColumn<Row>[] = [
+  { id: 'ref', label: 'Rujukan', value: (r) => r.ref, render: (r) => <strong>{r.ref}</strong>, phone: 'title' },
+  { id: 'site', label: 'Tapak', value: (r) => r.siteName, phone: 'sub' },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => r.statusLabel,
+    render: (r) => (
+      <>
+        <Chip tone={statusTone(r)}>{r.statusLabel}</Chip> {r.myTurn && <Chip tone="info">Giliran anda</Chip>}
+      </>
+    ),
+  },
+  { id: 'contract', label: 'Kontrak', value: (r) => CONTRACT[r.contract] ?? r.contract, hideBelow: 1100 },
+  { id: 'startedBy', label: 'Dimulakan oleh', value: (r) => r.startedBy.name, hideBelow: 1300 },
+  {
+    id: 'requested',
+    label: 'Dimasukkan',
+    value: (r) => r.requestedAt.slice(0, 10),
+    sort: 'date',
+    render: (r) => (
+      <>
+        {dateLabel(r.requestedAt.slice(0, 10))}
+        <div className="muted small">oleh {r.requestedBy}</div>
+        {r.alsoSentBy.channel ? <div className="muted small">{`juga dihantar melalui ${r.alsoSentBy.channel} ${r.alsoSentBy.ref}`}</div> : null}
+      </>
+    ),
+  },
+  { id: 'wait', label: 'Menunggu', value: (r) => r.waitDays, sort: 'number', render: (r) => `${r.waitDays} hari` },
+];
+const ROW_FILTERS: DtFilter<Row>[] = [
+  { id: 'status', label: 'Status', value: (r) => r.statusLabel },
+  { id: 'contract', label: 'Kontrak', value: (r) => r.contract, optionLabel: (v) => CONTRACT[v] ?? v },
+  {
+    id: 'turn',
+    label: 'Giliran',
+    value: (r) => (r.myTurn ? 'mine' : 'other'),
+    options: [
+      { value: 'mine', label: 'Giliran anda' },
+      { value: 'other', label: 'Bukan giliran anda' },
+    ],
+  },
+];
+
 export function SiteSuppliesPanel({ canAsk }: { canAsk?: boolean }) {
   const { data, error } = useLoad(() => api.siteSuppliesAct('board', {}) as Promise<Board>, []);
   const [open, setOpen] = useState<string | null>(null);
@@ -149,23 +196,28 @@ export function SiteSuppliesPanel({ canAsk }: { canAsk?: boolean }) {
           ]}
         />
       )}
-      <div className="list">
-        {data.rows.map((r) => (
-          <div key={r.id} className="item">
-            <div className="item-main">
-              <button className="link" onClick={() => setOpen(open === r.id ? null : r.id)}>
-                <strong>{r.ref}</strong>
-              </button>{' '}
-              {r.siteName} <Chip tone={r.status === 'ditolak' ? 'crit' : r.status === 'siap' ? 'ok' : 'warn'}>{r.statusLabel}</Chip> {r.myTurn && <Chip tone="info">Giliran anda</Chip>}
-              <div className="muted small">
-                {CONTRACT[r.contract]} · dimulakan oleh {r.startedBy.name} · dimasukkan oleh {r.requestedBy} {dateLabel(r.requestedAt.slice(0, 10))} · menunggu {r.waitDays} hari
-                {r.alsoSentBy.channel ? ` · juga dihantar melalui ${r.alsoSentBy.channel} ${r.alsoSentBy.ref}` : ''}
-              </div>
-              {open === r.id && <Detail r={r} />}
+      {/* P107: the requests as a data table (search, filters, sort, pages; a card per request on a phone). Clicking a
+          request opens its lines and steps under it, as the reference link did. This panel is written in Malay. */}
+      <DataTable
+        label="Permohonan Pesanan Barang"
+        stateKey="purchasing.site-supplies"
+        rows={data.rows}
+        rowKey={(r) => r.id}
+        columns={ROW_COLUMNS}
+        filters={ROW_FILTERS}
+        searchPlaceholder="Cari rujukan, tapak atau nama"
+        searchText={(r) => `${r.alsoSentBy.channel ?? ''} ${r.alsoSentBy.ref}`}
+        onRowClick={(r) => setOpen(open === r.id ? null : r.id)}
+        phoneFacts={5}
+        rowDetail={(r) =>
+          open === r.id ? (
+            <div data-no-row-click>
+              <Detail r={r} />
             </div>
-          </div>
-        ))}
-      </div>
+          ) : null
+        }
+        empty={<p className="muted small">Tiada permohonan.</p>}
+      />
       {data.bulks.length > 0 && (
         <>
           <h4>Penghantaran pukal ke tapak (kira dahulu, kemudian serah)</h4>

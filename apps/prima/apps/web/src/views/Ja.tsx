@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { SopHelp } from '../sop/SopHelp';
 import { ArrowsClockwiseIcon, IdentificationCardIcon, MoneyIcon, SirenIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import { api, type JaBoard } from '../api';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, Loading, Sev, dateLabel, dateTimeLabel, useLoad, type Tone } from '../ui';
+import { DataTable, type DtColumn } from '../DataTable';
 import '../styles/biz.css';
 
 
@@ -54,6 +56,7 @@ export function JaView() {
     <div className="page bz-ja-page">
       <PageHead
         title="JA Group app"
+        actions={<SopHelp id="it-ja-feed" />}
         sub={`Guards and officers use the JA Group app. Their payroll, foreign worker papers and incidents come here from its feed, read-only. A company with no data for over ${data.rule.staleHours} hours shows as unknown. Nothing is added or changed here: correct a record in the JA Group app and it arrives with the next feed.`}
       >
         <p className="notice" data-tone="info">
@@ -154,32 +157,84 @@ function FeedPanel({ data }: { data: JaBoard }) {
         })}
       </div>
       {data.syncs.length > 0 && (
-        <Card title="Deliveries" sub="Each batch the JA app sent, and what Prima kept" flush>
-          <ul className="bz-rows">
-            {data.syncs.map((s) => (
-              <li key={s.id} className="bz-row" data-tone={s.rejected.length ? 'warn' : undefined}>
-                <span className="bz-row-main">
-                  <span className="bz-row-title">{DATASET[s.dataset]}</span>
-                  <span className="bz-row-meta">{dateTimeLabel(s.at)}</span>
-                  {s.rejected.slice(0, 3).map((r) => (
-                    <span key={r.externalId} className="bz-row-meta">
-                      Refused {r.externalId}: {r.reason}
-                    </span>
-                  ))}
-                </span>
-                <span className="bz-row-side">
-                  <Chip tone={s.rejected.length ? 'warn' : 'ok'}>
-                    {s.accepted} of {s.received} kept
-                  </Chip>
-                </span>
-              </li>
-            ))}
-          </ul>
+        <Card title="Deliveries" sub="Each batch the JA app sent, and what Prima kept">
+          <DataTable
+            label="Deliveries"
+            stateKey="it.ja.deliveries"
+            rows={data.syncs}
+            rowKey={(s) => s.id}
+            columns={SYNC_COLUMNS}
+            filters={[
+              { id: 'dataset', label: 'Dataset', value: (s) => s.dataset, optionLabel: (k) => DATASET[k as Dataset] ?? k },
+              { id: 'refused', label: 'Refused', value: (s) => (s.rejected.length ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Some refused' }, { value: 'no', label: 'All kept' }] },
+            ]}
+            searchText={(s) => s.rejected.map((r) => `${r.externalId} ${r.reason}`).join(' ')}
+            rowTone={(s) => (s.rejected.length ? 'warn' : undefined)}
+          />
         </Card>
       )}
     </>
   );
 }
+
+type Dataset = JaBoard['datasets'][number];
+/** P107: the JA app's deliveries as a table. */
+const SYNC_COLUMNS: DtColumn<JaBoard['syncs'][number]>[] = [
+  { id: 'dataset', label: 'Dataset', value: (s) => DATASET[s.dataset], translate: true, render: (s) => <strong>{DATASET[s.dataset]}</strong>, phone: 'title' },
+  { id: 'at', label: 'Received', value: (s) => s.at, sort: 'date', render: (s) => dateTimeLabel(s.at), phone: 'sub' },
+  {
+    id: 'kept',
+    label: 'Kept',
+    value: (s) => s.accepted,
+    sort: 'number',
+    align: 'left',
+    render: (s) => (
+      <Chip tone={s.rejected.length ? 'warn' : 'ok'}>
+        {s.accepted} of {s.received} kept
+      </Chip>
+    ),
+  },
+  {
+    id: 'refused',
+    label: 'Refused',
+    value: (s) => s.rejected.length,
+    sort: 'number',
+    align: 'left',
+    render: (s) =>
+      s.rejected.length ? (
+        <span className="small">
+          {s.rejected.slice(0, 3).map((r) => (
+            <span key={r.externalId} style={{ display: 'block' }}>
+              Refused {r.externalId}: {r.reason}
+            </span>
+          ))}
+          {s.rejected.length > 3 && <span className="muted">{`and ${s.rejected.length - 3} more`}</span>}
+        </span>
+      ) : (
+        '–'
+      ),
+  },
+];
+
+type PayRow = JaBoard['payroll'][number];
+/** P107: every company's payroll month in one table (the SOCSO, LINDUNG and EIS figures stay per month below it). */
+const payrollColumns = (byDay: number): DtColumn<PayRow>[] => [
+  { id: 'company', label: 'Company', value: (p) => p.companyName, render: (p) => <strong>{p.companyName}</strong>, phone: 'title' },
+  { id: 'period', label: 'Month', value: (p) => p.period, sort: 'date', render: (p) => p.period, phone: 'sub' },
+  { id: 'headcount', label: 'People', value: (p) => p.headcount, sort: 'number' },
+  { id: 'gross', label: 'Gross', value: (p) => p.gross, sort: 'money' },
+  { id: 'net', label: 'Net', value: (p) => p.net, sort: 'money', hideBelow: 1100 },
+  { id: 'epf', label: 'Employer EPF', value: (p) => p.employerEpf, sort: 'money', hideBelow: 1200 },
+  { id: 'approvedBy', label: 'Approved by', value: (p) => p.approvedBy ?? '', hideBelow: 1300 },
+  { id: 'paidOn', label: 'Paid', value: (p) => p.paidOn ?? '', sort: 'date', hideBelow: 1100 },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (p) => (p.late ? `Not paid by the ${byDay}th` : PAY[p.status][1]),
+    translate: true,
+    render: (p) => <Chip tone={p.late ? 'crit' : PAY[p.status][0]}>{p.late ? `Not paid by the ${byDay}th` : PAY[p.status][1]}</Chip>,
+  },
+];
 
 function PayrollPanel({ data }: { data: JaBoard }) {
   const periods = [...new Set(data.payroll.map((p) => p.period))];
@@ -190,6 +245,21 @@ function PayrollPanel({ data }: { data: JaBoard }) {
           Not received for {data.payrollMissing[0].period}: {data.payrollMissing.map((m) => m.companyName).join(', ')}.
         </div>
       )}
+      <Card title="Payroll by company" sub="Each company's month as the JA app sent it; the month totals and contributions follow">
+        <DataTable
+          label="Payroll by company"
+          stateKey="it.ja.payroll"
+          rows={data.payroll}
+          rowKey={(p) => p.id}
+          columns={payrollColumns(data.rule.payrollByDay)}
+          filters={[
+            { id: 'period', label: 'Month', value: (p) => p.period },
+            { id: 'company', label: 'Company', value: (p) => p.companyName },
+            { id: 'status', label: 'Status', value: (p) => (p.late ? 'late' : p.status), options: [{ value: 'late', label: `Not paid by the ${data.rule.payrollByDay}th` }, ...Object.entries(PAY).map(([k, [, l]]) => ({ value: k, label: l }))] },
+          ]}
+          rowTone={(p) => (p.late ? 'crit' : undefined)}
+        />
+      </Card>
       {periods.map((period) => {
         const rows = data.payroll.filter((p) => p.period === period);
         return (
@@ -199,25 +269,6 @@ function PayrollPanel({ data }: { data: JaBoard }) {
             sub={`${rows.reduce((n, r) => n + r.headcount, 0).toLocaleString()} paid · gross ${rm(rows.reduce((n, r) => n + r.gross, 0))}`}
             flush
           >
-            <ul className="bz-rows">
-              {rows.map((p) => (
-                <li key={p.id} className="bz-row" data-tone={p.late ? 'crit' : undefined}>
-                  <span className="bz-row-main">
-                    <span className="bz-row-title">{p.companyName}</span>
-                    <span className="bz-row-meta">
-                      {p.headcount} people · net {rm(p.net)} · employer EPF {rm(p.employerEpf)}
-                      {p.approvedBy ? ` · approved by ${p.approvedBy}` : ''}
-                      {p.paidOn ? ` · paid ${dateLabel(p.paidOn)}` : ''}
-                    </span>
-                  </span>
-                  <span className="bz-row-side">
-                    <span className="bz-amt">{rm(p.gross)}</span>
-                    <span className="bz-sub">gross</span>
-                    <Chip tone={p.late ? 'crit' : PAY[p.status][0]}>{p.late ? `Not paid by the ${data.rule.payrollByDay}th` : PAY[p.status][1]}</Chip>
-                  </span>
-                </li>
-              ))}
-            </ul>
             <div className="bz-ja-contrib">
               <h3>SOCSO, LINDUNG and EIS</h3>
               <Contributions rows={rows} />
@@ -235,71 +286,101 @@ function PapersPanel({ data }: { data: JaBoard }) {
       title={`Papers due within ${data.rule.papersWarnDays} days, no renewal submitted`}
       sub={`${data.workers} workers on the feed`}
       actions={<span className="bz-count">{data.papers.length}</span>}
-      flush
     >
-      {data.papers.length === 0 ? (
-        <Empty title="Nothing due." />
-      ) : (
-        <ul className="bz-rows">
-          {data.papers.slice(0, 80).map((p) => (
-            <li key={`${p.recordId}-${p.paper}`} className="bz-row" data-tone={!p.stale && (p.daysLeft == null || p.daysLeft <= 7) ? 'crit' : undefined}>
-              <span className="bz-row-main">
-                <span className="bz-row-title">
-                  {p.name} <span className="muted small mono">{p.staffNo}</span>
-                </span>
-                <span className="bz-row-meta">
-                  {p.companyName} · {PAPER[p.paper]} {p.expiresOn ? `expires ${dateLabel(p.expiresOn)}` : 'no expiry date on record'}
-                  {p.status !== 'active' ? ` · ${p.status.replace('_', ' ')}` : ''}
-                </span>
-              </span>
-              <span className="bz-row-side">
-                {p.stale ? (
-                  <Chip tone="unknown">Unknown, feed late</Chip>
-                ) : (
-                  <Chip tone={p.daysLeft == null || p.daysLeft <= 7 ? 'crit' : 'warn'}>
-                    {p.daysLeft == null ? 'No date' : p.daysLeft < 0 ? `${-p.daysLeft} days expired` : `${p.daysLeft} days left`}
-                  </Chip>
-                )}
-              </span>
-            </li>
-          ))}
-          {data.papers.length > 80 && <li className="bz-ja-more">and {data.papers.length - 80} more</li>}
-        </ul>
-      )}
+      <DataTable
+        label="Papers due"
+        stateKey="it.ja.papers"
+        rows={data.papers}
+        rowKey={(p) => `${p.recordId}-${p.paper}`}
+        columns={PAPER_COLUMNS}
+        filters={[
+          { id: 'paper', label: 'Paper', value: (p) => p.paper, optionLabel: (k) => PAPER[k as PaperRow['paper']] ?? k },
+          { id: 'company', label: 'Company', value: (p) => p.companyName },
+          { id: 'status', label: 'Status', value: (p) => p.status.replace('_', ' ') },
+          { id: 'feed', label: 'Feed', value: (p) => (p.stale ? 'late' : 'current'), options: [{ value: 'late', label: 'Unknown, feed late' }, { value: 'current', label: 'Current' }] },
+        ]}
+        searchText={(p) => p.staffNo}
+        rowTone={(p) => (!p.stale && (p.daysLeft == null || p.daysLeft <= 7) ? 'crit' : undefined)}
+        empty={<Empty title="Nothing due." />}
+      />
     </Card>
   );
 }
 
+type PaperRow = JaBoard['papers'][number];
+/** P107: every paper due, no longer cut at 80. */
+const PAPER_COLUMNS: DtColumn<PaperRow>[] = [
+  {
+    id: 'name',
+    label: 'Worker',
+    value: (p) => p.name,
+    render: (p) => (
+      <span>
+        <strong>{p.name}</strong> <span className="muted small mono">{p.staffNo}</span>
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'company', label: 'Company', value: (p) => p.companyName, phone: 'sub' },
+  { id: 'paper', label: 'Paper', value: (p) => PAPER[p.paper], translate: true },
+  { id: 'expires', label: 'Expires', value: (p) => p.expiresOn ?? '', sort: 'date', render: (p) => (p.expiresOn ? dateLabel(p.expiresOn) : <span className="muted small">no expiry date on record</span>) },
+  { id: 'status', label: 'Status', value: (p) => p.status.replace('_', ' '), translate: true, hideBelow: 1100 },
+  {
+    id: 'left',
+    label: 'Days left',
+    value: (p) => (p.stale ? null : p.daysLeft),
+    sort: 'number',
+    align: 'left',
+    render: (p) =>
+      p.stale ? (
+        <Chip tone="unknown">Unknown, feed late</Chip>
+      ) : (
+        <Chip tone={p.daysLeft == null || p.daysLeft <= 7 ? 'crit' : 'warn'}>{p.daysLeft == null ? 'No date' : p.daysLeft < 0 ? `${-p.daysLeft} days expired` : `${p.daysLeft} days left`}</Chip>
+      ),
+  },
+];
+
 function IncidentsPanel({ data }: { data: JaBoard }) {
   return (
-    <Card title="Incidents from the JA app" sub="Reported, escalated and closed in the JA app" actions={<span className="bz-count">{data.incidents.length}</span>} flush>
-      {data.incidents.length === 0 ? (
-        <Empty title="No incidents received." />
-      ) : (
-        <ul className="bz-rows">
-          {data.incidents.map((i) => (
-            <li key={i.id} className="bz-row bz-ja-inc" data-tone={i.status === 'open' && (i.severity === 'P1' || i.severity === 'P2') ? 'crit' : undefined}>
-              <span className="bz-ja-sev">
-                <Sev s={i.severity} />
-              </span>
-              <span className="bz-row-main">
-                <span className="bz-row-title">
-                  {i.category} · {i.companyName}
-                  {i.siteCode ? ` · ${i.siteCode}` : ''}
-                </span>
-                <span className="bz-row-meta">{i.summary}</span>
-                <span className="bz-row-meta">{dateTimeLabel(i.occurredAt)}</span>
-              </span>
-              <span className="bz-row-side">
-                <Chip tone={i.status === 'open' ? 'warn' : 'ok'}>{i.status === 'open' ? 'Open' : 'Closed'}</Chip>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <Card title="Incidents from the JA app" sub="Reported, escalated and closed in the JA app" actions={<span className="bz-count">{data.incidents.length}</span>}>
+      <DataTable
+        label="Incidents from the JA app"
+        stateKey="it.ja.incidents"
+        rows={data.incidents}
+        rowKey={(i) => i.id}
+        columns={INCIDENT_COLUMNS}
+        filters={[
+          { id: 'severity', label: 'Severity', value: (i) => i.severity },
+          { id: 'status', label: 'Status', value: (i) => i.status, options: [{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }] },
+          { id: 'company', label: 'Company', value: (i) => i.companyName },
+          { id: 'category', label: 'Category', value: (i) => i.category },
+        ]}
+        rowTone={(i) => (i.status === 'open' && (i.severity === 'P1' || i.severity === 'P2') ? 'crit' : undefined)}
+        empty={<Empty title="No incidents received." />}
+      />
     </Card>
   );
 }
+
+/** P107: incidents from the JA app as a table. */
+const INCIDENT_COLUMNS: DtColumn<JaBoard['incidents'][number]>[] = [
+  {
+    id: 'what',
+    label: 'Incident',
+    value: (i) => i.category,
+    render: (i) => (
+      <span>
+        <strong>{i.category}</strong>
+        <span className="small" style={{ display: 'block' }}>{i.summary}</span>
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'severity', label: 'Severity', value: (i) => i.severity, render: (i) => <Sev s={i.severity} /> },
+  { id: 'company', label: 'Company', value: (i) => `${i.companyName}${i.siteCode ? ` · ${i.siteCode}` : ''}`, phone: 'sub' },
+  { id: 'at', label: 'When', value: (i) => i.occurredAt, sort: 'date', render: (i) => dateTimeLabel(i.occurredAt) },
+  { id: 'status', label: 'Status', value: (i) => (i.status === 'open' ? 'Open' : 'Closed'), translate: true, render: (i) => <Chip tone={i.status === 'open' ? 'warn' : 'ok'}>{i.status === 'open' ? 'Open' : 'Closed'}</Chip> },
+];
 
 /**
  * Normal SOCSO and LINDUNG 24 Jam in separate columns, each with its own total (Fauzan, 27 Oct 2026). A figure the
@@ -355,56 +436,41 @@ function GuardsPanel({ data }: { data: JaBoard }) {
   return (
     <>
       {data.belowMinimumWage.length > 0 && (
-        <Card title="Basic pay below the minimum wage" actions={<Chip tone="crit">{data.belowMinimumWage.length}</Chip>} flush>
-          <ul className="bz-rows">
-            {data.belowMinimumWage.map((g) => (
-              <li key={`${g.companyId}-${g.staffNo}`} className="bz-row" data-tone="crit">
-                <span className="bz-row-main">
-                  <span className="bz-row-title">{g.name}</span>
-                  <span className="bz-row-meta">
-                    {g.staffNo} · {g.companyName}
-                  </span>
-                </span>
-                <span className="bz-row-side">
-                  <span className="bz-amt">{rm(g.basicPay)}</span>
-                  <span className="bz-sub">against {rm(g.minimum)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+        <Card title="Basic pay below the minimum wage" actions={<Chip tone="crit">{data.belowMinimumWage.length}</Chip>}>
+          <DataTable
+            label="Basic pay below the minimum wage"
+            stateKey="it.ja.minwage"
+            rows={data.belowMinimumWage}
+            rowKey={(g) => `${g.companyId}-${g.staffNo}`}
+            columns={[
+              { id: 'name', label: 'Name', value: (g) => g.name, render: (g) => <strong>{g.name}</strong>, phone: 'title' },
+              { id: 'staffNo', label: 'Staff no.', value: (g) => g.staffNo, className: 'mono', phone: 'sub' },
+              { id: 'company', label: 'Company', value: (g) => g.companyName },
+              { id: 'basic', label: 'Basic pay', value: (g) => g.basicPay, sort: 'money' },
+              { id: 'minimum', label: 'Minimum wage', value: (g) => g.minimum, sort: 'money' },
+            ]}
+            filters={[{ id: 'company', label: 'Company', value: (g) => g.companyName }]}
+            rowTone={() => 'crit'}
+          />
         </Card>
       )}
-      <Card title="Guards by company" flush>
-        {data.guards.length === 0 ? (
-          <Empty title="No guard records received yet." />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Company</th>
-                  <th className="num">Active</th>
-                  <th className="num">Suspended</th>
-                  <th className="num">Left</th>
-                  <th className="num">Foreign</th>
-                  <th>Feed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.guards.map((g) => (
-                  <tr key={g.companyId}>
-                    <td>{g.companyName}</td>
-                    <td className="num">{g.active}</td>
-                    <td className="num">{g.suspended}</td>
-                    <td className="num">{g.left}</td>
-                    <td className="num">{g.foreign}</td>
-                    <td>{g.stale ? <Chip tone="unknown">feed late</Chip> : <Chip tone="ok">Current</Chip>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <Card title="Guards by company">
+        <DataTable
+          label="Guards by company"
+          stateKey="it.ja.guards"
+          rows={data.guards}
+          rowKey={(g) => g.companyId}
+          columns={[
+            { id: 'company', label: 'Company', value: (g) => g.companyName, render: (g) => <strong>{g.companyName}</strong>, phone: 'title' },
+            { id: 'active', label: 'Active', value: (g) => g.active, sort: 'number' },
+            { id: 'suspended', label: 'Suspended', value: (g) => g.suspended, sort: 'number' },
+            { id: 'left', label: 'Left', value: (g) => g.left, sort: 'number' },
+            { id: 'foreign', label: 'Foreign', value: (g) => g.foreign, sort: 'number' },
+            { id: 'feed', label: 'Feed', value: (g) => (g.stale ? 'feed late' : 'Current'), translate: true, render: (g) => (g.stale ? <Chip tone="unknown">feed late</Chip> : <Chip tone="ok">Current</Chip>) },
+          ]}
+          filters={[{ id: 'feed', label: 'Feed', value: (g) => (g.stale ? 'late' : 'current'), options: [{ value: 'late', label: 'feed late' }, { value: 'current', label: 'Current' }] }]}
+          empty={<Empty title="No guard records received yet." />}
+        />
       </Card>
     </>
   );

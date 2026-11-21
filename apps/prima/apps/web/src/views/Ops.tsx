@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ClockCountdownIcon, FootprintsIcon, SirenIcon, UserCheckIcon, UserMinusIcon } from '@phosphor-icons/react';
 import { api, type RegionalOps } from '../api';
 import { useApp } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { LeavePanel } from './Leave';
 import { GovOpsMonitorPanel } from './GovOps';
 import { ManagementFeeBillsPanel } from './ManagementFees';
@@ -89,6 +90,7 @@ export function OpsView() {
               </Select>
             )}
             {/* P91: sites are added here too, for those who may add them (the form and the server check it). */}
+            <SopHelp id="ops" />
             <ImportButton kind="site" label="Import sites" />
             <RecordButton kind="site" label="Add site" primary />
           </>

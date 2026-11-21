@@ -4,6 +4,7 @@ import { ClockCountdownIcon, LightningIcon, TrayIcon } from '@phosphor-icons/rea
 import type { ProofInput } from '@prima/core';
 import { api, type HostelBillInput, type HostelBoard, type HostelCheckOutInput } from '../api';
 import { Card, Empty, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
+import { SopHelp } from '../sop/SopHelp';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
 import { RecordButton } from './RecordForm';
@@ -11,6 +12,7 @@ import { NoAddNote } from './FwmAdd';
 import { ImportButton } from './ImportDrawer';
 import '../styles/hrx.css';
 import { FwHostelPanel } from './FwHostel';
+import { useRouteTab } from '../App';
 
 /**
  * Hostel bills and utility excess (Fauzan, 26 Oct 2026). Each bill belongs to the company that owns or rents the
@@ -34,7 +36,8 @@ function billTone(b: BillRow): Tone {
 
 export function HostelsView() {
   const { data, error } = useLoad(() => api.hostelBoard(), []);
-  const [tab, setTab] = useState<'bills' | 'utility' | 'stays' | null>(null);
+  // P121: a link may open a tab (#hostels/utility); the moves, needs and repairs tabs are in FwHostelPanel.
+  const [tab, setTab] = useRouteTab<'auto' | 'bills' | 'utility' | 'stays'>('auto', ['bills', 'utility', 'stays']);
   const [q, setQ] = useState('');
   if (error)
     return (
@@ -48,7 +51,8 @@ export function HostelsView() {
         <Loading what="hostels" />
       </div>
     );
-  const view = tab ?? (data.role === 'hr' ? 'utility' : 'bills');
+  const has = { auto: false, bills: true, stays: data.canManageStays || data.stays.length > 0, utility: data.charges.length > 0 };
+  const view = has[tab] ? tab : data.role === 'hr' ? 'utility' : 'bills';
   const bills = data.hostels.flatMap((h) => h.bills);
   const mine = bills.filter((b) => Object.values(b.can).some(Boolean));
   const overdue = bills.filter((b) => b.bill.status !== 'paid' && b.daysToDue < 0);
@@ -62,6 +66,7 @@ export function HostelsView() {
         sub="Each hostel bill belongs to the company that owns or rents the hostel. The company asks for approval, FWM checks it, the Operations Director or OGM approves, then the COO."
         actions={
           <>
+            <SopHelp id="fw-hostel-bill" />
             <ImportButton kind="hostel" />
             <RecordButton kind="hostel" label="Add hostel" primary />
             {/* P93: where the Add button would be, say who adds hostels instead of leaving a silent gap. */}

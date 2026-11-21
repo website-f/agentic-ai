@@ -5,6 +5,7 @@ import { api, type WarrantyBoard } from '../api';
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { ProofPicker } from './Proof';
 import { Card } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * A8 (Fitri package): equipment warranty claims. The holder or the store reports the fault with a photo; the store or
@@ -18,24 +19,15 @@ const STATUS: Record<Claim['status'], [string, 'warn' | 'ok' | 'neutral' | 'crit
   closed: ['Closed', 'ok'],
 };
 
-function ClaimLine({ c, canCheck, results }: { c: Claim; canCheck: boolean; results: WarrantyBoard['results'] }) {
+/** P107: the claim's next step for the store or IT (the same forms as the old line), under its row in the table. */
+function ClaimSteps({ c, results }: { c: Claim; results: WarrantyBoard['results'] }) {
   const today = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
   const [f, setF] = useState({ supplier: '', warrantyTo: '', note: '', supplierRef: '', on: today, result: 'repaired' as keyof typeof results, replacementSerial: '' });
   const [proof, setProof] = useState<ProofInput[]>([]);
   const act = useAction();
-  const [label, tone] = STATUS[c.status];
   return (
-    <div className="item">
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        <strong>{c.ref}</strong> <span>{c.itemLabel}</span> <Chip tone={c.outcome?.result === 'refused' ? 'crit' : tone}>{c.outcome ? results[c.outcome.result] : label}</Chip>
-      </div>
-      <div className="muted small">
-        Fault found {dateLabel(c.faultOn)}: {c.fault}. Reported by {c.reportedBy}.
-        {c.check ? ` Warranty to ${dateLabel(c.check.warrantyTo)}${c.check.fromRecord ? ' (register)' : ' (warranty card)'}, supplier ${c.check.supplier}.` : ''}
-        {c.sent ? ` Sent ${dateLabel(c.sent.on)}, reference ${c.sent.supplierRef}.` : ''}
-        {c.outcome ? ` ${c.outcome.note}` : ''}
-      </div>
-      {canCheck && c.status === 'reported' && (
+    <div data-no-row-click style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {c.status === 'reported' && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           <input className="input" placeholder="Supplier or maker" aria-label="Supplier" value={f.supplier} onChange={(e) => setF({ ...f, supplier: e.target.value })} />
           <label className="small">
@@ -47,7 +39,7 @@ function ClaimLine({ c, canCheck, results }: { c: Claim; canCheck: boolean; resu
           </button>
         </div>
       )}
-      {canCheck && c.status === 'checked' && (
+      {c.status === 'checked' && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           <input className="input" type="date" aria-label="Sent on" value={f.on} max={today} onChange={(e) => setF({ ...f, on: e.target.value })} />
           <input className="input" placeholder="Supplier's claim or ticket reference" aria-label="Supplier reference" value={f.supplierRef} onChange={(e) => setF({ ...f, supplierRef: e.target.value })} />
@@ -56,7 +48,7 @@ function ClaimLine({ c, canCheck, results }: { c: Claim; canCheck: boolean; resu
           </button>
         </div>
       )}
-      {canCheck && c.status === 'sent' && (
+      {c.status === 'sent' && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           <Select className="select" aria-label="Outcome" value={f.result} onChange={(e) => setF({ ...f, result: e.target.value as keyof typeof results })}>
             {Object.entries(results).map(([k, v]) => (
@@ -76,6 +68,61 @@ function ClaimLine({ c, canCheck, results }: { c: Claim; canCheck: boolean; resu
     </div>
   );
 }
+
+const claimLabel = (c: Claim, results: WarrantyBoard['results']) => (c.outcome ? results[c.outcome.result] : STATUS[c.status][0]);
+const SOURCE_LABEL: Record<Claim['source'], string> = { it_asset: 'IT equipment', stock: 'Store item' };
+
+/** P107: the claims as a data table (search, filters, sort, pages; a card per claim on a phone). */
+function claimColumns(results: WarrantyBoard['results']): DtColumn<Claim>[] {
+  return [
+    { id: 'ref', label: 'Reference', value: (c) => c.ref, render: (c) => <strong>{c.ref}</strong>, phone: 'title' },
+    { id: 'item', label: 'Item', value: (c) => c.itemLabel, phone: 'sub' },
+    {
+      id: 'fault',
+      label: 'Fault found',
+      value: (c) => c.faultOn,
+      sort: 'date',
+      render: (c) => (
+        <>
+          {dateLabel(c.faultOn)}
+          <div className="muted small">{c.fault}</div>
+        </>
+      ),
+    },
+    { id: 'reportedBy', label: 'Reported by', value: (c) => c.reportedBy, hideBelow: 1200 },
+    {
+      id: 'supplier',
+      label: 'Supplier',
+      value: (c) => c.check?.supplier ?? null,
+      hideBelow: 1100,
+      render: (c) =>
+        c.check || c.sent ? (
+          <span className="small">
+            {c.check ? `${c.check.supplier}, warranty to ${dateLabel(c.check.warrantyTo)}${c.check.fromRecord ? ' (register)' : ' (warranty card)'}` : ''}
+            {c.sent ? <div className="muted">{`Sent ${dateLabel(c.sent.on)}, reference ${c.sent.supplierRef}`}</div> : null}
+          </span>
+        ) : (
+          '–'
+        ),
+    },
+    {
+      id: 'status',
+      label: 'Status',
+      value: (c) => claimLabel(c, results),
+      translate: true,
+      render: (c) => (
+        <>
+          <Chip tone={c.outcome?.result === 'refused' ? 'crit' : STATUS[c.status][1]}>{claimLabel(c, results)}</Chip>
+          {c.outcome ? <div className="muted small">{c.outcome.note}</div> : null}
+        </>
+      ),
+    },
+  ];
+}
+const CLAIM_FILTERS: DtFilter<Claim>[] = [
+  { id: 'status', label: 'Status', value: (c) => c.status, options: (Object.keys(STATUS) as Claim['status'][]).map((k) => ({ value: k, label: STATUS[k][0] })) },
+  { id: 'source', label: 'Source', value: (c) => c.source, optionLabel: (v) => SOURCE_LABEL[v as Claim['source']] ?? v },
+];
 
 /** `hideWhenEmpty` (P105): on a person's own screen, nothing is shown while they hold nothing under warranty and have no claim. */
 export function WarrantyClaimsSection({ source, hideWhenEmpty }: { source?: 'it_asset' | 'stock'; hideWhenEmpty?: boolean }) {
@@ -126,7 +173,20 @@ export function WarrantyClaimsSection({ source, hideWhenEmpty }: { source?: 'it_
         </div>
       )}
       <ErrorNotice error={act.error} />
-      {claims.length === 0 ? <div className="muted small">No warranty claims.</div> : claims.map((c) => <ClaimLine key={c.id} c={c} canCheck={canCheck(c) && c.reportedById !== undefined} results={data.results} />)}
+      {claims.length === 0 ? (
+        <div className="muted small">No warranty claims.</div>
+      ) : (
+        <DataTable
+          label="Warranty claims"
+          stateKey={`warranty.claims.${source ?? 'all'}`}
+          rows={claims}
+          rowKey={(c) => c.id}
+          columns={claimColumns(data.results)}
+          filters={CLAIM_FILTERS}
+          searchText={(c) => `${c.fault} ${c.sent?.supplierRef ?? ''}`}
+          rowDetail={(c) => (canCheck(c) && c.reportedById !== undefined && c.status !== 'closed' ? <ClaimSteps c={c} results={data.results} /> : null)}
+        />
+      )}
       </div>
     </Card>
   );

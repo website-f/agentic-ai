@@ -12,7 +12,8 @@ import {
 import { ATTENDANCE_ISSUE_LABEL, DISCIPLINE_LABEL, FOLLOW_UP_LABEL, addDays, dateOf, type AttendanceIssueView } from '@prima/core';
 import { api } from '../api';
 import type { AttendanceAlerts, AttendanceDay } from '../api/types';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Card, PageHead, Person, Stat, Stats, Toolbar } from '../kit';
 import { DataTable } from '../DataTable';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
@@ -39,10 +40,13 @@ const ISSUE_ICON: Record<Issue, ReactNode> = {
   EARLY_LEAVE: <SignOutIcon size={18} />,
 };
 
+type AttTab = 'day' | 'record' | 'leave' | 'reports';
+
 export function AttendanceView() {
   const { companyId } = useApp();
-  // P81: the HR screen opens this screen on the monthly reports (ATT_TAB_KEY).
-  const [tab, setTab] = useState<'day' | 'record' | 'leave' | 'reports'>(() => {
+  // P81: another screen could ask for the monthly reports through ATT_TAB_KEY (kept for old callers). P121: a link opens
+  // any tab directly (#attendance/leave, from the SOP guide or the HR monitor).
+  const [first] = useState<AttTab>(() => {
     try {
       const t = sessionStorage.getItem(ATT_TAB_KEY);
       sessionStorage.removeItem(ATT_TAB_KEY);
@@ -51,6 +55,7 @@ export function AttendanceView() {
       return 'day';
     }
   });
+  const [tab, setTab] = useRouteTab<AttTab>(first, ['day', 'record', 'leave', 'reports']);
   const alerts = useLoad(() => api.attendanceAlerts(companyId), [companyId]);
   const [open, setOpen] = useState<AttendanceIssueView | null>(null);
   const a = alerts.data;
@@ -61,7 +66,12 @@ export function AttendanceView() {
       <PageHead
         title="Attendance"
         sub="Who came, who was late and who was absent: the day sheet from the site devices, absences, leave, and each person's attendance from the monthly reports."
-        actions={<ImportTimesheetButton onDone={() => setTab('reports')} />}
+        actions={
+          <>
+            <SopHelp id="hr-guard-absence" />
+            <ImportTimesheetButton onDone={() => setTab('reports')} />
+          </>
+        }
       />
 
       <div className="tabbar" role="tablist" aria-label="Attendance sections">

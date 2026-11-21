@@ -4,6 +4,7 @@ import { api } from '../api';
 import { Card, Empty, PageHead, Search, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { DataTable } from '../DataTable';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Accounts and Access (Fauzan, 15 Nov 2026). IT or central HR prepares sign-ins and company access as one request; the
@@ -25,7 +26,7 @@ export function AccountsAccess() {
   if (board.error || !board.data)
     return (
       <div className="page">
-        <PageHead title="Accounts and access" sub="Who can sign in to Prima and which companies they see." />
+        <PageHead title="Accounts and access" sub="Who can sign in to Prima and which companies they see." actions={<SopHelp id="it-accounts-access" />} />
         <Card>
           <ErrorNotice error={board.error} />
         </Card>
@@ -49,6 +50,7 @@ function Screen({ b }: { b: Board }) {
       <PageHead
         title="Accounts and access"
         sub="Who can sign in to Prima and which companies they see. IT or HR prepares a request; the HR Director or the CEO approves it with a comment, never their own. A leader's account needs the CEO. Closing a leaver's access stays in HR's leaving steps."
+        actions={<SopHelp id="it-accounts-access" />}
       />
       <Stats>
         <Stat label="Accounts" value={b.accounts.length} />

@@ -1,7 +1,10 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { api, type JaSwitchBoard, type JaSwitchReport, type JaGuardHistory } from '../api';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { DataTable } from '../DataTable';
 
 /**
  * Switch-over from the JA Group app (Fauzan, 5 Nov 2026). One company and one area at a time: 30 days side by side, a
@@ -29,7 +32,8 @@ const KIND_LABEL: Record<JaSwitchBoard['importKinds'][number]['kind'], string> =
 
 export function JaSwitchView() {
   const { data, error } = useLoad(() => api.jaSwitchBoard(), []);
-  const [tab, setTab] = useState<Tab>('areas');
+  // P121: a link can open a tab (#jaswitch/files); everyone on this screen has all four.
+  const [tab, setTab] = useRouteTab<Tab>('areas', ['areas', 'files', 'history', 'numbers']);
   const [open, setOpen] = useState<{ companyId: string; area: Area } | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="switch-over from JA" />;
@@ -40,7 +44,10 @@ export function JaSwitchView() {
   return (
     <div className="page">
       <div className="page-head">
-        <h1>Switch from JA</h1>
+        <div className="row" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <h1>Switch from JA</h1>
+          <SopHelp id="it-ja-switch" />
+        </div>
         <p className="muted">
           One company and one area at a time. Prima and JA run the same {data.settingsShown ? `${data.settings.sideBySideDays} days` : 'days'} side by side, every difference is explained or fixed,
           ACT checks the report, then the CEO switches. A switch can be undone.
@@ -75,92 +82,106 @@ export function JaSwitchView() {
 function AreasPanel({ data, onOpen }: { data: JaSwitchBoard; onOpen: (x: { companyId: string; area: Area }) => void }) {
   const [start, setStart] = useState<Row | null>(null);
   const label = (a: Area) => data.areas.find((x) => x.area === a)?.label ?? a;
+  // P107: one table for every company and area, in the companies' order as before (each company's areas together).
+  const order = new Map(data.companies.map((c, i) => [c.id, i]));
+  const rows = data.rows.filter((r) => order.has(r.companyId)).sort((a, b) => order.get(a.companyId)! - order.get(b.companyId)!);
   return (
     <>
       <p className="muted small">
         Suggested order: incidents, attendance and patrol, guard pay, then hostels. Foreign worker papers live in both apps and do not switch.
       </p>
-      {data.companies.map((c) => (
-        <section key={c.id} className="panel" style={{ marginBottom: 12 }}>
-          <div className="panel-head">
-            <h3>{c.name}</h3>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Area</th>
-                  <th>Where it stands</th>
-                  <th>Side-by-side days</th>
-                  <th>Differences</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows
-                  .filter((r) => r.companyId === c.id)
-                  .map((r) => {
-                    const s = r.summary;
-                    return (
-                      <tr key={r.area}>
-                        <td>{label(r.area)}</td>
-                        <td>
-                          <Chip tone={STATE[r.state][0]}>{STATE[r.state][1]}</Chip>
-                          {r.state === 'side_by_side' && r.check && !s?.checkStale && <Chip tone="ok">ACT checked</Chip>}
-                          {s?.checkStale && <Chip tone="warn">Data changed after ACT check</Chip>}
-                          {r.switched && <div className="muted small">JA read-only until {dateLabel(r.switched.jaReadOnlyUntil)}</div>}
-                        </td>
-                        <td>
-                          {r.run ? (
-                            <>
-                              {dateLabel(r.run.from)} to {dateLabel(r.run.to)}
-                              <div className="muted small">{r.ended ? 'Finished' : `${s?.compared ?? 0} of ${r.run.settings?.sideBySideDays ?? data.settings.sideBySideDays} days compared`}</div>
-                            </>
-                          ) : (
-                            '–'
-                          )}
-                        </td>
-                        <td>
-                          {!s ? (
-                            '–'
-                          ) : !s.primaReady ? (
-                            <Chip tone="unknown">Prima side not built</Chip>
-                          ) : (
-                            <>
-                              <Chip tone={s.differences === s.explained ? 'ok' : 'warn'}>
-                                {s.explained} of {s.differences} explained
-                              </Chip>
-                              {s.jaMissingDays > 0 && <Chip tone="unknown">JA data missing {s.jaMissingDays} day(s)</Chip>}
-                            </>
-                          )}
-                        </td>
-                        <td>
-                          <div className="row">
-                            {r.run && (
-                              <button className="btn btn-sm" onClick={() => onOpen({ companyId: r.companyId, area: r.area })}>
-                                Open report
-                              </button>
-                            )}
-                            {!r.run && r.state === 'prima' && (
-                              <button className="btn btn-sm" onClick={() => onOpen({ companyId: r.companyId, area: r.area })}>
-                                Details
-                              </button>
-                            )}
-                            {r.canStart && (
-                              <button className="btn btn-sm btn-primary" onClick={() => setStart(r)}>
-                                Start side by side
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ))}
+      <section className="panel" style={{ marginBottom: 12 }}>
+        <div className="panel-body">
+          <DataTable
+            label="Areas"
+            stateKey="it.jaswitch.areas"
+            rows={rows}
+            rowKey={(r) => `${r.companyId}-${r.area}`}
+            columns={[
+              { id: 'company', label: 'Company', value: (r) => r.companyName, render: (r) => <strong>{r.companyName}</strong>, phone: 'title' },
+              { id: 'area', label: 'Area', value: (r) => label(r.area), translate: true, phone: 'sub' },
+              {
+                id: 'state',
+                label: 'Where it stands',
+                value: (r) => STATE[r.state][1],
+                translate: true,
+                render: (r) => {
+                  const s = r.summary;
+                  return (
+                    <>
+                      <Chip tone={STATE[r.state][0]}>{STATE[r.state][1]}</Chip>
+                      {r.state === 'side_by_side' && r.check && !s?.checkStale && <Chip tone="ok">ACT checked</Chip>}
+                      {s?.checkStale && <Chip tone="warn">Data changed after ACT check</Chip>}
+                      {r.switched && <div className="muted small">JA read-only until {dateLabel(r.switched.jaReadOnlyUntil)}</div>}
+                    </>
+                  );
+                },
+              },
+              {
+                id: 'run',
+                label: 'Side-by-side days',
+                value: (r) => r.run?.from ?? '',
+                sort: 'date',
+                render: (r) =>
+                  r.run ? (
+                    <>
+                      {dateLabel(r.run.from)} to {dateLabel(r.run.to)}
+                      <div className="muted small">{r.ended ? 'Finished' : `${r.summary?.compared ?? 0} of ${r.run.settings?.sideBySideDays ?? data.settings.sideBySideDays} days compared`}</div>
+                    </>
+                  ) : (
+                    '–'
+                  ),
+              },
+              {
+                id: 'differences',
+                label: 'Differences',
+                value: (r) => (r.summary?.primaReady ? r.summary.differences - r.summary.explained : null),
+                sort: 'number',
+                align: 'left',
+                render: (r) => {
+                  const s = r.summary;
+                  return !s ? (
+                    '–'
+                  ) : !s.primaReady ? (
+                    <Chip tone="unknown">Prima side not built</Chip>
+                  ) : (
+                    <>
+                      <Chip tone={s.differences === s.explained ? 'ok' : 'warn'}>
+                        {s.explained} of {s.differences} explained
+                      </Chip>
+                      {s.jaMissingDays > 0 && <Chip tone="unknown">JA data missing {s.jaMissingDays} day(s)</Chip>}
+                    </>
+                  );
+                },
+              },
+            ]}
+            filters={[
+              { id: 'company', label: 'Company', value: (r) => r.companyName },
+              { id: 'area', label: 'Area', value: (r) => r.area, optionLabel: (a) => label(a as Area) },
+              { id: 'state', label: 'Where it stands', value: (r) => r.state, options: Object.entries(STATE).map(([k, [, l]]) => ({ value: k, label: l })) },
+            ]}
+            rowEnd={(r) => (
+              <div className="row">
+                {r.run && (
+                  <button className="btn btn-sm" onClick={() => onOpen({ companyId: r.companyId, area: r.area })}>
+                    Open report
+                  </button>
+                )}
+                {!r.run && r.state === 'prima' && (
+                  <button className="btn btn-sm" onClick={() => onOpen({ companyId: r.companyId, area: r.area })}>
+                    Details
+                  </button>
+                )}
+                {r.canStart && (
+                  <button className="btn btn-sm btn-primary" onClick={() => setStart(r)}>
+                    Start side by side
+                  </button>
+                )}
+              </div>
+            )}
+          />
+        </div>
+      </section>
       {start && <StartDrawer row={start} label={label(start.area)} days={data.settings.sideBySideDays} today={data.today} onClose={() => setStart(null)} />}
     </>
   );
@@ -246,47 +267,63 @@ function ReportDrawer({ companyId, area, onClose }: { companyId: string; area: A
         </div>
       )}
       {c && c.differences.length > 0 && (
-        <div className="table-wrap" style={{ marginBottom: 12 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Day</th>
-                <th>Who or where</th>
-                <th>Difference</th>
-                <th>JA</th>
-                <th>Prima</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {c.differences.map((d) => {
-                const e = done.get(d.key);
-                return (
-                  <tr key={d.key}>
-                    <td>{dateLabel(d.date)}</td>
-                    <td>{d.subject}</td>
-                    <td>{d.what}</td>
-                    <td>{d.ja}</td>
-                    <td>{d.prima}</td>
-                    <td>
-                      {e ? (
-                        <div className="small">
-                          <Chip tone="ok">{e.kind === 'fixed' ? 'Fixed' : 'Explained'}</Chip> {e.note} <span className="muted">({e.by})</span>
-                        </div>
-                      ) : (
-                        <Chip tone="warn">Open</Chip>
-                      )}
-                      {r.canExplain && (
-                        <button className="btn btn-sm btn-ghost" onClick={() => { setExplain(d.key); setNote(e?.note ?? ''); setKind(e?.kind ?? 'explained'); }}>
-                          {e ? 'Change' : 'Explain'}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div style={{ marginBottom: 12 }}>
+          {/* P107: the differences as a table; cards in the narrow drawer. */}
+          <DataTable
+            label="Differences"
+            stateKey="it.jaswitch.differences"
+            layout="cards"
+            rows={c.differences}
+            rowKey={(d) => d.key}
+            columns={[
+              { id: 'what', label: 'Difference', value: (d) => d.what, phone: 'title' },
+              { id: 'subject', label: 'Who or where', value: (d) => d.subject, phone: 'sub' },
+              { id: 'date', label: 'Day', value: (d) => d.date, sort: 'date' },
+              { id: 'ja', label: 'JA', value: (d) => d.ja },
+              { id: 'prima', label: 'Prima', value: (d) => d.prima },
+              {
+                id: 'state',
+                label: 'Explanation',
+                value: (d) => {
+                  const e = done.get(d.key);
+                  return e ? (e.kind === 'fixed' ? 'Fixed' : 'Explained') : 'Open';
+                },
+                translate: true,
+                render: (d) => {
+                  const e = done.get(d.key);
+                  return e ? (
+                    <div className="small">
+                      <Chip tone="ok">{e.kind === 'fixed' ? 'Fixed' : 'Explained'}</Chip> {e.note} <span className="muted">({e.by})</span>
+                    </div>
+                  ) : (
+                    <Chip tone="warn">Open</Chip>
+                  );
+                },
+              },
+            ]}
+            phoneFacts={4}
+            filters={[
+              {
+                id: 'state',
+                label: 'Explanation',
+                value: (d) => done.get(d.key)?.kind ?? 'open',
+                options: [
+                  { value: 'open', label: 'Open' },
+                  { value: 'explained', label: 'Explained' },
+                  { value: 'fixed', label: 'Fixed' },
+                ],
+              },
+              { id: 'date', label: 'Day', value: (d) => d.date, optionLabel: dateLabel },
+            ]}
+            rowEnd={(d) => {
+              const e = done.get(d.key);
+              return r.canExplain ? (
+                <button className="btn btn-sm btn-ghost" onClick={() => { setExplain(d.key); setNote(e?.note ?? ''); setKind(e?.kind ?? 'explained'); }}>
+                  {e ? 'Change' : 'Explain'}
+                </button>
+              ) : null;
+            }}
+          />
           {c.total > c.differences.length && <p className="muted small">Showing the first {c.differences.length} of {c.total}.</p>}
         </div>
       )}

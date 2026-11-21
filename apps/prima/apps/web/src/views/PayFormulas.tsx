@@ -2,6 +2,8 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type PayFormulaBoard, type PayFormulaSaveInput } from '../api';
 import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
+import { SopHelp } from '../sop/SopHelp';
 
 
 /**
@@ -68,6 +70,9 @@ export function PayFormulasView() {
           Test data. The amounts are placeholders (minimum wage, no allowances) until ACT sets the real ones. The ACT Director&apos;s amounts are
           saved as chosen; labour law points are flagged here and to the CEO. A formula counts pay; it does not pay anyone.
         </p>
+        <div className="row" style={{ marginTop: 8 }}>
+          <SopHelp id="pay-formula" />
+        </div>
         {!data.ready && (
           <p className="notice" data-tone="warn">
             Pay formulas are not switched on in this database yet. Nothing can be saved until the pay formulas module is installed with approval.
@@ -112,15 +117,27 @@ export function PayFormulasView() {
         <div className="panel-head">
           <h2>Formulas</h2>
         </div>
-        <div className="list">
-          {live.length === 0 && <div className="empty">No formula is set yet.</div>}
-          {live.map((r) => (
-            <FormulaCard key={r.formula.id} r={r} data={data} onEdit={(f) => setEditing({ from: f, kind: f.kind })} />
-          ))}
-          {old.map((r) => (
-            <FormulaCard key={r.formula.id} r={r} data={data} onEdit={(f) => setEditing({ from: f, kind: f.kind })} />
-          ))}
-        </div>
+        {live.length === 0 && <div className="empty">No formula is set yet.</div>}
+        {/* P107: a data table (search, kind and status filters, sort, pages; cards on a phone). Each formula's amounts, flags,
+            buttons and worked month stay under its row, as on the card before. */}
+        {live.length + old.length > 0 && (
+          <div className="panel-body">
+            <DataTable
+              label="Formulas"
+              stateKey="payformulas.formulas"
+              rows={[...live, ...old]}
+              rowKey={(r) => r.formula.id}
+              searchText={(r) => `${r.formula.preparedBy} ${r.formula.reason}`}
+              columns={formulaColumns(data.month)}
+              filters={FORMULA_FILTERS}
+              rowDetail={(r) => (
+                <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
+                  <FormulaBody r={r} data={data} onEdit={(f) => setEditing({ from: f, kind: f.kind })} />
+                </div>
+              )}
+            />
+          </div>
+        )}
       </section>
       <p className="muted small">
         Rule {data.rule.id}: {data.rule.source}
@@ -142,16 +159,37 @@ function amountSummary(kind: Kind, a: Amounts): string {
   return `${base}${extras ? ` · ${extras}` : ''}`;
 }
 
+/** P107: whether a formula counts pay this month, for the Formulas table ('' for drafts, sent back and withdrawn). */
+function inForceText(r: Row, month: string): string {
+  const f = r.formula;
+  return r.inForce ? 'In force this month' : f.status === 'live' && f.effectiveFrom > month ? 'Starts later' : f.status === 'live' ? 'Replaced' : '';
+}
+
+/** P107: the Formulas table's columns; the rest of each formula (FormulaBody) sits under its row. */
+function formulaColumns(month: string): DtColumn<Row>[] {
+  return [
+    { id: 'name', label: 'Name', value: (r) => r.formula.name, render: (r) => <span style={{ fontWeight: 600 }}>{r.formula.name}</span>, phone: 'title' },
+    { id: 'code', label: 'Code', value: (r) => `${r.formula.code} v${r.formula.version}`, phone: 'sub' },
+    { id: 'kind', label: 'Kind', value: (r) => KIND[r.formula.kind], translate: true },
+    { id: 'from', label: 'From', value: (r) => r.formula.effectiveFrom, sort: 'date', render: (r) => r.formula.effectiveFrom },
+    { id: 'inForce', label: 'In force', value: (r) => inForceText(r, month) || null, translate: true },
+    {
+      id: 'status',
+      label: 'Status',
+      value: (r) => STATUS[r.formula.status][0],
+      translate: true,
+      render: (r) => <Chip tone={STATUS[r.formula.status][1]}>{STATUS[r.formula.status][0]}</Chip>,
+    },
+  ];
+}
+const FORMULA_FILTERS: DtFilter<Row>[] = [
+  { id: 'kind', label: 'Kind', value: (r) => r.formula.kind, optionLabel: (v) => KIND[v as Kind] ?? v },
+  { id: 'status', label: 'Status', value: (r) => r.formula.status, optionLabel: (v) => STATUS[v as Formula['status']]?.[0] ?? v },
+];
+
 function FormulaCard({ r, data, onEdit }: { r: Row; data: PayFormulaBoard; onEdit: (f: Formula) => void }) {
   const f = r.formula;
-  const [open, setOpen] = useState(false);
-  const [deciding, setDeciding] = useState(false);
-  const [note, setNote] = useState('');
-  const act = useAction();
   const [label, tone] = STATUS[f.status];
-  const isAct = data.role === 'director' || data.role === 'team';
-  const usedAt = data.uses.filter((u) => u.current && u.use.formulaCode === f.code).map((u) => u.placeName);
-  const flags = f.status === 'draft' || r.inForce ? r.check.flags : f.lawFlags;
   return (
     <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
       <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
@@ -166,6 +204,25 @@ function FormulaCard({ r, data, onEdit }: { r: Row; data: PayFormulaBoard; onEdi
         </div>
         <Chip tone={tone}>{label}</Chip>
       </div>
+      <FormulaBody r={r} data={data} onEdit={onEdit} />
+    </div>
+  );
+}
+
+/** A formula's amounts, where it is used, who prepared it, its law flags, its buttons and the worked month (P107: shared by
+ *  the waiting card and the Formulas table row). */
+function FormulaBody({ r, data, onEdit }: { r: Row; data: PayFormulaBoard; onEdit: (f: Formula) => void }) {
+  const f = r.formula;
+  const [open, setOpen] = useState(false);
+  const [deciding, setDeciding] = useState(false);
+  const [note, setNote] = useState('');
+  const act = useAction();
+  const [label] = STATUS[f.status];
+  const isAct = data.role === 'director' || data.role === 'team';
+  const usedAt = data.uses.filter((u) => u.current && u.use.formulaCode === f.code).map((u) => u.placeName);
+  const flags = f.status === 'draft' || r.inForce ? r.check.flags : f.lawFlags;
+  return (
+    <>
       <div className="small">{amountSummary(f.kind, f.amounts)}</div>
       {f.amounts.fixedAllowances.length > 0 && (
         <div className="small">Fixed allowances: {f.amounts.fixedAllowances.map((x) => `${x.label} ${rm(x.amount)}`).join(', ')}</div>
@@ -225,7 +282,7 @@ function FormulaCard({ r, data, onEdit }: { r: Row; data: PayFormulaBoard; onEdi
       )}
       <ErrorNotice error={act.error} />
       {open && <Worked example={r.example} kind={f.kind} />}
-    </div>
+    </>
   );
 }
 
@@ -418,41 +475,93 @@ function Uses({ data }: { data: PayFormulaBoard }) {
   const [code, setCode] = useState('');
   const [month, setMonth] = useState(nextMonth(data.month));
   const [reason, setReason] = useState('');
-  const [showOld, setShowOld] = useState(false);
   const act = useAction();
   const director = data.role === 'director' && data.ready;
   const places = scope === 'region' ? data.places.regions : scope === 'company' ? data.places.companies : scope === 'site' ? data.places.sites : [];
   const codes = [...new Map(data.formulas.filter((r) => r.formula.status === 'live' && r.formula.kind === kind).map((r) => [r.formula.code, r.formula.name])).entries()];
-  const rows = data.uses.filter((u) => showOld || u.current);
+  type Use = PayFormulaBoard['uses'][number];
+  const statusOf = (u: Use) => (u.current ? (u.use.effectiveFrom > data.month ? `From ${u.use.effectiveFrom}` : 'Current') : 'Replaced');
+  const formulaNames = new Map(data.uses.filter((u) => u.use.formulaCode).map((u) => [u.use.formulaCode as string, `${u.formulaName} (${u.use.formulaCode})`]));
+  const columns: DtColumn<Use>[] = [
+    {
+      id: 'place',
+      label: 'Place',
+      value: (u) => (u.use.scope === 'group' ? SCOPE.group : u.placeName),
+      render: (u) => (
+        <span style={{ fontWeight: 600 }}>
+          {KIND[u.use.kind]} · {SCOPE[u.use.scope]}
+          {u.use.scope === 'group' ? '' : `: ${u.placeName}`}
+        </span>
+      ),
+      phone: 'title',
+    },
+    {
+      id: 'formula',
+      label: 'Formula',
+      value: (u) => u.formulaName,
+      render: (u) => (
+        <>
+          {u.formulaName}
+          {u.use.formulaCode ? ` (${u.use.formulaCode})` : ''}
+        </>
+      ),
+      phone: 'sub',
+    },
+    { id: 'from', label: 'From', value: (u) => u.use.effectiveFrom, sort: 'date', render: (u) => u.use.effectiveFrom },
+    {
+      id: 'setBy',
+      label: 'Set by',
+      value: (u) => u.use.setBy,
+      render: (u) => (
+        <span className="small">
+          {u.use.setBy}, {dateTimeLabel(u.use.setAt)}
+          <span className="muted">: {u.use.reason}</span>
+        </span>
+      ),
+    },
+    {
+      id: 'status',
+      label: 'Status',
+      value: statusOf,
+      translate: true,
+      render: (u) => <Chip tone={u.current ? (u.use.effectiveFrom > data.month ? 'info' : 'ok') : 'info'}>{statusOf(u)}</Chip>,
+    },
+  ];
+  const filters: DtFilter<Use>[] = [
+    { id: 'kind', label: 'Kind of pay', value: (u) => u.use.kind, optionLabel: (v) => KIND[v as Kind] ?? v },
+    { id: 'scope', label: 'Applies to', value: (u) => u.use.scope, optionLabel: (v) => SCOPE[v as Scope] ?? v },
+    { id: 'formula', label: 'Formula', value: (u) => u.use.formulaCode ?? null, optionLabel: (v) => formulaNames.get(v) ?? v },
+    // The old "Show earlier choices" button: current choices first, as before; Replaced or All on request.
+    {
+      id: 'when',
+      label: 'Status',
+      value: (u) => (u.current ? 'current' : 'replaced'),
+      options: [
+        { value: 'current', label: 'Current' },
+        { value: 'replaced', label: 'Replaced' },
+      ],
+    },
+  ];
   return (
     <section className="panel">
       <div className="panel-head">
         <h2>Where each formula is used</h2>
       </div>
-      <div className="list">
-        {rows.length === 0 && <div className="empty">Nothing chosen yet.</div>}
-        {rows.map((u) => (
-          <div key={u.use.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
-            <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-              <div style={{ fontWeight: 600 }}>
-                {KIND[u.use.kind]} · {SCOPE[u.use.scope]}
-                {u.use.scope === 'group' ? '' : `: ${u.placeName}`}
-              </div>
-              <Chip tone={u.current ? (u.use.effectiveFrom > data.month ? 'info' : 'ok') : 'info'}>{u.current ? (u.use.effectiveFrom > data.month ? `From ${u.use.effectiveFrom}` : 'Current') : 'Replaced'}</Chip>
-            </div>
-            <div className="small">
-              {u.formulaName}
-              {u.use.formulaCode ? ` (${u.use.formulaCode})` : ''} from {u.use.effectiveFrom}
-            </div>
-            <div className="muted small">
-              {u.use.setBy}, {dateTimeLabel(u.use.setAt)}: {u.use.reason}
-            </div>
-          </div>
-        ))}
+      {/* P107: a data table (search, kind, place type, formula and status filters, sort, pages; cards on a phone). The status
+          filter starts on Current, as the list did before "Show earlier choices". */}
+      <div className="panel-body">
+        <DataTable
+          label="Where each formula is used"
+          stateKey="payformulas.uses"
+          rows={data.uses}
+          rowKey={(u) => u.use.id}
+          searchText={(u) => `${u.use.formulaCode ?? ''} ${u.use.reason}`}
+          columns={columns}
+          filters={filters}
+          defaults={{ f: { when: 'current' } }}
+          empty={<div className="empty">Nothing chosen yet.</div>}
+        />
       </div>
-      <button className="btn btn-sm btn-ghost" onClick={() => setShowOld(!showOld)}>
-        {showOld ? 'Hide earlier choices' : 'Show earlier choices'}
-      </button>
       {director && (
         <div style={{ marginTop: 10 }}>
           <div className="small" style={{ fontWeight: 600 }}>

@@ -6,6 +6,7 @@ import { Card, Empty, PageHead } from '../kit';
 import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/selfservice.css';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Memos (Fauzan, 26 Oct 2026; real use 5 Nov 2026). Only the Chief of Staff publishes memos to all staff, and only the
@@ -60,11 +61,14 @@ export function MemosView() {
         title="Memos"
         sub={PAGE_SUB}
         actions={
-          data.canPublish.length > 0 ? (
-            <button className="btn btn-primary" onClick={() => setWriting(true)}>
-              <PlusIcon size={16} /> New memo
-            </button>
-          ) : undefined
+          <>
+            <SopHelp id="board-memo" />
+            {data.canPublish.length > 0 && (
+              <button className="btn btn-primary" onClick={() => setWriting(true)}>
+                <PlusIcon size={16} /> New memo
+              </button>
+            )}
+          </>
         }
       />
       {data.unread > 0 && (

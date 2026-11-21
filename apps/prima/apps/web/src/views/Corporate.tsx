@@ -14,6 +14,8 @@ import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction
 import { CentralAdminGuide } from './CentralAdminGuide';
 import { ImportButton } from './ImportDrawer';
 import '../styles/gov.css';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Company secretary (V9). Each company keeps its own licensed secretary, filings and board. Head office Corporate Admin
@@ -23,6 +25,18 @@ import '../styles/gov.css';
  */
 
 type Tab = 'filings' | 'changes' | 'audit' | 'legal' | 'companies' | 'files' | 'panel' | 'delegations';
+/** P121: the tabs a link may ask for (#corporate/changes). Audit and legal open only for people who have them. */
+const CORP_TABS: readonly Tab[] = ['filings', 'changes', 'audit', 'legal', 'companies', 'files', 'panel', 'delegations'];
+const CORP_SOP: Record<Tab, string> = {
+  filings: 'board-ssm-filing',
+  changes: 'board-corporate-change',
+  audit: 'board',
+  legal: 'board-legal-hold',
+  companies: 'board',
+  files: 'board-company-record',
+  panel: 'board',
+  delegations: 'board-delegation',
+};
 type FilingRow = CorpBoard['filings'][number];
 type ChangeRow = CorpBoard['changes'][number];
 
@@ -56,7 +70,7 @@ const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct
 export function CorporateView() {
   const { data, error } = useLoad(() => api.corpBoard(), []);
   const al = useLoad(() => api.corpAuditLegal().catch(() => null), []);
-  const [tab, setTab] = useState<Tab>('filings');
+  const [tabPick, setTab] = useRouteTab<Tab>('filings', CORP_TABS);
   const [adding, setAdding] = useState<'filing' | 'change' | null>(null);
   if (error && al.data) return <AuditLegalOnly data={al.data} />;
   if (error && !al.loading)
@@ -72,6 +86,7 @@ export function CorporateView() {
       </div>
     );
   const k = data.kpis;
+  const tab: Tab = (tabPick === 'audit' || tabPick === 'legal') && !al.data ? 'filings' : tabPick;
   const addFiling = () => {
     setTab('filings');
     setAdding('filing');
@@ -88,6 +103,7 @@ export function CorporateView() {
         actions={
           data.canFile.length > 0 || data.canRaise.length > 0 ? (
             <>
+              <SopHelp id={CORP_SOP[tab]} />
               {data.canRaise.length > 0 && (
                 <button className="btn" onClick={addChange}>
                   <PlusIcon size={16} /> Ask for a change
@@ -100,7 +116,9 @@ export function CorporateView() {
               )}
               {data.canFile.length > 0 && <ImportButton kind="corpFiling" label="Import filings" choices={data.canFile.map((c): [string, string] => [c.id, c.name])} />}
             </>
-          ) : undefined
+          ) : (
+            <SopHelp id={CORP_SOP[tab]} />
+          )
         }
       >
         <p className="notice" data-tone="info">
@@ -196,10 +214,14 @@ export function CorporateView() {
 
 /** PWVSB legal sees the audit and legal tabs only, not filings or structure changes. */
 function AuditLegalOnly({ data }: { data: NonNullable<Awaited<ReturnType<typeof api.corpAuditLegal>>> }) {
-  const [tab, setTab] = useState<'legal' | 'audit' | 'panel'>('legal');
+  const [tab, setTab] = useRouteTab<'legal' | 'audit' | 'panel'>('legal', ['legal', 'audit', 'panel']);
   return (
     <div className="page gv-page">
-      <PageHead title="Audit and legal" sub="Each company runs its own audit and keeps its own lawyers. PWVSB legal follows every matter with the company.">
+      <PageHead
+        title="Audit and legal"
+        sub="Each company runs its own audit and keeps its own lawyers. PWVSB legal follows every matter with the company."
+        actions={<SopHelp id={tab === 'legal' ? 'board-legal-hold' : 'board'} />}
+      >
         <p className="notice" data-tone="info">
           Test data.
         </p>

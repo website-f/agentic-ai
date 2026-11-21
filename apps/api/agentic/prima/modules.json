@@ -5,7 +5,8 @@
   "clock",
   "work",
   "meetings",
-  "memos"
+  "memos",
+  "sop"
  ],
  "common": [
   "GET arisha",
@@ -189,6 +190,25 @@
        "blurb": {
         "en": "Memos and notices sent to you.",
         "ms": "Memo dan notis yang dihantar kepada anda."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Guides",
+      "ms": "Panduan"
+     },
+     "modules": [
+      {
+       "id": "sop",
+       "title": {
+        "en": "SOP and workflows",
+        "ms": "SOP dan aliran kerja"
+       },
+       "blurb": {
+        "en": "How work is done: every flow step by step, with links.",
+        "ms": "Cara kerja dibuat: setiap aliran langkah demi langkah, dengan pautan."
        }
       }
      ]
@@ -421,6 +441,25 @@
     "ms": "Barang, pakaian seragam, stok tapak, kenderaan dan aset."
    },
    "groups": [
+    {
+     "title": {
+      "en": "Ask and order",
+      "ms": "Mohon dan pesan"
+     },
+     "modules": [
+      {
+       "id": "equiprequests",
+       "title": {
+        "en": "Ask for equipment",
+        "ms": "Mohon peralatan"
+       },
+       "blurb": {
+        "en": "Ask for uniforms and site supplies; the store answers here.",
+        "ms": "Mohon uniform dan bekalan tapak; stor menjawab di sini."
+       }
+      }
+     ]
+    },
     {
      "title": {
       "en": "Equipment and vehicles",
@@ -2043,6 +2082,35 @@
    "PUT duty/sites/:/terms",
    "PUT sites/:/kit"
   ],
+  "equiprequests": [
+   "GET me/items",
+   "GET purchasing",
+   "GET purchasing/issues/:/proof",
+   "GET purchasing/uniform-requests",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET warranty-claims",
+   "POST inventory/:",
+   "POST it/act/:",
+   "POST me/it-devices/report",
+   "POST me/items/:/:",
+   "POST purchasing/:/issues",
+   "POST purchasing/:/requests",
+   "POST purchasing/:/suppliers",
+   "POST purchasing/issues/:/confirm-loss",
+   "POST purchasing/issues/:/handover/:",
+   "POST purchasing/issues/:/return",
+   "POST purchasing/requests/:/:",
+   "POST purchasing/stock/:/count",
+   "POST purchasing/suppliers/:/:",
+   "POST purchasing/uniform-requests",
+   "POST purchasing/uniform-requests/:/:",
+   "POST supplies/:",
+   "POST warranty-claims",
+   "POST warranty-claims/:/check",
+   "POST warranty-claims/:/close",
+   "POST warranty-claims/:/send"
+  ],
   "finance": [
    "GET finance",
    "GET finance/:/controls",
@@ -2273,11 +2341,8 @@
    "GET attendance-reports/uploads/:",
    "GET cms/guard-phones",
    "GET cms/hours",
-   "GET companies/:/attendance",
-   "GET companies/:/attendance/alerts",
    "GET companies/:/guard-phones",
    "GET companies/:/people",
-   "GET companies/:/people/:/discipline",
    "GET discipline/appeals",
    "GET dosh/register/:",
    "GET flex",
@@ -2310,7 +2375,6 @@
    "GET people/:/profile",
    "GET records/:/form",
    "GET records/kinds",
-   "GET shifts/:/candidates",
    "GET socso",
    "GET socso/:",
    "GET vacancies",
@@ -2324,8 +2388,6 @@
    "POST attendance-reports/uploads/:/finish",
    "POST attendance-reports/uploads/:/preview",
    "POST attendance-reports/uploads/:/save",
-   "POST attendance/follow-up",
-   "POST companies/:/attendance/lock",
    "POST companies/:/guard-phones/codes",
    "POST discipline/:/appeal",
    "POST discipline/:/appeal/decide",
@@ -3048,6 +3110,7 @@
    "POST socso/:/restrictions/:/clear",
    "POST socso/:/status"
   ],
+  "sop": [],
   "staff-directory": [
    "GET records/:/form",
    "GET records/kinds",

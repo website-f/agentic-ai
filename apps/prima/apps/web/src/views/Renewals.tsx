@@ -10,6 +10,7 @@ import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import '../styles/hrx.css';
 import { KdnRenewalPanel } from './KdnRenewal';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Renewals and compliance calendar (Central Admin 5C, Fauzan 2 Nov 2026). Each company renews its own licences,
@@ -160,6 +161,7 @@ export function RenewalsView() {
         sub="Every licence, registration and certificate each company holds: KDN, MOF and vendor panels, council licences, ISO, fire certificate, insurance and SSM. Each company renews its own; Central Admin monitors and confirms the new expiry. The app never lodges or pays."
         actions={
           <>
+            <SopHelp id="gov-renewal" />
             <ImportButton kind="licence" />
             <RecordButton kind="licence" primary label="Add licence" />
           </>

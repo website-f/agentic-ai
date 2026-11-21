@@ -4,6 +4,7 @@ import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, PencilSimpleLineIcon,
 import { addDays, dateOf, isBlocked } from '@prima/core';
 import { api, type Roster } from '../api';
 import { useApp } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Card, Empty, PageHead, Person, Search, Stat, Stats, Toolbar } from '../kit';
 import { RecordButton } from './RecordForm';
 import { Chip, Drawer, ErrorNotice, Findings, Loading, dayLabel, hhmm, useAction, useLoad } from '../ui';
@@ -70,6 +71,7 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
         sub="Pick a shift to assign or change a guard. The app checks papers, age, hours and rest before it allows a change."
         actions={
           <>
+            <SopHelp id="ops-roster-week" />
             {!noSites && <Select id="roster-site" className="select ros-site" aria-label="Site" value={activeSite ?? ''} disabled={!siteList?.length} onChange={(e) => setSiteId(e.target.value)}>
               {siteList?.map((s) => (
                 <option key={s.site.id} value={s.site.id}>

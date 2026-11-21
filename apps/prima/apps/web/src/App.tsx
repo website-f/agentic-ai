@@ -137,6 +137,9 @@ const CooPaymentsView = lazyView(() => import('./views/CooPayments'), 'CooPaymen
 const PaymentRequestsView = lazyView(() => import('./views/PaymentRequests'), 'PaymentRequestsView');
 const HandoversView = lazyView(() => import('./views/Handovers'), 'HandoversView');
 const QualityView = lazyView(() => import('./views/Quality'), 'QualityView');
+// P121: the SOP and workflow guide, and the equipment requests screen.
+const SopView = lazyView(() => import('./views/Sop'), 'SopView');
+const EquipRequestsView = lazyView(() => import('./views/EquipRequests'), 'EquipRequestsView');
 
 /** The code of each menu screen, fetched ahead (see prefetchMenuScreens). */
 const SCREEN_CODE: Partial<Record<ViewName, () => Promise<unknown>>> = {
@@ -218,6 +221,8 @@ const SCREEN_CODE: Partial<Record<ViewName, () => Promise<unknown>>> = {
   meetings: () => import('./views/Meetings'),
   selfaudit: () => import('./views/SelfAudit'),
   rba: () => import('./views/Rba'),
+  sop: () => import('./views/Sop'),
+  equiprequests: () => import('./views/EquipRequests'),
   handovers: () => import('./views/Handovers'),
 };
 
@@ -278,7 +283,7 @@ function prefetchMenuScreens(views: ViewName[]): () => void {
 
 
 
-export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'guardroster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'accounts' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba';
+export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'guardroster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'accounts' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'sop' | 'equiprequests';
 
 export interface Route {
   view: ViewName;
@@ -288,6 +293,8 @@ export interface Route {
   tenderId?: string;
   /** P91: on the home screen, the app whose own home page is open (`#@hr`). */
   space?: SpaceId;
+  /** P121: the part of the screen to open (`#purchasing/store`): a tab, or a guide's id on the SOP screen. */
+  tab?: string;
 }
 
 interface AppCtx {
@@ -304,10 +311,46 @@ interface AppCtx {
   /** P91: whether this person's menu is split into apps, and opening one (null = the home screen). */
   apps?: boolean;
   openSpace?: (id: SpaceId | null) => void;
+  /** P121: the screen open now (its `tab` is read by useRouteTab). */
+  route?: Route;
 }
 
 export const Ctx = createContext<AppCtx>(null as unknown as AppCtx);
 export const useApp = () => useContext(Ctx);
+
+/** P121: '#view/tab' split into the screen and the part of it (a tab, or a guide's id). */
+export function splitHash(raw: string): { view: string; tab?: string } {
+  const h = raw.replace(/^#/, '');
+  const at = h.indexOf('/');
+  if (at < 0) return { view: h };
+  let tab = h.slice(at + 1);
+  try {
+    tab = decodeURIComponent(tab);
+  } catch {
+    /* keep it as typed */
+  }
+  return { view: h.slice(0, at), tab: tab || undefined };
+}
+/** P121: the address of a screen (and a part of it). */
+export function hashOf(r: Route): string {
+  if (r.view === 'home' && r.space) return `#@${r.space}`;
+  return r.tab ? `#${r.view}/${encodeURIComponent(r.tab)}` : `#${r.view}`;
+}
+/**
+ * P121: a screen's tab that a link can choose (`#purchasing/store`, or go({ view, tab })). `valid` lists the tabs this
+ * person has; a link to another tab is ignored and the screen opens as usual. A new link to the screen already open
+ * switches the tab too.
+ */
+export function useRouteTab<T extends string>(initial: T, valid: readonly T[]): [T, (t: T) => void] {
+  const route = useContext(Ctx)?.route;
+  const asked = route?.tab as T | undefined;
+  const [tab, setTab] = useState<T>(asked && valid.includes(asked) ? asked : initial);
+  useEffect(() => {
+    if (asked && valid.includes(asked)) setTab(asked);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route]);
+  return [tab, setTab];
+}
 
 /** depts is informational now: which central departments a screen serves; LINE in Shell decides who sees it. */
 /**
@@ -482,6 +525,11 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'purchasing', label: 'Procurement', icon: 'cart', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // One item register for every kind of thing in every company (Fauzan, 6 Nov 2026). Firearms stay in Arms Control.
   { view: 'items', label: 'Items and equipment', icon: 'cart', roles: ['guard', 'supervisor', 'director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // P121 (Fitri, 21 Nov 2026: "in equipment, where to order the equipment, the form?"): asking for uniforms and site
+  // supplies, and the store's queue, in the Equipment app. The same panels as My details and Procurement; the server decides.
+  { view: 'equiprequests', label: 'Ask for equipment', icon: 'cart', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // P121: every SOP and workflow Fauzan declared, step by step, with a link to where each step is done. Read only.
+  { view: 'sop', label: 'SOP and workflows', icon: 'compliance', roles: ['guard', 'supervisor', 'director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Continuity: IT keeps three copies of every system in Malaysia and tests restores; group leadership watches.
   { view: 'it-extraction', label: 'AI data preview', icon: 'device', roles: ['director', 'pwvsb_officer'] },
   // Microsoft 365 Connections (2 Nov 2026): every office staff member checks their own Outlook, Teams and SharePoint access.
@@ -633,7 +681,9 @@ const VIEW_TOKENS: ViewName[] = [
 'cmsready',
 'quality',
 'selfaudit',
-'rba'
+'rba',
+'sop',
+'equiprequests'
 ];
 
 function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?: string | null }) {
@@ -973,6 +1023,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         n.view === 'claims' ||
         n.view === 'staffpay' ||
         n.view === 'memos' ||
+        // P121: the SOP guide is for everyone.
+        n.view === 'sop' ||
         // Anyone can be invited to a meeting or own a meeting action, so every office sign-in reaches Meetings (5 Nov 2026).
         n.view === 'meetings' ||
         n.view === 'fleet' ||
@@ -996,6 +1048,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         n.view === 'work' ||
         // Items (P85, paper section 9): stores, OM and patrol in their area, Finance, HR for uniforms, audit, the COO and the owner.
         (n.view === 'items' && (['om', 'regional', 'ogm', 'ops_director', 'coo'].includes(me.user.opsTier ?? '') || isOwnerAdmin(me.user))) ||
+        // P121: OMs ask for uniforms and site supplies; the store (procurement) decides; the owner sees it.
+        (n.view === 'equiprequests' && (['om', 'regional', 'ogm', 'ops_director', 'coo'].includes(me.user.opsTier ?? '') || dept === 'procurement' || isOwnerAdmin(me.user))) ||
         (n.view === 'branchwork' && (dept === 'audit' || dept === 'cms' || ['om', 'regional', 'ogm', 'ops_director', 'coo'].includes(me.user.opsTier ?? ''))) ||
         (LINE[dept!] ?? ['clock']).includes(n.view)) &&
       // Far branches: the branch manager, the company manager, OM and above, ACT and CMS; not other admin executives.
@@ -1086,7 +1140,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   const narrowed = officeNarrowed(roleNav, me.office);
   const nav = narrowed.length ? narrowed : [{ view: 'home' as ViewName, label: 'Home', icon: 'company', roles: [] as User['role'][] }];
   const initialView = (): ViewName => {
-    const h = location.hash.slice(1) as ViewName;
+    const h = splitHash(location.hash).view as ViewName;
     return VIEW_TOKENS.includes(h) && nav.some((x) => x.view === h) ? h : nav[0].view;
   };
   // P91: Prima as apps for a long menu; `#@hr` opens an app's own home page.
@@ -1098,8 +1152,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       if (id !== 'home' && spaceLayout(nav, id)) return { view: 'home', space: id };
     }
     // With apps, Prima opens on the home screen (the app cards), unless the address names a screen of this person.
-    if (apps && !(VIEW_TOKENS.includes(h as ViewName) && nav.some((x) => x.view === h))) return { view: 'home' };
-    return { view: initialView() };
+    const at = splitHash(h);
+    if (apps && !(VIEW_TOKENS.includes(at.view as ViewName) && nav.some((x) => x.view === at.view))) return { view: 'home' };
+    const v = initialView();
+    return v === at.view && at.tab ? { view: v, tab: at.tab } : { view: v };
   };
   const [route, setRoute] = useState<Route>(initialRoute);
   // P75: the office's feedback button explains the screen open now (prima-page.ts).
@@ -1167,7 +1223,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       const step = apps && spaceOfRoute(r) !== spaceNow.current;
       setRoute(r);
       try {
-        const hash = r.view === 'home' && r.space ? `#@${r.space}` : `#${r.view}`;
+        const hash = hashOf(r);
         if (step) history.pushState(null, '', hash);
         else history.replaceState(null, '', hash);
       } catch {
@@ -1186,8 +1242,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       if (backClosedSheet(e)) return;
       const h = location.hash.slice(1);
       if (h.startsWith('@') && spaceLayout(nav, h.slice(1) as SpaceId)) setRoute({ view: 'home', space: h.slice(1) as SpaceId });
-      else if (VIEW_TOKENS.includes(h as ViewName) && nav.some((x) => x.view === h)) setRoute({ view: h as ViewName });
-      else if (!h || h === 'home') setRoute({ view: 'home' });
+      else if (VIEW_TOKENS.includes(splitHash(h).view as ViewName) && nav.some((x) => x.view === splitHash(h).view)) {
+        const at = splitHash(h);
+        setRoute(at.tab ? { view: at.view as ViewName, tab: at.tab } : { view: at.view as ViewName });
+      } else if (!h || h === 'home') setRoute({ view: 'home' });
       window.scrollTo(0, 0);
     };
     window.addEventListener('popstate', onPop);
@@ -1207,7 +1265,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     // (no dashboard numbers), so nobody sees more than before.
     return apps && !m.some((n) => n.view === 'home') ? [{ view: 'home' as ViewName, label: 'Home', icon: 'company' }, ...m] : m;
   }, [menuKey, apps]);
-  const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup, canOpen, menu, apps, openSpace }), [me, companyId, company, go, isGroup, canOpen, menu, apps, openSpace]);
+  const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup, canOpen, menu, apps, openSpace, route }), [me, companyId, company, go, isGroup, canOpen, menu, apps, openSpace, route]);
   // P91: the side menu shows the open app's screens only (or, on the home screen, the everyday screens).
   const railItems = useMemo(() => (apps ? (spaceLayout(menu, space ?? 'home')?.groups.flatMap((g) => g.items) ?? []) : menu), [apps, menu, space]);
   // P117: inside the office page the office's sidebar opens screens and apps (the same '#clock' and '#@hr' addresses),
@@ -1221,7 +1279,9 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return spaceLayout(menu, id) ? { view: 'home', space: id } : null;
       }
       if (h === 'home' && apps) return { view: 'home' };
-      return VIEW_TOKENS.includes(h as ViewName) && navKey.split(',').includes(h) ? { view: h as ViewName } : null;
+      const at = splitHash(h);
+      if (!(VIEW_TOKENS.includes(at.view as ViewName) && navKey.split(',').includes(at.view))) return null;
+      return at.tab ? { view: at.view as ViewName, tab: at.tab } : { view: at.view as ViewName };
     },
     [apps, navKey, menu],
   );
@@ -1433,6 +1493,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <SelfAuditView />;
       case 'rba':
         return <RbaView />;
+      case 'sop':
+        return <SopView />;
+      case 'equiprequests':
+        return <EquipRequestsView />;
       case 'surveys':
         return <SurveysView ownerId={me.user.id} />;
       case 'handovers':

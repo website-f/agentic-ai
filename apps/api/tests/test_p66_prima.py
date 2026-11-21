@@ -191,8 +191,11 @@ def test_the_screen_catalog_is_prima_s_menu():
     # Every screen of Prima's menu (App.tsx NAV) can be chosen, in exactly one app.
     nav = set(re.findall(r"view: '([\w-]+)',", (PRIMA_WEB / "App.tsx").read_text("utf-8")))
     assert nav <= set(modules.ids()) and len(modules.ids()) == len(set(modules.ids()))
-    # Each screen makes calls (Connections inside the office is the office's own page).
-    assert not [v for v, calls in kept["calls"].items() if not calls and v != "connections"]
+    # Each screen makes calls (Connections inside the office is the office's own page; P121: the SOP
+    # guide is read-only text, its rules register uses a common call).
+    assert not [
+        v for v, calls in kept["calls"].items() if not calls and v not in ("connections", "sop")
+    ]
     # Every route Prima serves belongs to a screen, or is refused to anyone with chosen
     # screens: only the guard's own phone app (its own sign-in, never through the office).
     loose = [

@@ -1,6 +1,7 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
+import { useRouteTab } from '../App';
 import { Chip, ErrorNotice, Kpi, useAction, useLoad } from '../ui';
 
 /**
@@ -151,7 +152,8 @@ function MoveSteps({ m, role, busy, go }: { m: AnyRec & { newArrival?: boolean }
 export function FwHostelPanel() {
   const v = useLoad(() => api.fwHostel(), []);
   const act = useAction();
-  const [tab, setTab] = useState<'hostels' | 'moves' | 'needs' | 'damage' | 'repairs'>('hostels');
+  // P121: a link may open one of these tabs (#hostels/needs).
+  const [asked, setTab] = useRouteTab<'hostels' | 'moves' | 'needs' | 'damage' | 'repairs'>('hostels', ['hostels', 'moves', 'needs', 'damage', 'repairs']);
   const [form, setForm] = useState<string | null>(null);
   const [f, setF] = useState<Record<string, unknown>>({});
   const [photos, setPhotos] = useState<string[]>([]);
@@ -166,6 +168,8 @@ export function FwHostelPanel() {
   const damages = ((d as { damages?: unknown[] }).damages ?? []) as (AnyRec & { hostelId: string; lines: { item: string; qty: number }[]; penalty: { amount: number; status: string } | null })[];
   const maints = ((d as { maints?: unknown[] }).maints ?? []) as (AnyRec & { hostelName: string; what: string; critical: boolean })[];
   const role = d.role;
+  // Asset Management has only the needs and repairs tabs: open on needs rather than on a tab it cannot see.
+  const tab = role === 'asset' && asked !== 'needs' && asked !== 'repairs' ? 'needs' : asked;
   return (
     <section className="panel" style={{ marginBottom: 16 }}>
       <div className="panel-head">

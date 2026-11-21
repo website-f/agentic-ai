@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api, type FinSqlPosting } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * Finance > Checks > SQL Account link (Fauzan, 13 Nov 2026, Build 1). Prima posts approved, finished records into each
@@ -76,6 +77,81 @@ export function SqlAccountLinkPanel({ companyId }: { companyId: string }) {
   );
 }
 
+type Job = Co['jobs'][number];
+/** One row of the codes table: a payee, a customer with a code, or a customer still without one. */
+interface CodeRow {
+  key: string;
+  kind: 'payee' | 'customer';
+  /** The payee id, or the customer's name. */
+  id: string;
+  name: string;
+  code: string | null;
+  state: 'checked' | 'tocheck' | 'none';
+  mayCheck: boolean;
+}
+const codeRows = (co: Co): CodeRow[] => [
+  ...co.payeeCodes.map((p): CodeRow => ({
+    key: p.payeeId,
+    kind: 'payee',
+    id: p.payeeId,
+    name: p.payee,
+    code: p.code?.code ?? null,
+    state: p.code ? (p.code.checked ? 'checked' : 'tocheck') : 'none',
+    mayCheck: !!p.mayCheck,
+  })),
+  ...co.customerCodes.map((c): CodeRow => ({ key: `c-${c.customer}`, kind: 'customer', id: c.customer, name: c.customer, code: c.code, state: c.checked ? 'checked' : 'tocheck', mayCheck: !!c.mayCheck })),
+  ...co.customersWithoutCode.map((name): CodeRow => ({ key: `n-${name}`, kind: 'customer', id: name, name, code: null, state: 'none', mayCheck: false })),
+];
+const CODE_STATE: Record<CodeRow['state'], ['ok' | 'warn' | 'neutral', string]> = { checked: ['ok', 'checked'], tocheck: ['warn', 'to check'], none: ['neutral', 'no code'] };
+/** P107: the codes table's columns, drawn as the old table drew them. */
+const CODE_COLUMNS: DtColumn<CodeRow>[] = [
+  {
+    id: 'name',
+    label: 'Payee',
+    value: (r) => r.name,
+    render: (r) => <span data-no-translate>{r.kind === 'customer' ? `${r.name} (customer)` : r.name}</span>,
+    phone: 'title',
+  },
+  { id: 'code', label: 'Code', value: (r) => r.code, render: (r) => <span data-no-translate>{r.code ?? '–'}</span> },
+  { id: 'state', label: 'Status', value: (r) => CODE_STATE[r.state][1], translate: true, render: (r) => <Chip tone={CODE_STATE[r.state][0]}>{CODE_STATE[r.state][1]}</Chip> },
+];
+const CODE_FILTERS: DtFilter<CodeRow>[] = [
+  { id: 'kind', label: 'Kind', value: (r) => r.kind, options: [{ value: 'payee', label: 'Payee' }, { value: 'customer', label: 'Customer' }] },
+  { id: 'state', label: 'Status', value: (r) => r.state, options: Object.entries(CODE_STATE).map(([value, [, label]]) => ({ value, label })) },
+];
+/** P107: the posting jobs, drawn as the old table drew them; filters by status, document and month made. */
+const JOB_COLUMNS: DtColumn<Job>[] = [
+  { id: 'createdAt', label: 'Made', value: (j) => j.createdAt, sort: 'date', render: (j) => dateTimeLabel(j.createdAt), phone: 'sub' },
+  {
+    id: 'doc',
+    label: 'Document',
+    value: (j) => j.docLabel,
+    render: (j) => (
+      <>
+        {j.docLabel}
+        <div className="muted small" data-no-translate>
+          {j.payload.ourRef}
+        </div>
+      </>
+    ),
+    phone: 'title',
+  },
+  { id: 'amount', label: 'Amount', value: (j) => j.payload.amount, sort: 'money', render: (j) => rm(j.payload.amount) },
+  { id: 'status', label: 'Status', value: (j) => j.statusLabel, translate: true, render: (j) => <Chip tone={TONE[j.status] ?? 'neutral'}>{j.statusLabel}</Chip> },
+  {
+    id: 'why',
+    label: 'Why / SQL number',
+    value: (j) => (j.sqlDocNo ? `SQL Account: ${j.sqlDocNo}${j.postedAt ? ` on ${dateTimeLabel(j.postedAt)}` : ''}` : j.reasons.join(' ')),
+    sort: false,
+    render: (j) => <span className="small">{j.sqlDocNo ? `SQL Account: ${j.sqlDocNo}${j.postedAt ? ` on ${dateTimeLabel(j.postedAt)}` : ''}` : j.reasons.join(' ')}</span>,
+  },
+];
+const JOB_FILTERS: DtFilter<Job>[] = [
+  { id: 'status', label: 'Status', value: (j) => j.statusLabel },
+  { id: 'doc', label: 'Document', value: (j) => j.docLabel },
+  { id: 'month', label: 'Month', value: (j) => j.createdAt.slice(0, 7) },
+];
+
 function Company({ co, lead, run }: { co: Co; lead: boolean; run: (kind: 'switch' | 'code' | 'exception' | 'paste', input: Record<string, unknown>, msg: string) => Promise<unknown> }) {
   const [reason, setReason] = useState('');
   const [types, setTypes] = useState<Record<string, boolean>>(Object.fromEntries(co.docTypes.map((t) => [t.docType, t.on])));
@@ -83,6 +159,7 @@ function Company({ co, lead, run }: { co: Co; lead: boolean; run: (kind: 'switch
   const [comment, setComment] = useState<Record<string, string>>({});
   const [rev, setRev] = useState<Record<string, string>>({});
   const [csv, setCsv] = useState('');
+  const codes = useMemo(() => codeRows(co), [co]);
   return (
     <>
       <div className="kpis">
@@ -153,110 +230,55 @@ function Company({ co, lead, run }: { co: Co; lead: boolean; run: (kind: 'switch
       ))}
 
       <h4 style={{ margin: '12px 12px 4px' }}>SQL Account codes (entered by one person, checked by another)</h4>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Payee</th>
-              <th>Code</th>
-              <th>Status</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {co.payeeCodes.map((p) => (
-              <tr key={p.payeeId}>
-                <td data-no-translate>{p.payee}</td>
-                <td data-no-translate>{p.code?.code ?? '–'}</td>
-                <td>{p.code ? (p.code.checked ? <Chip tone="ok">checked</Chip> : <Chip tone="warn">to check</Chip>) : <Chip tone="neutral">no code</Chip>}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  {p.mayCheck ? (
-                    <button className="btn" onClick={() => void run('code', { companyId: co.companyId, action: 'payeeCodeCheck', payeeId: p.payeeId, comment: 'Matches the list in SQL Account' }, 'Code checked.')}>
-                      Check
-                    </button>
-                  ) : (
-                    <>
-                      <input className="input" style={{ width: 110 }} placeholder="Code" value={code[p.payeeId] ?? ''} onChange={(x) => setCode({ ...code, [p.payeeId]: x.target.value })} />{' '}
-                      <button className="btn" onClick={() => void run('code', { companyId: co.companyId, action: 'payeeCode', payeeId: p.payeeId, code: code[p.payeeId] ?? '' }, 'Code saved; someone else checks it.')}>
-                        Save
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {co.customerCodes.map((c) => (
-              <tr key={`c-${c.customer}`}>
-                <td data-no-translate>{c.customer} (customer)</td>
-                <td data-no-translate>{c.code}</td>
-                <td>{c.checked ? <Chip tone="ok">checked</Chip> : <Chip tone="warn">to check</Chip>}</td>
-                <td>
-                  {c.mayCheck && (
-                    <button className="btn" onClick={() => void run('code', { companyId: co.companyId, action: 'customerCodeCheck', customer: c.customer, comment: 'Matches the list in SQL Account' }, 'Code checked.')}>
-                      Check
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {co.customersWithoutCode.map((name) => (
-              <tr key={`n-${name}`}>
-                <td data-no-translate>{name} (customer)</td>
-                <td>–</td>
-                <td>
-                  <Chip tone="neutral">no code</Chip>
-                </td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  <input className="input" style={{ width: 110 }} placeholder="Code" value={code[`c:${name}`] ?? ''} onChange={(x) => setCode({ ...code, [`c:${name}`]: x.target.value })} />{' '}
-                  <button className="btn" onClick={() => void run('code', { companyId: co.companyId, action: 'customerCode', customer: name, code: code[`c:${name}`] ?? '' }, 'Code saved; someone else checks it.')}>
-                    Save
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* P107: one table for payee and customer codes (and customers with no code yet): search, kind and state filters, pages. */}
+      <DataTable
+        label="SQL Account codes"
+        stateKey={`fin.sqlcodes.${co.companyId}`}
+        rows={codes}
+        rowKey={(r) => r.key}
+        columns={CODE_COLUMNS}
+        filters={CODE_FILTERS}
+        rowEnd={(r) =>
+          r.kind === 'payee' ? (
+            r.mayCheck ? (
+              <button className="btn" onClick={() => void run('code', { companyId: co.companyId, action: 'payeeCodeCheck', payeeId: r.id, comment: 'Matches the list in SQL Account' }, 'Code checked.')}>
+                Check
+              </button>
+            ) : (
+              <span style={{ whiteSpace: 'nowrap' }}>
+                <input className="input" style={{ width: 110 }} placeholder="Code" value={code[r.id] ?? ''} onChange={(x) => setCode({ ...code, [r.id]: x.target.value })} />{' '}
+                <button className="btn" onClick={() => void run('code', { companyId: co.companyId, action: 'payeeCode', payeeId: r.id, code: code[r.id] ?? '' }, 'Code saved; someone else checks it.')}>
+                  Save
+                </button>
+              </span>
+            )
+          ) : r.state !== 'none' ? (
+            r.mayCheck && (
+              <button className="btn" onClick={() => void run('code', { companyId: co.companyId, action: 'customerCodeCheck', customer: r.id, comment: 'Matches the list in SQL Account' }, 'Code checked.')}>
+                Check
+              </button>
+            )
+          ) : (
+            <span style={{ whiteSpace: 'nowrap' }}>
+              <input className="input" style={{ width: 110 }} placeholder="Code" value={code[`c:${r.id}`] ?? ''} onChange={(x) => setCode({ ...code, [`c:${r.id}`]: x.target.value })} />{' '}
+              <button className="btn" onClick={() => void run('code', { companyId: co.companyId, action: 'customerCode', customer: r.id, code: code[`c:${r.id}`] ?? '' }, 'Code saved; someone else checks it.')}>
+                Save
+              </button>
+            </span>
+          )
+        }
+      />
 
       <h4 style={{ margin: '12px 12px 4px' }}>Documents</h4>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Made</th>
-              <th>Document</th>
-              <th style={{ textAlign: 'right' }}>Amount</th>
-              <th>Status</th>
-              <th>Why / SQL number</th>
-            </tr>
-          </thead>
-          <tbody>
-            {co.jobs.length === 0 && (
-              <tr>
-                <td colSpan={5} className="muted">
-                  Nothing yet. A job is made when a payment is released or a receipt is found on the bank statement.
-                </td>
-              </tr>
-            )}
-            {co.jobs.map((j) => (
-              <tr key={j.id}>
-                <td>{dateTimeLabel(j.createdAt)}</td>
-                <td>
-                  {j.docLabel}
-                  <div className="muted small" data-no-translate>
-                    {j.payload.ourRef}
-                  </div>
-                </td>
-                <td style={{ textAlign: 'right' }}>{rm(j.payload.amount)}</td>
-                <td>
-                  <Chip tone={TONE[j.status] ?? 'neutral'}>{j.statusLabel}</Chip>
-                </td>
-                <td className="small">{j.sqlDocNo ? `SQL Account: ${j.sqlDocNo}${j.postedAt ? ` on ${dateTimeLabel(j.postedAt)}` : ''}` : j.reasons.join(' ')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Documents"
+        stateKey={`fin.sqljobs.${co.companyId}`}
+        rows={co.jobs}
+        rowKey={(j) => j.id}
+        columns={JOB_COLUMNS}
+        filters={JOB_FILTERS}
+        empty={<p className="muted">Nothing yet. A job is made when a payment is released or a receipt is found on the bank statement.</p>}
+      />
 
       <details style={{ padding: 12 }}>
         <summary className="small">Paste SQL Account's daily listing (when SQL Account cannot be read back)</summary>

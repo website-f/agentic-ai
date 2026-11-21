@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
-import { ErrorNotice, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, useAction, useLoad } from '../ui';
+import { DataTable } from '../DataTable';
 
 /**
  * Part N8: "Lapor masalah / Report a problem" on every screen. What went wrong, the screen (filled in) and an optional
@@ -88,19 +89,52 @@ export function ProblemReportsSection() {
   const v = useLoad(() => api.problems(), []);
   const act = useAction();
   const [reply, setReply] = useState<Record<string, string>>({});
+  const [openId, setOpenId] = useState<string | null>(null);
   if (!v.data?.support) return null;
   const open = v.data.reports.filter((r) => r.mayReply);
+  type Report = (typeof open)[number];
+  const r = open.find((x) => x.id === openId) ?? null;
   return (
     <section className="panel">
       <div className="panel-head">
         <h3>Problem reports from staff</h3>
-        <span className="muted small">{open.filter((r) => r.status === 'open').length} to answer</span>
+        <span className="muted small">{open.filter((x) => x.status === 'open').length} to answer</span>
       </div>
       <ErrorNotice error={act.error} />
-      <div className="list">
-        {open.length === 0 && <div className="empty">No problem reports.</div>}
-        {open.map((r) => (
-          <div key={r.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+      {/* P107: the reports as a data table; a row opens the report, its picture, the replies and the reply box. */}
+      <DataTable
+        label="Problem reports from staff"
+        stateKey="it.problems"
+        rows={open}
+        rowKey={(x) => x.id}
+        columns={[
+          { id: 'reporter', label: 'Reported by', value: (x: Report) => x.reporter, render: (x: Report) => <strong>{x.reporter}</strong>, phone: 'title' },
+          { id: 'screen', label: 'Screen', value: (x: Report) => x.screen, phone: 'sub' },
+          { id: 'what', label: 'What went wrong', value: (x: Report) => x.what, phone: 'sub' },
+          { id: 'at', label: 'Reported on', value: (x: Report) => x.at, sort: 'date', hideBelow: 1100 },
+          { id: 'replies', label: 'Replies', value: (x: Report) => x.replies.length, sort: 'number', hideBelow: 1100 },
+          { id: 'status', label: 'Status', value: (x: Report) => (x.status === 'open' ? 'To answer' : 'Answered'), translate: true, render: (x: Report) => <Chip tone={x.status === 'open' ? 'warn' : 'ok'}>{x.status === 'open' ? 'To answer' : 'Answered'}</Chip> },
+        ]}
+        filters={[
+          {
+            id: 'status',
+            label: 'Status',
+            value: (x: Report) => x.status,
+            options: [
+              { value: 'open', label: 'To answer' },
+              { value: 'answered', label: 'Answered' },
+            ],
+          },
+          { id: 'screen', label: 'Screen', value: (x: Report) => x.screen },
+        ]}
+        searchPlaceholder="Person, screen or problem"
+        onRowClick={(x) => setOpenId(x.id)}
+        rowTone={(x) => (x.status === 'open' ? 'warn' : undefined)}
+        empty={<div className="empty">No problem reports.</div>}
+      />
+      {r && (
+        <Drawer title={`${r.reporter} · ${r.screen}`} onClose={() => setOpenId(null)}>
+          <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
             <div style={{ fontWeight: 600 }}>
               {r.reporter} · {r.screen}
             </div>
@@ -117,9 +151,10 @@ export function ProblemReportsSection() {
                 Reply
               </button>
             </div>
+            <ErrorNotice error={act.error} />
           </div>
-        ))}
-      </div>
+        </Drawer>
+      )}
     </section>
   );
 }

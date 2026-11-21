@@ -10,7 +10,8 @@ import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataT
 import { BookOpenTextIcon, ClockCountdownIcon, DesktopIcon, LifebuoyIcon, PlusIcon, ShoppingCartIcon, StethoscopeIcon, UserSwitchIcon } from '@phosphor-icons/react';
 import { arishaLeader } from '@prima/core';
 import { api, type ItBoard } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
 import { AssignPick, Jobs, MyWork, Systems, Team } from './ItWork';
 import { AwayPanel, BuyFlow, ItAudit, ItTenders, LogTicket, RecordConfirm } from './ItPilot';
@@ -41,6 +42,8 @@ import { RecordPrimaConfirm, ServiceReport, TicketPolicyFacts, TicketPolicyTools
  */
 
 type Tab = 'guide' | 'import' | 'audit' | 'work' | 'plan' | 'rental' | 'jobs' | 'team' | 'systems' | 'assets' | 'purchases' | 'maintenance' | 'websites' | 'tickets' | 'onboarding' | 'tenders' | 'mine' | 'policy';
+/** P121: every tab a link may ask for (#it/tickets); the screen still opens only a tab this person has (see `current`). 'start' = this person's first tab. */
+const LINK_TABS: readonly (Tab | 'start')[] = ['start', 'guide', 'import', 'audit', 'work', 'plan', 'rental', 'jobs', 'team', 'systems', 'assets', 'purchases', 'maintenance', 'websites', 'tickets', 'onboarding', 'tenders', 'mine', 'policy'];
 type AssetRow = NonNullable<ItBoard['assets']>[number];
 type Asset = AssetRow['asset'];
 const manualRecord=(row:unknown)=>(row as {manual?:{kind?:string;unitLabel?:string;companyId?:string|null;purchaseDateUnknown?:boolean;personUserId?:string|null}}).manual;
@@ -84,7 +87,8 @@ const CATEGORY = {
 export function ItView() {
   const { me } = useApp();
   const { data, error } = useLoad(() => api.itBoard(), []);
-  const [tab, setTab] = useState<Tab | null>(null);
+  // P121: the tab can come from a link (#it/mine). A tab this person does not have opens their first tab instead.
+  const [tab, setTab] = useRouteTab<Tab | 'start'>('start', LINK_TABS);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="IT" />;
   const k = data.kpis;
@@ -140,8 +144,8 @@ export function ItView() {
         // The CEO's batch import of open IT work (task T9).
         ...(arishaLeader(me.user) === 'ceo' ? ([['import', 'Import']] as [Tab, string][]) : []),
       ];
-  const current = tab ?? tabs[0][0];
-  const has = (t: Tab) => tabs.some(([x]) => x === t);
+  const has = (t: Tab | 'start') => tabs.some(([x]) => x === t);
+  const current: Tab = tab === 'guide' && k ? 'guide' : tab !== 'start' && has(tab) ? tab : tabs[0][0];
   /** A tile opens its tab when this person has that tab. */
   const opens = (t: Tab) => (has(t) ? () => setTab(t) : undefined);
   const selfService = tabs.length === 1;
@@ -156,6 +160,8 @@ export function ItView() {
         }
         actions={
           <>
+            {/* P121: the SOP and workflow guide for IT (every IT flow, step by step, with its links). */}
+            <SopHelp id="it" />
             {/* The step-by-step guide to every IT workflow, for this person's own screens (P78). */}
             {k && current !== 'guide' && (
               <button className="btn" onClick={() => setTab('guide')}>
@@ -240,7 +246,7 @@ export function ItView() {
         {current === 'guide' && (
           <>
             <div className="it-actions">
-              <button className="btn btn-sm" onClick={() => setTab(null)}>
+              <button className="btn btn-sm" onClick={() => setTab('start')}>
                 Back to IT
               </button>
             </div>
@@ -266,7 +272,7 @@ export function ItView() {
         {current === 'tickets' && <Tickets data={data} staff={staff} />}
         {current === 'onboarding' && <>{manualItVisible(me.user)&&<ItManualPanel mode="intake"/>}<Onboarding data={data} staff={staff} /></>}
         {current === 'tenders' && <ItTenders data={data} />}
-        {current === 'mine' && <Mine data={data} />}
+        {current === 'mine' && <Mine data={data} onForms={has('policy') ? () => setTab('policy') : undefined} />}
         {current === 'policy' && <ItPolicyPanel assets={(data.assets ?? []).map((r) => ({ id: r.asset.id, label: `${r.asset.tag} · ${r.asset.model}` }))} companyNames={Object.fromEntries((data.assets ?? []).map((r) => [r.asset.ownerId, r.ownerName]))} />}
         {current === 'import' && arishaLeader(me.user) === 'ceo' && <ItImport />}
       </div>
@@ -598,6 +604,7 @@ function Purchases({ data, staff }: { data: ItBoard; staff: boolean }) {
 function PurchaseLine({ p: row, staff, data }: { p: NonNullable<ItBoard['purchases']>[number]; staff: boolean; data: ItBoard }) {
   const act = useAction();
   const [note, setNote] = useState('');
+  const { go, canOpen } = useApp();
   const p = row.purchase;
   const tone = p.status === 'rejected' ? 'crit' : p.status === 'received' ? 'ok' : row.canApprove || row.canDecide ? 'warn' : 'info';
   return (
@@ -626,7 +633,7 @@ function PurchaseLine({ p: row, staff, data }: { p: NonNullable<ItBoard['purchas
         </div>
       )}
       <BuyFlow row={row} data={data} />
-      {row.canTag&&<p className="notice" data-tone="info">Record actual delivery quantities in IT purchase fulfilment. The previous direct tag/receipt shortcut is not used for the protected workflow.</p>}
+      {row.canTag&&<p className="notice" data-tone="info"><span>Record actual delivery quantities in IT purchase fulfilment. The previous direct tag/receipt shortcut is not used for the protected workflow.</span>{canOpen?.('it-procurement')&&<button className="btn btn-sm" onClick={()=>go({view:'it-procurement'})}>Open IT purchase fulfilment</button>}</p>}
       <ErrorNotice error={act.error} />
     </li>
   );
@@ -1127,7 +1134,7 @@ function Onboarding({ data, staff }: { data: ItBoard; staff: boolean }) {
   );
 }
 
-function Mine({ data }: { data: ItBoard }) {
+function Mine({ data, onForms }: { data: ItBoard; /** P121: opens IT policies, where the other request forms are. */ onForms?: () => void }) {
   const act = useAction();
   const [category, setCategory] = useState<keyof typeof CATEGORY>('M365');
   const [priority, setPriority] = useState<'P1' | 'P2' | 'P3' | 'P4'>('P3');
@@ -1151,6 +1158,15 @@ function Mine({ data }: { data: ItBoard }) {
     });
   return (
     <div className="it-mine">
+      {/* P121: equipment, Microsoft 365 accounts, domains and websites are asked for on the IT policies tab; say so here, where people look first. */}
+      {onForms && (
+        <Card title="Need equipment, an account, a domain or a website?" sub="Ask for IT equipment, a Microsoft 365 account, a new domain or a new company website with the request forms under IT policies.">
+          <button className="btn btn-sm btn-primary" onClick={onForms}>
+            <PlusIcon size={14} weight="bold" aria-hidden="true" />
+            Open the request forms
+          </button>
+        </Card>
+      )}
       <Card title="Ask IT for help" sub="Say what is wrong and how much it stops your work. IT replies within the time limit for that urgency.">
         <div className="it-form">
           <label className="field">

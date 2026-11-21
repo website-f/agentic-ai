@@ -3,7 +3,8 @@ import { WebTicketReview, LegacyWebsiteActions } from './WebTicketReview';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type WebBoardOk } from '../api';
 import { saveFile } from '../save';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { loadWebsiteVisit, websiteNoticeIsMonth, type WebsiteVisit } from './website-schedule-state';
 import { Chip, Drawer, ErrorNotice, Loading, dataNotice, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Card, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
@@ -22,6 +23,8 @@ import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 type B = WebBoardOk;
 type Tab = 'overview' | 'companies' | 'sites' | 'domains' | 'social' | 'email' | 'reviews' | 'checks' | 'issues' | 'dns' | 'reports' | 'settings';
+/** P121: the tabs a link may ask for (#websites/issues); a tab this person does not have opens the overview. */
+const LINK_TABS: readonly Tab[] = ['overview', 'companies', 'sites', 'domains', 'social', 'email', 'reviews', 'checks', 'issues', 'dns', 'reports', 'settings'];
 type Open = { kind: 'company' | 'site' | 'domain' | 'social' | 'review' | 'check' | 'issue' | 'dns'; id: string } | null;
 type Act = ReturnType<typeof useAction>;
 
@@ -94,7 +97,7 @@ export function WebsitesView() {
   const visit = useRef<WebsiteVisit>({ active: true, attempted: false, generation: 0 });
   useEffect(() => { visit.current.active = true; return () => { visit.current.active = false; visit.current.generation++; }; }, []);
   const { data, error, reload } = useLoad(() => loadWebsiteVisit(api, visit.current), []);
-  const [tab, setTab] = useState<Tab>('overview');
+  const [asked, setTab] = useRouteTab<Tab>('overview', LINK_TABS);
   const [open, setOpen] = useState<Open>(null);
   const [filter, setFilter] = useState<{ label: string; ids: string[] } | null>(null);
   if (error) return <div className="ws-retry"><ErrorNotice error={error} /><button className="btn" onClick={reload}>Retry Websites</button></div>;
@@ -121,6 +124,7 @@ export function WebsitesView() {
     ['reports', 'Reports'],
     ...(r.admin ? ([['settings', 'Settings']] as [Tab, string][]) : []),
   ];
+  const tab: Tab = tabs.some(([t]) => t === asked) ? asked : 'overview';
   const go = (kind: NonNullable<Open>['kind'], id: string) => setOpen({ kind, id });
   const drill = (label: string, ids: string[]) => {
     setFilter({ label, ids });
@@ -132,6 +136,7 @@ export function WebsitesView() {
         title="Websites"
         actions={
           <>
+            <SopHelp id="it-website-issue" />
             <ImportButton kind="itDomain" />
             <RecordButton kind="itDomain" label="Add domain" primary />
           </>

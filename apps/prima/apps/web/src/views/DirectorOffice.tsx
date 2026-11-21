@@ -4,6 +4,7 @@ import { FileTextIcon, HourglassIcon, LightningIcon, TrayIcon } from '@phosphor-
 import { ExceptionalGuardCash } from './ExceptionalGuardCash';
 import { JointTenders } from './JointTenders';
 import { DirectorDesk } from './DirectorDesk';
+import { SopHelp } from '../sop/SopHelp';
 import { MyDailyCash } from './FinanceDailyCash';
 import { api } from '../api';
 import { useApp } from '../App';
@@ -14,9 +15,81 @@ import { PriorityChip } from './TenderFlow';
 import { TenderCounterPanel } from './TenderCounter';
 import { DirectorOfficeCounterPanel } from './DirectorOfficeCounter';
 import { TenderOpportunitiesPanel, TenderSourcesPanel } from './TenderOpportunities';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/leadership.css';
 
-type Show = 'mine' | 'live' | 'all';
+type TenderRow = Awaited<ReturnType<typeof api.tenderBoard>>['rows'][number];
+
+const TENDER_COLUMNS: DtColumn<TenderRow>[] = [
+  { id: 'title', label: 'Tender', value: (r) => r.tender.title, render: (r) => <strong>{r.tender.title}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'ref', label: 'Reference', value: (r) => r.tender.ref, render: (r) => <span className="mono small">{r.tender.ref}</span>, hideBelow: 1300 },
+  { id: 'channel', label: 'Channel', value: (r) => (r.tender.channel === 'GOVERNMENT' ? 'Government' : 'Private'), translate: true, hideBelow: 1200 },
+  {
+    id: 'checklist',
+    label: 'Checklist',
+    value: (r) => (r.total ? r.done / r.total : null),
+    sort: 'number',
+    align: 'left',
+    render: (r) => (
+      <span className="small">
+        {r.total ? `${r.done} of ${r.total} done` : 'not started'}
+        {r.checklistItems > 0 && !r.reviewed ? ', not checked yet' : ''}
+        {r.total > 0 && (
+          <span className="ld-bar" aria-hidden="true">
+            <span style={{ width: `${Math.round((r.done / r.total) * 100)}%` }} />
+          </span>
+        )}
+      </span>
+    ),
+    hideBelow: 1100,
+  },
+  {
+    id: 'stage',
+    label: 'Stage',
+    value: (r) => r.stage,
+    translate: true,
+    render: (r) => (
+      <span className="ld-chips">
+        <Chip tone={r.mine ? 'warn' : r.tender.status === 'submitted' ? 'ok' : 'neutral'}>{r.stage}</Chip>
+        <PriorityChip p={r.priority} />
+        {r.naWaiting > 0 && <Chip tone="warn">{r.naWaiting} T/B to confirm</Chip>}
+        {r.openQueries > 0 && <Chip tone="info">{r.openQueries} questions to the buyer open</Chip>}
+        {r.leadOnly && <Chip tone="unknown">Lead only</Chip>}
+      </span>
+    ),
+  },
+  { id: 'closes', label: 'Closes', value: (r) => r.tender.closesOn, sort: 'date' },
+  {
+    id: 'left',
+    label: 'Days left',
+    value: (r) => (r.tender.status === 'submitted' ? null : r.daysLeft),
+    sort: 'number',
+    render: (r) =>
+      r.tender.status === 'submitted' ? (
+        '–'
+      ) : (
+        <span className="ld-when-left" data-soon={r.daysLeft >= 0 && r.daysLeft <= 7 ? true : undefined}>
+          {r.daysLeft >= 0 ? `${r.daysLeft} days` : 'Closed'}
+        </span>
+      ),
+  },
+];
+const TENDER_FILTERS: DtFilter<TenderRow>[] = [
+  {
+    id: 'show',
+    label: 'Show',
+    value: (r) => [r.mine ? 'mine' : '', r.tender.status !== 'submitted' ? 'live' : ''].filter(Boolean),
+    options: [
+      { value: 'mine', label: 'Waiting for you' },
+      { value: 'live', label: 'Being worked on' },
+    ],
+  },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'channel', label: 'Channel', value: (r) => r.tender.channel, optionLabel: (v) => (v === 'GOVERNMENT' ? 'Government' : 'Private') },
+  { id: 'stage', label: 'Stage', value: (r) => r.stage },
+  { id: 'priority', label: 'Priority', value: (r) => r.priority?.level ?? '', optionLabel: (v) => (v === 'URGENT' ? 'Urgent' : 'Short window') },
+];
 
 /**
  * The Director Office Administrator's desk (Fauzan, 25 Oct 2026): every company's tenders, quotations, proposals and
@@ -28,7 +101,9 @@ export function DirectorOfficeView() {
   const toCommercial = canOpen ? canOpen('commercial') : true;
   const [cashCompany, setCashCompany] = useState(companyId);
   const { data, error } = useLoad(() => api.tenderBoard(), []);
-  const [show, setShow] = useState<Show | null>(null);
+  // P121: loaded here (not in the desk) so the head can offer a jump to CEO instructions to those who keep them.
+  const instr = useLoad(() => api.ceoInstructions().catch(() => null), []);
+  const table = useTableState('board.doa.tenders');
   if (error)
     return (
       <div className="page">
@@ -43,20 +118,29 @@ export function DirectorOfficeView() {
     );
   const live = data.rows.filter((r) => r.tender.status !== 'submitted');
   const mine = data.rows.filter((r) => r.mine).length;
-  // What waits for this person opens first; otherwise every tender.
-  const view: Show = show ?? (mine ? 'mine' : 'all');
-  const rows = view === 'mine' ? data.rows.filter((r) => r.mine) : view === 'live' ? live : data.rows;
+  // What waits for this person opens first; otherwise every tender (until the person picks).
+  const control = { state: { ...table.state, f: { ...table.state.f, show: table.state.f.show ?? (mine ? 'mine' : '') } }, set: table.set };
+  const setShow = (v: 'mine' | 'live' | '') => table.set({ f: { show: v } });
   return (
     <div className="page ld">
       <PageHead
         title="Director Office"
         sub="Every company's tenders from papers to submission slip. Each company bids in its own name and does the work; the Director Office checks the checklist, follows each bid and gets the CEO's approval."
         actions={
-          toCommercial && (
-            <button className="btn" onClick={() => go({ view: 'commercial' })}>
-              Open Tenders and quotations
-            </button>
-          )
+          <>
+            {instr.data && (
+              <button className="btn" onClick={() => document.getElementById('ceo-instructions')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                CEO instructions
+                {instr.data.totals.waiting > 0 && <Chip tone="warn">{instr.data.totals.waiting}</Chip>}
+              </button>
+            )}
+            <SopHelp id={instr.data ? 'board-ceo-instruction' : 'board'} />
+            {toCommercial && (
+              <button className="btn" onClick={() => go({ view: 'commercial' })}>
+                Open Tenders and quotations
+              </button>
+            )}
+          </>
         }
       />
       <Stats>
@@ -79,19 +163,6 @@ export function DirectorOfficeView() {
       <Card
         title="Tenders"
         sub={data.reader.readsFiles ? data.reader.name : 'Checklists: test version sample draft'}
-        actions={
-          <div className="seg" role="group" aria-label="Which tenders">
-            <button type="button" aria-pressed={view === 'mine'} onClick={() => setShow('mine')}>
-              Waiting for you ({mine})
-            </button>
-            <button type="button" aria-pressed={view === 'live'} onClick={() => setShow('live')}>
-              Being worked on ({live.length})
-            </button>
-            <button type="button" aria-pressed={view === 'all'} onClick={() => setShow('all')}>
-              All ({data.rows.length})
-            </button>
-          </div>
-        }
         flush
       >
         {data.rows.length === 0 ? (
@@ -107,56 +178,20 @@ export function DirectorOfficeView() {
           >
             Each company works its tenders and quotations on its Tenders and quotations screen; they show here as they move.
           </Empty>
-        ) : rows.length === 0 ? (
-          <Empty title="Nothing here." />
         ) : (
-          <ul className="ld-rows">
-            {rows.map((r) => (
-              <li key={r.tender.id}>
-                <button
-                  type="button"
-                  className="ld-row ld-tender"
-                  data-tone={r.mine ? 'warn' : undefined}
-                  onClick={() => {
-                    setCompanyId(r.tender.companyId);
-                    go({ view: 'commercial', tenderId: r.tender.id });
-                  }}
-                >
-                  <span className="ld-row-main">
-                    <span className="ld-row-title">{r.tender.title}</span>
-                    <span className="ld-row-meta">
-                      {r.companyName} · <span className="mono">{r.tender.ref}</span> · {r.tender.channel === 'GOVERNMENT' ? 'Government' : 'Private'}
-                    </span>
-                    <span className="ld-row-meta">
-                      Checklist {r.total ? `${r.done} of ${r.total} done` : 'not started'}
-                      {r.checklistItems > 0 && !r.reviewed ? ', not checked yet' : ''}
-                      {r.checks.length ? ` · checks: ${r.checks.map((c) => ({ PREPARER: 'preparer', MANAGER: 'manager' })[c]).join(', ')}` : ''}
-                    </span>
-                    {r.total > 0 && (
-                      <span className="ld-bar" aria-hidden="true">
-                        <span style={{ width: `${Math.round((r.done / r.total) * 100)}%` }} />
-                      </span>
-                    )}
-                    <span className="ld-chips">
-                      <Chip tone={r.mine ? 'warn' : r.tender.status === 'submitted' ? 'ok' : 'neutral'}>{r.stage}</Chip>
-                      <PriorityChip p={r.priority} />
-                      {r.naWaiting > 0 && <Chip tone="warn">{r.naWaiting} T/B to confirm</Chip>}
-                      {r.openQueries > 0 && <Chip tone="info">{r.openQueries} questions to the buyer open</Chip>}
-                      {r.leadOnly && <Chip tone="unknown">Lead only</Chip>}
-                    </span>
-                  </span>
-                  <span className="ld-row-aside ld-when">
-                    <span className="ld-when-date">{dateLabel(r.tender.closesOn)}</span>
-                    {r.tender.status !== 'submitted' && (
-                      <span className="ld-when-left" data-soon={r.daysLeft >= 0 && r.daysLeft <= 7 ? true : undefined}>
-                        {r.daysLeft >= 0 ? `${r.daysLeft} days` : 'Closed'}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <DataTable
+            label="Tenders"
+            control={control}
+            rows={data.rows}
+            rowKey={(r) => r.tender.id}
+            columns={TENDER_COLUMNS}
+            filters={TENDER_FILTERS}
+            onRowClick={(r) => {
+              setCompanyId(r.tender.companyId);
+              go({ view: 'commercial', tenderId: r.tender.id });
+            }}
+            rowTone={(r) => (r.mine ? 'warn' : undefined)}
+          />
         )}
       </Card>
 
@@ -184,7 +219,7 @@ export function DirectorOfficeView() {
         )}
       </Card>
 
-      <DirectorDesk />
+      <DirectorDesk instr={instr} />
       <ExceptionalGuardCash key={cashCompany} companyId={cashCompany} picker={<label>Cash handover company<Select className="select" value={cashCompany} onChange={e => setCashCompany(e.target.value)}>{me.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label>} />
       <MyDailyCash />
       <TenderOpportunitiesPanel />

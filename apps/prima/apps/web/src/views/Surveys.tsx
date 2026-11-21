@@ -4,6 +4,8 @@ import { RULES, SURVEY_RISKS, SURVEY_RISK_LABEL, SURVEY_SITE_TYPES, SURVEY_SITE_
 import { api, type SiteSurveyBoard, type SiteSurveySetup } from '../api';
 import { Chip, Drawer, ErrorNotice, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Empty, PageHead } from '../kit';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { DataTable } from '../DataTable';
 import { EvidenceCamera, gps } from './Camera';
 import {
@@ -34,7 +36,8 @@ import {
  * Director (COO, Operations General Manager, Operations Director) accepts or returns it with a reason.
  */
 export function SurveysView({ ownerId, offline = false }: { ownerId: string; offline?: boolean }) {
-  const [tab, setTab] = useState<'phone' | 'sent' | 'decide'>('phone');
+  // P121: '#surveys/decide' opens the Project Director's list (links from the SOP guide). Offline there is no link.
+  const [tab, setTab] = useRouteTab<'phone' | 'sent' | 'decide'>('phone', ['phone', 'sent', 'decide']);
   const [local, setLocal] = useState<LocalSurvey[] | null>(null);
   const [others, setOthers] = useState(0);
   const [saves, setSaves] = useState(true);
@@ -153,6 +156,7 @@ export function SurveysView({ ownerId, offline = false }: { ownerId: string; off
         sub="Fill it in at the site, even with no signal. Photos and measurements stay on this phone and are sent by themselves when there is a signal."
         actions={
           <>
+            {!offline && <SopHelp id="ops-site-survey" />}
             {!offline && waiting > 0 && (
               <button className="btn btn-lg" onClick={() => send(true)}>
                 Send now

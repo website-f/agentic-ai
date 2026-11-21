@@ -365,9 +365,12 @@ export function SpaceHome({
   onView,
   onLink,
   onBack,
+  extra,
 }: {
   id: SpaceId;
   menu: MenuItem[];
+  /** P121: shown under the app's screens (the app's SOPs and workflows). */
+  extra?: ReactNode;
   /** This person's open items from the home screen (filtered to this app here); undefined while loading. */
   waitingItems?: HomeItem[];
   onView: (v: ViewName) => void;
@@ -440,6 +443,7 @@ export function SpaceHome({
           </ul>
         </section>
       ))}
+      {extra}
     </div>
   );
 }

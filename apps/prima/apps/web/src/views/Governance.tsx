@@ -3,9 +3,11 @@ import { useState } from 'react';
 import { CalendarXIcon, HourglassIcon, KeyIcon, PlusIcon, ScalesIcon, SealCheckIcon, WarningIcon } from '@phosphor-icons/react';
 import type { GovArea } from '@prima/core';
 import { api, type GovBoard, type GovMandateInput } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Card, Empty, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/gov.css';
 
 /**
@@ -15,6 +17,8 @@ import '../styles/gov.css';
  */
 
 type Tab = 'mandates' | 'coverage' | 'matrix';
+/** P121: the tabs a link may ask for (#governance/mandates). */
+const GOV_TABS: readonly Tab[] = ['mandates', 'coverage', 'matrix'];
 type Row = GovBoard['rows'][number];
 
 const STATE: Record<Row['state'], ['ok' | 'warn' | 'crit' | 'info', string]> = {
@@ -30,7 +34,7 @@ const rm = (n: number) => `RM${n.toLocaleString('en-MY')}`;
 
 export function GovernanceView() {
   const { data, error } = useLoad(() => api.govBoard(), []);
-  const [tab, setTab] = useState<Tab>('mandates');
+  const [tab, setTab] = useRouteTab<Tab>('mandates', GOV_TABS);
   const [adding, setAdding] = useState(false);
   if (error)
     return (
@@ -57,11 +61,14 @@ export function GovernanceView() {
         title="Mandates and authority"
         sub="PWVSB acts in a company only under a signed management agreement or board mandate, confirmed by the company's board and verified by PWVSB legal. Where there is none, PWVSB only monitors and the area shows as unknown."
         actions={
-          canAdd ? (
-            <button className="btn btn-primary" onClick={add}>
-              <PlusIcon size={16} /> Add mandate
-            </button>
-          ) : undefined
+          <>
+            <SopHelp id="board-mandate" />
+            {canAdd && (
+              <button className="btn btn-primary" onClick={add}>
+                <PlusIcon size={16} /> Add mandate
+              </button>
+            )}
+          </>
         }
       >
         <p className="notice" data-tone="info">
@@ -123,43 +130,61 @@ export function GovernanceView() {
   );
 }
 
+const kindLabel = (r: Row) => (r.mandate.kind === 'BOARD_MANDATE' ? 'Board mandate' : 'Management agreement');
+const MANDATE_COLUMNS: DtColumn<Row>[] = [
+  { id: 'ref', label: 'Reference', value: (r) => r.mandate.ref, render: (r) => <strong>{r.mandate.ref}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'kind', label: 'Kind', value: kindLabel, translate: true, hideBelow: 1200 },
+  { id: 'title', label: 'Title', value: (r) => r.mandate.title, hideBelow: 1100 },
+  { id: 'signed', label: 'Signed', value: (r) => r.mandate.signedOn, sort: 'date', hideBelow: 1300 },
+  { id: 'from', label: 'From', value: (r) => r.mandate.validFrom, sort: 'date', hideBelow: 1300 },
+  { id: 'to', label: 'To', value: (r) => r.mandate.validTo, sort: 'date', render: (r) => (r.mandate.validTo ? dateLabel(r.mandate.validTo) : 'until ended') },
+  { id: 'left', label: 'Days left', value: (r) => (r.live && r.daysLeft !== null && r.daysLeft >= 0 ? r.daysLeft : null), sort: 'number' },
+  { id: 'state', label: 'Status', value: (r) => STATE[r.state][1], translate: true, render: (r) => <Chip tone={STATE[r.state][0]}>{STATE[r.state][1]}</Chip> },
+];
+const MANDATE_FILTERS: DtFilter<Row>[] = [
+  { id: 'show', label: 'Show', value: (r) => (r.state === 'terminated' ? 'ended' : 'current'), options: [{ value: 'current', label: 'Not ended' }, { value: 'ended', label: 'Ended' }] },
+  { id: 'state', label: 'Status', value: (r) => r.state, optionLabel: (v) => STATE[v as Row['state']]?.[1] ?? v },
+  { id: 'kind', label: 'Kind', value: (r) => r.mandate.kind, optionLabel: (v) => (v === 'BOARD_MANDATE' ? 'Board mandate' : 'Management agreement') },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
+
 function Mandates({ data, canAdd, onAdd }: { data: GovBoard; canAdd: boolean; onAdd: () => void }) {
-  const [all, setAll] = useState(false);
-  const rows = data.rows.filter((r) => all || r.state !== 'terminated');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = data.rows.find((r) => r.mandate.id === openId);
   return (
-    <Card
-      title="Management agreements and board mandates"
-      sub={`${rows.length} on the register${all ? '' : ', ended ones hidden'}`}
-      flush
-      actions={
-        <>
-          <button className="btn btn-sm" aria-pressed={all} onClick={() => setAll(!all)}>
-            {all ? 'Hide ended' : 'Show ended'}
-          </button>
-        </>
-      }
-    >
-      {!rows.length && (
-        <Empty
-          title="No mandates registered."
-          action={
-            canAdd ? (
-              <button className="btn btn-primary" onClick={onAdd}>
-                <PlusIcon size={16} /> Add mandate
-              </button>
-            ) : undefined
-          }
-        >
-          {canAdd ? 'Add each signed management agreement or board mandate, with the powers it gives PWVSB.' : 'PWVSB legal or the Chief of Staff adds them.'}
-        </Empty>
+    <Card title="Management agreements and board mandates" sub="Every agreement and mandate on the register. Open one for its steps and powers." flush>
+      <DataTable
+        label="Management agreements and board mandates"
+        stateKey="board.governance.mandates"
+        defaults={{ f: { show: 'current' } }}
+        rows={data.rows}
+        rowKey={(r) => r.mandate.id}
+        columns={MANDATE_COLUMNS}
+        filters={MANDATE_FILTERS}
+        onRowClick={(r) => setOpenId(r.mandate.id)}
+        rowTone={(r) => (STATE[r.state][0] === 'crit' ? 'crit' : STATE[r.state][0] === 'warn' ? 'warn' : undefined)}
+        actions={(r) => [{ label: 'Open', onClick: () => setOpenId(r.mandate.id) }]}
+        empty={
+          <Empty
+            title="No mandates registered."
+            action={
+              canAdd ? (
+                <button className="btn btn-primary" onClick={onAdd}>
+                  <PlusIcon size={16} /> Add mandate
+                </button>
+              ) : undefined
+            }
+          >
+            {canAdd ? 'Add each signed management agreement or board mandate, with the powers it gives PWVSB.' : 'PWVSB legal or the Chief of Staff adds them.'}
+          </Empty>
+        }
+      />
+      {open && (
+        <Drawer title={open.mandate.ref} sub={open.companyName} onClose={() => setOpenId(null)}>
+          <MandateLine r={open} data={data} />
+        </Drawer>
       )}
-      <ul className="gv-list">
-        {rows.map((r) => (
-          <li key={r.mandate.id}>
-            <MandateLine r={r} data={data} />
-          </li>
-        ))}
-      </ul>
     </Card>
   );
 }
@@ -422,8 +447,39 @@ function NewMandate({ data, onDone }: { data: GovBoard; onDone: () => void }) {
   );
 }
 
+type CoverageRow = GovBoard['coverage'][number];
+const areaText = (a: CoverageRow['areas'][number] | undefined) =>
+  !a ? '' : a.status === 'act' ? `act${a.limit != null ? ` to ${rm(a.limit)}` : ''}` : a.status === 'monitor' ? 'monitor' : 'unknown';
+const COVERAGE_FILTERS: DtFilter<CoverageRow>[] = [
+  { id: 'mandate', label: 'Mandates', value: (c) => (c.liveMandates ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Mandate in force' }, { value: 'no', label: 'No mandate on file' }] },
+];
+
 function Coverage({ data }: { data: GovBoard }) {
   const grants = data.coverage.filter((c) => c.unsupportedGrants.length > 0);
+  const coverageColumns: DtColumn<CoverageRow>[] = [
+    { id: 'company', label: 'Company', value: (c) => c.companyName, render: (c) => <strong>{c.companyName}</strong>, phone: 'title' },
+    {
+      id: 'mandates',
+      label: 'Mandates',
+      value: (c) => c.liveMandates,
+      sort: 'number',
+      align: 'left',
+      render: (c) => <Chip tone={c.liveMandates ? 'ok' : 'warn'}>{c.liveMandates ? `${c.liveMandates} in force` : 'No mandate on file'}</Chip>,
+    },
+    ...data.rule.areas.map(
+      (area): DtColumn<CoverageRow> => ({
+        id: `area-${area.area}`,
+        label: area.label,
+        value: (c) => areaText(c.areas.find((x) => x.area === area.area)),
+        translate: true,
+        render: (c) => {
+          const a = c.areas.find((x) => x.area === area.area);
+          if (!a) return <span className="muted">–</span>;
+          return <Chip tone={a.status === 'act' ? 'info' : a.status === 'monitor' ? 'ok' : 'warn'}>{areaText(a)}</Chip>;
+        },
+      }),
+    ),
+  ];
   return (
     <div className="gv-stack">
       <Card
@@ -433,42 +489,16 @@ function Coverage({ data }: { data: GovBoard }) {
       >
         {!data.coverage.length && <Empty title="No companies." />}
         {data.coverage.length > 0 && (
-          <div className="table-wrap">
-            <table className="table gv-matrix">
-              <thead>
-                <tr>
-                  <th>Company</th>
-                  <th>Mandates</th>
-                  {data.rule.areas.map((a) => (
-                    <th key={a.area}>{a.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.coverage.map((c) => (
-                  <tr key={c.companyId}>
-                    <td>
-                      <strong>{c.companyName}</strong>
-                    </td>
-                    <td>
-                      <Chip tone={c.liveMandates ? 'ok' : 'warn'}>{c.liveMandates ? `${c.liveMandates} in force` : 'No mandate on file'}</Chip>
-                    </td>
-                    {data.rule.areas.map((area) => {
-                      const a = c.areas.find((x) => x.area === area.area);
-                      if (!a) return <td key={area.area} className="muted">–</td>;
-                      return (
-                        <td key={area.area}>
-                          <Chip tone={a.status === 'act' ? 'info' : a.status === 'monitor' ? 'ok' : 'warn'}>
-                            {a.status === 'act' ? `act${a.limit != null ? ` to ${rm(a.limit)}` : ''}` : a.status === 'monitor' ? 'monitor' : 'unknown'}
-                          </Chip>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            label="What PWVSB may do, by company"
+            stateKey="board.governance.coverage"
+            rows={data.coverage}
+            rowKey={(c) => c.companyId}
+            columns={coverageColumns}
+            filters={COVERAGE_FILTERS}
+            phoneFacts={data.rule.areas.length + 1}
+            className="gv-matrix"
+          />
         )}
       </Card>
       {grants.length > 0 && (

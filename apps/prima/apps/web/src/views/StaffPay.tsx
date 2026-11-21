@@ -22,7 +22,8 @@ import {
   type StaffPayFile,
   type StaffPayRunView,
 } from "../api";
-import { useApp } from "../App";
+import { useApp, useRouteTab } from "../App";
+import { SopHelp } from "../sop/SopHelp";
 import { PayChangesPanel } from "./PayChanges";
 import { StatTablesView } from "./StatTables";
 import { AdvancesOverdue } from "./FinanceCash";
@@ -87,6 +88,8 @@ function runSteps(stage: StaffPayStage, late: boolean) {
   });
 }
 
+type PayTab = 'runs' | 'mine' | 'tables';
+
 export function StaffPayView() {
   const { me } = useApp();
   const { data, error } = useLoad(() => api.staffPayroll(), []);
@@ -95,12 +98,13 @@ export function StaffPayView() {
     me.user.department === "hr" ||
     isGroupLeader(me.user) ||
     me.user.department === "finance";
-  const [tab, setTab] = useState<"runs" | "mine" | "tables" | null>(null);
+  // P121: a link may open a tab (#staffpay/tables); staff without a payroll role only have their payslips.
+  const [tab, setTab] = useRouteTab<PayTab | ''>('', ['runs', 'mine', 'tables']);
   const [open, setOpen] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="staff payroll" />;
-  const current = tab ?? (data.role ? "runs" : "mine");
+  const current: PayTab = tab && (data.role || tab === "mine") ? tab : data.role ? "runs" : "mine";
   return (
     <div className="page pay">
       <PageHead
@@ -114,11 +118,14 @@ export function StaffPayView() {
           </>
         }
         actions={
-          data.canPrepare && current === "runs" ? (
-            <button className="btn btn-primary" onClick={() => setPreparing(true)}>
-              <PlusIcon size={16} /> Start a payroll month
-            </button>
-          ) : undefined
+          <>
+            <SopHelp id="pay-staff-payroll" />
+            {data.canPrepare && current === "runs" && (
+              <button className="btn btn-primary" onClick={() => setPreparing(true)}>
+                <PlusIcon size={16} /> Start a payroll month
+              </button>
+            )}
+          </>
         }
       >
         {data.role && (

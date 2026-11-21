@@ -3,7 +3,8 @@ import { useMemo, useState } from 'react';
 import { CalendarBlankIcon, ChecksIcon, ClipboardTextIcon, ClockCountdownIcon, EnvelopeSimpleIcon, ListChecksIcon, NotePencilIcon, PlusIcon } from '@phosphor-icons/react';
 import { myt } from '@prima/core';
 import { api, type Meetings } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { ToolboxPanel } from './Toolbox';
 import { GroupMonthlyPanel } from './GroupMonthly';
 import { saveFile } from '../save';
@@ -127,11 +128,16 @@ const EVERY: Record<PlanRow['every'], string> = {
   year: 'Once a year',
 };
 
+type MeetingsTab = 'calendar' | 'meetings' | 'mine' | 'plan' | 'sections' | 'toolbox' | 'monthly';
+/** P121: the tabs a link may ask for (#meetings/toolbox). */
+const MEETINGS_TABS: readonly MeetingsTab[] = ['calendar', 'meetings', 'mine', 'plan', 'sections', 'toolbox', 'monthly'];
+const MEETINGS_SOP: Partial<Record<MeetingsTab, string>> = { toolbox: 'board-toolbox', monthly: 'board-group-monthly' };
+
 /** Meetings across the group: invitations, agenda, pre-brief, minutes, action items and every deadline (Fauzan, 25 Oct and 5 Nov 2026). */
 export function MeetingsView() {
   const { lang } = useLang();
   const { data, error } = useLoad(() => api.meetings(), []);
-  const [tab, setTab] = useState<'calendar' | 'meetings' | 'mine' | 'plan' | 'sections' | 'toolbox' | 'monthly'>('meetings');
+  const [tabPick, setTab] = useRouteTab<MeetingsTab>('meetings', MEETINGS_TABS);
   const [open, setOpen] = useState<string | null>(null);
   const [creating, setCreating] = useState<Draft | null>(null);
   if (error)
@@ -146,6 +152,7 @@ export function MeetingsView() {
         <Loading what="meetings" />
       </div>
     );
+  const tab: MeetingsTab = tabPick === 'sections' && !data.sections ? 'meetings' : tabPick;
   const row = data.rows.find((r) => r.meeting.id === open);
   const toCheck = data.rows.filter((r) => r.canCheck).length;
   const noMinutes = data.rows.filter((r) => r.minutesLateDays > 0).length;
@@ -180,7 +187,12 @@ export function MeetingsView() {
       <PageHead
         title="Meetings"
         sub="Invitations, agenda, pre-briefing checklist, minutes and action items, and the dates that matter: meetings, actions, tender closing dates and reports due."
-        actions={newMeeting}
+        actions={
+          <>
+            <SopHelp id={MEETINGS_SOP[tab] ?? 'board-meeting'} />
+            {newMeeting}
+          </>
+        }
       />
       <Stats>
         <Stat

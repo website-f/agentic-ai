@@ -4,11 +4,13 @@ import { BuildingsIcon, PlusIcon, SmileyIcon, UsersThreeIcon, WarningIcon } from
 import type { ProofInput } from '@prima/core';
 import { api, type ClientBoard, type ClientShareReport } from '../api';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
+import { SopHelp } from '../sop/SopHelp';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, humanize, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
 import { ImportButton } from './ImportDrawer';
 import '../styles/biz.css';
-import { CRM_TABS, CrmView, type CrmTab } from './Crm';
+import { CRM_TABS, ClientFile, CrmView, type CrmTab } from './Crm';
+import { useRouteTab } from '../App';
 
 /**
  * Client board (Fauzan, 26 Oct 2026). Operations Managers, the Operations Director and officers act on clients:
@@ -53,7 +55,9 @@ export function ClientsView() {
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [tab, setTab] = useState<CrmTab | 'board'>('board');
+  const [routeTab, setTab] = useRouteTab<CrmTab | 'board'>('board', ['board', 'pipeline', 'renewals', 'open', 'lost', 'group']);
+  // P121: the client file (due diligence, owner, renewals) opened from the board.
+  const [fileId, setFileId] = useState<string | null>(null);
   if (error)
     return (
       <div className="page">
@@ -67,6 +71,7 @@ export function ClientsView() {
       </div>
     );
   // Client CRM (Fauzan, 4 Nov 2026): the lifecycle tabs sit beside the board; the Group tab is for group leadership only.
+  const tab = routeTab === 'group' && !data.leader ? 'board' : routeTab;
   const tabs = (
     <div className="tabbar crm-tabs" role="tablist" aria-label="Client CRM">
       {CRM_TABS.filter(([k]) => k !== 'group' || data.leader).map(([k, label]) => (
@@ -79,7 +84,7 @@ export function ClientsView() {
   if (tab !== 'board')
     return (
       <div className="page">
-        <PageHead title="Clients" />
+        <PageHead title="Clients" actions={<SopHelp id="sales" />} />
         {tabs}
         <CrmView tab={tab} />
       </div>
@@ -110,15 +115,18 @@ export function ClientsView() {
         title="Clients"
         sub="Operations Managers, the Operations Director and officers look after each client. The COO monitors every company; each company manager monitors their own. Unknown is never shown as fine."
         actions={
-          data.canAdd.length > 0 && (
-            <>
-              <ImportButton kind="client" choices={data.canAdd.map((c): [string, string] => [c.companyId, c.companyName])} />
-              <button className="btn btn-primary" onClick={() => setAdding(true)}>
-                <PlusIcon size={16} weight="bold" aria-hidden="true" />
-                New client
-              </button>
-            </>
-          )
+          <>
+            <SopHelp id="sales" />
+            {data.canAdd.length > 0 && (
+              <>
+                <ImportButton kind="client" choices={data.canAdd.map((c): [string, string] => [c.companyId, c.companyName])} />
+                <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                  New client
+                </button>
+              </>
+            )}
+          </>
         }
       />
       {tabs}
@@ -223,7 +231,19 @@ export function ClientsView() {
         )}
         {rows.length > 60 && <p className="bz-note bz-cl-more">Showing 60 of {rows.length}. Pick a company above to narrow the list.</p>}
       </Card>
-      {open && <ClientDetail a={open} act={act && open.canAct} canBill={open.canBill} onClose={() => setOpenId(null)} />}
+      {open && (
+        <ClientDetail
+          a={open}
+          act={act && open.canAct}
+          canBill={open.canBill}
+          onClose={() => setOpenId(null)}
+          onFile={() => {
+            setOpenId(null);
+            setFileId(open.id);
+          }}
+        />
+      )}
+      {fileId && <ClientFile id={fileId} onClose={() => setFileId(null)} />}
     </div>
   );
 }
@@ -251,7 +271,7 @@ function ClientLine({ a, act, onOpen }: { a: Account; act: boolean; onOpen: () =
   );
 }
 
-function ClientDetail({ a, act, canBill, onClose }: { a: Account; act: boolean; canBill: boolean; onClose: () => void }) {
+function ClientDetail({ a, act, canBill, onClose, onFile }: { a: Account; act: boolean; canBill: boolean; onClose: () => void; onFile: () => void }) {
   const [note, setNote] = useState('');
   const [proof, setProof] = useState<ProofInput[]>([]);
   const [score, setScore] = useState(0);
@@ -285,6 +305,9 @@ function ClientDetail({ a, act, canBill, onClose }: { a: Account; act: boolean; 
       <div className="bz-chips">
         <Chip tone={a.tone}>{TONE_LABEL[a.tone]}</Chip>
         <Chip tone={STAGE_TONE[a.stage]}>{STAGE_LABEL[a.stage]}</Chip>
+        <button type="button" className="btn btn-sm" onClick={onFile} title="Due diligence, the person in charge, client contacts, renewal and requests">
+          Open the client file
+        </button>
       </div>
       <div className="bz-facts">
         <Facts

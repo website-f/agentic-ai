@@ -85,6 +85,23 @@ export function JoinLeavePanel() {
                     EA figures
                   </button>
                 )}
+                {/* P121: a leaver's notice, termination benefit, resignation procedure and final pay, next to their CP22A (before,
+                    the guide opened only for staff near retirement age). */}
+                {f.kind === "CP22A" && f.personId && (
+                  <button
+                    className="btn btn-sm"
+                    disabled={act.busy}
+                    onClick={() =>
+                      void act.run(() => api.leavingGuide(f.personId!)).then((g) => {
+                        if (!g) return;
+                        setGuide(g);
+                        window.setTimeout(() => document.getElementById("hr-leaving-guide")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                      })
+                    }
+                  >
+                    Leaving guide
+                  </button>
+                )}
               </div>
               {!f.filed && (
                 <div className="hx-row-body">
@@ -221,7 +238,7 @@ export function JoinLeavePanel() {
 
       {guide && (
         <div className="hp-section">
-          <div className="hp-guide" role="region" aria-label="Leaving guide">
+          <div className="hp-guide" id="hr-leaving-guide" role="region" aria-label="Leaving guide">
             <div className="hp-guide-head">
               <h3>
                 Leaving guide: {guide.name}, {guide.years} years of service

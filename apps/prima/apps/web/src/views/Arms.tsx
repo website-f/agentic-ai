@@ -4,8 +4,9 @@ import { ClockCountdownIcon, CrosshairIcon, ScanIcon, ShieldCheckIcon, WarningIc
 import { ArmsPolicyPanel } from './ArmsPolicyPanel';
 import { REGIONS, type ArmedJobKind, type ArmedJobStatus, type ArmsOverdueState, type FirearmStatus } from '@prima/core';
 import { api, type ArmsDetail } from '../api';
-import { useApp } from '../App';
-import { ArmsControlBoard, REQUEST_KIND, Resubmit, StepActions, type ArmsTab } from './ArmsControl';
+import { useApp, useRouteTab } from '../App';
+import { ARMS_TABS, ArmsControlBoard, REQUEST_KIND, Resubmit, StepActions, type ArmsTab } from './ArmsControl';
+import { SopHelp } from '../sop/SopHelp';
 import { OpsGuide } from './OpsGuide';
 import { RecordButton } from './RecordForm';
 import { WitnessField, emptyWitness } from './Witness';
@@ -37,6 +38,7 @@ const OVERDUE: Record<ArmsOverdueState, { label: string; tone: Tone }> = {
 };
 
 type OpenRow = ArmsDetail['open'][number];
+const ARMS_TAB_IDS = ARMS_TABS.map((x) => x.id);
 
 /**
  * Arms control (V13, V14). PWVSB Arms Control and the Director Office monitor; the
@@ -45,18 +47,22 @@ type OpenRow = ArmsDetail['open'][number];
 export function ArmsView() {
   const { isGroup, companyId, me, go } = useApp();
   const runsCms = me.user.role === 'director' || me.user.department === 'arms_control';
-  const [tab, setTab] = useState<ArmsTab>('alerts');
+  // P121: a link may open one section (#arms/requests); the tabs are Arms Control's (group) board.
+  const [tab, setTab] = useRouteTab<ArmsTab>('alerts', ARMS_TAB_IDS);
   return (
     <div className="page">
       <PageHead
         title="Arms control"
         sub="Firearms, vaults and every issue and return. PWVSB Arms Control monitors and coordinates; the licensed company issues, receives and counts, with a witness each time. The paper register book stays in use beside the app."
         actions={
-          runsCms && (
-            <button className="btn btn-primary" onClick={() => go({ view: 'cms' })}>
-              CMS management
-            </button>
-          )
+          <>
+            <SopHelp id="security" />
+            {runsCms && (
+              <button className="btn btn-primary" onClick={() => go({ view: 'cms' })}>
+                CMS management
+              </button>
+            )}
+          </>
         }
       />
       {isGroup && <ArmsControlBoard tab={tab} onTab={setTab} />}

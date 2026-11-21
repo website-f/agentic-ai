@@ -26,8 +26,9 @@ from functools import cache
 from pathlib import Path
 
 # Everyone keeps the home screen and their own things: their details, clock, work, meetings
-# and memos (a person must clock in and read notices whatever else they are given).
-ALWAYS = ("home", "mine", "clock", "work", "meetings", "memos")
+# and memos (a person must clock in and read notices whatever else they are given). P121: and the
+# SOP and workflow guide (read only; its links open only the screens the person was given).
+ALWAYS = ("home", "mine", "clock", "work", "meetings", "memos", "sop")
 # Prima's frame (menu, alerts, Arisha, the drafts tray, the guide): on every screen.
 _SHELL_FILES = (
     "AlertBell.tsx",

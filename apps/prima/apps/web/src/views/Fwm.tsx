@@ -15,7 +15,9 @@ import {
 import { GroupHistoryPanel, HistoryLookupPanel } from './StaffHistory';
 import { FWM_TASK_LABEL, FW_LEVEL_LABEL, type FwmTaskKind, type FwPaper, type ProofInput, FW_PAPERS } from '@prima/core';
 import { api, type FwmBoard } from '../api';
+import { useRouteTab } from '../App';
 import { Avatar, Card, Empty, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
+import { SopHelp } from '../sop/SopHelp';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { CooNoticesPanel } from './CooNotices';
 import { DocList, ProofPicker } from './Proof';
@@ -77,7 +79,16 @@ const stripe = (t: Tone) => (t === 'crit' || t === 'warn' || t === 'unknown' ? t
 
 export function FwmView() {
   const { data, error } = useLoad(() => api.fwmBoard(), []);
-  const [tab, setTab] = useState<'papers' | 'workers' | 'align' | 'year10' | 'tasks' | 'welfare' | 'recruit' | null>(null);
+  // P121: a link may open a tab (#fwm/recruit); 'auto' (or a tab this person does not have) opens their usual first tab.
+  const [tab, setTab] = useRouteTab<'auto' | 'papers' | 'workers' | 'align' | 'year10' | 'tasks' | 'welfare' | 'recruit'>('auto', [
+    'papers',
+    'workers',
+    'align',
+    'year10',
+    'tasks',
+    'welfare',
+    'recruit',
+  ]);
   const [mine, setMine] = useState(true);
   const [q, setQ] = useState('');
   const [company, setCompany] = useState('');
@@ -103,7 +114,9 @@ export function FwmView() {
       </div>
     );
   const board = data.role !== 'om' && data.role !== 'despatch';
-  const view = tab ?? (board ? 'papers' : 'tasks');
+  const align0 = data.alignment;
+  const has = { auto: false, papers: board, workers: data.canWork, align: board && !!align0, year10: board, tasks: true, welfare: board, recruit: board };
+  const view = has[tab] ? tab : board ? 'papers' : 'tasks';
   const forMeFirst = data.role === 'escalation' && mine;
   const text = q.trim().toLowerCase();
   const items = data.items.filter(
@@ -129,11 +142,14 @@ export function FwmView() {
       <PageHead
         title="Foreign workers"
         actions={
-          data.canWork ? (
-            <FwAddMenu branches={data.branches} onPapers={() => setTab('workers')} />
-          ) : (
-            <NoAddNote>Foreign workers are added by the FWM team. Ask them, or ask the owner to give you FWM access.</NoAddNote>
-          )
+          <>
+            <SopHelp id="fw" />
+            {data.canWork ? (
+              <FwAddMenu branches={data.branches} onPapers={() => setTab('workers')} />
+            ) : (
+              <NoAddNote>Foreign workers are added by the FWM team. Ask them, or ask the owner to give you FWM access.</NoAddNote>
+            )}
+          </>
         }
         sub={
           data.role === 'om'

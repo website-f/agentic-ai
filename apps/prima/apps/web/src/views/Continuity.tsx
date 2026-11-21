@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { ArrowsClockwiseIcon, ClipboardTextIcon, HardDrivesIcon, PlusIcon, QuestionIcon, WarningOctagonIcon } from '@phosphor-icons/react';
 import { api, type BcmBoard } from '../api';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
@@ -21,7 +23,8 @@ const LABEL = { crit: 'Red', unknown: 'Unknown', warn: 'Behind target', ok: 'Tes
 
 export function ContinuityView() {
   const { data, error } = useLoad(() => api.bcmBoard(), []);
-  const [tab, setTab] = useState<'systems' | 'playbooks'>('systems');
+  // P121: a link can open a tab (#continuity/playbooks).
+  const [tab, setTab] = useRouteTab<'systems' | 'playbooks'>('systems', ['systems', 'playbooks']);
   const [adding, setAdding] = useState(false);
   if (error)
     return (
@@ -46,12 +49,15 @@ export function ContinuityView() {
         actions={
           it ? (
             <>
+              <SopHelp id="it-continuity" />
               <button className="btn btn-primary" onClick={() => setAdding(true)}>
                 <PlusIcon size={16} /> Add system
               </button>
               <ImportButton kind="bcmSystem" />
             </>
-          ) : undefined
+          ) : (
+            <SopHelp id="it-continuity" />
+          )
         }
       >
         <p className="notice" data-tone="info">

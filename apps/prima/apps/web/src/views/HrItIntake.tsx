@@ -2,6 +2,7 @@ import { Select } from '../SearchSelect';
 import{useEffect,useMemo,useReducer,useState}from'react';
 import{api}from'../api';import{useApp}from'../App';import{Chip,ErrorNotice,Loading,useLoad}from'../ui';
 import{createHrSession,decodeHrBoard,effectiveDelegations,reviewFingerprint}from'../hr-it/client';
+import{SopHelp}from'../sop/SopHelp';
 import{roleLabels,type HrBoard,type HrKind,type HrRequest,type HrDelegation}from'../hr-it/contract';
 const states={draft:'Draft coordination request',pending_setup:'Pending trusted setup / authority mapping',pending_technical_details:'Pending unverified technical details',awaiting_scope_approvals:'Awaiting two exact-scope approvals',awaiting_hr_review:'Awaiting mapped HR Administrator review',pending_directory_verification:'Pending directory verification — not linked or applied',cancelled:'Cancelled coordination request'};
 type Selection={kind:HrKind;id?:string;delegationId?:string;approvalKind?:'cos'|'company_head';decision?:'approve'|'revoke'};
@@ -15,7 +16,7 @@ export function HrItIntake(){
  return <div className="page ix-page">
   <header className="k-head">
    <div className="k-head-text"><h1>HR / IT joining and leaving coordination</h1><p className="k-head-sub">HR prepares the authoritative subject and one company scope. CoS and the mapped Company Head must approve the same version as two distinct people. A separately mapped HR Administrator reviews the handoff. IT Lead records technical information; executive delegation requires independent IT Manager approval.</p></div>
-   {!selection&&data.capabilities.canCreate&&<div className="k-head-actions"><button className="btn btn-primary" onClick={()=>setSelection({kind:'request'})}>Prepare HR joining / leaving intake</button></div>}
+   <div className="k-head-actions"><SopHelp id="it-hr-it-intake"/>{!selection&&data.capabilities.canCreate&&<button className="btn btn-primary" onClick={()=>setSelection({kind:'request'})}>Prepare HR joining / leaving intake</button>}</div>
   </header>
   <p className="notice" data-tone="warn">Intake and review only. No Microsoft account is verified, linked, activated or revoked here, and no Prima role/company grants are applied. Do not enter passwords, tokens or recovery codes. Offboarding coordination must not delay separately authorized urgent access closure.</p>
   {data.configuration==='setup_required'&&<p role="status" className="notice" data-tone="warn">Protected storage needs administrative setup. No coordination writes are available.</p>}

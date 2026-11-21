@@ -4,6 +4,7 @@ import { CheckIcon, ClockCountdownIcon, PlusIcon, SirenIcon, UserFocusIcon, Warn
 import { jaOwns, type CaseType, type EscalationLevel, type ProofInput, type Severity } from '@prima/core';
 import { api, type CaseDetail, type CaseList, type SignOffOutcome } from '../api';
 import { useApp } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Empty, Facts, PageHead, Stat, Stats } from '../kit';
 import { DataTable, useTableState, type DtColumn } from '../DataTable';
 import { Chip, Drawer, ErrorNotice, Loading, Sev, dateLabel, dateTimeLabel, hhmm, useAction, useLoad } from '../ui';
@@ -93,10 +94,13 @@ export function Cases({ openCaseId }: { openCaseId?: string }) {
         title="Cases"
         sub="Incidents, complaints and alerts in one place. Each has a response clock by severity. Only the company closes a case."
         actions={
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
-            <PlusIcon size={16} weight="bold" aria-hidden="true" />
-            Raise a case
-          </button>
+          <>
+            <SopHelp id="security-case" />
+            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+              <PlusIcon size={16} weight="bold" aria-hidden="true" />
+              Raise a case
+            </button>
+          </>
         }
       />
       <ErrorNotice error={error} />

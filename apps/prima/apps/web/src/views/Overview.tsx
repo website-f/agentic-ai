@@ -1,43 +1,57 @@
-import { ArrowRightIcon, CalendarCheckIcon, FirstAidKitIcon, ShieldCheckIcon, UserCheckIcon, UserMinusIcon } from '@phosphor-icons/react';
+import { CalendarCheckIcon, FirstAidKitIcon, ShieldCheckIcon, UserCheckIcon, UserMinusIcon } from '@phosphor-icons/react';
 import { api } from '../api';
 import { RecordButton } from './RecordForm';
 import { useState } from 'react';
 import { useApp } from '../App';
 import { Chip, ExpiryChip, Loading, ErrorNotice, n, useAction, useLoad, type Tone } from '../ui';
-import { PageHead, Search, Stat, Stats, Toolbar } from '../kit';
+import { Empty, PageHead, Stat, Stats } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/leadership.css';
 
 type Num = number | 'UNKNOWN';
 const some = (v: Num) => v !== 'UNKNOWN' && v > 0;
 
-/** One figure on a company card; Unknown stays Unknown and is never coloured as fine. */
-function Fig({ label, value, tone }: { label: string; value: Num; tone?: Tone }) {
-  return (
-    <div className="ld-fig" data-tone={value === 'UNKNOWN' ? 'unknown' : tone}>
-      <dt>{label}</dt>
-      <dd>{n(value)}</dd>
-    </div>
-  );
+type Row = Awaited<ReturnType<typeof api.overview>>[number];
+
+/** One figure in the companies table; Unknown stays Unknown and is never coloured as fine. */
+function fig(value: Num, tone?: Tone) {
+  if (value === 'UNKNOWN') return <span className="muted">{n(value)}</span>;
+  return tone ? <Chip tone={tone}>{n(value)}</Chip> : n(value);
+}
+const figValue = (v: Num) => (v === 'UNKNOWN' ? null : v);
+
+/** A row's worst state, as the old card's edge: red for an expired licence, a P1 or a no-show; amber for papers or a licence due. */
+function toneOf(r: Row): Tone {
+  return r.licenceStatus === 'OVERDUE' || some(r.p1Open) || some(r.noShowToday)
+    ? 'crit'
+    : r.licenceStatus === 'DUE' || some(r.credentialIssues)
+      ? 'warn'
+      : !r.hasDetail || r.licenceStatus === 'UNKNOWN'
+        ? 'unknown'
+        : 'ok';
 }
 
-/** The grid opens with this many cards (pilot companies first); the rest are one click away. */
-const CARDS = 12;
+const LICENCE_RANK: Record<Row['licenceStatus'], number> = { OVERDUE: 3, DUE: 2, UNKNOWN: 1, OK: 0 };
+const LICENCE_SHOW: Partial<Record<Row['licenceStatus'], string>> = { OVERDUE: 'expired', DUE: 'due', UNKNOWN: 'unknown' };
 
-type Show = 'all' | 'pilot' | 'expired' | 'due' | 'unknown';
-const SHOW: [Show, string][] = [
-  ['all', 'All'],
-  ['pilot', 'Pilot'],
-  ['expired', 'Licence expired'],
-  ['due', 'Licence due'],
-  ['unknown', 'No licence record'],
+const COMPANY_FILTERS: DtFilter<Row>[] = [
+  {
+    id: 'show',
+    label: 'Show',
+    value: (r) => [...(r.hasDetail ? ['pilot'] : []), ...(LICENCE_SHOW[r.licenceStatus] ? [LICENCE_SHOW[r.licenceStatus]!] : [])],
+    options: [
+      { value: 'pilot', label: 'Pilot' },
+      { value: 'expired', label: 'Licence expired' },
+      { value: 'due', label: 'Licence due' },
+      { value: 'unknown', label: 'No licence record' },
+    ],
+  },
+  { id: 'state', label: 'State', value: (r) => r.company.state },
 ];
 
 export function Overview() {
   const { go, setCompanyId, me } = useApp();
   const { data, error, reload } = useLoad(() => api.overview(), []);
-  const [q, setQ] = useState('');
-  const [show, setShow] = useState<Show>('all');
-  const [allCards, setAllCards] = useState(false);
   if (error)
     return (
       <div className="page">
@@ -56,18 +70,91 @@ export function Overview() {
     pilots.reduce((s, r) => s + (r[k] === 'UNKNOWN' ? 0 : (r[k] as number)), 0);
   const licenceBad = data.filter((r) => r.licenceStatus === 'OVERDUE').length;
   const licenceUnknown = data.filter((r) => r.licenceStatus === 'UNKNOWN').length;
-  const needle = q.trim().toLowerCase();
-  const shown = data.filter(
-    (r) =>
-      (!needle || `${r.company.name} ${r.company.state}`.toLowerCase().includes(needle)) &&
-      (show === 'all' ||
-        (show === 'pilot' && r.hasDetail) ||
-        (show === 'expired' && r.licenceStatus === 'OVERDUE') ||
-        (show === 'due' && r.licenceStatus === 'DUE') ||
-        (show === 'unknown' && r.licenceStatus === 'UNKNOWN')),
-  );
   // Pilot companies first: they carry live figures.
-  const ordered = [...shown.filter((r) => r.hasDetail), ...shown.filter((r) => !r.hasDetail)];
+  const ordered = [...data.filter((r) => r.hasDetail), ...data.filter((r) => !r.hasDetail)];
+  const openIt = (r: Row) => {
+    setCompanyId(r.company.id);
+    go({ view: 'company' });
+  };
+  // P107: the companies as a data table (search, filters, sort, pages; cards on a phone) in place of the card grid.
+  // The figures, chips, the red/amber edge, Open company and Company record are as on the old cards.
+  const columns: DtColumn<Row>[] = [
+    {
+      id: 'company',
+      label: 'Company',
+      value: (r) => r.company.name,
+      phone: 'title',
+      render: (r) => (
+        <span style={{ display: 'grid', gap: 2, justifyItems: 'start' }}>
+          {r.hasDetail ? (
+            <button type="button" className="ld-co-link" onClick={() => openIt(r)}>
+              {r.company.name}
+            </button>
+          ) : (
+            <strong>{r.company.name}</strong>
+          )}
+          <span className="muted small">{r.company.isPilot ? 'Pilot' : 'Summary only'}</span>
+        </span>
+      ),
+    },
+    { id: 'state', label: 'State', value: (r) => r.company.state, phone: 'sub' },
+    {
+      id: 'access',
+      label: 'Access',
+      value: (r) => (r.canAct ? 'Act' : 'Monitor'),
+      translate: true,
+      hideBelow: 1300,
+      phone: 'hidden',
+      render: (r) => (r.canAct ? <Chip tone="info">Act</Chip> : <Chip tone="neutral">Monitor</Chip>),
+    },
+    {
+      id: 'licences',
+      label: 'Licences',
+      value: (r) => LICENCE_RANK[r.licenceStatus],
+      sort: 'number',
+      search: false,
+      align: 'left',
+      render: (r) => {
+        const bad = r.licences.filter((l) => l.status !== 'OK');
+        return (
+          <span style={{ display: 'grid', gap: 2, justifyItems: 'start' }}>
+            <ExpiryChip status={r.licenceStatus} />
+            <span className="small">{bad.map((l) => l.label).join(', ') || 'All valid'}</span>
+          </span>
+        );
+      },
+    },
+    { id: 'guards', label: 'Guards', value: (r) => figValue(r.guards), sort: 'number', phone: 'hidden', render: (r) => fig(r.guards) },
+    { id: 'sites', label: 'Sites', value: (r) => figValue(r.sites), sort: 'number', phone: 'hidden', hideBelow: 1100, render: (r) => fig(r.sites) },
+    { id: 'onDuty', label: 'On duty', value: (r) => figValue(r.presentNow), sort: 'number', render: (r) => fig(r.presentNow, some(r.presentNow) ? 'ok' : undefined) },
+    { id: 'noShows', label: 'No-shows', value: (r) => figValue(r.noShowToday), sort: 'number', render: (r) => fig(r.noShowToday, some(r.noShowToday) ? 'crit' : undefined) },
+    {
+      id: 'cases',
+      label: 'Open cases',
+      value: (r) => figValue(r.openCases),
+      sort: 'number',
+      render: (r) => (
+        <>
+          {fig(r.openCases, some(r.p1Open) ? 'crit' : undefined)}
+          {r.p1Open !== 'UNKNOWN' && r.p1Open > 0 && (
+            <>
+              {' '}
+              <Chip tone="crit">{r.p1Open} P1</Chip>
+            </>
+          )}
+        </>
+      ),
+    },
+    {
+      id: 'papers',
+      label: 'Papers to fix',
+      value: (r) => figValue(r.credentialIssues),
+      sort: 'number',
+      hideBelow: 1200,
+      phone: 'hidden',
+      render: (r) => fig(r.credentialIssues, some(r.credentialIssues) ? 'warn' : undefined),
+    },
+  ];
 
   return (
     <div className="page ld">
@@ -108,99 +195,26 @@ export function Overview() {
           <Chip tone="neutral">{data.length}</Chip>
           <span className="muted small">Select a pilot company to open it</span>
         </div>
-        <Toolbar
-          end={
-            <div className="seg ld-seg" role="group" aria-label="Show companies">
-              {SHOW.map(([k, label]) => (
-                <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          }
-        >
-          <Search value={q} onChange={setQ} placeholder="Search companies or states" />
-        </Toolbar>
-        {ordered.length === 0 && <div className="empty">No company matches.</div>}
-        <ul className="ld-grid">
-          {(allCards || needle || show !== 'all' ? ordered : ordered.slice(0, CARDS)).map((r) => {
-            const figures = [r.guards, r.sites, r.presentNow, r.noShowToday, r.openCases, r.credentialIssues];
-            const allUnknown = figures.every((v) => v === 'UNKNOWN');
-            const bad = r.licences.filter((l) => l.status !== 'OK');
-            // The card's edge carries its worst state: red for an expired licence, a P1 or a no-show; amber for papers or a licence due.
-            const tone: Tone =
-              r.licenceStatus === 'OVERDUE' || some(r.p1Open) || some(r.noShowToday)
-                ? 'crit'
-                : r.licenceStatus === 'DUE' || some(r.credentialIssues)
-                  ? 'warn'
-                  : !r.hasDetail || r.licenceStatus === 'UNKNOWN'
-                    ? 'unknown'
-                    : 'ok';
-            const openIt = () => {
-              setCompanyId(r.company.id);
-              go({ view: 'company' });
-            };
-            return (
-              <li key={r.company.id} className="ld-co" data-tone={tone} data-pilot={r.hasDetail}>
-                <div className="ld-co-head">
-                  <div className="ld-co-name">
-                    {r.hasDetail ? (
-                      <button type="button" className="ld-co-link" onClick={openIt}>
-                        {r.company.name}
-                      </button>
-                    ) : (
-                      <h3>{r.company.name}</h3>
-                    )}
-                    <span className="ld-co-sub">
-                      {r.company.isPilot ? 'Pilot' : 'Summary only'} · {r.company.state}
-                    </span>
-                  </div>
-                  {r.canAct ? <Chip tone="info">Act</Chip> : <Chip tone="neutral">Monitor</Chip>}
-                </div>
-
-                <div className="ld-co-licence">
-                  <span className="label">Licences</span>
-                  <ExpiryChip status={r.licenceStatus} />
-                  <span className="ld-co-licence-text">{bad.map((l) => l.label).join(', ') || 'All valid'}</span>
-                </div>
-
-                {allUnknown ? (
-                  <p className="ld-co-unknown">Guards, sites, duty, cases and papers: Unknown until connected</p>
-                ) : (
-                <dl className="ld-figs">
-                  <Fig label="Guards" value={r.guards} />
-                  <Fig label="Sites" value={r.sites} />
-                  <Fig label="On duty" value={r.presentNow} tone={some(r.presentNow) ? 'ok' : undefined} />
-                  <Fig label="No-shows" value={r.noShowToday} tone={some(r.noShowToday) ? 'crit' : undefined} />
-                  <Fig label="Open cases" value={r.openCases} tone={some(r.p1Open) ? 'crit' : undefined} />
-                  <Fig label="Papers to fix" value={r.credentialIssues} tone={some(r.credentialIssues) ? 'warn' : undefined} />
-                </dl>
-                )}
-
-                {r.p1Open !== 'UNKNOWN' && r.p1Open > 0 && (
-                  <div className="ld-co-flags">
-                    <Chip tone="crit">{r.p1Open} P1</Chip>
-                  </div>
-                )}
-
-                <div className="ld-co-foot">
-                  <RecordButton kind="company" companyId={r.company.id} label="Company record" />
-                  {r.hasDetail && (
-                    <button type="button" className="btn btn-sm btn-ghost ld-go" onClick={openIt}>
-                      Open company
-                      <ArrowRightIcon size={14} weight="bold" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        {!needle && show === 'all' && ordered.length > CARDS && (
-          <button type="button" className="btn ld-more-cards" aria-expanded={allCards} onClick={() => setAllCards(!allCards)}>
-            {allCards ? 'Show fewer companies' : `Show all ${ordered.length} companies`}
-          </button>
-        )}
+        <DataTable
+          label="Companies"
+          stateKey="overview.companies"
+          rows={ordered}
+          rowKey={(r) => r.company.id}
+          columns={columns}
+          filters={COMPANY_FILTERS}
+          searchPlaceholder="Search companies or states"
+          searchText={(r) => r.licences.filter((l) => l.status !== 'OK').map((l) => l.label).join(' ')}
+          onRowClick={(r) => {
+            if (r.hasDetail) openIt(r);
+          }}
+          rowTone={(r) => {
+            const t = toneOf(r);
+            return t === 'crit' || t === 'warn' ? t : undefined;
+          }}
+          rowEnd={(r) => <RecordButton kind="company" companyId={r.company.id} label="Company record" />}
+          actions={(r) => [{ label: 'Open company', onClick: () => openIt(r), hidden: !r.hasDetail }]}
+          empty={<Empty title="No company matches." />}
+        />
       </section>
       {me.user.opsTier === 'ceo' && <AddCompany onAdded={reload} />}
     </div>

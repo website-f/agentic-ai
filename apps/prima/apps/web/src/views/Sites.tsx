@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { BuildingsIcon, SirenIcon, UserCheckIcon, WarningIcon } from '@phosphor-icons/react';
 import { api } from '../api';
 import { useApp } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Card, Empty, Facts, PageHead, Stat, Stats } from '../kit';
 import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { SiteVisitsSection } from './Visits';
@@ -107,6 +108,7 @@ export function Sites({ openSiteId }: { openSiteId?: string }) {
       <PageHead
         title="Sites"
         sub={`${data.length} sites. Problems counts no-shows, late guards and unfilled shifts today.`}
+        actions={<SopHelp id="ops" />}
       />
       <Stats>
         <Stat label="Sites" value={data.length} note={`${sum('posts')} posts${armed ? `, ${armed} armed sites` : ''}`} icon={<BuildingsIcon size={16} />} tone="info" />
@@ -310,8 +312,7 @@ export function SiteDrawer({ siteId, onClose }: { siteId: string; onClose: () =>
               ))}
             </div>
           </section>
-
-          <SiteVisitsSection siteId={siteId} />
+          {/* P121: Site visits are shown once, near the top (they were drawn twice, so the visit form appeared twice). */}
         </>
       )}
     </Drawer>

@@ -10,7 +10,8 @@ import {
   WarningIcon,
 } from "@phosphor-icons/react";
 import { api, type Cms, type CmsSettingsPatch } from "../api";
-import { useApp } from "../App";
+import { useApp, useRouteTab } from "../App";
+import { SopHelp } from "../sop/SopHelp";
 import { ATTENDANCE_ISSUE_LABEL, CMS_SERVICE_KINDS, type AttendanceIssueView } from "@prima/core";
 import { Card, Empty, Facts, PageHead, Split, Stat, Stats } from "../kit";
 import {
@@ -58,6 +59,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "staff", label: "Staff" },
   { id: "commissioning", label: "Commissioning" },
 ];
+// P121: the sections a link may open (#cms/roster); every CMS screen user sees every tab.
+const LINK_TABS: readonly Tab[] = ['now', 'emergencies', 'devices', 'sites', 'phones', 'guardphones', 'roster', 'settings', 'duties', 'staff', 'commissioning'];
 
 const POST: Record<Cms["staff"][number]["posts"][number], string> = {
   HEAD_CONTROL: "Head Control",
@@ -98,7 +101,7 @@ function revealOnPhone(el: HTMLElement | null) {
  * IP phones. CMS monitors and escalates; each company still decides (V13 s.2).
  */
 export function CmsView() {
-  const [tab, setTab] = useState<Tab>("now");
+  const [tab, setTab] = useRouteTab<Tab>("now", LINK_TABS);
   const { data, error } = useLoad(() => api.cms(), []);
   if (error)
     return (
@@ -118,6 +121,7 @@ export function CmsView() {
     <div className="page">
       <PageHead
         title="CMS command centre"
+        actions={<SopHelp id="security" />}
         sub={
           <>
             The 24-hour centre that watches every site of every company: guards&apos;

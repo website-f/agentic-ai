@@ -2,7 +2,6 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import {
   CalendarBlankIcon,
-  CaretRightIcon,
   ChartLineUpIcon,
   ChatCircleDotsIcon,
   CheckCircleIcon,
@@ -17,9 +16,11 @@ import {
 } from '@phosphor-icons/react';
 import { hasOwnStaffRecord, isGroupLeader, type ScoreState } from '@prima/core';
 import { api, type BranchWork, type MyWork, type PersonWork, type TeamWork, type WorkRebalance, type WorkSummary } from '../api';
-import { useApp } from '../App';
-import { Card, PageHead, Person, Search, Stat, Stats } from '../kit';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
+import { Card, Empty, PageHead, Person, Search, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { EvidenceCamera } from './Camera';
 import { CooNoticesPanel } from './CooNotices';
 import { Readiness } from './Remote';
@@ -53,6 +54,8 @@ const due = (t: Task) => `${dateLabel(t.effectiveDueAt.slice(0, 10))} ${hhmm(t.e
 const has = (needle: string, ...xs: (string | null | undefined)[]) => !needle || xs.some((x) => x?.toLowerCase().includes(needle));
 
 type WorkTab = 'mine' | 'team' | 'rebalance' | 'summary';
+/** P121: the tabs a link may ask for (#work/mine); a tab this person does not have opens their first one. */
+const WORK_TABS: readonly (WorkTab | '')[] = ['mine', 'team', 'rebalance', 'summary'];
 
 /**
  * Work (Fauzan, 27 Oct 2026): everyone sees what to do and what "done" means (role playbook and manager tasks), sends a
@@ -72,12 +75,12 @@ export function WorkView() {
     ...(hasTeam ? [{ key: 'rebalance' as const, label: 'Rebalance' }] : []),
     ...(leader ? [{ key: 'summary' as const, label: 'Monday summary' }] : []),
   ];
-  const [tab, setTab] = useState<WorkTab | null>(null);
+  const [tab, setTab] = useRouteTab<WorkTab | ''>('', WORK_TABS);
   // P78: group leadership gives a task to anyone on staff, not only to its direct reports.
   const [giving, setGiving] = useState(false);
   const staff = team.data?.staff ?? [];
   const settled = !!team.data || !!team.error;
-  const cur: WorkTab | null = tab ?? (settled ? (tabs[0]?.key ?? 'mine') : null);
+  const cur: WorkTab | null = tab && tabs.some((t) => t.key === tab) ? tab : settled ? (tabs[0]?.key ?? 'mine') : null;
   return (
     <div className="page ss">
       <PageHead
@@ -88,13 +91,15 @@ export function WorkView() {
             : 'What to do today, what done means for each task, and help when you are stuck. Tasks are also kept in Microsoft Planner.'
         }
         actions={
-          leader &&
-          staff.length > 0 && (
-            <button className="btn btn-primary" onClick={() => setGiving(true)}>
-              <PlusIcon size={16} weight="bold" aria-hidden="true" />
-              Give a task
-            </button>
-          )
+          <>
+            <SopHelp id="board-work-task" />
+            {leader && staff.length > 0 && (
+              <button className="btn btn-primary" onClick={() => setGiving(true)}>
+                <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                Give a task
+              </button>
+            )}
+          </>
         }
       />
       {giving && <GiveTaskDrawer staff={staff} onClose={() => setGiving(false)} />}
@@ -121,27 +126,66 @@ export function WorkView() {
 
 // ---------- My work ----------
 
-type TaskFilter = 'all' | 'overdue' | 'returned' | 'open';
+type TaskMode = 'done' | 'time' | 'help';
+const PRIORITY = { high: 'High priority', normal: 'Normal priority' } as const;
+const taskTone = (t: Task) => (STATE[t.state].tone === 'crit' ? 'crit' : STATE[t.state].tone === 'warn' ? 'warn' : undefined);
+
+/** P107: the open tasks as a data table (search, filters, sort, pages; cards on a phone). */
+const TASK_COLUMNS: DtColumn<Task>[] = [
+  { id: 'title', label: 'Task', value: (t) => t.title, render: (t) => <span className="ss-row-title">{t.title}</span>, phone: 'title' },
+  { id: 'state', label: 'Status', value: (t) => STATE[t.state].label, translate: true, render: (t) => <Chip tone={STATE[t.state].tone}>{STATE[t.state].label}</Chip> },
+  { id: 'due', label: 'Due', value: (t) => t.effectiveDueAt, sort: 'date', render: (t) => due(t) },
+  { id: 'source', label: 'From', value: (t) => `${SOURCE[t.source]}${t.assignedBy ? ` (${t.assignedBy})` : ''}`, translate: true, hideBelow: 1100, phone: 'sub' },
+  {
+    id: 'priority',
+    label: 'Priority',
+    value: (t) => PRIORITY[t.priority],
+    translate: true,
+    hideBelow: 1200,
+    render: (t) => (t.priority === 'high' ? <span className="ss-high">High priority</span> : <span className="muted">Normal priority</span>),
+  },
+];
+const TASK_FILTERS: DtFilter<Task>[] = [
+  { id: 'state', label: 'Status', value: (t) => t.state, optionLabel: (v) => STATE[v as Task['state']]?.label ?? v },
+  { id: 'priority', label: 'Priority', value: (t) => t.priority, optionLabel: (v) => PRIORITY[v as Task['priority']] ?? v },
+  { id: 'source', label: 'From', value: (t) => t.source, optionLabel: (v) => SOURCE[v as Task['source']] ?? v },
+];
 
 function MyWorkTab() {
   const { me } = useApp();
   const { data, error } = useLoad(() => api.myWork(), []);
-  const [filter, setFilter] = useState<TaskFilter>('all');
-  const [q, setQ] = useState('');
+  // P107: the table's state is held here so the Overdue tile can still pick the overdue tasks.
+  const table = useTableState('work.todo');
+  // The row whose Finish / More time / Help form is open (the form shows under the row).
+  const [form, setForm] = useState<{ id: string; mode: TaskMode } | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="your work" />;
   const overdue = data.open.filter((t) => t.state === 'overdue').length;
-  const returned = data.open.filter((t) => t.state === 'returned').length;
-  const needle = q.trim().toLowerCase();
-  const shown = data.open
-    .filter((t) => filter === 'all' || t.state === filter)
-    .filter((t) => has(needle, t.title, t.doneMeans, t.assignedBy, SOURCE[t.source]));
   const onTime = data.measures.onTimePct;
+  const ask = (t: Task, mode: TaskMode) => setForm({ id: t.id, mode });
+  const detail = (t: Task) => {
+    const open = form?.id === t.id ? form.mode : null;
+    const returned = t.review?.verdict === 'returned';
+    if (!t.doneMeans && !t.late && !t.changes?.length && !returned && !open) return null;
+    return (
+      <div className="ss-row-main">
+        <DoneMeans text={t.doneMeans} />
+        {t.late && <span className="ss-meta">More time given: {t.late.reason}</span>}
+        <LastChange t={t} />
+        {returned && (
+          <div className="notice small" data-tone="warn">
+            {t.review!.by}: {t.review!.note}
+          </div>
+        )}
+        {open && <TaskForm key={t.id} t={t} mode={open} onClose={() => setForm(null)} />}
+      </div>
+    );
+  };
   return (
     <>
       <Stats>
         <Stat label="Open tasks" value={data.open.length} icon={<ListChecksIcon size={16} />} tone="info" />
-        <Stat label="Overdue" value={overdue} tone={overdue ? 'crit' : 'ok'} icon={<WarningIcon size={16} />} onClick={overdue ? () => setFilter('overdue') : undefined} />
+        <Stat label="Overdue" value={overdue} tone={overdue ? 'crit' : 'ok'} icon={<WarningIcon size={16} />} onClick={overdue ? () => table.set({ f: { state: 'overdue' } }) : undefined} />
         <Stat label="Waiting for review" value={data.waitingReview.length} icon={<HourglassIcon size={16} />} />
         <Stat
           label="On time, last 4 weeks"
@@ -179,35 +223,30 @@ function MyWorkTab() {
       <div className="ss-cols">
         <div className="ss-stack">
           <Card title="To do" sub={`${data.open.length} open${overdue ? `, ${overdue} overdue` : ''}`} flush>
-            {data.open.length > 0 && (
-              <div className="ss-tools">
-                <div className="seg" role="group" aria-label="Which tasks">
-                  {(
-                    [
-                      ['all', 'All', data.open.length],
-                      ['overdue', 'Overdue', overdue],
-                      ['returned', 'Returned', returned],
-                      ['open', 'Open', data.open.filter((t) => t.state === 'open').length],
-                    ] as [TaskFilter, string, number][]
-                  ).map(([k, l, n]) => (
-                    <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>
-                      {l}
-                      <span className="ss-count">{n}</span>
-                    </button>
-                  ))}
-                </div>
-                <Search value={q} onChange={setQ} placeholder="Search tasks" />
-              </div>
-            )}
-            <ul className="ss-rows">
-              {data.open.length === 0 && <li className="empty">Nothing open.</li>}
-              {data.open.length > 0 && shown.length === 0 && <li className="empty">No task matches.</li>}
-              {shown.map((t) => (
-                <li key={t.id}>
-                  <MyTaskRow t={t} />
-                </li>
-              ))}
-            </ul>
+            <DataTable
+              label="To do"
+              control={table}
+              rows={data.open}
+              rowKey={(t) => t.id}
+              columns={TASK_COLUMNS}
+              filters={TASK_FILTERS}
+              searchPlaceholder="Search tasks"
+              searchText={(t) => `${t.doneMeans} ${t.assignedBy ?? ''}`}
+              rowTone={taskTone}
+              rowDetail={detail}
+              rowEnd={(t) =>
+                form?.id === t.id ? null : (
+                  <button className="btn btn-sm btn-primary" onClick={() => ask(t, 'done')}>
+                    Finish with proof
+                  </button>
+                )
+              }
+              actions={(t) => [
+                { label: 'Ask for more time', hidden: form?.id === t.id || !!t.late || t.state === 'overdue', onClick: () => ask(t, 'time') },
+                { label: 'Stuck? Ask for help', hidden: form?.id === t.id, onClick: () => ask(t, 'help') },
+              ]}
+              empty={<Empty title="Nothing open." />}
+            />
             <div className="ss-foot">
               <OwnTaskForm userId={me.user.id} />
             </div>
@@ -356,120 +395,91 @@ function DoneMeans({ text }: { text: string }) {
   );
 }
 
-function MyTaskRow({ t }: { t: Task }) {
-  const [mode, setMode] = useState<null | 'done' | 'time' | 'help'>(null);
+/** P107: a task's Finish / More time / Help form, opened from its row in the To do table (was MyTaskRow's own buttons). */
+function TaskForm({ t, mode, onClose }: { t: Task; mode: TaskMode; onClose: () => void }) {
   const [note, setNote] = useState('');
   const [ref, setRef] = useState('');
   const [when, setWhen] = useState(localIn(2));
   const act = useAction();
-  const st = STATE[t.state];
   return (
-    <article className="ss-task" data-tone={st.tone}>
-      <TaskHead t={t} />
-      <DoneMeans text={t.doneMeans} />
-      <LastChange t={t} />
-      {t.review?.verdict === 'returned' && (
-        <div className="notice small" data-tone="warn">
-          {t.review.by}: {t.review.note}
+    <div className="ss-sub-form">
+      {mode === 'done' && (
+        <>
+          <label className="field">
+            <span className="label">Proof</span>
+            <input
+              className="input"
+              placeholder="What came out of it, so your manager can check it"
+              aria-label="Proof"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="label">Reference</span>
+            <input
+              className="input"
+              placeholder="Record number or file name (optional)"
+              aria-label="Reference"
+              value={ref}
+              onChange={(e) => setRef(e.target.value)}
+            />
+          </label>
+        </>
+      )}
+      {mode === 'time' && (
+        <div className="ss-grid">
+          <label className="field">
+            <span className="label">Reason</span>
+            <input className="input" placeholder="Why you need more time" aria-label="Reason" value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          <label className="field">
+            <span className="label">New due time</span>
+            <input className="input" type="datetime-local" aria-label="New due time" value={when} onChange={(e) => setWhen(e.target.value)} />
+          </label>
         </div>
       )}
-      {mode === null && (
-        <div className="ss-actions">
-          <button className="btn btn-sm btn-primary" onClick={() => setMode('done')}>
-            Finish with proof
-          </button>
-          {!t.late && t.state !== 'overdue' && (
-            <button className="btn btn-sm" onClick={() => setMode('time')}>
-              Ask for more time
-            </button>
-          )}
-          <button className="btn btn-sm btn-ghost" onClick={() => setMode('help')}>
-            Stuck? Ask for help
-          </button>
-        </div>
+      {mode === 'help' && (
+        <label className="field">
+          <span className="label">What you are stuck on</span>
+          <textarea
+            className="textarea"
+            rows={2}
+            placeholder="What you are stuck on"
+            aria-label="Help needed"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </label>
       )}
-      {mode !== null && (
-        <div className="ss-sub-form">
-          {mode === 'done' && (
-            <>
-              <label className="field">
-                <span className="label">Proof</span>
-                <input
-                  className="input"
-                  placeholder="What came out of it, so your manager can check it"
-                  aria-label="Proof"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span className="label">Reference</span>
-                <input
-                  className="input"
-                  placeholder="Record number or file name (optional)"
-                  aria-label="Reference"
-                  value={ref}
-                  onChange={(e) => setRef(e.target.value)}
-                />
-              </label>
-            </>
-          )}
-          {mode === 'time' && (
-            <div className="ss-grid">
-              <label className="field">
-                <span className="label">Reason</span>
-                <input className="input" placeholder="Why you need more time" aria-label="Reason" value={note} onChange={(e) => setNote(e.target.value)} />
-              </label>
-              <label className="field">
-                <span className="label">New due time</span>
-                <input className="input" type="datetime-local" aria-label="New due time" value={when} onChange={(e) => setWhen(e.target.value)} />
-              </label>
-            </div>
-          )}
-          {mode === 'help' && (
-            <label className="field">
-              <span className="label">What you are stuck on</span>
-              <textarea
-                className="textarea"
-                rows={2}
-                placeholder="What you are stuck on"
-                aria-label="Help needed"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-              />
-            </label>
-          )}
-          <ErrorNotice error={act.error} />
-          <div className="ss-actions">
-            <button
-              className="btn btn-sm btn-primary"
-              disabled={act.busy}
-              onClick={async () => {
-                const r = await act.run(
-                  () =>
-                    mode === 'done'
-                      ? api.workTaskDone(t.id, { note, ref })
-                      : mode === 'time'
-                        ? api.workTaskLate(t.id, { reason: note, newDueAt: fromLocal(when) })
-                        : api.helpAsk({ text: note, taskId: t.id }),
-                  mode === 'done' ? 'Sent for review.' : mode === 'time' ? 'More time recorded.' : 'Your manager has been asked.',
-                );
-                if (r) {
-                  setMode(null);
-                  setNote('');
-                }
-              }}
-            >
-              Send
-            </button>
-            <button className="btn btn-sm btn-ghost" onClick={() => setMode(null)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-      {mode === null && <ErrorNotice error={act.error} />}
-    </article>
+      <ErrorNotice error={act.error} />
+      <div className="ss-actions">
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={act.busy}
+          onClick={async () => {
+            const r = await act.run(
+              () =>
+                mode === 'done'
+                  ? api.workTaskDone(t.id, { note, ref })
+                  : mode === 'time'
+                    ? api.workTaskLate(t.id, { reason: note, newDueAt: fromLocal(when) })
+                    : api.helpAsk({ text: note, taskId: t.id }),
+              mode === 'done' ? 'Sent for review.' : mode === 'time' ? 'More time recorded.' : 'Your manager has been asked.',
+            );
+            if (r) {
+              setNote('');
+              onClose();
+            }
+          }}
+        >
+          Send
+        </button>
+        <button className="btn btn-sm btn-ghost" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -677,14 +687,84 @@ type Row = TeamWork['people'][number];
 const needsLook = (p: Row) =>
   p.overdue > 0 || p.returned > 0 || p.waitingReview > 0 || p.openHelp > 0 || p.talk.length > 0 || p.checkInState === 'late' || p.checkInState === 'missing';
 
+const CHECK_IN: Record<Row['checkInState'], string> = { done: 'Sent', late: 'Late', missing: 'Missing', not_yet: 'Not yet', not_needed: 'Not needed today' };
+const WHERE: Record<string, string> = { office: 'Office', home: 'Working from home', branch: 'Branch', field: 'Field' };
+const followUps = (p: Row) => [p.openHelp > 0 ? 'Asked for help' : '', p.oneOnOneDue ? 'One-to-one due' : ''].filter(Boolean);
+
+/** P107: the team as a data table; the chips are the ones the old rows showed. */
+const TEAM_COLUMNS: DtColumn<Row>[] = [
+  {
+    id: 'name',
+    label: 'Name',
+    value: (p) => p.name,
+    phone: 'title',
+    render: (p) => (
+      <Person
+        name={p.name}
+        sub={
+          <>
+            {p.title}
+            {p.where === 'home' ? ' · working from home' : ''}
+            {p.signedIn ? ` · signed in ${hhmm(p.signedIn.in)}` : ''}
+          </>
+        }
+      />
+    ),
+  },
+  {
+    id: 'checkin',
+    label: 'Check-in',
+    value: (p) => CHECK_IN[p.checkInState],
+    translate: true,
+    render: (p) => (
+      <Chip tone={p.checkInState === 'done' ? 'ok' : p.checkInState === 'late' ? 'warn' : p.checkInState === 'missing' ? 'crit' : 'neutral'}>
+        Check-in: {p.checkInState === 'done' ? 'sent' : p.checkInState === 'late' ? 'late' : p.checkInState === 'missing' ? 'missing' : 'not yet'}
+      </Chip>
+    ),
+  },
+  { id: 'overdue', label: 'Overdue', value: (p) => p.overdue, sort: 'number', render: (p) => (p.overdue > 0 ? <Chip tone="crit">{p.overdue} overdue</Chip> : '0') },
+  { id: 'dueSoon', label: 'Due soon', value: (p) => p.dueSoon, sort: 'number', hideBelow: 1200, phone: 'hidden' },
+  { id: 'returned', label: 'Returned', value: (p) => p.returned, sort: 'number', hideBelow: 1100, phone: 'hidden' },
+  { id: 'review', label: 'To review', value: (p) => p.waitingReview, sort: 'number' },
+  {
+    id: 'onTime',
+    label: 'On time',
+    value: (p) => p.onTimePct,
+    sort: 'number',
+    render: (p) => <Chip tone={p.atStandard === null ? 'neutral' : p.atStandard ? 'ok' : 'warn'}>{p.onTimePct === null ? 'Results unknown' : `${p.onTimePct}% on time`}</Chip>,
+  },
+  {
+    id: 'follow',
+    label: 'Follow up',
+    value: (p) => followUps(p).join(', '),
+    translate: true,
+    sort: false,
+    render: (p) => (
+      <span className="ss-chips">
+        {p.openHelp > 0 && <Chip tone="warn">Asked for help</Chip>}
+        {p.oneOnOneDue && <Chip tone="neutral">One-to-one due</Chip>}
+      </span>
+    ),
+  },
+];
+const TEAM_FILTERS: DtFilter<Row>[] = [
+  {
+    id: 'look',
+    label: 'Who to show',
+    allLabel: 'Everyone',
+    value: (p) => (needsLook(p) ? 'look' : 'fine'),
+    options: [
+      { value: 'look', label: 'Needs a look' },
+      { value: 'fine', label: 'All in order' },
+    ],
+  },
+  { id: 'checkin', label: 'Check-in', value: (p) => p.checkInState, optionLabel: (v) => CHECK_IN[v as Row['checkInState']] ?? v },
+  { id: 'where', label: 'Where', value: (p) => p.where, optionLabel: (v) => WHERE[v] ?? v },
+];
+
 function TeamTab({ data }: { data: TeamWork }) {
   const [open, setOpen] = useState<Row | null>(null);
-  const [filter, setFilter] = useState<'look' | 'all'>('all');
-  const [q, setQ] = useState('');
   const sum = (f: (p: Row) => number) => data.people.reduce((n, p) => n + f(p), 0);
-  const needle = q.trim().toLowerCase();
-  const look = data.people.filter(needsLook).length;
-  const shown = data.people.filter((p) => filter === 'all' || needsLook(p)).filter((p) => has(needle, p.name, p.title));
   return (
     <>
       <Stats>
@@ -721,60 +801,21 @@ function TeamTab({ data }: { data: TeamWork }) {
         }
         flush
       >
-        <div className="ss-tools">
-          <div className="seg" role="group" aria-label="Who to show">
-            <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-              Everyone
-              <span className="ss-count">{data.people.length}</span>
-            </button>
-            <button aria-pressed={filter === 'look'} onClick={() => setFilter('look')}>
-              Needs a look
-              <span className="ss-count">{look}</span>
-            </button>
-          </div>
-          <Search value={q} onChange={setQ} placeholder="Search name or title" />
-        </div>
-        <ul className="ss-rows">
-          {shown.length === 0 && <li className="empty">Nobody here.</li>}
-          {shown.map((p) => (
-            <li key={p.userId}>
-              <button
-                className="ss-row ss-person"
-                data-tone={p.overdue > 0 ? 'crit' : p.talk.length || p.openHelp || p.returned ? 'warn' : undefined}
-                onClick={() => setOpen(p)}
-              >
-                <span className="ss-row-main">
-                  <Person
-                    name={p.name}
-                    sub={
-                      <>
-                        {p.title}
-                        {p.where === 'home' ? ' · working from home' : ''}
-                        {p.signedIn ? ` · signed in ${hhmm(p.signedIn.in)}` : ''}
-                      </>
-                    }
-                  />
-                  <span className="ss-chips">
-                    <Chip tone={p.checkInState === 'done' ? 'ok' : p.checkInState === 'late' ? 'warn' : p.checkInState === 'missing' ? 'crit' : 'neutral'}>
-                      Check-in: {p.checkInState === 'done' ? 'sent' : p.checkInState === 'late' ? 'late' : p.checkInState === 'missing' ? 'missing' : 'not yet'}
-                    </Chip>
-                    {p.overdue > 0 && <Chip tone="crit">{p.overdue} overdue</Chip>}
-                    {p.dueSoon > 0 && <Chip tone="info">{p.dueSoon} due soon</Chip>}
-                    {p.returned > 0 && <Chip tone="warn">{p.returned} returned</Chip>}
-                    {p.waitingReview > 0 && <Chip tone="neutral">{p.waitingReview} to review</Chip>}
-                    {p.openHelp > 0 && <Chip tone="warn">Asked for help</Chip>}
-                    {p.oneOnOneDue && <Chip tone="neutral">One-to-one due</Chip>}
-                    <Chip tone={p.atStandard === null ? 'neutral' : p.atStandard ? 'ok' : 'warn'}>
-                      {p.onTimePct === null ? 'Results unknown' : `${p.onTimePct}% on time`}
-                    </Chip>
-                  </span>
-                  {p.talk.length > 0 && <span className="ss-talk">Talk to them: {p.talk.join('; ')}</span>}
-                </span>
-                <CaretRightIcon size={18} className="ss-chev" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          label="Your team today"
+          stateKey="work.team"
+          rows={data.people}
+          rowKey={(p) => p.userId}
+          columns={TEAM_COLUMNS}
+          filters={TEAM_FILTERS}
+          searchPlaceholder="Search name or title"
+          searchText={(p) => `${p.title ?? ''} ${p.talk.join(' ')}`}
+          phoneFacts={5}
+          onRowClick={(p) => setOpen(p)}
+          rowTone={(p) => (p.overdue > 0 ? 'crit' : p.talk.length || p.openHelp || p.returned ? 'warn' : undefined)}
+          rowDetail={(p) => (p.talk.length > 0 ? <span className="ss-talk">Talk to them: {p.talk.join('; ')}</span> : null)}
+          empty={<Empty title="Nobody here." />}
+        />
       </Card>
       {open && <PersonDrawer userId={open.userId} name={open.name} onClose={() => setOpen(null)} />}
     </>
@@ -1035,6 +1076,41 @@ const KIND: Record<WorkRebalance['advice'][number]['kind'], string> = {
   at_risk: 'Tight on time',
 };
 
+type LoadRow = WorkRebalance['people'][number];
+
+/** P107: the team's load as a data table (the same chips as the old rows). */
+const LOAD_COLUMNS: DtColumn<LoadRow>[] = [
+  { id: 'name', label: 'Name', value: (p) => p.name, render: (p) => <Person name={p.name} sub={p.title} size={32} />, phone: 'title' },
+  { id: 'open', label: 'Open tasks', value: (p) => p.openTasks, sort: 'number' },
+  { id: 'overdue', label: 'Overdue', value: (p) => p.overdue, sort: 'number', render: (p) => (p.overdue > 0 ? <Chip tone="crit">{p.overdue} overdue</Chip> : '0') },
+  {
+    id: 'usual',
+    label: 'Usual time',
+    value: (p) => p.typicalHours,
+    sort: 'number',
+    hideBelow: 1100,
+    render: (p) => <Chip tone="neutral">{p.typicalHours === null ? 'Usual time unknown' : `Usually ${p.typicalHours} h per task`}</Chip>,
+  },
+  {
+    id: 'leave',
+    label: 'Leave',
+    value: (p) => p.awaySoon?.from ?? null,
+    sort: 'date',
+    render: (p) =>
+      p.awaySoon ? (
+        <Chip tone="info">
+          Leave {p.awaySoon.from}
+          {p.awaySoon.to !== p.awaySoon.from ? ` to ${p.awaySoon.to}` : ''}
+          {p.awaySoon.approved ? '' : ' (asked)'}
+        </Chip>
+      ) : (
+        '–'
+      ),
+  },
+  { id: 'room', label: 'Load', value: (p) => ROOM[p.room].label, translate: true, render: (p) => <Chip tone={ROOM[p.room].tone}>{ROOM[p.room].label}</Chip> },
+];
+const LOAD_FILTERS: DtFilter<LoadRow>[] = [{ id: 'room', label: 'Load', value: (p) => p.room, optionLabel: (v) => ROOM[v as LoadRow['room']]?.label ?? v }];
+
 function RebalanceTab() {
   const { data, error } = useLoad(() => api.workRebalance(), []);
   if (error) return <ErrorNotice error={error} />;
@@ -1069,29 +1145,17 @@ function RebalanceTab() {
         }
         flush
       >
-        <ul className="ss-rows">
-          {data.people.length === 0 && <li className="empty">Nobody reports to you.</li>}
-          {data.people.map((p) => (
-            <li key={p.userId} className="ss-row">
-              <div className="ss-row-main">
-                <Person name={p.name} sub={p.title} size={32} />
-                <span className="ss-chips">
-                  <Chip tone="neutral">{p.openTasks} open</Chip>
-                  {p.overdue > 0 && <Chip tone="crit">{p.overdue} overdue</Chip>}
-                  <Chip tone="neutral">{p.typicalHours === null ? 'Usual time unknown' : `Usually ${p.typicalHours} h per task`}</Chip>
-                  {p.awaySoon && (
-                    <Chip tone="info">
-                      Leave {p.awaySoon.from}
-                      {p.awaySoon.to !== p.awaySoon.from ? ` to ${p.awaySoon.to}` : ''}
-                      {p.awaySoon.approved ? '' : ' (asked)'}
-                    </Chip>
-                  )}
-                </span>
-              </div>
-              <Chip tone={ROOM[p.room].tone}>{ROOM[p.room].label}</Chip>
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          label="Your team’s load"
+          stateKey="work.load"
+          rows={data.people}
+          rowKey={(p) => p.userId}
+          columns={LOAD_COLUMNS}
+          filters={LOAD_FILTERS}
+          searchPlaceholder="Search name or title"
+          searchText={(p) => p.title ?? ''}
+          empty={<Empty title="Nobody reports to you." />}
+        />
       </Card>
     </div>
   );
@@ -1249,6 +1313,21 @@ function SummaryTab() {
   return <Summary s={data} />;
 }
 
+type DeptRow = WorkSummary['departments'][number];
+
+/** P107: the Monday summary's departments, sortable by each measure (no search or filters: tens of rows). */
+const DEPT_COLUMNS: DtColumn<DeptRow>[] = [
+  { id: 'name', label: 'Department', value: (d) => d.name, phone: 'title' },
+  { id: 'people', label: 'People', value: (d) => d.people, sort: 'number' },
+  { id: 'due', label: 'Tasks due', value: (d) => d.due, sort: 'number' },
+  { id: 'onTime', label: 'On time', value: (d) => d.onTimePct, sort: 'number', render: (d) => (d.onTimePct === null ? 'Unknown' : `${d.onTimePct}%`) },
+  { id: 'returned', label: 'Returned', value: (d) => d.returned, sort: 'number' },
+  { id: 'overdue', label: 'Overdue now', value: (d) => d.overdue, sort: 'number' },
+  { id: 'oneOnOne', label: 'One-to-one this week', value: (d) => d.oneOnOnePct, sort: 'number', render: (d) => `${d.oneOnOnePct}%` },
+  { id: 'below', label: 'Below standard', value: (d) => d.belowStandard, sort: 'number' },
+  { id: 'noPlaybook', label: 'No playbook', value: (d) => d.noPlaybook, sort: 'number' },
+];
+
 function Summary({ s }: { s: WorkSummary }) {
   const red = s.branches.filter((b) => b.overall === 'red').length;
   return (
@@ -1268,38 +1347,7 @@ function Summary({ s }: { s: WorkSummary }) {
         <Stat label="Branches red" value={red} tone={red ? 'crit' : 'ok'} icon={<MapPinIcon size={16} />} />
       </Stats>
       <Card title="By department" flush>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Department</th>
-                <th className="num">People</th>
-                <th className="num">Tasks due</th>
-                <th className="num">On time</th>
-                <th className="num">Returned</th>
-                <th className="num">Overdue now</th>
-                <th className="num">One-to-one this week</th>
-                <th className="num">Below standard</th>
-                <th className="num">No playbook</th>
-              </tr>
-            </thead>
-            <tbody>
-              {s.departments.map((d) => (
-                <tr key={d.name}>
-                  <td>{d.name}</td>
-                  <td className="num">{d.people}</td>
-                  <td className="num">{d.due}</td>
-                  <td className="num">{d.onTimePct === null ? 'Unknown' : `${d.onTimePct}%`}</td>
-                  <td className="num">{d.returned}</td>
-                  <td className="num">{d.overdue}</td>
-                  <td className="num">{d.oneOnOnePct}%</td>
-                  <td className="num">{d.belowStandard}</td>
-                  <td className="num">{d.noPlaybook}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable label="By department" stateKey="work.departments" rows={s.departments} rowKey={(d) => d.name} columns={DEPT_COLUMNS} phoneFacts={8} noSearch />
       </Card>
       <div className="ss-cols" data-even="">
         <Card title="Far branches" flush>
@@ -1343,6 +1391,37 @@ type BranchRow = BranchWork['branches'][number];
 const KIND_LABEL = { om: 'OM visit', rom: 'Regional OM visit', act: 'ACT unannounced audit', spot: 'Video spot check' } as const;
 const SCORE_SHORT: Record<string, string> = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', om: 'OM', rom: 'ROM', act: 'ACT', spot: 'Spot' };
 
+/** P107: the branches as a data table; the scorecard chips and overall chip are the old row's. */
+const BRANCH_COLUMNS: DtColumn<BranchRow>[] = [
+  { id: 'name', label: 'Branch', value: (x) => x.name, render: (x) => <span className="ss-row-title">{x.name}</span>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (x) => x.company, phone: 'sub' },
+  {
+    id: 'manager',
+    label: 'Branch manager',
+    value: (x) => x.manager?.name ?? null,
+    hideBelow: 1100,
+    render: (x) => (x.manager ? x.manager.name : <span className="muted">no branch manager sign-in</span>),
+  },
+  {
+    id: 'score',
+    label: 'Scorecard',
+    render: (x) => (
+      <span className="ss-chips">
+        {x.score.map((s) => (
+          <Chip key={s.key} tone={SCORE[s.state].tone} title={`${s.label}: ${s.value}`}>
+            {SCORE_SHORT[s.key] ?? 'Tasks'}
+          </Chip>
+        ))}
+      </span>
+    ),
+  },
+  { id: 'overall', label: 'Overall', value: (x) => SCORE[x.overall].label, translate: true, render: (x) => <Chip tone={SCORE[x.overall].tone}>{SCORE[x.overall].label}</Chip> },
+];
+const BRANCH_FILTERS: DtFilter<BranchRow>[] = [
+  { id: 'company', label: 'Company', value: (x) => x.company },
+  { id: 'overall', label: 'Overall', value: (x) => x.overall, optionLabel: (v) => SCORE[v as ScoreState]?.label ?? v },
+];
+
 /**
  * Far branches (Fauzan, 27 Oct 2026): checklists with photo proof, an 8-measure scorecard where UNKNOWN is never green,
  * OM twice a month, Regional OM monthly, ACT unannounced once a half year, and up to 2 random video spot checks a month.
@@ -1354,6 +1433,7 @@ export function BranchWorkView() {
     <PageHead
       title="Far branches"
       sub="Daily, weekly and monthly checklists with photo proof, OM and Regional OM visits, ACT audits and video spot checks, scored on 8 measures per branch."
+      actions={<SopHelp id="ops-far-branch" />}
     />
   );
   if (error)
@@ -1385,31 +1465,19 @@ export function BranchWorkView() {
         />
       </Stats>
       <Card title="Branches" sub="Open a branch for its scorecard, checklists and visits." flush>
-        <ul className="ss-rows">
-          {data.branches.length === 0 && <li className="empty">No branches for this sign-in.</li>}
-          {data.branches.map((x) => (
-            <li key={x.id}>
-              <button className="ss-row" data-tone={x.overall === 'red' ? 'crit' : x.overall === 'amber' ? 'warn' : undefined} onClick={() => setOpen(x.id)}>
-                <span className="ss-row-main">
-                  <span className="ss-row-title">{x.name}</span>
-                  <span className="ss-meta">
-                    {x.company} · {x.manager ? x.manager.name : 'no branch manager sign-in'}
-                  </span>
-                  <span className="ss-chips">
-                    {x.score.map((s) => (
-                      <Chip key={s.key} tone={SCORE[s.state].tone} title={`${s.label}: ${s.value}`}>
-                        {SCORE_SHORT[s.key] ?? 'Tasks'}
-                      </Chip>
-                    ))}
-                  </span>
-                </span>
-                <span className="ss-row-side">
-                  <Chip tone={SCORE[x.overall].tone}>{SCORE[x.overall].label}</Chip>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          label="Branches"
+          stateKey="branchwork.branches"
+          rows={data.branches}
+          rowKey={(x) => x.id}
+          columns={BRANCH_COLUMNS}
+          filters={BRANCH_FILTERS}
+          searchPlaceholder="Search branches"
+          searchText={(x) => x.state ?? ''}
+          onRowClick={(x) => setOpen(x.id)}
+          rowTone={(x) => (x.overall === 'red' ? 'crit' : x.overall === 'amber' ? 'warn' : undefined)}
+          empty={<Empty title="No branches for this sign-in." />}
+        />
         <p className="ss-note ss-foot">A measure with no data shows as Unknown, never green. Visit and spot-check limits are proposals for approval.</p>
       </Card>
       {b && <BranchDrawer b={b} checklists={data.checklists} onClose={() => setOpen(null)} />}

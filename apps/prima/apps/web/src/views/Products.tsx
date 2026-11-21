@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { CertBody, ProofInput } from '@prima/core';
 import { api, type ProductBoard, type ProductCertInput, type ProductInput, type ProposalCheck } from '../api';
-import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad, type Tone } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad, type Tone } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { ProofPicker } from './Proof';
 import { PlusIcon } from '@phosphor-icons/react';
 import { ImportButton } from './ImportDrawer';
@@ -25,11 +26,50 @@ const CERT_TONE: Record<Cert['state'], [Tone, string]> = {
 };
 const MODE: Record<Product['mode'], string> = { SALE: 'Sold', RENTAL: 'Rented', BOTH: 'Sold or rented' };
 
+const worstCert = (p: Product) => {
+  const order: Cert['state'][] = ['expired', 'not_started', 'urgent', 'due', 'applying', 'valid'];
+  return order.find((st) => p.certs.some((c) => c.state === st));
+};
+const PRODUCT_COLUMNS: DtColumn<Product>[] = [
+  { id: 'name', label: 'Product', value: (p) => p.name, render: (p) => <strong>{p.name}</strong>, phone: 'title' },
+  { id: 'category', label: 'Category', value: (p) => p.category, phone: 'sub' },
+  { id: 'mode', label: 'Sold or rented', value: (p) => MODE[p.mode], translate: true },
+  { id: 'data', label: 'Personal data', value: (p) => (p.personalData.length ? p.personalData.join(', ') : 'no personal data'), sort: false, hideBelow: 1200 },
+  { id: 'supplier', label: 'Supplier', value: (p) => p.supplier, hideBelow: 1100 },
+  { id: 'kept', label: 'Kept (days)', value: (p) => p.retentionDays, sort: 'number', hideBelow: 1300 },
+  {
+    id: 'certs',
+    label: 'Certificates',
+    value: (p) => p.certs.length,
+    sort: 'number',
+    align: 'left',
+    render: (p) => {
+      const w = worstCert(p);
+      return w ? <Chip tone={CERT_TONE[w][0]}>{`${p.certs.length} · ${CERT_TONE[w][1]}`}</Chip> : <span className="muted">None recorded.</span>;
+    },
+    hideBelow: 1100,
+  },
+  {
+    id: 'ready',
+    label: 'Proposals',
+    value: (p) => (p.readiness.ready ? 'Ready for proposals' : 'Not ready'),
+    translate: true,
+    render: (p) => (p.readiness.ready ? <Chip tone="ok">Ready for proposals</Chip> : <Chip tone="crit">Not ready</Chip>),
+  },
+];
+const PRODUCT_FILTERS: DtFilter<Product>[] = [
+  { id: 'ready', label: 'Proposals', value: (p) => (p.readiness.ready ? 'ready' : 'not'), options: [{ value: 'ready', label: 'Ready for proposals' }, { value: 'not', label: 'Not ready' }] },
+  { id: 'category', label: 'Category', value: (p) => p.category },
+  { id: 'mode', label: 'Sold or rented', value: (p) => p.mode, optionLabel: (v) => MODE[v as Product['mode']] ?? v },
+];
+
 export function ProductsPanel() {
   const { data, error } = useLoad(() => api.productBoard(), []);
   const [adding, setAdding] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="products" />;
+  const open = data.products.find((p) => p.id === openId);
   // The PDPA officer keeps the list; the owner may too (P78).
   const officer = data.canKeep;
   return (
@@ -53,21 +93,31 @@ export function ProductsPanel() {
           )}
         </div>
         {adding && <ProductForm onDone={() => setAdding(false)} />}
-        <div className="list">
-          {data.products.length === 0 && (
-            <div className="empty">No products yet.{officer ? ' Use Add product to record what is sold or rented to clients.' : ' The PDPA officer records them.'}</div>
-          )}
-          {data.products.map((p) => (
-            <ProductLine key={p.id} p={p} officer={officer} />
-          ))}
-        </div>
+        <DataTable
+          label="Products sold or rented to clients"
+          stateKey="board.pdpa.products"
+          rows={data.products}
+          rowKey={(p) => p.id}
+          columns={PRODUCT_COLUMNS}
+          filters={PRODUCT_FILTERS}
+          searchText={(p) => `${p.notes ?? ''} ${p.certs.map((c) => `${c.body} ${c.scheme ?? ''} ${c.ref ?? ''}`).join(' ')}`}
+          onRowClick={(p) => setOpenId(p.id)}
+          rowTone={(p) => (p.readiness.ready ? undefined : 'crit')}
+          actions={(p) => [{ label: 'Details', onClick: () => setOpenId(p.id) }]}
+          empty={<div className="empty">No products yet.{officer ? ' Use Add product to record what is sold or rented to clients.' : ' The PDPA officer records them.'}</div>}
+        />
+        {open && (
+          <Drawer title={open.name} sub={`${open.category} · ${MODE[open.mode]}`} onClose={() => setOpenId(null)}>
+            <ProductLine p={open} officer={officer} startOpen />
+          </Drawer>
+        )}
       </section>
     </>
   );
 }
 
-function ProductLine({ p, officer }: { p: Product; officer: boolean }) {
-  const [open, setOpen] = useState(false);
+function ProductLine({ p, officer, startOpen }: { p: Product; officer: boolean; startOpen?: boolean }) {
+  const [open, setOpen] = useState(!!startOpen);
   const [editing, setEditing] = useState(false);
   const [cert, setCert] = useState<Cert | 'new' | null>(null);
   return (

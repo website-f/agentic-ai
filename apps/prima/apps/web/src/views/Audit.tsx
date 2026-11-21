@@ -1,9 +1,9 @@
-import { Select } from '../SearchSelect';
 import { useMemo, useState } from 'react';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { ClockCounterClockwiseIcon, FingerprintIcon, SealCheckIcon, UsersThreeIcon } from '@phosphor-icons/react';
 import { api, type AuditLog } from '../api';
 import { useApp } from '../App';
-import { Empty, Facts, PageHead, Person, Search, Stat, Stats, Toolbar } from '../kit';
+import { Empty, Facts, PageHead, Person, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, dayLabel, hhmm, humanize, useLoad } from '../ui';
 import '../styles/gov.css';
 
@@ -11,20 +11,49 @@ type Entry = AuditLog['entries'][number];
 
 /** The part of an action before the first dot ("arms.issue" is "arms"): what area of the app the change was in. */
 const areaOf = (action: string) => action.split('.')[0] || action;
-const PAGE = 100;
 
 export function AuditView() {
   const { data, error } = useLoad(() => api.audit(), []);
   const { me } = useApp();
-  const [q, setQ] = useState('');
-  const [who, setWho] = useState('');
-  const [area, setArea] = useState('');
-  const [limit, setLimit] = useState(PAGE);
   const [open, setOpen] = useState<Entry | null>(null);
 
   const companyName = useMemo(() => new Map(me.companies.map((c) => [c.id, c.name])), [me.companies]);
   const actors = useMemo(() => [...new Set((data?.entries ?? []).map((e) => e.actor))].sort((a, b) => a.localeCompare(b)), [data]);
-  const areas = useMemo(() => [...new Set((data?.entries ?? []).map((e) => areaOf(e.action)))].sort(), [data]);
+  const company = (e: Entry) => (e.companyId ? (companyName.get(e.companyId) ?? 'Company') : 'Group-wide');
+  const columns: DtColumn<Entry>[] = [
+    { id: 'at', label: 'When', value: (e) => e.at, sort: 'date', render: (e) => <span className="gv-ev-time">{dayLabel(e.at.slice(0, 10))} {e.at.slice(0, 4)} · {hhmm(e.at)}</span>, phone: 'sub', width: '11rem' },
+    { id: 'who', label: 'Who', value: (e) => e.actor, render: (e) => <Person name={e.actor} sub={company(e)} size={32} />, phone: 'fact' },
+    {
+      id: 'what',
+      label: 'What',
+      value: (e) => e.summary,
+      render: (e) => (
+        <span className="gv-ev-what">
+          <span className="gv-ev-sum">{e.summary}</span>
+          {/* P80: the kind of change in words ("CMS: visit update"); its code stays in the entry. */}
+          <span className="gv-ev-act">{humanize(e.action)}</span>
+        </span>
+      ),
+      phone: 'title',
+    },
+    {
+      id: 'record',
+      label: 'Record',
+      value: (e) => humanize(e.entity),
+      render: (e) => (
+        <span className="gv-ev-rec">
+          {humanize(e.entity)} <span className="mono">{e.entityId.length > 14 ? `${e.entityId.slice(0, 14)}…` : e.entityId}</span>
+        </span>
+      ),
+      hideBelow: 1100,
+    },
+    { id: 'seal', label: 'Seal', value: (e) => e.seq, sort: 'number', render: (e) => <span className="gv-ev-seal mono" title={e.hash}>#{e.seq} · {e.hash.slice(0, 6)}…</span>, align: 'right' },
+  ];
+  const filters: DtFilter<Entry>[] = [
+    { id: 'who', label: 'Who', value: (e) => e.actor, allLabel: 'Everyone' },
+    { id: 'area', label: 'Area', value: (e) => areaOf(e.action), optionLabel: humanize, allLabel: 'All areas' },
+    { id: 'company', label: 'Company', value: (e) => e.companyId ?? '-', optionLabel: (v) => (v === '-' ? 'Group-wide' : (companyName.get(v) ?? v)) },
+  ];
 
   if (error)
     return (
@@ -39,23 +68,6 @@ export function AuditView() {
       </div>
     );
 
-  const needle = q.trim().toLowerCase();
-  const shown = data.entries.filter(
-    (e) =>
-      (!who || e.actor === who) &&
-      (!area || areaOf(e.action) === area) &&
-      (!needle || [e.summary, e.actor, e.action, e.entity, e.entityId, String(e.seq)].some((v) => v.toLowerCase().includes(needle))),
-  );
-  const filtered = !!(needle || who || area);
-  const page = shown.slice(0, limit);
-  // Group the rows by day, newest first (the log already comes newest first).
-  const days: [string, Entry[]][] = [];
-  for (const e of page) {
-    const d = e.at.slice(0, 10);
-    const last = days[days.length - 1];
-    if (last && last[0] === d) last[1].push(e);
-    else days.push([d, [e]]);
-  }
   const seal = data.verified ? (
     data.chainIntact ? (
       <Chip tone="ok">Seal intact across {data.total} entries</Chip>
@@ -97,108 +109,20 @@ export function AuditView() {
         />
       </Stats>
 
-      <Toolbar end={<span className="muted small">{filtered ? `${shown.length} of ${data.entries.length}` : `${data.entries.length} entries`}</span>}>
-        <Search
-          value={q}
-          onChange={(v) => {
-            setQ(v);
-            setLimit(PAGE);
-          }}
-          placeholder="Search what, who, record or entry number"
-          label="Search the audit trail"
-        />
-        <Select className="select gv-filter" aria-label="Who" value={who} onChange={(e) => (setWho(e.target.value), setLimit(PAGE))}>
-          <option value="">Everyone</option>
-          {actors.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </Select>
-        <Select className="select gv-filter" aria-label="Area" value={area} onChange={(e) => (setArea(e.target.value), setLimit(PAGE))}>
-          <option value="">All areas</option>
-          {areas.map((a) => (
-            <option key={a} value={a}>
-              {humanize(a)}
-            </option>
-          ))}
-        </Select>
-      </Toolbar>
-
+      {/* P107: the log as a table: search, who, area and company filters, sortable, paged (was day groups + "Show more"). */}
       <section className="k-card" aria-label="Audit entries">
-        {shown.length > 0 && (
-          <div className="gv-ev-head" aria-hidden="true">
-            <span>Time</span>
-            <span>Who</span>
-            <span>What</span>
-            <span>Record</span>
-            <span>Seal</span>
-          </div>
-        )}
-        {shown.length > 0 && (
-          <ul className="gv-list">
-            {days.map(([d, rows]) => (
-              <li key={d} className="gv-group-li">
-                <div className="gv-group">
-                  <span>{dayLabel(d)} {d.slice(0, 4)}</span>
-                  <span>
-                    {rows.length} entr{rows.length === 1 ? 'y' : 'ies'}
-                  </span>
-                </div>
-                <ul className="gv-list">
-                  {rows.map((e) => (
-                    <li key={e.seq}>
-                      <button type="button" className="gv-ev" onClick={() => setOpen(e)} aria-label={`Entry ${e.seq}: ${e.summary}`}>
-                        <span className="gv-ev-time">{hhmm(e.at)}</span>
-                        <span className="gv-ev-who">
-                          <Person name={e.actor} sub={e.companyId ? (companyName.get(e.companyId) ?? 'Company') : 'Group-wide'} size={32} />
-                        </span>
-                        <span className="gv-ev-what">
-                          <span className="gv-ev-sum">{e.summary}</span>
-                          {/* P80: the kind of change in words ("CMS: visit update"); its code stays in the entry. */}
-                          <span className="gv-ev-act">{humanize(e.action)}</span>
-                        </span>
-                        <span className="gv-ev-rec">
-                          {humanize(e.entity)} <span className="mono">{e.entityId.length > 14 ? `${e.entityId.slice(0, 14)}…` : e.entityId}</span>
-                        </span>
-                        <span className="gv-ev-seal mono" title={e.hash}>
-                          #{e.seq} · {e.hash.slice(0, 6)}…
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ul>
-        )}
-        {shown.length > page.length && (
-          <div className="gv-more">
-            <button className="btn" onClick={() => setLimit(limit + PAGE)}>
-              Show {Math.min(PAGE, shown.length - page.length)} more
-            </button>
-          </div>
-        )}
-        {data.entries.length === 0 && <Empty title="Nothing recorded yet." />}
-        {data.entries.length > 0 && shown.length === 0 && (
-          <Empty
-            title="No entries."
-            action={
-              <button
-                className="btn btn-sm"
-                onClick={() => {
-                  setQ('');
-                  setWho('');
-                  setArea('');
-                }}
-              >
-                Clear search and filters
-              </button>
-            }
-          >
-            Nothing matches the search or filters.
-          </Empty>
-        )}
+        <DataTable
+          label="Audit entries"
+          stateKey="gov.audit.entries"
+          rows={data.entries}
+          rowKey={(e) => String(e.seq)}
+          columns={columns}
+          filters={filters}
+          searchText={(e) => `${e.action} ${e.entity} ${e.entityId} ${e.seq} ${e.hash}`}
+          searchPlaceholder="Search what, who, record or entry number"
+          onRowClick={setOpen}
+          empty={<Empty title="Nothing recorded yet." />}
+        />
       </section>
 
       {open && (

@@ -346,8 +346,8 @@ function PassOnLine({ r }: { r: PassOn }) {
 
 type UReq = UniformRequests['requests'][number];
 
-const REQ_TONE = { open: 'warn', issued: 'ok', refused: 'crit', cancelled: 'neutral' } as const;
-const REQ_LABEL = { open: 'Waiting for the store', issued: 'Issued: confirm and collect signatures below', refused: 'Refused', cancelled: 'Cancelled' } as const;
+export const REQ_TONE = { open: 'warn', issued: 'ok', refused: 'crit', cancelled: 'neutral' } as const;
+export const REQ_LABEL = { open: 'Waiting for the store', issued: 'Issued: confirm and collect signatures below', refused: 'Refused', cancelled: 'Cancelled' } as const;
 
 /**
  * An Operations Manager asks the Goodwill store for a uniform for a guard (Fauzan, 11 Nov 2026). Once the store issues

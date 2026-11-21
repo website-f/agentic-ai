@@ -22,6 +22,7 @@ import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, hhmm, use
 import { DocList, ProofPicker } from './Proof';
 import { DoshPanel, DoshRegisterPanel, FamilyPanel, LindungPanel } from './SocsoMore';
 import { useApp } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import '../styles/hrx.css';
 
 /**
@@ -115,11 +116,14 @@ export function SocsoView() {
         title="SOCSO claims"
         sub="Start a claim here or from the person's profile (the SOCSO tab). HR submits Form 34 in PERKESO ASSIST and records the reference here."
         actions={
-          data.canStart ? (
-            <button className="btn btn-primary" onClick={() => setStarting(true)}>
-              <PlusIcon size={16} /> Start a claim
-            </button>
-          ) : undefined
+          <>
+            <SopHelp id="hr-socso-claim" />
+            {data.canStart && (
+              <button className="btn btn-primary" onClick={() => setStarting(true)}>
+                <PlusIcon size={16} /> Start a claim
+              </button>
+            )}
+          </>
         }
       />
       <Stats>

@@ -7,6 +7,7 @@ import { api, type ItemBoard } from '../../api';
 import { Card, Empty, Facts, Stat, Stats } from '../../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../../ui';
 import { Scanner } from './Scanner';
+import { ReadsBox } from '../ScanBox';
 import { FilterChips, TabIntro, act, rolesOf } from './shared';
 
 export function Counts({ data }: { data: ItemBoard }) {
@@ -194,6 +195,25 @@ function CountSession({ id, onClose }: { id: string; onClose: () => void }) {
                 </li>
               ))}
             </ul>
+            {/* P121: an RFID reader's list pasted at once (count.scanMany), as upstream had; lost in the P85 split. */}
+            <details>
+              <summary className="muted small">Many RFID reads at once</summary>
+              <ReadsBox
+                button="Count all read"
+                busy={a.busy}
+                onSend={(reads) =>
+                  a
+                    .run(
+                      () => act({ kind: 'count.scanMany', countId: c.id, reads }),
+                      (r) => {
+                        const x = (r as { result: { found: number; extra: number; already: number; unknown: string[] } }).result;
+                        return `${x.found} found, ${x.extra} not expected here, ${x.already} already counted, ${x.unknown.length} unknown tags (set aside and check).`;
+                      },
+                    )
+                    .then((r) => r && reload())
+                }
+              />
+            </details>
             <button className="btn it-big" type="button" disabled={a.busy} onClick={() => run({ kind: 'count.close', countId: c.id }, 'Count closed. Recount what was not found, then a manager reviews it.')}>
               Close the count
             </button>

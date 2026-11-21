@@ -15,6 +15,8 @@ import {
 } from "@prima/core";
 import { api, type RegBoard } from "../api";
 import { ImportButton } from "./ImportDrawer";
+import { useRouteTab } from "../App";
+import { SopHelp } from "../sop/SopHelp";
 import { DataTable, type DtColumn, type DtFilter } from "../DataTable";
 import {
   Chip,
@@ -35,6 +37,15 @@ import {
  */
 
 type Tab = "deals" | "interests" | "committees" | "risks";
+/** P121: the tabs a link may ask for (#registers/deals); each person still sees only the registers that are theirs. */
+// Single quotes here: the SOP guide's test reads the tab names from this line.
+const REG_TABS: readonly (Tab | '')[] = ['deals', 'interests', 'committees', 'risks'];
+const REG_SOP: Record<Tab, string> = {
+  deals: "board-related-party-deal",
+  interests: "board-director-interests",
+  committees: "board",
+  risks: "board-risk-register",
+};
 type Deals = NonNullable<RegBoard["deals"]>;
 type Interests = NonNullable<RegBoard["interests"]>;
 type Committees = NonNullable<RegBoard["committees"]>;
@@ -86,7 +97,7 @@ const head = {
 
 export function RegistersView() {
   const { data, error } = useLoad(() => api.registerBoard(), []);
-  const [pick, setPick] = useState<Tab | null>(null);
+  const [pick, setPick] = useRouteTab<Tab | "">("", REG_TABS);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="governance registers" />;
   const tabs = (
@@ -110,6 +121,11 @@ export function RegistersView() {
         <p className="notice" data-tone="info">
           Test data.
         </p>
+        {tab && (
+          <span style={{ alignSelf: "flex-start" }}>
+            <SopHelp id={REG_SOP[tab]} />
+          </span>
+        )}
       </div>
       <div className="kpis">
         {data.deals && (

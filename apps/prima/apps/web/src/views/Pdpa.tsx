@@ -4,12 +4,15 @@ import { ChatCircleDotsIcon, ClockCountdownIcon, HandshakeIcon, PlusIcon, Shield
 import type { ProofInput } from '@prima/core';
 import { api, type PdpaBoard, type PdpaCaseInput, type PdpaStepName } from '../api';
 import { Card, Empty, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
-import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { DocList, ProofPicker } from './Proof';
 import { ProductsPanel, ProposalPanel } from './Products';
 import { DpoPanel, RequestsPanel } from './PdpaRights';
 import { BreachRegisterPanel, ConsentsPanel, RegisterPanel } from './PdpaRegister';
 import '../styles/hrx.css';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * PDPA (Fauzan, 26 Oct 2026). The PDPA officer manages every personal data matter and is monitored by the Operations
@@ -52,12 +55,14 @@ function countdown(due: string, now: number): { late: boolean; text: string } {
 type Kind = Case['kind'];
 
 const TAB_LABEL: Record<Kind, string> = { BREACH: 'Breaches', CLIENT_CONSENT: 'Client consent', SOCIAL: 'Social media' };
+const PDPA_TABS: readonly (Kind | Extra)[] = [...(Object.keys(TAB_LABEL) as Kind[]), ...(Object.keys(EXTRA_LABEL) as Extra[])];
 
 export function PdpaView() {
   const { data, error } = useLoad(() => api.pdpaBoard(), []);
-  const [tab, setTab] = useState<Kind | Extra>('BREACH');
+  // P121: a link may open a section (#pdpa/REQUESTS); the screen itself is only for the PDPA officer and those who monitor.
+  const [tab, setTab] = useRouteTab<Kind | Extra>('BREACH', PDPA_TABS);
   const [adding, setAdding] = useState(false);
-  const [shut, setShut] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
   if (error)
     return (
       <div className="page">
@@ -73,7 +78,7 @@ export function PdpaView() {
   const officer = data.role === 'officer';
   const inTab = data.cases.filter((c) => c.kind === tab);
   const closedCount = inTab.filter((c) => c.status === 'closed').length;
-  const rows = shut ? inTab : inTab.filter((c) => c.status !== 'closed');
+  const openCase = data.cases.find((c) => c.id === openId);
   const caseTab = tab === 'BREACH' || tab === 'CLIENT_CONSENT' || tab === 'SOCIAL';
   const go = (k: Kind) => {
     setTab(k);
@@ -84,6 +89,7 @@ export function PdpaView() {
       <PageHead
         title="PDPA"
         sub="The PDPA officer handles every personal data matter. The Operations Director, the Chief of Staff and the CEO monitor. A breach goes to the PDP Commissioner within 72 hours, and to the affected people within 7 days after that when the harm is significant."
+        actions={<SopHelp id={tab === 'REQUESTS' || tab === 'DPO' ? 'board-pdpa-request' : 'board-pdpa-breach'} />}
       />
       {!data.settings.enabled && (
         <div className="notice" data-tone="warn" role="status">
@@ -153,16 +159,11 @@ export function PdpaView() {
             <div className="k-card-title">
               <h2>{TAB_LABEL[tab as Kind]}</h2>
               <p>
-                {rows.length} case{rows.length === 1 ? '' : 's'}
-                {closedCount > 0 ? (shut ? `, ${closedCount} closed` : ` open, ${closedCount} closed hidden`) : ''}
+                {inTab.length} case{inTab.length === 1 ? '' : 's'}
+                {closedCount > 0 ? `, ${closedCount} closed` : ''}
               </p>
             </div>
             <div className="k-card-actions">
-              {closedCount > 0 && (
-                <button className="btn btn-ghost btn-sm" aria-pressed={shut} onClick={() => setShut(!shut)}>
-                  {shut ? 'Hide closed' : 'Show closed'}
-                </button>
-              )}
               {data.canAdd && !adding && (
                 <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
                   <PlusIcon size={14} weight="bold" aria-hidden="true" />
@@ -176,14 +177,28 @@ export function PdpaView() {
               <NewCase kind={tab as Kind} companies={data.companies} onDone={() => setAdding(false)} />
             </div>
           )}
-          {rows.length === 0 ? (
-            <Empty title="Nothing here." />
-          ) : (
-            <ul className="hx-rows">
-              {rows.map((c) => (
-                <CaseLine key={c.id} c={c} officer={officer} />
-              ))}
-            </ul>
+          <DataTable
+            key={tab}
+            label={TAB_LABEL[tab as Kind]}
+            stateKey={`board.pdpa.cases.${tab}`}
+            rows={inTab}
+            rowKey={(c) => c.id}
+            columns={caseColumns(tab as Kind)}
+            filters={CASE_FILTERS}
+            searchText={(c) => c.openedBy}
+            onRowClick={(c) => setOpenId(c.id)}
+            rowTone={(c) => {
+              if (c.status === 'closed') return undefined;
+              const t = caseChip(c, Date.now())[0];
+              return t === 'crit' ? 'crit' : t === 'warn' ? 'warn' : undefined;
+            }}
+            actions={(c) => [{ label: officer && c.status === 'open' ? 'Act' : 'Steps', onClick: () => setOpenId(c.id) }]}
+            empty={<Empty title="Nothing here." />}
+          />
+          {openCase && (
+            <Drawer title={openCase.title} sub={`${openCase.companyName} · opened ${dateTimeLabel(openCase.openedAt)} by ${openCase.openedBy}`} onClose={() => setOpenId(null)}>
+              <CaseDetail c={openCase} officer={officer} />
+            </Drawer>
           )}
         </section>
       )}
@@ -251,39 +266,40 @@ function caseSteps(c: Case): { label: string; state: StepState; note?: string }[
   return null;
 }
 
-function CaseLine({ c, officer }: { c: Case; officer: boolean }) {
-  const [open, setOpen] = useState(false);
+/** The status chip, its countdown kept current. */
+function CaseChip({ c }: { c: Case }) {
   const now = useNow();
   const [tone, label] = caseChip(c, now);
-  return (
-    <li className="hx-row" data-tone={c.status === 'closed' ? undefined : tone === 'crit' ? 'crit' : tone === 'warn' ? 'warn' : undefined}>
-      <div className="hx-row-main">
-        <span className="hx-row-title">{c.title}</span>
-        <span className="hx-row-meta">
-          {c.companyName} · opened {dateTimeLabel(c.openedAt)} by {c.openedBy}
-        </span>
-        {(c.breach || c.consent || c.social) && (
-          <span className="hx-row-meta">
-            {c.breach ? `${c.breach.affected} people · ${c.breach.significantHarm ? 'significant harm' : 'no significant harm'}` : ''}
-            {c.consent ? `${c.consent.client}: ${c.consent.product}` : ''}
-            {c.social ? c.social.platform : ''}
-          </span>
-        )}
-      </div>
-      <div className="hx-row-side">
-        <Chip tone={tone}>{label}</Chip>
-        <button className={`btn btn-sm${officer && c.status === 'open' && !open ? '' : ' btn-ghost'}`} aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? 'Hide' : officer && c.status === 'open' ? 'Act' : 'Steps'}
-        </button>
-      </div>
-      {open && (
-        <div className="hx-row-body">
-          <CaseDetail c={c} officer={officer} />
-        </div>
-      )}
-    </li>
-  );
+  return <Chip tone={tone}>{label}</Chip>;
 }
+
+function caseColumns(kind: Kind): DtColumn<Case>[] {
+  const extra: DtColumn<Case>[] =
+    kind === 'BREACH'
+      ? [
+          { id: 'affected', label: 'People', value: (c) => c.breach?.affected, sort: 'number' },
+          { id: 'harm', label: 'Significant harm', value: (c) => (c.breach?.significantHarm ? 'Yes' : 'No'), translate: true, hideBelow: 1100 },
+        ]
+      : kind === 'CLIENT_CONSENT'
+        ? [
+            { id: 'client', label: 'Client', value: (c) => c.consent?.client },
+            { id: 'product', label: 'Product', value: (c) => c.consent?.product, hideBelow: 1100 },
+          ]
+        : [{ id: 'platform', label: 'Platform', value: (c) => c.social?.platform }];
+  return [
+    { id: 'opened', label: 'Opened', value: (c) => c.openedAt, sort: 'date', render: (c) => dateTimeLabel(c.openedAt), width: '10rem' },
+    { id: 'title', label: 'Case', value: (c) => c.title, render: (c) => <strong>{c.title}</strong>, phone: 'title' },
+    { id: 'company', label: 'Company', value: (c) => c.companyName, phone: 'sub' },
+    ...extra,
+    { id: 'by', label: 'Opened by', value: (c) => c.openedBy, hideBelow: 1200 },
+    { id: 'status', label: 'Status', value: (c) => caseChip(c, Date.now())[1], translate: true, render: (c) => <CaseChip c={c} /> },
+  ];
+}
+const CASE_FILTERS: DtFilter<Case>[] = [
+  { id: 'status', label: 'Status', value: (c) => (c.status === 'closed' ? 'closed' : 'open'), options: [{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }] },
+  { id: 'company', label: 'Company', value: (c) => c.companyName },
+  { id: 'platform', label: 'Platform', value: (c) => c.social?.platform },
+];
 
 function CaseDetail({ c, officer }: { c: Case; officer: boolean }) {
   const docs = useLoad(() => api.pdpaDocs(c.id), [c.id, c.steps.length]);

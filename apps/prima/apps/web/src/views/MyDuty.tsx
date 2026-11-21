@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { CalendarBlankIcon, ClockIcon, FootprintsIcon, ShieldCheckIcon, UserMinusIcon } from '@phosphor-icons/react';
 import { WarrantyClaimsSection } from './Warranty';
 import { jaOwns } from '@prima/core';
@@ -17,6 +19,7 @@ const PERSON_ROLE: Record<string, string> = { guard: 'Guard', supervisor: 'Offic
 
 type Tab = 'roster' | 'clock' | 'patrol' | 'me';
 type MeTab = 'work' | 'training' | 'hours' | 'leave' | 'socso' | 'warnings' | 'benefits';
+const ME_TABS: MeTab[] = ['work', 'training', 'hours', 'leave', 'socso', 'warnings', 'benefits'];
 
 const CLOCK: Record<Duty['clockRecord'][number]['status'], { label: string; tone: Tone }> = {
   on_time: { label: 'On time', tone: 'ok' },
@@ -54,8 +57,14 @@ export function MyDuty() {
   const { data, error, reload } = useLoad(() => api.myDuty(), []);
   // Office and central staff have no roster or patrols here: they open straight on their details.
   const staff = data?.person.role === 'office';
-  const [tab, setTab] = useState<Tab>('roster');
-  const [meTab, setMeTab] = useState<MeTab>('work');
+  // P121: a link may open a tab (#mine/leave, from the SOP guide); a "My details" tab also opens My details for a guard.
+  const { route } = useApp();
+  const [tab, setTab] = useRouteTab<Tab>('roster', ['roster', 'clock', 'patrol', 'me']);
+  const [meTab, setMeTab] = useRouteTab<MeTab>('work', ME_TABS);
+  useEffect(() => {
+    if (route?.tab && ME_TABS.includes(route.tab as MeTab)) setTab('me');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route]);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
@@ -85,6 +94,7 @@ export function MyDuty() {
             {d.person.staffNo} · {d.person.jobTitle ?? PERSON_ROLE[d.person.role] ?? 'Guard'} · {d.person.companyName}
           </>
         }
+        actions={<SopHelp id={staff ? 'hr-staff-leave' : 'ops-guard-leave'} label="How leave works" />}
       />
 
       {!staff && shift && (

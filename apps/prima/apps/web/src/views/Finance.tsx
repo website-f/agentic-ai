@@ -9,9 +9,10 @@ import {
   QuestionIcon,
   WarningOctagonIcon,
 } from '@phosphor-icons/react';
-import type { FinPackStatus } from '@prima/core';
+import type { FinCheckSection, FinPackStatus } from '@prima/core';
 import { api, type FinBoard, type FinDesk } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { ManagementFeesPanel } from './ManagementFees';
 import { takeFinTarget, type FinTarget } from '../finTarget';
 import { CloseTab, FinPackPanel, NewPayment, PaymentsTab } from './FinanceDesk';
@@ -22,6 +23,7 @@ import { FinanceDashboardTab } from './FinanceDashboard';
 import { ImportButton } from './ImportDrawer';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/finance.css';
 import { CeoSummaryTab, FinanceSitesTab } from './FinanceMonitor';
 
@@ -36,6 +38,30 @@ import { CeoSummaryTab, FinanceSitesTab } from './FinanceMonitor';
 
 type Row = FinBoard['rows'][number];
 type Tab = 'teams' | 'payments' | 'close' | 'checks' | 'banks' | 'books' | 'papers' | 'settings' | 'kpi' | 'dashboard' | 'summary' | 'sites';
+/**
+ * P121: a link may open a tab (#finance/payments) or one section of Checks (#finance/checks-bank). A tab this person
+ * does not have falls back to the overview.
+ */
+type RouteTab = Tab | 'checks-out' | 'checks-bank' | 'checks-in' | 'checks-cash' | 'checks-tax';
+const ROUTE_TABS: RouteTab[] = [
+  'teams',
+  'dashboard',
+  'summary',
+  'sites',
+  'payments',
+  'close',
+  'banks',
+  'books',
+  'papers',
+  'checks',
+  'kpi',
+  'settings',
+  'checks-out',
+  'checks-bank',
+  'checks-in',
+  'checks-cash',
+  'checks-tax',
+];
 
 const TONE: Record<Row['tone'], [Tone, string]> = {
   crit: ['crit', 'Act now'],
@@ -64,7 +90,8 @@ export function FinanceView() {
     const t = takeFinTarget();
     return t ? { ...t, n: 0 } : null;
   });
-  const [tab, setTab] = useState<Tab>(target?.tab ?? 'teams');
+  const [routeTab, setTab] = useRouteTab<RouteTab>(target?.tab ?? 'teams', ROUTE_TABS);
+  const routeSection = routeTab.startsWith('checks-') ? (routeTab.slice(7) as FinCheckSection) : undefined;
   const goTo = (t: FinTarget) => {
     setTarget((x) => ({ ...t, n: (x?.n ?? 0) + 1 }));
     setTab(t.tab);
@@ -106,6 +133,9 @@ export function FinanceView() {
         ] as [Tab, string][])
       : []),
   ];
+  const asked: Tab = routeSection ? 'checks' : (routeTab as Tab);
+  const tab: Tab = tabs.some(([t]) => t === asked) ? asked : 'teams';
+  const checksTarget = routeSection ? { section: routeSection } : target;
   return (
     <div className="page fin">
       <PageHead
@@ -117,7 +147,9 @@ export function FinanceView() {
           </>
         }
         actions={
-          payCos.length > 0 || bankCos.length > 0 || paperCos.length > 0 ? (
+          <>
+            <SopHelp id="finance" />
+            {payCos.length > 0 || bankCos.length > 0 || paperCos.length > 0 ? (
             <>
               {paperCos.length > 0 && (
                 <button className="btn" onClick={() => setAdding('paper')}>
@@ -141,7 +173,8 @@ export function FinanceView() {
                 </button>
               )}
             </>
-          ) : undefined
+            ) : null}
+          </>
         }
       >
         <p className="notice" data-tone="info">
@@ -218,7 +251,7 @@ export function FinanceView() {
       )}
       {tab === 'checks' && desk && (
         <div className="fin-body">
-          <ChecksTab key={target?.n ?? 0} desk={desk} target={target} />
+          <ChecksTab key={`${target?.n ?? 0}-${routeSection ?? ''}`} desk={desk} target={checksTarget} />
         </div>
       )}
       {tab === 'settings' && desk && (
@@ -274,25 +307,6 @@ export function FinanceView() {
   );
 }
 
-/** One company on a board: its name, what is wrong (each item a tag), and its state. */
-function CompanyLine({ r, onOpen, detail }: { r: Row; onOpen: (id: string) => void; detail: string[] }) {
-  return (
-    <button type="button" className="fin-co" data-tone={r.tone} onClick={() => onOpen(r.status.companyId)}>
-      <span className="fin-co-dot" aria-hidden="true" />
-      <span className="fin-co-text">
-        <span className="fin-co-name">{r.companyName}</span>
-        <span className="fin-co-detail">
-          {detail.map((d, i) => (
-            <span key={i}>{d}</span>
-          ))}
-        </span>
-      </span>
-      <Chip tone={TONE[r.tone][0]}>{TONE[r.tone][1]}</Chip>
-      <CaretRightIcon className="fin-caret" size={14} aria-hidden="true" />
-    </button>
-  );
-}
-
 function reasons(r: Row): string[] {
   const out: string[] = [];
   if (r.stale) out.push('no recent SQL figures');
@@ -309,126 +323,221 @@ function reasons(r: Row): string[] {
 
 const RANK: Record<Row['tone'], number> = { crit: 0, unknown: 1, warn: 2, ok: 3 };
 
+/** P107: the company boards' shared pieces: the state chip, its filter, the coloured edge and the list of what is wrong. */
+const TONE_OPTIONS = (Object.keys(TONE) as Row['tone'][]).map((t) => ({ value: t, label: TONE[t][1] }));
+const toneEdge = (tone: Row['tone']) => (tone === 'crit' ? 'crit' : tone === 'warn' ? 'warn' : undefined);
+const teamLabel = (team: number | string) => `Team ${team}`;
+function Details({ items }: { items: string[] }) {
+  return (
+    <span className="fin-co-detail">
+      {items.map((d, i) => (
+        <span key={i}>{d}</span>
+      ))}
+    </span>
+  );
+}
+const stateColumn: DtColumn<Row> = {
+  id: 'state',
+  label: 'Status',
+  value: (r) => TONE[r.tone][1],
+  translate: true,
+  render: (r) => <Chip tone={TONE[r.tone][0]}>{TONE[r.tone][1]}</Chip>,
+};
+
 function Teams({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void }) {
+  // P107: one table of every company (search, team and state filters, pages; cards on a phone) in place of a card per
+  // team. The usual order stays: team by team, act-now companies first; a row opens the company drawer as before.
+  const leader = new Map(data.teams.map((t) => [t.team, t.leader]));
+  const rows = data.teams.flatMap((t) => data.rows.filter((r) => r.status.team === t.team).sort((a, b) => RANK[a.tone] - RANK[b.tone]));
+  const columns: DtColumn<Row>[] = [
+    { id: 'company', label: 'Company', value: (r) => r.companyName, render: (r) => <span className="fin-strong">{r.companyName}</span>, phone: 'title' },
+    {
+      id: 'team',
+      label: 'Team',
+      value: (r) => r.status.team,
+      sort: 'number',
+      align: 'left',
+      render: (r) => (
+        <>
+          {teamLabel(r.status.team)}
+          <span className="muted small fin-block">{leader.get(r.status.team) ?? 'No leader set'}</span>
+        </>
+      ),
+      phone: 'sub',
+    },
+    { id: 'wrong', label: 'What is wrong', value: (r) => reasons(r).join(', '), sort: false, render: (r) => <Details items={reasons(r)} /> },
+    stateColumn,
+  ];
+  const filters: DtFilter<Row>[] = [
+    { id: 'team', label: 'Team', value: (r) => String(r.status.team), optionLabel: teamLabel },
+    { id: 'state', label: 'Status', value: (r) => r.tone, options: TONE_OPTIONS },
+  ];
   return (
     <section className="fin-section" aria-labelledby="fin-teams-h">
       <div className="fin-section-head">
         <h2 id="fin-teams-h">{data.role === 'lead' ? 'Teams' : 'Companies'}</h2>
         <span className="muted small">Press a company for its banks, tests, postings and papers</span>
       </div>
-      <div className="fin-teams">
-        {data.teams.map((t) => (
-          <Card
-            key={t.team}
-            title={`Team ${t.team}`}
-            sub={`${t.leader ?? 'No leader set'} · ${t.companies} companies${t.members.length > 1 ? ` · ${t.members.length} people` : ''}`}
-            actions={
-              <span className="fin-chips">
-                {t.crit > 0 && <Chip tone="crit">{t.crit} act now</Chip>}
-                {t.unknown > 0 && <Chip tone="unknown">{t.unknown} unknown</Chip>}
-                {t.warn > 0 && <Chip tone="warn">{t.warn} to finish</Chip>}
-                {t.ok > 0 && <Chip tone="ok">{t.ok} in order</Chip>}
-              </span>
-            }
-            flush
-          >
-            <div className="fin-cos">
-              {data.rows
-                .filter((r) => r.status.team === t.team)
-                .sort((a, b) => RANK[a.tone] - RANK[b.tone])
-                .map((r) => (
-                  <CompanyLine key={r.status.id} r={r} onOpen={onOpen} detail={reasons(r)} />
-                ))}
-            </div>
-          </Card>
-        ))}
-      </div>
+      <Card flush>
+        <DataTable
+          label="Companies"
+          stateKey="fin.companies"
+          rows={rows}
+          rowKey={(r) => r.status.id}
+          columns={columns}
+          filters={filters}
+          searchText={(r) => leader.get(r.status.team) ?? ''}
+          onRowClick={(r) => onOpen(r.status.companyId)}
+          rowTone={(r) => toneEdge(r.tone)}
+        />
+      </Card>
     </section>
   );
 }
 
+type BankLine = { r: Row; b: Row['banksBehind'][number] };
+
 function Banks({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void }) {
-  const rows = data.rows.filter((r) => r.banksBehind.length);
+  // P107: one row per bank account (the company on each row), in place of a company cell spanning its accounts.
+  const lines: BankLine[] = data.rows.flatMap((r) => r.banksBehind.map((b) => ({ r, b })));
+  const columns: DtColumn<BankLine>[] = [
+    { id: 'company', label: 'Company', value: ({ r }) => r.companyName, render: ({ r }) => <span className="fin-strong">{r.companyName}</span>, phone: 'title' },
+    { id: 'bank', label: 'Bank account', value: ({ b }) => `${b.bank} ${b.accountMasked}`, phone: 'sub' },
+    {
+      id: 'reconciled',
+      label: 'Reconciled to',
+      value: ({ b }) => b.reconciledTo,
+      sort: 'date',
+      render: ({ b }) => (b.reconciledTo ? `reconciled to ${dateLabel(b.reconciledTo)}` : 'never reconciled'),
+    },
+    { id: 'open', label: 'Open items', value: ({ b }) => b.openItems, sort: 'number' },
+    { id: 'diff', label: 'Difference', value: ({ b }) => b.statementBalance - b.glBalance, sort: 'money', render: ({ b }) => rm(b.statementBalance - b.glBalance) },
+    { id: 'state', label: 'Status', value: ({ r }) => TONE[r.tone][1], translate: true, render: ({ r }) => <Chip tone={TONE[r.tone][0]}>{TONE[r.tone][1]}</Chip> },
+  ];
+  const filters: DtFilter<BankLine>[] = [
+    { id: 'company', label: 'Company', value: ({ r }) => r.companyName },
+    { id: 'state', label: 'Status', value: ({ r }) => r.tone, options: TONE_OPTIONS },
+  ];
   return (
     <Card title={`Not reconciled to ${dateLabel(data.lastEnd)}`} sub={`Reconcile in SQL Account by the ${data.rule.reconcileByDay}th`} flush>
-      {rows.length === 0 ? (
-        <Empty title="Every bank account is reconciled." />
-      ) : (
-        <table className="fin-table">
-          <thead>
-            <tr>
-              <th>Company</th>
-              <th>Bank account</th>
-              <th>Reconciled to</th>
-              <th className="fin-num">Open items</th>
-              <th className="fin-num">Difference</th>
-              <th>State</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.flatMap((r) =>
-              r.banksBehind.map((b, i) => (
-                <tr key={`${r.status.id}-${b.id}`}>
-                  {i === 0 && (
-                    <td rowSpan={r.banksBehind.length}>
-                      <button type="button" className="fin-link" onClick={() => onOpen(r.status.companyId)}>
-                        {r.companyName}
-                      </button>
-                    </td>
-                  )}
-                  <td>
-                    {b.bank} {b.accountMasked}
-                  </td>
-                  <td>{b.reconciledTo ? `reconciled to ${dateLabel(b.reconciledTo)}` : 'never reconciled'}</td>
-                  <td className="fin-num">{b.openItems}</td>
-                  <td className="fin-num">{rm(b.statementBalance - b.glBalance)}</td>
-                  {i === 0 && (
-                    <td rowSpan={r.banksBehind.length}>
-                      <Chip tone={TONE[r.tone][0]}>{TONE[r.tone][1]}</Chip>
-                    </td>
-                  )}
-                </tr>
-              )),
-            )}
-          </tbody>
-        </table>
-      )}
+      <DataTable
+        label="Bank accounts not reconciled"
+        stateKey="fin.banks"
+        rows={lines}
+        rowKey={({ r, b }) => `${r.status.id}-${b.id}`}
+        columns={columns}
+        filters={filters}
+        onRowClick={({ r }) => onOpen(r.status.companyId)}
+        empty={<Empty title="Every bank account is reconciled." />}
+      />
     </Card>
   );
 }
 
 function Books({ data, onOpen }: { data: FinBoard; onOpen: (id: string) => void }) {
   const rows = data.rows.filter((r) => r.closeBehind || r.testsFailed.length || r.testsNotRun.length || r.gaps.length || r.stale);
+  const detail = (r: Row) =>
+    [
+      r.stale ? `SQL figures ${r.status.sqlLastAt ? `last received ${dateTimeLabel(r.status.sqlLastAt)}` : 'never received'}` : '',
+      r.closeBehind ? `closed to ${r.status.closedTo ? dateLabel(r.status.closedTo) : 'never'}` : '',
+      ...r.testsFailed.map((t) => `${t.id} off by ${rm(t.diff ?? 0)}`),
+      r.testsNotRun.length ? 'tests not run' : '',
+      ...r.gaps,
+    ].filter(Boolean);
+  // P107: a table (search, state and SQL-figures filters, sortable dates) in place of the list of company lines.
+  const columns: DtColumn<Row>[] = [
+    { id: 'company', label: 'Company', value: (r) => r.companyName, render: (r) => <span className="fin-strong">{r.companyName}</span>, phone: 'title' },
+    { id: 'wrong', label: 'What is wrong', value: (r) => detail(r).join(', '), sort: false, render: (r) => <Details items={detail(r)} />, phone: 'sub' },
+    { id: 'closed', label: 'Closed to', value: (r) => r.status.closedTo, sort: 'date', render: (r) => (r.status.closedTo ? dateLabel(r.status.closedTo) : 'Never'), hideBelow: 1100 },
+    {
+      id: 'sql',
+      label: 'Last SQL figures',
+      value: (r) => r.status.sqlLastAt,
+      sort: 'date',
+      render: (r) => (r.status.sqlLastAt ? dateTimeLabel(r.status.sqlLastAt) : 'Never'),
+      hideBelow: 1200,
+    },
+    stateColumn,
+  ];
+  const filters: DtFilter<Row>[] = [
+    { id: 'state', label: 'Status', value: (r) => r.tone, options: TONE_OPTIONS },
+    {
+      id: 'sql',
+      label: 'SQL figures',
+      value: (r) => (r.stale ? 'stale' : 'recent'),
+      options: [
+        { value: 'stale', label: 'No recent SQL figures' },
+        { value: 'recent', label: 'Recent SQL figures' },
+      ],
+    },
+  ];
   return (
     <Card title={`Closing and posting for ${dateLabel(data.lastEnd)}`} sub={`Close by the ${data.rule.closeByDay}th · FS-01, FS-02 and FS-06 must be RM0.00`} flush>
-      {rows.length === 0 ? (
-        <Empty title="Every company is closed, posted and passes the tests." />
-      ) : (
-        <div className="fin-cos">
-          {rows.map((r) => (
-            <CompanyLine
-              key={r.status.id}
-              r={r}
-              onOpen={onOpen}
-              detail={[
-                r.stale ? `SQL figures ${r.status.sqlLastAt ? `last received ${dateTimeLabel(r.status.sqlLastAt)}` : 'never received'}` : '',
-                r.closeBehind ? `closed to ${r.status.closedTo ? dateLabel(r.status.closedTo) : 'never'}` : '',
-                ...r.testsFailed.map((t) => `${t.id} off by ${rm(t.diff ?? 0)}`),
-                r.testsNotRun.length ? 'tests not run' : '',
-                ...r.gaps,
-              ].filter(Boolean)}
-            />
-          ))}
-        </div>
-      )}
+      <DataTable
+        label="Closing and posting"
+        stateKey="fin.books"
+        rows={rows}
+        rowKey={(r) => r.status.id}
+        columns={columns}
+        filters={filters}
+        onRowClick={(r) => onOpen(r.status.companyId)}
+        rowTone={(r) => toneEdge(r.tone)}
+        empty={<Empty title="Every company is closed, posted and passes the tests." />}
+      />
     </Card>
   );
 }
 
+type PaperLine = { r: Row; i: Row['packsDue'][number]; late: boolean };
+const paperFor = (i: PaperLine['i']) => (i.pack === 'audit' ? 'auditor' : 'tax agent');
+const paperState = ({ i, late }: PaperLine) => (late ? 'Overdue' : PACK[i.status][1]);
+
 function Papers({ data, onOpen, onAdd }: { data: FinBoard; onOpen: (id: string) => void; onAdd?: () => void }) {
-  const items = data.rows
+  const items: PaperLine[] = data.rows
     .flatMap((r) => [...r.packsOverdue.map((i) => ({ r, i, late: true })), ...r.packsDue.map((i) => ({ r, i, late: false }))])
     .sort((a, b) => a.i.dueOn.localeCompare(b.i.dueOn));
+  // P107: a table (search, for, team and state filters, pages) in place of the plain table; a row opens the company.
+  const columns: DtColumn<PaperLine>[] = [
+    { id: 'paper', label: 'Paper', value: ({ i }) => i.label, render: ({ i }) => <span className="fin-strong">{i.label}</span>, phone: 'title' },
+    {
+      id: 'company',
+      label: 'Company',
+      value: ({ r }) => r.companyName,
+      render: ({ r }) => (
+        <>
+          {r.companyName} <span className="muted small">· Team {r.status.team}</span>
+        </>
+      ),
+      phone: 'sub',
+    },
+    { id: 'for', label: 'For', value: ({ i }) => paperFor(i), translate: true },
+    { id: 'due', label: 'Due', value: ({ i }) => i.dueOn, sort: 'date', render: ({ i }) => <span className="fin-nowrap">due {dateLabel(i.dueOn)}</span> },
+    {
+      id: 'state',
+      label: 'Status',
+      value: paperState,
+      translate: true,
+      render: (x) => <Chip tone={x.late ? 'crit' : PACK[x.i.status][0]}>{paperState(x)}</Chip>,
+    },
+  ];
+  const filters: DtFilter<PaperLine>[] = [
+    {
+      id: 'for',
+      label: 'For',
+      value: ({ i }) => i.pack,
+      options: [
+        { value: 'audit', label: 'auditor' },
+        { value: 'tax', label: 'tax agent' },
+      ],
+    },
+    { id: 'team', label: 'Team', value: ({ r }) => String(r.status.team), optionLabel: teamLabel },
+    {
+      id: 'state',
+      label: 'Status',
+      value: ({ i, late }) => (late ? 'overdue' : i.status),
+      options: [{ value: 'overdue', label: 'Overdue' }, ...(Object.keys(PACK) as FinPackStatus[]).map((s) => ({ value: s, label: PACK[s][1] }))],
+    },
+  ];
   return (
     <Card
       title={`Papers overdue or due within ${data.rule.packWarnDays} days`}
@@ -443,40 +552,16 @@ function Papers({ data, onOpen, onAdd }: { data: FinBoard; onOpen: (id: string) 
       }
       flush
     >
-      {items.length === 0 ? (
-        <Empty title="Nothing due.">{onAdd ? 'When the auditor or the tax agent asks for something, add it with its due date.' : undefined}</Empty>
-      ) : (
-        <table className="fin-table">
-          <thead>
-            <tr>
-              <th>Paper</th>
-              <th>Company</th>
-              <th>For</th>
-              <th>Due</th>
-              <th>State</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map(({ r, i, late }) => (
-              <tr key={`${r.status.id}-${i.id}`}>
-                <td>
-                  <button type="button" className="fin-link" onClick={() => onOpen(r.status.companyId)}>
-                    {i.label}
-                  </button>
-                </td>
-                <td>
-                  {r.companyName} <span className="muted small">· Team {r.status.team}</span>
-                </td>
-                <td>{i.pack === 'audit' ? 'auditor' : 'tax agent'}</td>
-                <td className="fin-nowrap">due {dateLabel(i.dueOn)}</td>
-                <td>
-                  <Chip tone={late ? 'crit' : PACK[i.status][0]}>{late ? 'Overdue' : PACK[i.status][1]}</Chip>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <DataTable
+        label="Papers"
+        stateKey="fin.papers"
+        rows={items}
+        rowKey={({ r, i }) => `${r.status.id}-${i.id}`}
+        columns={columns}
+        filters={filters}
+        onRowClick={({ r }) => onOpen(r.status.companyId)}
+        empty={<Empty title="Nothing due.">{onAdd ? 'When the auditor or the tax agent asks for something, add it with its due date.' : undefined}</Empty>}
+      />
     </Card>
   );
 }

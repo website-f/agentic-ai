@@ -6,6 +6,8 @@
 import { CalendarBlankIcon, ChatsCircleIcon, CheckCircleIcon, EnvelopeSimpleIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { Card, Facts, PageHead } from '../kit';
 import { Chip, ErrorNotice, Loading, useLoad } from '../ui';
+import { useApp } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 
 interface OfficeAccount {
   connected: boolean;
@@ -46,6 +48,7 @@ function when(iso: string | null): string {
 
 export function OfficeConnections() {
   const { data, error, reload } = useLoad(officeAccount, []);
+  const { go, canOpen } = useApp();
   const open = (path: string) => window.top?.location.assign(path);
   const healthy = !!data?.connected && data.status !== 'error' && data.status !== 'expired';
   return (
@@ -55,6 +58,7 @@ export function OfficeConnections() {
         sub="Your Microsoft 365 is connected once, in the Agentic Office. Prima uses that same connection."
         actions={
           <>
+            <SopHelp id="it-sharepoint-request" />
             <button className="btn" onClick={reload}>Refresh</button>
             <button className="btn btn-primary" onClick={() => open('/mail')}>
               {data?.connected ? 'Manage in the office' : 'Connect Microsoft 365'}
@@ -110,6 +114,17 @@ export function OfficeConnections() {
           </Card>
         </>
       )}
+      {/* P121: the setup request of the standalone Connections page is not part of the office one; staff ask IT instead. */}
+      <Card title="Need a SharePoint site or library?">
+        <p className="muted small">{'Ask IT with a help request about Microsoft 365, with the site or library address if you have one. IT records who owns it and checks it; access itself is given in Microsoft 365, not here.'}</p>
+        {canOpen?.('it') && (
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn btn-sm btn-primary" onClick={() => go({ view: 'it', tab: 'mine' })}>
+              Ask IT for help
+            </button>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

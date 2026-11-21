@@ -7,6 +7,7 @@ import { HomeLaunchpad, SpaceHome } from '../Spaces';
 import { useLoad } from '../ui';
 import { spaceOf, type SpaceId } from '../nav-catalog';
 import '../styles/home.css';
+import { SpaceSops } from './Sop';
 
 /**
  * P91: an app's own home page (`#@hr`): its screens, and the items from this person's home list that belong to it. The
@@ -23,7 +24,7 @@ export function SpaceRoute({ id }: { id: SpaceId }) {
     else if (l.companyId) setCompanyId(l.companyId);
     go({ view: l.view, siteId: l.siteId, personId: l.personId, caseId: l.caseId, tenderId: l.tenderId });
   };
-  return <SpaceHome id={id} menu={menu ?? []} waitingItems={data?.todo} onView={(v) => go({ view: v })} onLink={open} onBack={() => openSpace?.(null)} />;
+  return <SpaceHome id={id} menu={menu ?? []} waitingItems={data?.todo} onView={(v) => go({ view: v })} onLink={open} onBack={() => openSpace?.(null)} extra={<SpaceSops id={id} />} />;
 }
 
 /**

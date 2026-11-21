@@ -5,6 +5,8 @@ import { api, type FwCostBoard } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { DocList, ProofPicker } from './Proof';
 import { NoAddNote } from './FwmAdd';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Recruitment cost (Fauzan, 3 Nov 2026). A foreign worker owned by one company sometimes works under another company's
@@ -46,7 +48,7 @@ const STATUS_LABEL: Record<Charge['status'], string> = {
 
 export function FwCostView() {
   const { data, error } = useLoad(() => api.fwCostBoard(), []);
-  const [tab, setTab] = useState<'charges' | 'placements' | 'rates' | 'ceo'>('charges');
+  const [tab, setTab] = useRouteTab<'charges' | 'placements' | 'rates' | 'ceo'>('charges', ['charges', 'placements', 'rates', 'ceo']);
   const [startAdding, setStartAdding] = useState(0);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="recruitment cost" />;
@@ -64,6 +66,7 @@ export function FwCostView() {
         </div>
         {/* P93: the add at the top for FWM; for everyone else, who adds instead of a silent gap. */}
         <div className="k-head-actions">
+          <SopHelp id="fw-recruitment-cost" />
           {data.can.place ? (
             <button className="btn btn-primary btn-sm" onClick={() => (setTab('placements'), setStartAdding((n) => n + 1))}>
               Record a placement

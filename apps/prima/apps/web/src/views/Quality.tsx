@@ -15,8 +15,11 @@ import {
   type QmsState,
 } from '@prima/core';
 import { api, type CompMatrix, type QmsBoard, type QmsFoundationBoard } from '../api';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
+import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { Faults, Items, Suppliers } from './QualityOps';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Quality and compliance (Fauzan, 5 Nov 2026). One requirements and evidence register for ISO 9001:2015 and the
@@ -25,6 +28,18 @@ import { Faults, Items, Suppliers } from './QualityOps';
  */
 
 type Tab = 'register' | 'foundation' | 'matrix' | 'faults' | 'suppliers' | 'objectives' | 'documents' | 'review';
+/** P121: the tabs a link may ask for (#quality/faults); the screen still opens only the tabs this person has. */
+const QUALITY_TABS: readonly (Tab | '')[] = ['register', 'foundation', 'matrix', 'faults', 'suppliers', 'objectives', 'documents', 'review'];
+const QUALITY_SOP: Record<Tab, string> = {
+  register: 'gov-quality-evidence',
+  foundation: 'gov-quality-evidence',
+  matrix: 'gov-competency',
+  faults: 'gov-service-fault',
+  suppliers: 'gov-supplier-rating',
+  objectives: 'gov',
+  documents: 'gov-controlled-document',
+  review: 'gov-controlled-document',
+};
 type Tone = 'ok' | 'warn' | 'crit' | 'info';
 const STATE_TONE: Record<QmsState, Tone> = {
   awaiting_text: 'info',
@@ -52,7 +67,7 @@ export function QualityView() {
   const hasReg = !!reg.data;
   const hasFnd = !!fnd.data;
   const hasMat = !!mat.data;
-  const [tabPick, setTab] = useState<Tab | null>(null);
+  const [tabPick, setTab] = useRouteTab<Tab | ''>('', QUALITY_TABS);
   const tabs = (
     [
       ['register', 'Requirements register', hasReg],
@@ -80,6 +95,7 @@ export function QualityView() {
         <div className="page-head">
           <h1>Supplier ratings</h1>
           <p className="muted">Rate each supplier on quality, time and paperwork. Prima reminds you when a rating is due.</p>
+          <span style={{ alignSelf: 'flex-start' }}><SopHelp id="gov-supplier-rating" /></span>
         </div>
         <Suppliers data={o} />
       </div>
@@ -91,6 +107,7 @@ export function QualityView() {
         <div className="page-head">
           <h1>Guard skills</h1>
           <p className="muted">Check that each guard can do the job at their post. Prima reminds you when a check is due.</p>
+          <span style={{ alignSelf: 'flex-start' }}><SopHelp id="gov-competency" /></span>
         </div>
         {companies.length > 1 && (
           <Select className="select" aria-label="Company" value={current} onChange={(e) => setCompanyId(e.target.value)} style={{ maxWidth: 360, marginBottom: 8 }}>
@@ -115,6 +132,7 @@ export function QualityView() {
         <p className="notice" data-tone="info">
           Test data. PIKM rows follow the 2022 drafts of Parts 1 and 2. Review and refresher periods approved by the CEO, 8 Nov 2026.
         </p>
+        <span style={{ alignSelf: 'flex-start' }}><SopHelp id={QUALITY_SOP[tab]} /></span>
       </div>
       {companies.length > 1 && tab !== 'foundation' && tab !== 'suppliers' && tab !== 'objectives' && tab !== 'documents' && tab !== 'review' && (
         <Select className="select" aria-label="Company" value={current} onChange={(e) => setCompanyId(e.target.value)} style={{ maxWidth: 360, marginBottom: 8 }}>
@@ -152,7 +170,9 @@ function Register({ data, standard, setStandard }: { data: QmsBoard; standard?: 
   const k = data.kpis;
   const act = useAction();
   const [filter, setFilter] = useState<'open' | 'all'>('open');
+  const [openId, setOpenId] = useState<string | null>(null);
   const rows = data.rows.filter((r) => filter === 'all' || !['checked', 'not_applicable'].includes(r.state));
+  const opened = openId ? data.rows.find((r) => r.requirement.id === openId) : undefined;
   return (
     <>
       <div className="kpis">
@@ -166,19 +186,7 @@ function Register({ data, standard, setStandard }: { data: QmsBoard; standard?: 
       {data.role !== 'company' && data.summary.length > 1 && (
         <details className="panel">
           <summary>All companies at a glance</summary>
-          <div className="list">
-            {data.summary.map((s) => (
-              <div key={s.companyId} className="list-item row" style={head}>
-                <span>{s.companyName}</span>
-                <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
-                  {s.counts.gap > 0 && <Chip tone="crit">{s.counts.gap} gaps</Chip>}
-                  <Chip tone={s.counts.unknown ? 'warn' : 'ok'}>{s.counts.unknown} unknown</Chip>
-                  {s.counts.not_checked > 0 && <Chip tone="warn">{s.counts.not_checked} not checked</Chip>}
-                  <Chip tone="ok">{s.counts.checked} checked</Chip>
-                </span>
-              </div>
-            ))}
-          </div>
+          <DataTable label="All companies at a glance" stateKey="gov.quality.summary" rows={data.summary} rowKey={(s) => s.companyId} columns={SUMMARY_COLUMNS} />
         </details>
       )}
       <section className="panel">
@@ -202,23 +210,60 @@ function Register({ data, standard, setStandard }: { data: QmsBoard; standard?: 
         </div>
         <ErrorNotice error={act.error} />
         {data.role === 'act' && <RequirementForm data={data} />}
-        <div className="list">
-          {!data.rows.length && <div className="empty">No requirements yet. ACT loads the starter list.</div>}
-          {data.rows.length > 0 && !rows.length && <div className="empty">Nothing open.</div>}
-          {rows.map((r) => (
-            <RequirementLine key={r.requirement.id} row={r} data={data} />
-          ))}
-        </div>
+        {/* P107: the register as a table (search, state and owner filters); a row opens its evidence and steps in a drawer. */}
+        {data.rows.length > 0 && !rows.length ? (
+          <div className="empty">Nothing open.</div>
+        ) : (
+          <DataTable
+            label="Requirements register"
+            stateKey="gov.quality.register"
+            rows={rows}
+            rowKey={(r) => r.requirement.id}
+            columns={REG_COLUMNS}
+            filters={REG_FILTERS}
+            searchText={(r) => `${r.signal ?? ''} ${r.gaps.map((g) => g.findingRef).join(' ')}`}
+            onRowClick={(r) => setOpenId(r.requirement.id)}
+            rowTone={(r) => (STATE_TONE[r.state] === 'crit' ? 'crit' : undefined)}
+            empty={<div className="empty">No requirements yet. ACT loads the starter list.</div>}
+          />
+        )}
       </section>
+      {opened && (
+        <Drawer title={reqTitle(opened)} sub={opened.requirement.ownerTitle} onClose={() => setOpenId(null)}>
+          <RequirementLine row={opened} data={data} inDrawer />
+        </Drawer>
+      )}
     </>
   );
 }
 
 type RegRow = QmsBoard['rows'][number];
+type SummaryRow = QmsBoard['summary'][number];
+const reqTitle = (r: RegRow) => `${r.requirement.standard === 'ISO9001' ? 'ISO 9001' : 'PIKM'} ${r.requirement.ref}: ${r.requirement.title}`;
+const REG_COLUMNS: DtColumn<RegRow>[] = [
+  { id: 'req', label: 'Requirement', value: (r) => reqTitle(r), render: (r) => <strong>{reqTitle(r)}</strong>, phone: 'title' },
+  { id: 'owner', label: 'Owner', value: (r) => r.requirement.ownerTitle, phone: 'sub' },
+  { id: 'workflow', label: 'Where in Prima', value: (r) => r.requirement.workflow, hideBelow: 1100 },
+  { id: 'review', label: 'Review by', value: (r) => r.reviewDueOn, sort: 'date', hideBelow: 900 },
+  { id: 'gaps', label: 'Gaps', value: (r) => r.gaps.length, sort: 'number', render: (r) => (r.gaps.length ? <Chip tone="crit">{r.gaps.length}</Chip> : '–') },
+  { id: 'state', label: 'Status', value: (r) => QMS_STATE_LABEL[r.state], translate: true, render: (r) => <Chip tone={STATE_TONE[r.state]}>{QMS_STATE_LABEL[r.state]}</Chip> },
+];
+const REG_FILTERS: DtFilter<RegRow>[] = [
+  { id: 'state', label: 'Status', value: (r) => r.state, optionLabel: (v) => QMS_STATE_LABEL[v as QmsState] ?? v },
+  { id: 'owner', label: 'Owner', value: (r) => r.requirement.ownerTitle },
+  { id: 'standard', label: 'Standard', value: (r) => r.requirement.standard, optionLabel: (v) => (v === 'ISO9001' ? 'ISO 9001:2015' : 'PIKM code') },
+];
+const SUMMARY_COLUMNS: DtColumn<SummaryRow>[] = [
+  { id: 'company', label: 'Company', value: (s) => s.companyName, phone: 'title' },
+  { id: 'gap', label: 'Gaps', value: (s) => s.counts.gap, sort: 'number', render: (s) => (s.counts.gap ? <Chip tone="crit">{s.counts.gap}</Chip> : '0') },
+  { id: 'unknown', label: 'Unknown', value: (s) => s.counts.unknown, sort: 'number' },
+  { id: 'notChecked', label: 'Not checked', value: (s) => s.counts.not_checked, sort: 'number' },
+  { id: 'checked', label: 'Checked', value: (s) => s.counts.checked, sort: 'number' },
+];
 
-function RequirementLine({ row, data }: { row: RegRow; data: QmsBoard }) {
+function RequirementLine({ row, data, inDrawer }: { row: RegRow; data: QmsBoard; inDrawer?: boolean }) {
   const act = useAction();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!inDrawer);
   const [kind, setKind] = useState<QmsEvidenceKind>('prima_record');
   const [label, setLabel] = useState('');
   const [ref, setRef] = useState('');
@@ -249,9 +294,11 @@ function RequirementLine({ row, data }: { row: RegRow; data: QmsBoard }) {
         </div>
         <div className="row" style={{ gap: 4 }}>
           <Chip tone={STATE_TONE[row.state]}>{QMS_STATE_LABEL[row.state]}</Chip>
-          <button className="btn btn-sm" onClick={() => setOpen(!open)} aria-expanded={open}>
-            {open ? 'Close' : 'Open'}
-          </button>
+          {!inDrawer && (
+            <button className="btn btn-sm" onClick={() => setOpen(!open)} aria-expanded={open}>
+              {open ? 'Close' : 'Open'}
+            </button>
+          )}
         </div>
       </div>
       {open && (
@@ -415,8 +462,10 @@ function RequirementForm({ data }: { data: QmsBoard }) {
 function Matrix({ data }: { data: CompMatrix }) {
   const k = data.kpis;
   const [onlyGaps, setOnlyGaps] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
   const act = useAction();
   const rows = data.rows.filter((r) => !onlyGaps || r.gaps || r.dueSoon);
+  const opened = openId ? data.rows.find((r) => r.person.id === openId) : undefined;
   const proposed = data.profiles.filter((p) => p.status === 'proposed');
   return (
     <>
@@ -464,23 +513,40 @@ function Matrix({ data }: { data: CompMatrix }) {
         <p className="muted small">
           Licences and certificates come from HR records; nobody types them again here. Skills are assessed by a manager or officer, never by the person themselves.
         </p>
-        <div className="list">
-          {!rows.length && <div className="empty">Nothing open.</div>}
-          {rows.slice(0, 100).map((r) => (
-            <PersonLine key={r.person.id} row={r} data={data} />
-          ))}
-          {rows.length > 100 && <div className="muted small">Showing 100 of {rows.length}.</div>}
-        </div>
+        {/* P107: everyone in a table (was the first 100); a row opens the person's skills and the assessment form. */}
+        <DataTable
+          label="People"
+          stateKey="gov.quality.people"
+          rows={rows}
+          rowKey={(r) => r.person.id}
+          columns={PEOPLE_COLUMNS}
+          filters={[{ id: 'role', label: 'Role', value: (r) => r.person.role, optionLabel: (v) => COMP_ROLE_LABEL[v as MatRow['person']['role']] ?? v }]}
+          onRowClick={(r) => setOpenId(r.person.id)}
+          rowTone={(r) => (r.gaps ? 'warn' : undefined)}
+          empty={<div className="empty">Nothing open.</div>}
+        />
       </section>
+      {opened && (
+        <Drawer title={`${opened.person.name} · ${opened.person.staffNo}`} sub={opened.person.jobTitle ?? COMP_ROLE_LABEL[opened.person.role]} onClose={() => setOpenId(null)}>
+          <PersonLine row={opened} data={data} inDrawer />
+        </Drawer>
+      )}
     </>
   );
 }
 
 type MatRow = CompMatrix['rows'][number];
+const PEOPLE_COLUMNS: DtColumn<MatRow>[] = [
+  { id: 'name', label: 'Name', value: (r) => r.person.name, render: (r) => <strong>{r.person.name}</strong>, phone: 'title' },
+  { id: 'staffNo', label: 'Staff number', value: (r) => r.person.staffNo },
+  { id: 'job', label: 'Job title', value: (r) => r.person.jobTitle ?? COMP_ROLE_LABEL[r.person.role], phone: 'sub' },
+  { id: 'gaps', label: 'Gaps', value: (r) => r.gaps, sort: 'number', render: (r) => (r.gaps > 0 ? <Chip tone="warn">{r.gaps} gaps</Chip> : <Chip tone="ok">All met</Chip>) },
+  { id: 'dueSoon', label: 'Due soon', value: (r) => r.dueSoon, sort: 'number' },
+];
 
-function PersonLine({ row, data }: { row: MatRow; data: CompMatrix }) {
+function PersonLine({ row, data, inDrawer }: { row: MatRow; data: CompMatrix; inDrawer?: boolean }) {
   const act = useAction();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!inDrawer);
   const [itemId, setItemId] = useState('');
   const [result, setResult] = useState<'competent' | 'not_yet'>('competent');
   const [method, setMethod] = useState<CompMethod>('observation');
@@ -500,9 +566,11 @@ function PersonLine({ row, data }: { row: MatRow; data: CompMatrix }) {
         </div>
         <div className="row" style={{ gap: 4 }}>
           {row.gaps > 0 ? <Chip tone="warn">{row.gaps} gaps</Chip> : <Chip tone="ok">All met</Chip>}
-          <button className="btn btn-sm" onClick={() => setOpen(!open)} aria-expanded={open}>
-            {open ? 'Close' : 'Open'}
-          </button>
+          {!inDrawer && (
+            <button className="btn btn-sm" onClick={() => setOpen(!open)} aria-expanded={open}>
+              {open ? 'Close' : 'Open'}
+            </button>
+          )}
         </div>
       </div>
       {open && (

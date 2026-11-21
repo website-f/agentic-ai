@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { api, type FinDashboard, type FinPack } from '../api';
 import { BankIcon, CalendarCheckIcon, ChartLineUpIcon, MapPinIcon, PrinterIcon, ReceiptIcon, WarningOctagonIcon } from '@phosphor-icons/react';
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
-import { Card, Stat, Stats } from '../kit';
+import { Card, Empty, Stat, Stats } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { printPage } from '../native';
 
 /**
@@ -69,48 +70,46 @@ export function FinanceDashboardTab() {
           />
         </Stats>
       </div>
-      <Card title={`Companies, ${data.period}`} sub="Press a company for its monthly pack" flush>
-        <table className="fin-table">
-          <thead>
-            <tr>
-              <th>Company</th>
-              <th>Close</th>
-              <th className="fin-num">Cash</th>
-              <th className="fin-num">Profit (vs budget)</th>
-              <th className="fin-num">Over 90 days</th>
-              <th className="fin-num">Days to collect</th>
-              <th className="fin-num">Payroll % of revenue</th>
-              <th>Watch</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.rows.map((r) => (
-              <DashRow
-                key={r.companyId}
-                r={r}
-                selected={open === r.companyId}
-                onOpen={() => {
-                  setOpen(open === r.companyId ? null : r.companyId);
-                  setTimeout(() => document.getElementById('fin-pack')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-                }}
-              />
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <th scope="row">Total</th>
-              <td />
-              <td className="fin-num">{rm(t.cash)}</td>
-              <td className="fin-num">
+      <Card
+        title={`Companies, ${data.period}`}
+        sub="Press a company for its monthly pack"
+        flush
+        footer={
+          <div className="fin-lines" style={{ width: '100%' }}>
+            <div className="fin-line fin-strong">
+              <span>Total</span>
+            </div>
+            <div className="fin-line">
+              <span>Cash</span>
+              <span className="fin-num">{rm(t.cash)}</span>
+            </div>
+            <div className="fin-line">
+              <span>Profit (vs budget)</span>
+              <span className="fin-num">
                 {rm(t.profitMonth)} <span className="muted">(budget {rm(t.budgetProfitMonth)})</span>
-              </td>
-              <td className="fin-num">{rm(t.over90)}</td>
-              <td />
-              <td />
-              <td />
-            </tr>
-          </tfoot>
-        </table>
+              </span>
+            </div>
+            <div className="fin-line">
+              <span>Over 90 days</span>
+              <span className="fin-num">{rm(t.over90)}</span>
+            </div>
+          </div>
+        }
+      >
+        {/* P107: a table (search, close filter, sortable figures; cards on a phone); the totals sit under it, as before. */}
+        <DataTable
+          label="Companies"
+          stateKey="fin.dash.companies"
+          rows={data.rows}
+          rowKey={(r) => r.companyId}
+          columns={DASH_COLUMNS}
+          filters={DASH_FILTERS}
+          onRowClick={(r) => {
+            setOpen(open === r.companyId ? null : r.companyId);
+            setTimeout(() => document.getElementById('fin-pack')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+          }}
+          rowTone={(r) => (open === r.companyId ? 'info' : undefined)}
+        />
       </Card>
       {open && (
         <div id="fin-pack" className="fin-anchor">
@@ -121,42 +120,101 @@ export function FinanceDashboardTab() {
   );
 }
 
-function DashRow({ r, onOpen, selected }: { r: Row; onOpen: () => void; selected: boolean }) {
-  const diff = vs(r.profitMonth, r.budgetProfitMonth);
-  return (
-    <tr className="fin-click" data-selected={selected ? 'yes' : undefined} onClick={onOpen}>
-      <td>
-        <button type="button" className="fin-link" aria-expanded={selected} onClick={(e) => (e.stopPropagation(), onOpen())} aria-label={`Open the monthly pack of ${r.company}`}>
-          {r.company}
-        </button>
-      </td>
-      <td>
-        <Chip tone={r.closeStatus === 'approved' ? 'ok' : 'warn'}>{r.closeStatus === 'approved' ? 'Closed' : `Open (${r.openExceptions})`}</Chip>
-      </td>
-      <td className="fin-num">{r.cash == null ? 'no statement' : rm(r.cash)}</td>
-      <td className="fin-num">
-        {rm(r.profitMonth)}
-        {diff != null && (
-          <span className="muted">
-            {' '}
-            ({diff >= 0 ? '+' : ''}
-            {rm(diff)})
-          </span>
-        )}
-      </td>
-      <td className="fin-num">{rm(r.over90)}</td>
-      <td className="fin-num">{r.daysToCollect ?? '–'}</td>
-      <td className="fin-num">{r.payrollPct == null ? '–' : `${r.payrollPct}%`}</td>
-      <td>
-        <span className="fin-chips">
-          {r.firstShortWeek && <Chip tone="crit">Short from {dateLabel(r.firstShortWeek)}</Chip>}
-          {r.lossSites > 0 && <Chip tone="warn">{r.lossSites} site(s) at a loss</Chip>}
-          {r.packReviewed && <Chip tone="ok">Pack reviewed</Chip>}
-        </span>
-      </td>
-    </tr>
-  );
-}
+/** P107: the dashboard's company columns: the same figures and chips as the old rows, now sortable. */
+const DASH_COLUMNS: DtColumn<Row>[] = [
+  { id: 'company', label: 'Company', value: (r) => r.company, render: (r) => <span className="fin-strong">{r.company}</span>, phone: 'title' },
+  {
+    id: 'close',
+    label: 'Close',
+    value: (r) => (r.closeStatus === 'approved' ? 'Closed' : 'Open'),
+    translate: true,
+    render: (r) => <Chip tone={r.closeStatus === 'approved' ? 'ok' : 'warn'}>{r.closeStatus === 'approved' ? 'Closed' : `Open (${r.openExceptions})`}</Chip>,
+  },
+  { id: 'cash', label: 'Cash', value: (r) => r.cash, sort: 'money', render: (r) => (r.cash == null ? 'no statement' : rm(r.cash)) },
+  {
+    id: 'profit',
+    label: 'Profit (vs budget)',
+    value: (r) => r.profitMonth,
+    sort: 'money',
+    render: (r) => {
+      const diff = vs(r.profitMonth, r.budgetProfitMonth);
+      return (
+        <>
+          {rm(r.profitMonth)}
+          {diff != null && (
+            <span className="muted">
+              {' '}
+              ({diff >= 0 ? '+' : ''}
+              {rm(diff)})
+            </span>
+          )}
+        </>
+      );
+    },
+  },
+  { id: 'over90', label: 'Over 90 days', value: (r) => r.over90, sort: 'money', render: (r) => rm(r.over90) },
+  { id: 'days', label: 'Days to collect', value: (r) => r.daysToCollect, sort: 'number', render: (r) => r.daysToCollect ?? '–', hideBelow: 1200 },
+  { id: 'payroll', label: 'Payroll % of revenue', value: (r) => r.payrollPct, sort: 'number', render: (r) => (r.payrollPct == null ? '–' : `${r.payrollPct}%`), hideBelow: 1200 },
+  {
+    id: 'watch',
+    label: 'Watch',
+    render: (r) => (
+      <span className="fin-chips">
+        {r.firstShortWeek && <Chip tone="crit">Short from {dateLabel(r.firstShortWeek)}</Chip>}
+        {r.lossSites > 0 && <Chip tone="warn">{r.lossSites} site(s) at a loss</Chip>}
+        {r.packReviewed && <Chip tone="ok">Pack reviewed</Chip>}
+      </span>
+    ),
+  },
+];
+const DASH_FILTERS: DtFilter<Row>[] = [
+  {
+    id: 'close',
+    label: 'Close',
+    value: (r) => (r.closeStatus === 'approved' ? 'closed' : 'open'),
+    options: [
+      { value: 'closed', label: 'Closed' },
+      { value: 'open', label: 'Open' },
+    ],
+  },
+];
+
+type Site = FinPack['data']['health']['sites'][number];
+/** P107: the pack's profit per site: the same figures (whole ringgit) as before, now sortable. */
+const SITE_COLUMNS: DtColumn<Site>[] = [
+  { id: 'contract', label: 'Contract', value: (s) => `${s.client} · ${s.contractRef}`, phone: 'title' },
+  { id: 'guards', label: 'Guards', value: (s) => s.guards, sort: 'number' },
+  {
+    id: 'money',
+    label: 'Money',
+    value: (s) => s.revenue,
+    sort: 'money',
+    render: (s) => (
+      <>
+        {rm(s.revenue)} {s.basis && <span className="muted">({s.basis})</span>}
+      </>
+    ),
+  },
+  { id: 'cost', label: 'Cost', value: (s) => s.cost, sort: 'money', render: (s) => rm(s.cost) },
+  {
+    id: 'profit',
+    label: 'Profit',
+    value: (s) => s.profit,
+    sort: 'money',
+    render: (s) => <span style={(s.profit ?? 0) < 0 ? { color: 'var(--crit)' } : undefined}>{rm(s.profit)}</span>,
+  },
+];
+const SITE_FILTERS: DtFilter<Site>[] = [
+  {
+    id: 'profit',
+    label: 'Profit',
+    value: (s) => (s.profit == null ? null : s.profit < 0 ? 'loss' : 'ok'),
+    options: [
+      { value: 'loss', label: 'At a loss' },
+      { value: 'ok', label: 'Not at a loss' },
+    ],
+  },
+];
 
 function PackView({ companyId }: { companyId: string }) {
   const [period, setPeriod] = useState<string | undefined>(undefined);
@@ -330,43 +388,16 @@ function PackView({ companyId }: { companyId: string }) {
             Money collected where Prima knows it (government claims paid), else the month&apos;s invoice; less the guards&apos; cost and shared costs at{' '}
             {rm(d.health.perGuardCost)} a guard.
           </p>
-          <div className="fin-scroll fin-framed">
-            <table className="fin-table">
-              <thead>
-                <tr>
-                  <th>Contract</th>
-                  <th className="fin-num">Guards</th>
-                  <th className="fin-num">Money</th>
-                  <th className="fin-num">Cost</th>
-                  <th className="fin-num">Profit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.health.sites.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="muted">
-                      No contracts ran this month.
-                    </td>
-                  </tr>
-                )}
-                {d.health.sites.map((s) => (
-                  <tr key={s.contractId}>
-                    <td>
-                      {s.client} · {s.contractRef}
-                    </td>
-                    <td className="fin-num">{s.guards}</td>
-                    <td className="fin-num">
-                      {rm(s.revenue)} {s.basis && <span className="muted">({s.basis})</span>}
-                    </td>
-                    <td className="fin-num">{rm(s.cost)}</td>
-                    <td className="fin-num" data-neg={(s.profit ?? 0) < 0 ? 'yes' : undefined}>
-                      {rm(s.profit)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/* P107: a table (search, a loss filter, sortable figures; cards on a phone) in place of the plain table. */}
+          <DataTable
+            label="Profit per site (estimate)"
+            stateKey="fin.dash.sites"
+            rows={d.health.sites}
+            rowKey={(s) => s.contractId}
+            columns={SITE_COLUMNS}
+            filters={SITE_FILTERS}
+            empty={<Empty title="No contracts ran this month." />}
+          />
         </section>
         <ErrorNotice error={act.error} />
       </div>

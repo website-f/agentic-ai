@@ -8,7 +8,8 @@ import { Select } from '../SearchSelect';
 import { useEffect, useMemo, useState } from 'react';
 import { monthDates, type RosterStatus } from '@prima/core';
 import { api, type GuardRosterBoard, type MyGuardRoster, type RosterActName } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, useAction, useLoad, type Tone } from '../ui';
 
@@ -66,7 +67,12 @@ export function GuardRosterView() {
       <PageHead
         title="Guard roster (engine)"
         sub="The OM prepares the month, the Area/Zone Supervisor verifies where the site has one, and the Operations Director (private) or OGM (government) publishes. Client limits block publishing; law points are flags to follow up."
-        actions={<Chip tone="warn">Trial: not switched on</Chip>}
+        actions={
+          <>
+            <SopHelp id="ops-guard-roster-month" />
+            <Chip tone="warn">Trial (pay stays trial to 1 Aug 2027)</Chip>
+          </>
+        }
       />
       <Card>
         <div className="hx-form-grid">
@@ -106,7 +112,8 @@ function Board({ b }: { b: GuardRosterBoard }) {
   const act = useAction();
   const [reason, setReason] = useState('');
   const [open, setOpen] = useState<Day | null>(null);
-  const [panel, setPanel] = useState<'grid' | 'coverage' | 'pay' | 'evidence'>('grid');
+  // P121: a link may open one part (#guardroster/coverage, /pay, /evidence).
+  const [panel, setPanel] = useRouteTab<'grid' | 'coverage' | 'pay' | 'evidence'>('grid', ['grid', 'coverage', 'pay', 'evidence']);
   const run = (name: RosterActName, args: unknown[], done: string) => act.run(() => api.rosterAct(name, args), done);
   const v = b.current;
   const editable = b.can.prepare && (!v || v.status === 'draft' || v.status === 'published');

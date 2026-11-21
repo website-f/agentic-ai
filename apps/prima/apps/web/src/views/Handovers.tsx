@@ -1,7 +1,8 @@
 import { Select } from '../SearchSelect';
 import { useContext, useState } from 'react';
 import { ArrowSquareOutIcon, BellIcon, ClockCountdownIcon, TrayIcon } from '@phosphor-icons/react';
-import { Ctx, useApp, type ViewName } from '../App';
+import { Ctx, useApp, useRouteTab, type ViewName } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { ColumnHelper } from './BulkHelper';
 import { MyGuide } from './GuideCard';
 import { ImportButton } from './ImportDrawer';
@@ -59,11 +60,13 @@ const STATUS = { live: 'Ready', in_pr: 'Waits for its department PR', direct: 'A
 const STATUS_TONE = { live: 'ok', in_pr: 'info', direct: 'ok', waits: 'warn' } as const;
 
 export function HandoversView() {
-  const [tab, setTab] = useState<Tab>('mine');
+  // P121: a link may open a tab (#handovers/map).
+  const [tab, setTab] = useRouteTab<Tab>('mine', ['mine', 'guide', 'map', 'import']);
   return (
     <div className="page">
       <PageHead
         title="Hand-overs"
+        actions={<SopHelp id="hr-handover" />}
         sub={
           <>
             Key it once. When one department records something another needs, the right people get it here with a link to the record, so nobody types it

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { api } from '../api';
 import { ErrorNotice, useAction, useLoad } from '../ui';
 import { readAsDataUrl } from './Proof';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 type View = Awaited<ReturnType<typeof api.finExceptionalCash>>;
 type Row = View['rows'][number];
@@ -16,6 +17,7 @@ export function ExceptionalGuardCash({ companyId, picker }: { companyId: string;
   const { data, error, reload } = useLoad(() => api.finExceptionalCash(companyId), [companyId]);
   const act = useAction();
   const [checked, setChecked] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
   if (error && /^Not allowed:/.test(error)) return null;
   if (error) return <>{picker}<ErrorNotice error={error} /></>;
   if (!data) return <p>Loading approved guard cash handovers…</p>;
@@ -41,10 +43,40 @@ export function ExceptionalGuardCash({ companyId, picker }: { companyId: string;
       <label>Upload approved handover<input type="file" accept="application/json,.json" disabled={!checked || act.busy} onChange={e => void submit(e.target.files?.[0])} /></label>
     </div>}
     <ErrorNotice error={act.error} />
-    {!data.rows.length && <p>No approved handovers for this company.</p>}
-    {data.rows.map(r => <CashRow key={r.id} row={r} view={data} reload={reload} />)}
+    {/* P107: the handovers as a table; clicking a row (or Open) shows its evidence and the next workflow form under it, as the card did. */}
+    <DataTable
+      label="Exceptional guard cash"
+      stateKey={`fin.guardcash.${companyId}`}
+      rows={data.rows}
+      rowKey={r => r.id}
+      columns={cashColumns(data)}
+      filters={CASH_FILTERS}
+      onRowClick={r => setOpen(open === r.id ? null : r.id)}
+      rowEnd={r => <button type="button" className="btn btn-sm" onClick={() => setOpen(open === r.id ? null : r.id)}>{open === r.id ? 'Close' : 'Open'}</button>}
+      rowDetail={r => open === r.id ? <CashRow row={r} view={data} reload={reload} /> : null}
+      empty={<p>No approved handovers for this company.</p>}
+    />
   </section>;
 }
+/** The step a row waits for, as the server allows this person (the same rule the form below uses). */
+function nextAction(r: Row, view: View) {
+  return view.canSubmit && r.payout && !r.receipt ? 'receipt' : view.canFinance && r.status === 'submitted' ? 'prepare' : view.canFinance && r.status === 'prepared' ? 'pay' : view.canFinance && r.status === 'paid' && r.receipt ? 'reconcile' : view.canFinance && r.status === 'reconciled' ? (r.treatment?.status === 'pending' ? 'reviewTreatment' : r.accounting || !r.payout ? 'complete' : 'post') : null;
+}
+const ACTION_LABEL = {prepare:'Record cash preparation and custody',pay:'Record actual payment',receipt:'Upload signed acknowledgement',reconcile:'Record cash return and reconciliation',post:'Record payroll accounting',reviewTreatment:'Record Finance/adviser treatment review',complete:'Mark complete'} as const;
+const cashColumns = (view: View): DtColumn<Row>[] => [
+  { id: 'name', label: 'Name', value: r => r.name, render: r => <strong>{r.name}</strong>, phone: 'title' },
+  { id: 'staffNo', label: 'Staff number', value: r => r.staffNo, phone: 'sub', hideBelow: 1100 },
+  { id: 'site', label: 'Site', value: r => r.siteName },
+  { id: 'occasion', label: 'Occasion', value: r => r.occasion, hideBelow: 1200 },
+  { id: 'amount', label: 'Approved', value: r => r.amount, sort: 'money', render: r => rm(r.amount) },
+  { id: 'status', label: 'Status', value: r => r.status, translate: true },
+  { id: 'next', label: 'Next step', value: r => { const a = nextAction(r, view); return a ? ACTION_LABEL[a] : ''; }, translate: true, hideBelow: 1100 },
+];
+const CASH_FILTERS: DtFilter<Row>[] = [
+  { id: 'status', label: 'Status', value: r => r.status },
+  { id: 'site', label: 'Site', value: r => r.siteName },
+  { id: 'occasion', label: 'Occasion', value: r => r.occasion },
+];
 function CashRow({ row: r, view, reload }: { row: Row; view: View; reload: () => void }) {
   const act = useAction();
   const [ref, setRef] = useState('');
@@ -56,13 +88,13 @@ function CashRow({ row: r, view, reload }: { row: Row; view: View; reload: () =>
   const [payrollRef, setPayrollRef] = useState('');
   const [policyRef, setPolicyRef] = useState('');
   const [pendingTreatment, setPendingTreatment] = useState(true);
-  const action = view.canSubmit && r.payout && !r.receipt ? 'receipt' : view.canFinance && r.status === 'submitted' ? 'prepare' : view.canFinance && r.status === 'prepared' ? 'pay' : view.canFinance && r.status === 'paid' && r.receipt ? 'reconcile' : view.canFinance && r.status === 'reconciled' ? (r.treatment?.status === 'pending' ? 'reviewTreatment' : r.accounting || !r.payout ? 'complete' : 'post') : null;
+  const action = nextAction(r, view);
   const go = async () => {
     if (!action) return;
     const payload = action === 'prepare' ? { ref, custodianId: custodian } : action === 'pay' ? { ref, amount: Number(value), atPaid: at, evidence } : action === 'receipt' ? { signedByPersonId: r.personId, paymentRef: r.payout!.ref, amount: r.payout!.amount, signedAt: at, transactionSpecific: signed, evidence } : action === 'post' ? { journalRef: ref, payrollRecordRef: payrollRef, additionalPayrollConfirmed: signed, statutoryRecordsConfirmed: !pendingTreatment && signed, ...(pendingTreatment ? {treatmentStatus:'pending'} : {}), evidence } : action === 'reviewTreatment' ? {policyRef,recordRef:payrollRef,statutoryRecordsConfirmed:signed,evidence} : action === 'complete' ? {} : { ref, returned: Number(value), evidence };
     if (await act.run(() => api.finControlAction(r.companyId, 'exceptionalcash', action, { id: r.id, ...payload }), 'Record saved. Ordinary wages remain payable in full.')) reload();
   };
-  return <article className="panel" style={{ overflowWrap: 'anywhere' }}>
+  return <article data-no-row-click style={{ overflowWrap: 'anywhere' }}>
     <h4>{r.name} · {r.staffNo} · {r.siteName}</h4>
     <p>{r.occasion} · Approved {rm(r.amount)} · {r.status} · {r.id}</p>
     <p>Manual OM request: {r.request.by} at {r.request.at}. Manual approval: {r.approval.by} at {r.approval.at} ({r.approval.id}). Workbook: {r.workbookRef}.</p>
@@ -87,7 +119,7 @@ function CashRow({ row: r, view, reload }: { row: Row; view: View; reload: () =>
       {view.canFinance && r.status === 'prepared' && <button className="btn" disabled={act.busy} onClick={() => void act.run(async () => {
         const result = await api.finControlAction(r.companyId, 'exceptionalcash', 'returnUnpaid', { id: r.id, returned: Number(value), ref, evidence }); reload(); return result;
       }, 'Unpaid cash returned; no payroll expense recorded.')}>Record full unpaid return (independent Finance count)</button>}
-      <button className="btn" disabled={act.busy || ((action === 'receipt' || action === 'post' || action === 'reviewTreatment') && !signed)} onClick={() => void go()}>{({prepare:'Record cash preparation and custody',pay:'Record actual payment',receipt:'Upload signed acknowledgement',reconcile:'Record cash return and reconciliation',post:'Record payroll accounting',reviewTreatment:'Record Finance/adviser treatment review',complete:'Mark complete'})[action]}</button>
+      <button className="btn" disabled={act.busy || ((action === 'receipt' || action === 'post' || action === 'reviewTreatment') && !signed)} onClick={() => void go()}>{ACTION_LABEL[action]}</button>
     </div>}
     <p className="muted small">Prepared or posted records cannot be edited, cancelled or reversed here. A full unpaid return preserves the original approval and requires a different Finance officer. Other corrections need an agreed authorization and payroll/accounting reversal procedure; keep the original evidence and do not submit a substitute payout.</p>
     <ErrorNotice error={act.error} />

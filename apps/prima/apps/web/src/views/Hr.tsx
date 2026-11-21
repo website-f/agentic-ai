@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { GlobeIcon, IdentificationCardIcon, ProhibitIcon, UsersThreeIcon } from '@phosphor-icons/react';
 import { api } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Chip, ErrorNotice, Loading, useLoad } from '../ui';
 import { Card, PageHead, Stat, Stats } from '../kit';
 import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
@@ -19,7 +20,6 @@ import { AppraisalsPanel, HrLegalPanel, OvertimePanel, PoliciesPanel, TrainingPa
 import { PayChangesPanel } from './PayChanges';
 import { HrGuide } from './HrGuide';
 import { AttendanceReportsSummary } from './AttendanceReports';
-import { ATT_TAB_KEY } from './Attendance';
 import { hrKeeps, isOwnerAdmin, p91MayImport } from '@prima/core';
 import { AddImportMenu, jumpTo } from './AddImportMenu';
 import '../styles/people.css';
@@ -39,6 +39,10 @@ const GROUPS: { id: string; title: string; sub: string }[] = [
 function jump(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+/** P121: a link can open the page at one group (#hr/move, from the SOP guide); the page stays one long list. */
+type HrSection = 'papers' | 'pay' | 'move' | 'cases' | 'grow' | 'leave' | 'att';
+const SECTIONS: HrSection[] = ['papers', 'pay', 'move', 'cases', 'grow', 'leave', 'att'];
 
 function Group({ id, title, sub, children }: { id: string; title: string; sub: string; children: ReactNode }) {
   return (
@@ -108,8 +112,17 @@ const PAPER_FILTERS: DtFilter<MonitorRow>[] = [
 
 /** PWVSB central HR monitors every company's workforce papers; each company stays the employer and acts (V7 s.89). */
 export function HrView() {
-  const { setCompanyId, go } = useApp();
+  const { setCompanyId, go, route } = useApp();
   const { data, error } = useLoad(() => api.hrMonitor(), []);
+  const [section] = useRouteTab<HrSection>('papers', SECTIONS);
+  const loaded = !!data;
+  useEffect(() => {
+    if (!loaded || !route?.tab || !SECTIONS.includes(route.tab as HrSection)) return;
+    // The panels below load on their own, so the group can move as they fill: scroll again once they have settled.
+    jump(`hr-g-${section}`);
+    const again = window.setTimeout(() => jump(`hr-g-${section}`), 700);
+    return () => window.clearTimeout(again);
+  }, [loaded, route, section]);
   if (error)
     return (
       <div className="page">
@@ -135,7 +148,12 @@ export function HrView() {
       <PageHead
         title="HR monitor"
         sub="Workforce papers for every company. PWVSB HR follows up; each company is the employer and makes the change. Companies with no data loaded yet show Unknown, never as fine."
-        actions={<HrAddMenu />}
+        actions={
+          <>
+            <SopHelp id="hr" />
+            <HrAddMenu />
+          </>
+        }
       />
       <Stats>
         <Stat label="Staff (companies with data)" value={sum('staff')} icon={<UsersThreeIcon />} tone="info" />
@@ -229,16 +247,8 @@ export function HrView() {
         <CmsHoursPanel />
       </Group>
       <Group {...att}>
-        <AttendanceReportsSummary
-          onOpen={() => {
-            try {
-              sessionStorage.setItem(ATT_TAB_KEY, 'reports');
-            } catch {
-              /* the Attendance screen then opens on its day sheet */
-            }
-            go({ view: 'attendance' });
-          }}
-        />
+        {/* P121: the Attendance screen opens on its monthly reports from the link itself (#attendance/reports). */}
+        <AttendanceReportsSummary onOpen={() => go({ view: 'attendance', tab: 'reports' })} />
       </Group>
     </div>
   );

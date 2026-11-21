@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, type FwStatBoard, type FwStatDraftRow } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Nepali EPF and SOCSO (Fauzan, 5 Nov 2026). The company holding the worker's permit pays KWSP and PERKESO. The company
@@ -45,6 +46,9 @@ export function FwStatView() {
             The company holding the worker's permit pays EPF and SOCSO. The company or branch that used the worker repays that amount every month, for the days
             it used the worker. The salary is paid by the company or branch that uses the worker.
           </p>
+        </div>
+        <div className="k-head-actions">
+          <SopHelp id="fw-epf-socso-recharge" />
         </div>
       </div>
       <div className="kpis">

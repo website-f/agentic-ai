@@ -3,6 +3,7 @@ import { api, type FinControls, type FinDesk } from '../api';
 import { ErrorNotice, dateLabel, useAction, useLoad } from '../ui';
 import { readAsDataUrl, shrinkImage } from './Proof';
 import { ExceptionalGuardCash } from './ExceptionalGuardCash';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 type Co = FinDesk['companies'][number];
 type ReceiptDue = Awaited<ReturnType<typeof api.finDailyCashMine>>['receipts'][number];
 const rm = (n: number) => `RM${n.toFixed(2)}`;
@@ -18,6 +19,19 @@ export function MyDailyCash() {
   if (error) return <ErrorNotice error={error} />;
   return data?.receipts.length ? <ReceiptUploads receipts={data.receipts} reload={reload} /> : null;
 }
+/** P107: the receipts to upload as a table (search, site and company filters, pages); the upload stays on each row. */
+const RECEIPT_COLUMNS: DtColumn<ReceiptDue>[] = [
+  { id: 'name', label: 'Name', value: (r) => r.name, render: (r) => <><strong>{r.name}</strong> (…{r.idLast4})</>, phone: 'title' },
+  { id: 'site', label: 'Site', value: (r) => r.site, phone: 'sub' },
+  { id: 'day', label: 'Date', value: (r) => r.day, sort: 'date', render: (r) => dateLabel(r.day) },
+  { id: 'amount', label: 'Amount', value: (r) => r.amount, sort: 'money', render: (r) => rm(r.amount) },
+  { id: 'company', label: 'Company', value: (r) => r.companyId, hideBelow: 1100 },
+  { id: 'paidBy', label: 'Paid by', value: (r) => r.paidBy, hideBelow: 1200 },
+];
+const RECEIPT_FILTERS: DtFilter<ReceiptDue>[] = [
+  { id: 'site', label: 'Site', value: (r) => r.site },
+  { id: 'company', label: 'Company', value: (r) => r.companyId },
+];
 function ReceiptUploads({ receipts, reload }: { receipts: ReceiptDue[]; reload: () => void }) {
   return (
     <section className="panel">
@@ -31,16 +45,20 @@ function ReceiptUploads({ receipts, reload }: { receipts: ReceiptDue[]; reload: 
         </div>
         <span className="muted small">{receipts.length}</span>
       </div>
-      <div className="list">
-        {receipts.map((r) => (
-          <ReceiptLine key={`${r.listId}-${r.payoutId}`} r={r} reload={reload} />
-        ))}
-      </div>
+      <DataTable
+        label="Signed cash receipts to upload"
+        stateKey="fin.dailycash.receipts"
+        rows={receipts}
+        rowKey={(r) => `${r.listId}-${r.payoutId}`}
+        columns={RECEIPT_COLUMNS}
+        filters={RECEIPT_FILTERS}
+        rowEnd={(r) => <ReceiptUpload r={r} reload={reload} />}
+      />
     </section>
   );
 }
 
-function ReceiptLine({ r, reload }: { r: ReceiptDue; reload: () => void }) {
+function ReceiptUpload({ r, reload }: { r: ReceiptDue; reload: () => void }) {
   const { act, go } = useGo(r.companyId);
   const [err, setErr] = useState<string | null>(null);
   const upload = async (f: File | undefined) => {
@@ -53,14 +71,8 @@ function ReceiptLine({ r, reload }: { r: ReceiptDue; reload: () => void }) {
     if (x) reload();
   };
   return (
-    <div className="list-item" style={{ display: 'block' }}>
-      <div>
-        <strong>{r.name}</strong> (…{r.idLast4}) · {r.site} · {dateLabel(r.day)} · {rm(r.amount)}
-        <div className="muted small">
-          {r.companyId} · paid in cash by {r.paidBy}
-        </div>
-      </div>
-      <label className="btn btn-sm" style={{ marginTop: 6 }}>
+    <div>
+      <label className="btn btn-sm">
         Upload signed receipt
         <input
           type="file"

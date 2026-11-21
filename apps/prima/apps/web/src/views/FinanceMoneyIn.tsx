@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { finStampPenalty } from '@prima/core';
 import { api, type FinControls, type FinDesk } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction, useLoad } from '../ui';
+import { DataTable, type DtAction } from '../DataTable';
 
 /**
  * Money in (Fauzan, 2 Nov 2026: yes to suggestions 1, 2 and 5). Every contract's monthly invoice in SQL Account, government
@@ -20,6 +21,19 @@ function useGo(companyId: string) {
     act.run(() => api.finControlAction(companyId, area, action, input), msg);
   return { act, go };
 }
+
+/**
+ * P107: which step box is open under each table row ("Record invoice", "Followed up"…). The row's buttons now sit in the
+ * row's action menu; pressing one again closes its box, as the old toggle buttons did.
+ */
+function useRowModes<M extends string>() {
+  const [modes, setModes] = useState<Record<string, M | null>>({});
+  const mode = (id: string) => modes[id] ?? null;
+  const set = (id: string, m: M | null) => setModes((x) => ({ ...x, [id]: m }));
+  const toggle = (id: string, m: M) => setModes((x) => ({ ...x, [id]: x[id] === m ? null : m }));
+  return { mode, set, toggle };
+}
+const block = { display: 'block' } as const;
 
 export function MoneyInPanels({ v, co }: { v: FinControls; co: Co }) {
   return (
@@ -39,6 +53,7 @@ function Billing({ v, co }: { v: FinControls; co: Co }) {
   const other = useLoad(() => (period === v.moneyIn.period ? Promise.resolve(null) : api.finControls(co.companyId, period)), [period, co.companyId]);
   const m = period === v.moneyIn.period ? v.moneyIn : other.data?.moneyIn;
   const missing = m?.billing.filter((r) => r.status === 'missing').length ?? 0;
+  const modes = useRowModes<BillMode>();
   return (
     <section className="panel">
       <div className="panel-head">
@@ -49,81 +64,94 @@ function Billing({ v, co }: { v: FinControls; co: Co }) {
             contract with neither is named at the close.
           </div>
         </div>
-        <Select className="select" aria-label="Billing month" value={period} onChange={(e) => setPeriod(e.target.value)}>
-          {v.moneyIn.periods.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </Select>
       </div>
-      <ErrorNotice error={other.error} />
       {m && missing > 0 && (
         <div className="notice" data-tone="warn" role="status">
           {missing} contract(s) with no invoice recorded for {m.period}.
         </div>
       )}
-      <div className="list">
-        {m && m.billing.length === 0 && <div className="empty">No contracts ran in {m.period}.</div>}
-        {m?.billing.map((r) => (
-          <BillingLine key={r.contractId} r={r} co={co} period={m.period} />
-        ))}
-      </div>
+      {/* P107: the month's contracts as a table; the billing month picker sits in the table's bar, the steps in each row's menu. */}
+      <DataTable
+        label="Contracts billed"
+        stateKey="fin.billing"
+        rows={m?.billing}
+        rowKey={(r) => r.contractId}
+        loading={!m && other.loading}
+        loadingWhat="billing"
+        error={other.error}
+        toolbar={
+          <Select className="select" aria-label="Billing month" value={period} onChange={(e) => setPeriod(e.target.value)}>
+            {v.moneyIn.periods.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </Select>
+        }
+        searchText={(r) => `${r.none?.reason ?? ''} ${r.invoice?.note ?? ''}`}
+        columns={[
+          { id: 'client', label: 'Client', value: (r) => r.client, phone: 'title', render: (r) => <span className="fin-strong">{r.client}</span> },
+          { id: 'contract', label: 'Contract', value: (r) => r.contractRef, phone: 'sub' },
+          {
+            id: 'expected',
+            label: 'Contract amount',
+            value: (r) => r.expected,
+            sort: 'money',
+            render: (r) => (r.expected == null ? 'by hours worked' : rm(r.expected)),
+          },
+          { id: 'sent', label: 'Sent to client', value: (r) => r.sentAmount, sort: 'money', render: (r) => rm(r.sentAmount), hideBelow: 1200 },
+          {
+            id: 'invoice',
+            label: 'Invoice',
+            value: (r) => r.invoice?.no ?? '',
+            render: (r) => (
+              <span className="small">
+                {r.invoice
+                  ? `${r.invoice.no} ${dateLabel(r.invoice.date)} ${rm(r.invoice.amount)}${r.invoice.note ? ` (${r.invoice.note})` : ''}, ${r.invoice.by}`
+                  : ''}
+                {r.invoice && r.none ? ' · ' : ''}
+                {r.none ? `no invoice: ${r.none.reason} (${r.none.by}${r.none.checked ? `; checked by ${r.none.checked.by}` : ''})` : ''}
+                {!r.invoice && !r.none ? '–' : ''}
+              </span>
+            ),
+          },
+          { id: 'status', label: 'Status', value: billingStatus, translate: true, render: (r) => <Chip tone={BILL_TONE[r.status] ?? 'crit'}>{billingStatus(r)}</Chip> },
+        ]}
+        filters={[{ id: 'status', label: 'Status', value: billingStatus }]}
+        actions={(r) => {
+          const id = m ? `${m.period}:${r.contractId}` : r.contractId;
+          return [
+            { label: 'Record invoice', hidden: r.status === 'invoiced', onClick: () => modes.toggle(id, 'invoice') },
+            { label: 'No invoice this month', hidden: r.status !== 'missing', onClick: () => modes.toggle(id, 'none') },
+            { label: 'Check the reason', hidden: r.status !== 'none_to_check', onClick: () => modes.toggle(id, 'check') },
+          ];
+        }}
+        rowDetail={(r) => {
+          if (!m) return null;
+          const id = `${m.period}:${r.contractId}`;
+          const mode = modes.mode(id);
+          return mode ? <BillingStep key={`${id}:${mode}`} r={r} co={co} period={m.period} mode={mode} onDone={() => modes.set(id, null)} /> : null;
+        }}
+        empty={m ? <div className="empty">No contracts ran in {m.period}.</div> : undefined}
+      />
     </section>
   );
 }
 
-function BillingLine({ r, co, period }: { r: MoneyIn['billing'][number]; co: Co; period: string }) {
+type BillMode = 'invoice' | 'none' | 'check';
+type BillRow = MoneyIn['billing'][number];
+const billingStatus = (r: BillRow) =>
+  r.status === 'invoiced' ? 'Invoiced' : r.status === 'none_checked' ? 'No invoice, checked' : r.status === 'none_to_check' ? 'No invoice, to check' : 'Missing';
+const BILL_TONE: Record<string, Parameters<typeof Chip>[0]['tone']> = { invoiced: 'ok', none_checked: 'neutral', none_to_check: 'warn', missing: 'crit' };
+
+/** One contract's billing step (record the invoice, or why there is none, or check that reason), under its row. */
+function BillingStep({ r, co, period, mode, onDone }: { r: BillRow; co: Co; period: string; mode: BillMode; onDone: () => void }) {
   const { act, go } = useGo(co.companyId);
   const [form, setForm] = useState({ invoiceNo: '', invoiceDate: '', amount: r.expected ?? r.sentAmount ?? 0, note: '' });
-  const [mode, setMode] = useState<'invoice' | 'none' | 'check' | null>(null);
   const [text, setText] = useState('');
-  const chip =
-    r.status === 'invoiced' ? (
-      <Chip tone="ok">Invoiced</Chip>
-    ) : r.status === 'none_checked' ? (
-      <Chip tone="neutral">No invoice, checked</Chip>
-    ) : r.status === 'none_to_check' ? (
-      <Chip tone="warn">No invoice, to check</Chip>
-    ) : (
-      <Chip tone="crit">Missing</Chip>
-    );
   const base = { contractId: r.contractId, period };
   return (
-    <div className="list-item fin-stack">
-      <div className="row fin-between">
-        <div>
-          <div className="fin-strong">
-            {r.client} · {r.contractRef}
-          </div>
-          <div className="muted small">
-            Contract amount {r.expected == null ? 'by hours worked' : rm(r.expected)}
-            {r.sentAmount != null ? ` · sent to client ${rm(r.sentAmount)}` : ''}
-            {r.invoice
-              ? ` · ${r.invoice.no} ${dateLabel(r.invoice.date)} ${rm(r.invoice.amount)}${r.invoice.note ? ` (${r.invoice.note})` : ''}, ${r.invoice.by}`
-              : ''}
-            {r.none ? ` · no invoice: ${r.none.reason} (${r.none.by}${r.none.checked ? `; checked by ${r.none.checked.by}` : ''})` : ''}
-          </div>
-        </div>
-        {chip}
-      </div>
-      <div className="row">
-        {r.status !== 'invoiced' && (
-          <button className="btn btn-sm" aria-pressed={mode === 'invoice'} onClick={() => setMode(mode === 'invoice' ? null : 'invoice')}>
-            Record invoice
-          </button>
-        )}
-        {r.status === 'missing' && (
-          <button className="btn btn-sm btn-ghost" aria-pressed={mode === 'none'} onClick={() => setMode(mode === 'none' ? null : 'none')}>
-            No invoice this month
-          </button>
-        )}
-        {r.status === 'none_to_check' && (
-          <button className="btn btn-sm" aria-pressed={mode === 'check'} onClick={() => setMode(mode === 'check' ? null : 'check')}>
-            Check the reason
-          </button>
-        )}
-      </div>
+    <div className="fin-stack">
       {mode === 'invoice' && (
         <div className="row">
           <input
@@ -158,7 +186,7 @@ function BillingLine({ r, co, period }: { r: MoneyIn['billing'][number]; co: Co;
           <button
             className="btn btn-primary btn-sm"
             disabled={act.busy || !form.invoiceNo.trim() || !form.invoiceDate || !form.amount}
-            onClick={() => go('billing', 'invoice', { ...base, ...form }, 'Invoice recorded.').then((x) => x && setMode(null))}
+            onClick={() => go('billing', 'invoice', { ...base, ...form }, 'Invoice recorded.').then((x) => x && onDone())}
           >
             Save
           </button>
@@ -177,7 +205,7 @@ function BillingLine({ r, co, period }: { r: MoneyIn['billing'][number]; co: Co;
             <button
               className="btn btn-sm"
               disabled={act.busy || text.trim().length < 5}
-              onClick={() => go('billing', 'none', { ...base, reason: text }, 'Sent for a check.').then((x) => x && setMode(null))}
+              onClick={() => go('billing', 'none', { ...base, reason: text }, 'Sent for a check.').then((x) => x && onDone())}
             >
               Save
             </button>
@@ -186,14 +214,14 @@ function BillingLine({ r, co, period }: { r: MoneyIn['billing'][number]; co: Co;
               <button
                 className="btn btn-primary btn-sm"
                 disabled={act.busy || !text.trim()}
-                onClick={() => go('billing', 'check', { ...base, comment: text }, 'Checked.').then((x) => x && setMode(null))}
+                onClick={() => go('billing', 'check', { ...base, comment: text }, 'Checked.').then((x) => x && onDone())}
               >
                 Agree
               </button>
               <button
                 className="btn btn-sm"
                 disabled={act.busy || text.trim().length < 5}
-                onClick={() => go('billing', 'check', { ...base, ok: false, comment: text }, 'Sent back: bill it.').then((x) => x && setMode(null))}
+                onClick={() => go('billing', 'check', { ...base, ok: false, comment: text }, 'Sent back: bill it.').then((x) => x && onDone())}
               >
                 Not agreed, bill it
               </button>
@@ -213,6 +241,7 @@ function GovtClaims({ m, co }: { m: MoneyIn; co: Co }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ agency: '', invoiceNo: '', amount: 0, claimRef: '', submittedOn: '', contractId: '' });
   const open = m.govt.filter((c) => c.status === 'submitted' || c.status === 'queried');
+  const modes = useRowModes<GovtMode>();
   return (
     <section className="panel">
       <div className="panel-head">
@@ -301,71 +330,86 @@ function GovtClaims({ m, co }: { m: MoneyIn; co: Co }) {
           {open.length} waiting, {rm(open.reduce((n, c) => n + c.amount, 0))}; {open.filter((c) => c.overdue).length} past the expected date.
         </div>
       )}
-      <div className="list">
-        {m.govt.length === 0 && <div className="empty">No government claims recorded.</div>}
-        {m.govt.map((c) => (
-          <GovtLine key={c.id} c={c} co={co} unidentified={m.unidentified} />
-        ))}
-      </div>
+      {/* P107: the claims as a table; the follow-up steps sit in each row's menu, their box and the claim's notes under the row. */}
+      <DataTable
+        label="Government claims"
+        stateKey="fin.govt-claims"
+        rows={m.govt}
+        rowKey={(c) => c.id}
+        searchText={(c) => c.log.map((l) => l.text).join(' ')}
+        columns={[
+          { id: 'agency', label: 'Agency', value: (c) => c.agency, phone: 'title', render: (c) => <span className="fin-strong">{c.agency}</span> },
+          { id: 'invoice', label: 'Invoice', value: (c) => c.invoiceNo, phone: 'sub' },
+          { id: 'ref', label: 'Reference', value: (c) => c.claimRef, phone: 'hidden', hideBelow: 1200 },
+          { id: 'amount', label: 'Amount', value: (c) => c.amount, sort: 'money', render: (c) => rm(c.amount) },
+          { id: 'submitted', label: 'Submitted', value: (c) => c.submittedOn, sort: 'date', phone: 'hidden', hideBelow: 1100 },
+          { id: 'expected', label: 'Expected by', value: (c) => c.expectedBy, sort: 'date' },
+          { id: 'daysOut', label: 'Days out', value: (c) => c.daysOut, sort: 'number' },
+          { id: 'status', label: 'Status', value: govtStatus, translate: true, render: (c) => <Chip tone={GOVT_TONE[govtStatus(c)]}>{govtStatus(c)}</Chip> },
+        ]}
+        filters={[
+          { id: 'status', label: 'Status', value: govtStatus },
+          { id: 'agency', label: 'Agency', value: (c) => c.agency },
+        ]}
+        actions={(c) =>
+          c.status === 'submitted' || c.status === 'queried'
+            ? (['follow', 'query', 'resubmit', 'cancel'] as const).map(
+                (k): DtAction => ({
+                  label: { follow: 'Followed up', query: 'Agency queried it', resubmit: 'Resubmitted', cancel: 'Cancel' }[k],
+                  onClick: () => modes.toggle(c.id, k),
+                }),
+              )
+            : []
+        }
+        rowDetail={(c) => {
+          const open = c.status === 'submitted' || c.status === 'queried';
+          const mode = modes.mode(c.id);
+          const shows = c.paid || (c.nextOn && open) || c.log.length > 0 || mode || (open && m.unidentified.some((u) => u.suggest.some((s) => s.claimId === c.id)));
+          return shows ? <GovtLine c={c} co={co} unidentified={m.unidentified} mode={mode} onDone={() => modes.set(c.id, null)} /> : null;
+        }}
+        empty={<div className="empty">No government claims recorded.</div>}
+      />
     </section>
   );
 }
 
-function GovtLine({ c, co, unidentified }: { c: MoneyIn['govt'][number]; co: Co; unidentified: MoneyIn['unidentified'] }) {
+type Govt = MoneyIn['govt'][number];
+type GovtMode = 'follow' | 'query' | 'resubmit' | 'cancel';
+const govtStatus = (c: Govt) =>
+  c.status === 'paid' ? 'Paid' : c.status === 'cancelled' ? 'Cancelled' : c.stale ? 'Late, follow up' : c.overdue ? 'Late' : c.status === 'queried' ? 'Queried' : 'Waiting';
+const GOVT_TONE: Record<string, Parameters<typeof Chip>[0]['tone']> = {
+  Paid: 'ok',
+  Cancelled: 'neutral',
+  'Late, follow up': 'crit',
+  Late: 'warn',
+  Queried: 'warn',
+  Waiting: 'neutral',
+};
+
+/** Under a claim's row: when it was paid, the next follow-up, the last note, the bank lines that may pay it, and the open step's box. */
+function GovtLine({ c, co, unidentified, mode, onDone }: { c: Govt; co: Co; unidentified: MoneyIn['unidentified']; mode: GovtMode | null; onDone: () => void }) {
   const { act, go } = useGo(co.companyId);
-  const [mode, setMode] = useState<'follow' | 'query' | 'resubmit' | 'cancel' | null>(null);
   const [text, setText] = useState('');
   const [on, setOn] = useState('');
   const open = c.status === 'submitted' || c.status === 'queried';
   const lines = unidentified.filter((u) => u.suggest.some((s) => s.claimId === c.id));
-  const chip =
-    c.status === 'paid' ? (
-      <Chip tone="ok">Paid</Chip>
-    ) : c.status === 'cancelled' ? (
-      <Chip tone="neutral">Cancelled</Chip>
-    ) : c.stale ? (
-      <Chip tone="crit">Late, follow up</Chip>
-    ) : c.overdue ? (
-      <Chip tone="warn">Late</Chip>
-    ) : c.status === 'queried' ? (
-      <Chip tone="warn">Queried</Chip>
-    ) : (
-      <Chip tone="neutral">Waiting</Chip>
-    );
   const last = c.log[c.log.length - 1];
   return (
-    <div className="list-item fin-stack">
-      <div className="row fin-between">
-        <div>
-          <div className="fin-strong">
-            {c.agency} · {c.invoiceNo} · {rm(c.amount)}
-          </div>
-          <div className="muted small">
-            {c.claimRef} · submitted {dateLabel(c.submittedOn)} · expected by {dateLabel(c.expectedBy)}
-            {c.daysOut != null ? ` · ${c.daysOut} days out` : ''}
-            {c.paid ? ` · paid ${dateLabel(c.paid.date)} ${rm(c.paid.amount)} (${c.paid.how === 'auto' ? 'found by Prima' : c.paid.by})` : ''}
-            {c.nextOn && open ? ` · next follow-up ${dateLabel(c.nextOn)}` : ''}
-          </div>
-          {last && (
-            <div className="muted small">
-              Last: {last.text} ({last.by})
-            </div>
-          )}
+    <div className="fin-stack">
+      {(c.paid || (c.nextOn && open)) && (
+        <div className="muted small">
+          {c.paid ? `paid ${dateLabel(c.paid.date)} ${rm(c.paid.amount)} (${c.paid.how === 'auto' ? 'found by Prima' : c.paid.by})` : ''}
+          {c.paid && c.nextOn && open ? ' · ' : ''}
+          {c.nextOn && open ? `next follow-up ${dateLabel(c.nextOn)}` : ''}
         </div>
-        {chip}
-      </div>
-      {open && (
+      )}
+      {last && (
+        <div className="muted small">
+          Last: {last.text} ({last.by})
+        </div>
+      )}
+      {open && lines.length > 0 && (
         <div className="row">
-          {(['follow', 'query', 'resubmit', 'cancel'] as const).map((k) => (
-            <button
-              key={k}
-              className={`btn btn-sm${k === 'cancel' ? ' btn-ghost' : ''}`}
-              aria-pressed={mode === k}
-              onClick={() => setMode(mode === k ? null : k)}
-            >
-              {{ follow: 'Followed up', query: 'Agency queried it', resubmit: 'Resubmitted', cancel: 'Cancel' }[k]}
-            </button>
-          ))}
           {lines.map((u) => (
             <button
               key={u.lineId}
@@ -418,7 +462,7 @@ function GovtLine({ c, co, unidentified }: { c: MoneyIn['govt'][number]; co: Co;
               go('govt', mode, { claimId: c.id, comment: text, ...(mode === 'resubmit' ? { submittedOn: on } : on ? { nextOn: on } : {}) }, 'Saved.').then(
                 (x) => {
                   if (x) {
-                    setMode(null);
+                    onDone();
                     setText('');
                     setOn('');
                   }
@@ -438,6 +482,7 @@ function GovtLine({ c, co, unidentified }: { c: MoneyIn['govt'][number]; co: Co;
 // ---------- Unidentified money in ----------
 
 function Unidentified({ m, co }: { m: MoneyIn; co: Co }) {
+  const [allocating, setAllocating] = useState<Record<string, boolean>>({});
   return (
     <section className="panel">
       <div className="panel-head">
@@ -449,12 +494,59 @@ function Unidentified({ m, co }: { m: MoneyIn; co: Co }) {
           </div>
         </div>
       </div>
-      <div className="list">
-        {m.unidentified.length === 0 && <div className="empty">Nothing to identify.</div>}
-        {m.unidentified.map((u) => (
-          <UnidLine key={u.lineId} u={u} co={co} />
-        ))}
-      </div>
+      {/* P107: the money to identify as a table; "Allocate" opens the same box under the row. */}
+      <DataTable
+        label="Money in to identify"
+        stateKey="fin.money-in-unidentified"
+        rows={m.unidentified}
+        rowKey={(u) => u.lineId}
+        columns={[
+          { id: 'date', label: 'Date', value: (u) => u.date, sort: 'date' },
+          { id: 'amount', label: 'Amount', value: (u) => u.amount, sort: 'money', render: (u) => <span className="fin-strong">{rm(u.amount)}</span> },
+          { id: 'description', label: 'Description', value: (u) => u.description, phone: 'title' },
+          { id: 'ref', label: 'Reference', value: (u) => u.ref, phone: 'sub', hideBelow: 1100 },
+          { id: 'allocateBy', label: 'Allocate by', value: (u) => u.allocateBy, sort: 'date' },
+          {
+            id: 'days',
+            label: 'Days',
+            value: (u) => u.days,
+            sort: 'number',
+            render: (u) => <Chip tone={u.late ? 'crit' : 'warn'}>{u.late ? `${u.days} days, late` : `${u.days} days`}</Chip>,
+          },
+        ]}
+        filters={[
+          {
+            id: 'late',
+            label: 'Status',
+            value: (u) => (u.late ? 'late' : 'ontime'),
+            options: [
+              { value: 'late', label: 'Late' },
+              { value: 'ontime', label: 'On time' },
+            ],
+          },
+        ]}
+        rowEnd={(u) =>
+          allocating[u.lineId] ? null : (
+            <button className="btn btn-sm" onClick={() => setAllocating((x) => ({ ...x, [u.lineId]: true }))}>
+              Allocate
+            </button>
+          )
+        }
+        rowDetail={(u) =>
+          allocating[u.lineId] ? (
+            <UnidLine u={u} co={co} />
+          ) : u.suggest.length > 0 ? (
+            <div className="row">
+              {u.suggest.map((s) => (
+                <span key={s.claimId} className="muted small">
+                  Same amount as government claim {s.invoiceNo} ({s.agency}): link it from the claim.
+                </span>
+              ))}
+            </div>
+          ) : null
+        }
+        empty={<div className="empty">Nothing to identify.</div>}
+      />
       {m.toCheck.length > 0 && <h4 className="fin-mt">Allocations to check</h4>}
       <div className="list">
         {m.toCheck.map((a) => (
@@ -465,36 +557,13 @@ function Unidentified({ m, co }: { m: MoneyIn; co: Co }) {
   );
 }
 
+/** The allocation box for one bank line (under its row once "Allocate" is pressed). */
 function UnidLine({ u, co }: { u: MoneyIn['unidentified'][number]; co: Co }) {
   const { act, go } = useGo(co.companyId);
-  const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ to: 'invoice', ref: '', payer: '', note: '' });
   return (
-    <div className="list-item fin-stack">
-      <div className="row fin-between">
-        <div>
-          <div className="fin-strong">
-            {rm(u.amount)} · {dateLabel(u.date)}
-          </div>
-          <div className="muted small">
-            {u.description}
-            {u.ref ? ` · ${u.ref}` : ''} · allocate by {dateLabel(u.allocateBy)}
-          </div>
-        </div>
-        <Chip tone={u.late ? 'crit' : 'warn'}>{u.late ? `${u.days} days, late` : `${u.days} days`}</Chip>
-      </div>
-      {!open ? (
-        <div className="row">
-          <button className="btn btn-sm" onClick={() => setOpen(true)}>
-            Allocate
-          </button>
-          {u.suggest.map((s) => (
-            <span key={s.claimId} className="muted small">
-              Same amount as government claim {s.invoiceNo} ({s.agency}): link it from the claim.
-            </span>
-          ))}
-        </div>
-      ) : (
+    <div className="fin-stack">
+      {(
         <div className="row">
           <select className="select" aria-label="What it is for" value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })}>
             <option value="invoice">Customer invoice</option>
@@ -598,6 +667,7 @@ export function StampDuty({ v, co }: { v: FinControls; co: Co }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ kind: 'client_contract', contractId: '', title: '', counterparty: '', signedOn: '', value: 0 });
   const open = s.items.filter((x) => x.status !== 'closed');
+  const modes = useRowModes<string>();
   return (
     <section className="panel">
       <div className="panel-head">
@@ -688,12 +758,64 @@ export function StampDuty({ v, co }: { v: FinControls; co: Co }) {
       )}
       <ErrorNotice error={act.error} />
       {s.notListed.length > 0 && <div className="muted small">Contracts signed lately and not on this list: {s.notListed.map((c) => c.ref).join(', ')}.</div>}
-      <div className="list">
-        {open.length === 0 && <div className="empty">Nothing to stamp or refund.</div>}
-        {s.items.map((it) => (
-          <StampLine key={it.id} it={it} co={co} />
-        ))}
-      </div>
+      {open.length === 0 && s.items.length > 0 && <div className="empty">Nothing to stamp or refund.</div>}
+      {/* P107: the agreements as a table; the stamping and refund steps sit in each row's menu, their box under the row. */}
+      <DataTable
+        label="Stamp duty"
+        stateKey="fin.stamp"
+        rows={s.items}
+        rowKey={(it) => it.id}
+        searchText={(it) => `${it.refund?.reason ?? ''} ${it.state.what ?? ''}`}
+        columns={[
+          { id: 'title', label: 'Agreement', value: (it) => it.title, phone: 'title', render: (it) => <span className="fin-strong">{it.title}</span> },
+          { id: 'kind', label: 'Type', value: (it) => STAMP_KIND[it.kind] ?? it.kind, translate: true, phone: 'sub' },
+          { id: 'signed', label: 'Date signed', value: (it) => it.signedOn, sort: 'date' },
+          { id: 'value', label: 'Value', value: (it) => it.value, sort: 'money', render: (it) => (it.value != null ? rm(it.value) : '–') },
+          {
+            id: 'cert',
+            label: 'Certificate',
+            value: (it) => it.stamped?.certNo ?? '',
+            render: (it) =>
+              it.stamped ? (
+                <span className="small">
+                  {`${it.stamped.certNo} ${dateLabel(it.stamped.on)} duty ${rm(it.stamped.duty)}${it.stamped.penalty ? ` + penalty ${rm(it.stamped.penalty)}` : ''}${it.stamped.checked ? `, checked by ${it.stamped.checked.by}` : ''}`}
+                </span>
+              ) : (
+                '–'
+              ),
+          },
+          {
+            id: 'status',
+            label: 'Status',
+            value: (it) => it.status.replace('_', ' '),
+            translate: true,
+            render: (it) => (
+              <Chip tone={it.state.late ? 'crit' : it.state.due ? 'warn' : it.status === 'closed' ? 'neutral' : 'ok'}>{it.status.replace('_', ' ')}</Chip>
+            ),
+          },
+        ]}
+        filters={[
+          { id: 'kind', label: 'Type', value: (it) => it.kind, optionLabel: (k) => STAMP_KIND[k] ?? k },
+          { id: 'status', label: 'Status', value: (it) => it.status.replace('_', ' ') },
+        ]}
+        actions={(it) => {
+          const r = it.refund;
+          const step = (k: string, label: string, show: boolean): DtAction => ({ label, hidden: !show, onClick: () => modes.toggle(it.id, k) });
+          return [
+            step('stamped', 'Record certificate', it.status === 'to_stamp'),
+            step('check', 'Check certificate', it.status === 'stamped' && !!it.stamped && !it.stamped.checked),
+            step('cancelled', 'Agreement cancelled', it.status === 'to_stamp' || it.status === 'stamped'),
+            step('docs', 'Refund documents', it.status === 'refund_open'),
+            step('submit', 'Submitted to LHDN', it.status === 'refund_open' && !!r && r.docs.length > 0),
+            step('outcome', 'LHDN answered', it.status === 'refund_submitted'),
+          ];
+        }}
+        rowDetail={(it) => {
+          const mode = modes.mode(it.id);
+          return it.refund || it.state.what || mode ? <StampLine it={it} co={co} mode={mode} onDone={() => modes.set(it.id, null)} /> : null;
+        }}
+        empty={<div className="empty">Nothing to stamp or refund.</div>}
+      />
     </section>
   );
 }
@@ -705,47 +827,23 @@ function useGo2(companyId: string) {
   return { act, go };
 }
 
-function StampLine({ it, co }: { it: Stamp['items'][number]; co: Co }) {
+/** Under an agreement's row: the refund so far, what is due next, and the open step's box. */
+function StampLine({ it, co, mode, onDone }: { it: Stamp['items'][number]; co: Co; mode: string | null; onDone: () => void }) {
   const { act, go } = useGo2(co.companyId);
   const [f, setF] = useState({ certNo: '', on: '', duty: 0, penalty: 0, comment: '', ref: '', amount: 0, docs: '', result: 'approved' });
-  const [mode, setMode] = useState<string | null>(null);
   const base = { stampId: it.id };
   const r = it.refund;
-  const step = (action: string, extra: Record<string, unknown>, msg: string) => go('stamp', action, { ...base, ...extra }, msg).then((x) => x && setMode(null));
-  const btn = (k: string, label: string) => (
-    <button key={k} className="btn btn-sm" aria-pressed={mode === k} onClick={() => setMode(mode === k ? null : k)}>
-      {label}
-    </button>
-  );
+  const step = (action: string, extra: Record<string, unknown>, msg: string) => go('stamp', action, { ...base, ...extra }, msg).then((x) => x && onDone());
   return (
-    <div className="list-item fin-stack">
-      <div className="row fin-between">
-        <div>
-          <div className="fin-strong">
-            {it.title} · {STAMP_KIND[it.kind]}
-          </div>
-          <div className="muted small">
-            Signed {dateLabel(it.signedOn)}
-            {it.value != null ? ` · ${rm(it.value)}` : ''}
-            {it.stamped
-              ? ` · ${it.stamped.certNo} ${dateLabel(it.stamped.on)} duty ${rm(it.stamped.duty)}${it.stamped.penalty ? ` + penalty ${rm(it.stamped.penalty)}` : ''}${it.stamped.checked ? `, checked by ${it.stamped.checked.by}` : ''}`
-              : ''}
-            {r ? ` · cancelled ${dateLabel(r.cancelledOn)}: ${r.reason}` : ''}
-            {r?.submitted ? ` · submitted ${dateLabel(r.submitted.on)} (${r.submitted.ref})` : ''}
-            {r?.outcome ? ` · LHDN ${r.outcome.result} ${r.outcome.result === 'approved' ? rm(r.outcome.amount) : ''}` : ''}
-          </div>
-          {it.state.what && <div className="small">{it.state.what}</div>}
+    <div className="fin-stack">
+      {r && (
+        <div className="muted small">
+          {`cancelled ${dateLabel(r.cancelledOn)}: ${r.reason}`}
+          {r.submitted ? ` · submitted ${dateLabel(r.submitted.on)} (${r.submitted.ref})` : ''}
+          {r.outcome ? ` · LHDN ${r.outcome.result} ${r.outcome.result === 'approved' ? rm(r.outcome.amount) : ''}` : ''}
         </div>
-        <Chip tone={it.state.late ? 'crit' : it.state.due ? 'warn' : it.status === 'closed' ? 'neutral' : 'ok'}>{it.status.replace('_', ' ')}</Chip>
-      </div>
-      <div className="row">
-        {it.status === 'to_stamp' && btn('stamped', 'Record certificate')}
-        {it.status === 'stamped' && it.stamped && !it.stamped.checked && btn('check', 'Check certificate')}
-        {(it.status === 'to_stamp' || it.status === 'stamped') && btn('cancelled', 'Agreement cancelled')}
-        {it.status === 'refund_open' && btn('docs', 'Refund documents')}
-        {it.status === 'refund_open' && r && r.docs.length > 0 && btn('submit', 'Submitted to LHDN')}
-        {it.status === 'refund_submitted' && btn('outcome', 'LHDN answered')}
-      </div>
+      )}
+      {it.state.what && <div className="small">{it.state.what}</div>}
       {mode === 'stamped' && (
         <div className="row">
           <input

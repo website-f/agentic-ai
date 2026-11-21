@@ -1,0 +1,554 @@
+/* P121: the SOP and workflow guide (views/Sop.tsx) and the equipment requests screen. Phone first; the shared tokens. */
+
+.sop-page {
+  max-width: 1080px;
+}
+
+.sop-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  margin: 4px 0 12px;
+}
+.sop-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 320px;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sop-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.sop-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+.sop-clear {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+.sop-mine {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sop-mine input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.sop-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  margin: 0 -2px 8px;
+  scrollbar-width: thin;
+}
+.sop-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sop-chip .num {
+  color: var(--muted);
+  font-size: 12px;
+}
+.sop-chip:hover {
+  border-color: var(--accent);
+}
+.sop-chip[aria-selected='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-primary);
+}
+.sop-chip[aria-selected='true'] .num {
+  color: inherit;
+  opacity: 0.85;
+}
+.sop-chip[data-rules] {
+  border-style: dashed;
+}
+
+.sop-section {
+  margin: 18px 0 8px;
+}
+.sop-section h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.sop-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.sop-section-head h2 {
+  margin: 0;
+  flex: 1;
+}
+
+/* Forms you can start */
+.sop-start-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.sop-start {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.15s;
+}
+.sop-start:hover {
+  box-shadow: var(--shadow);
+}
+.sop-start:active {
+  transform: translateY(1px);
+}
+.sop-start-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* The list of flows */
+.sop-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+.sop-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 40px 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sop-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  box-shadow: var(--shadow);
+}
+.sop-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sop-card-title {
+  font-size: 15px;
+  line-height: 1.3;
+}
+.sop-card-purpose {
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.sop-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: auto;
+  padding-top: 4px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.sop-card-steps {
+  font-weight: 600;
+  color: var(--accent);
+}
+.sop-card-go {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  translate: 0 -50%;
+  color: var(--muted);
+}
+
+.sop-status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.sop-status[data-tone='ok'] {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.sop-status[data-tone='warn'] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.sop-status[data-tone='info'] {
+  background: var(--unknown-soft);
+  color: var(--unknown);
+}
+
+.sop-empty {
+  padding: 28px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.sop-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* One flow */
+.sop-detail {
+  max-width: 760px;
+}
+.sop-detail-head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin: 10px 0 16px;
+}
+.sop-detail-head h1 {
+  margin: 0 0 6px;
+  font-size: clamp(20px, 4.5vw, 26px);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.sop-detail-purpose {
+  margin: 0 0 8px;
+  color: var(--muted);
+  line-height: 1.5;
+  max-width: 65ch;
+}
+.sop-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sop-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.sop-who-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.sop-who .sop-go {
+  margin-left: auto;
+}
+.sop-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sop-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sop-step {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding-bottom: 18px;
+}
+.sop-step::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 34px;
+  bottom: 0;
+  width: 2px;
+  background: var(--line);
+}
+.sop-step:last-child::before {
+  display: none;
+}
+.sop-step-n {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 14px;
+}
+.sop-step[data-decision] .sop-step-n {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.sop-step-body {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0 0;
+}
+.sop-step-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.sop-role {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.sop-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.sop-tag[data-tone='decision'] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.sop-step-does {
+  margin: 4px 0 8px;
+  line-height: 1.5;
+  max-width: 65ch;
+}
+.sop-place-off {
+  display: inline-block;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sop-rules ul {
+  list-style: none;
+  margin: 0;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.sop-rules li {
+  display: flex;
+  gap: 10px;
+  line-height: 1.5;
+}
+.sop-rules li svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--accent);
+}
+.sop-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
+}
+
+/* On an app's own page */
+.sop-mini {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.sop-mini-item {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.sop-mini-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sop-mini-row:hover {
+  background: var(--surface-2);
+}
+.sop-mini-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sop-mini-start {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* The equipment requests screen */
+.sop-flowline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 14px;
+}
+.sop-flowline span {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+}
+.sop-links {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.sop-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sop-link > span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sop-link:hover {
+  border-color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  .sop-cards,
+  .sop-start-grid,
+  .sop-mini {
+    grid-template-columns: 1fr;
+  }
+  .sop-who .sop-go {
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+  .sop-detail-head {
+    gap: 10px;
+  }
+}

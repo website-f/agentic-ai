@@ -29,6 +29,8 @@ import {
   type Tone,
 } from "../ui";
 import "../styles/biz.css";
+import { useRouteTab } from "../App";
+import { SopHelp } from "../sop/SopHelp";
 
 /**
  * Asset Management (Fauzan, 26 Oct 2026): 450 rental units, every non-electronic asset, 2 resorts, 6 orchards and the
@@ -72,6 +74,8 @@ const TABS: [Tab, string][] = [
   ["planned", "Planned maintenance"],
 ];
 const EXTRAS: AmExtrasSection[] = ["contractors", "letting", "meters", "resorts", "orchards", "planned"];
+/** P121: the sections a link may open ('#assets/office'); the same list as TABS (written out so the SOP guide's check finds each). */
+const ROUTE_TABS: Tab[] = ['overview', 'units', 'monthly', 'rent', 'maintenance', 'assets', 'books', 'properties', 'check', 'buy', 'office', 'homes', 'contractors', 'letting', 'meters', 'resorts', 'orchards', 'planned'];
 const TYPE: Record<AmBoard["byType"][number]["type"], string> = {
   RESIDENTIAL: "Residential",
   COMMERCIAL: "Commercial",
@@ -105,7 +109,8 @@ const edge = (t: Tone) => (t === "crit" || t === "warn" ? t : undefined);
 
 export function AssetsView() {
   const { data, error } = useLoad(() => api.amBoard(), []);
-  const [tab, setTab] = useState<Tab>("overview");
+  // P121: a link may open a section ("#assets/office", "#assets/homes"); every section is open to everyone on this screen.
+  const [tab, setTab] = useRouteTab<Tab>("overview", ROUTE_TABS);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="Asset Management" />;
   const k = data.kpis;
@@ -116,6 +121,7 @@ export function AssetsView() {
         sub="The group's rental units, office furniture and fittings, resorts, orchards and training facility. Seen only by the Asset Management team, group leadership and the finance staff who oversee it. Test version on made-up data: the Asset Management system will send the real figures."
         actions={
           <>
+            <SopHelp id="equip" />
             <RecordButton kind="amUnit" label="Add unit" primary />
             <RecordButton kind="amAsset" label="Add asset" />
             <RecordButton kind="amWorkOrder" label="Add work order" />

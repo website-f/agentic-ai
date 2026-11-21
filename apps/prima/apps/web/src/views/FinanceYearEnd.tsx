@@ -1,7 +1,8 @@
 import { Select } from '../SearchSelect';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api, type FinControls, type FinDesk } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction } from '../ui';
+import { DataTable } from '../DataTable';
 
 /**
  * Withholding tax, prepayments and accruals, fixed assets and auditor requests (Fauzan, 2 Nov 2026: suggestions 18, 21,
@@ -46,6 +47,20 @@ function useForm(init: Record<string, string> = {}) {
   return { f, set, reset: () => setF(init) };
 }
 
+/** P107: which table rows are opened (their steps shown under the row). */
+function useOpenRows() {
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (id: string) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  return { isOpen: (id: string) => open.has(id), toggle };
+}
+const block = { display: 'block' } as const;
+
 export function YearEndPanels({ v, co }: { v: FinControls; co: Co }) {
   return (
     <>
@@ -65,6 +80,7 @@ function WithholdingTax({ v, co }: { v: FinControls; co: Co }) {
   const [adding, setAdding] = useState(false);
   const { f, set, reset } = useForm({ type: 'services' });
   const go: Go = (action, input, msg) => act.run(() => api.finControlAction(v.companyId, 'wht', action, input), msg);
+  const rows = useOpenRows();
   const released = co.payments.filter((p) => p.status === 'released' && !ye.wht.some((w) => w.paymentId === p.id));
   const rate = f.treatyRate ? Number(f.treatyRate) : ye.whtRates[f.type as keyof Ye['whtRates']];
   const pay = released.find((p) => p.id === f.paymentId);
@@ -147,48 +163,81 @@ function WithholdingTax({ v, co }: { v: FinControls; co: Co }) {
           </button>
         </div>
       )}
-      <div className="list">
-        {ye.wht.map((w) => (
-          <WhtLine key={w.id} w={w} go={go} busy={act.busy} />
-        ))}
-        {!ye.wht.length && <div className="list-item muted">No payments to non-residents recorded.</div>}
-      </div>
+      {/* P107: the payments to non-residents as a table; "Act" opens the same steps under the row. */}
+      <DataTable
+        label="Withholding tax"
+        stateKey="fin.wht"
+        rows={ye.wht}
+        rowKey={(w) => w.id}
+        columns={[
+          { id: 'payee', label: 'Payee', value: (w) => w.payee, phone: 'title' },
+          { id: 'country', label: 'Country', value: (w) => w.country, phone: 'sub' },
+          { id: 'gross', label: 'Gross', value: (w) => w.gross, sort: 'money', render: (w) => rm(w.gross) },
+          {
+            id: 'tax',
+            label: 'Tax',
+            value: (w) => w.tax,
+            sort: 'money',
+            render: (w) => (
+              <>
+                {rm(w.tax)}
+                <span className="muted small" style={block}>
+                  at {w.rate}%{w.treaty ? ' (treaty)' : ''}
+                </span>
+              </>
+            ),
+          },
+          { id: 'paidOn', label: 'Paid on', value: (w) => w.paidOn, sort: 'date' },
+          {
+            id: 'lhdn',
+            label: 'Paid to LHDN',
+            value: (w) => w.remitted?.on ?? null,
+            sort: 'date',
+            hideBelow: 1100,
+            render: (w) => (w.remitted ? `${dateLabel(w.remitted.on)}, receipt ${w.remitted.receipt}` : '–'),
+          },
+          { id: 'status', label: 'Status', value: (w) => whtChip(w)[1], translate: true, render: (w) => <Chip tone={whtChip(w)[0]}>{whtChip(w)[1]}</Chip> },
+        ]}
+        filters={[
+          {
+            id: 'status',
+            label: 'Status',
+            value: whtState,
+            options: [
+              { value: 'due', label: 'Not paid yet' },
+              { value: 'late', label: 'Late' },
+              { value: 'check', label: 'To check' },
+              { value: 'done', label: 'Paid and checked' },
+            ],
+          },
+          { id: 'country', label: 'Country', value: (w) => w.country },
+        ]}
+        rowEnd={(w) =>
+          !w.checked ? (
+            <button className="btn btn-sm" onClick={() => rows.toggle(w.id)}>
+              {rows.isOpen(w.id) ? 'Close' : 'Act'}
+            </button>
+          ) : null
+        }
+        rowDetail={(w) => (rows.isOpen(w.id) && !w.checked ? <WhtLine w={w} go={go} busy={act.busy} /> : null)}
+        empty={<div className="list-item muted">No payments to non-residents recorded.</div>}
+      />
     </section>
   );
 }
 
-function WhtLine({ w, go, busy }: { w: Ye['wht'][number]; go: Go; busy: boolean }) {
-  const [open, setOpen] = useState(false);
+type Wht = Ye['wht'][number];
+const whtState = (w: Wht) => (w.checked ? 'done' : w.remitted ? 'check' : w.late ? 'late' : 'due');
+const whtChip = (w: Wht): [Parameters<typeof Chip>[0]['tone'], string] =>
+  w.checked ? ['ok', 'Paid and checked'] : w.remitted ? ['warn', 'To check'] : w.late ? ['crit', 'Late'] : ['info', `Due ${dateLabel(w.dueOn)}`];
+
+/** The next step for one withholding tax line (pay LHDN, then check), under its row once "Act" is pressed. */
+function WhtLine({ w, go, busy }: { w: Wht; go: Go; busy: boolean }) {
   const { f, set } = useForm();
   const due = Math.round((w.tax + w.penaltyNow) * 100) / 100;
-  const chip: [Parameters<typeof Chip>[0]['tone'], string] = w.checked
-    ? ['ok', 'Paid and checked']
-    : w.remitted
-      ? ['warn', 'To check']
-      : w.late
-        ? ['crit', 'Late']
-        : ['info', `Due ${dateLabel(w.dueOn)}`];
   return (
-    <div className="list-item fin-block">
-      <div className="row fin-between">
-        <span>
-          {w.payee} ({w.country}) · {rm(w.gross)} · tax {rm(w.tax)} at {w.rate}%{w.treaty ? ' (treaty)' : ''}
-          <span className="muted">
-            {' '}
-            · paid {dateLabel(w.paidOn)}
-            {w.remitted ? ` · to LHDN ${dateLabel(w.remitted.on)}, receipt ${w.remitted.receipt}` : ''}
-          </span>
-        </span>
-        <span className="row">
-          <Chip tone={chip[0]}>{chip[1]}</Chip>
-          {!w.checked && (
-            <button className="btn btn-sm" onClick={() => setOpen(!open)}>
-              {open ? 'Close' : 'Act'}
-            </button>
-          )}
-        </span>
-      </div>
-      {open && !w.remitted && (
+    <div className="fin-block">
+      {!w.remitted && (
         <div className="row fin-pt fin-end">
           <Field label="Paid to LHDN on">
             <input className="input" type="date" value={f.on ?? ''} onChange={set('on')} />
@@ -209,7 +258,7 @@ function WhtLine({ w, go, busy }: { w: Ye['wht'][number]; go: Go; busy: boolean 
           </button>
         </div>
       )}
-      {open && w.remitted && !w.checked && (
+      {w.remitted && !w.checked && (
         <div className="fin-pt">
           <Field label="What you checked (receipt, rate, form CP37)">
             <input className="input" value={f.comment ?? ''} onChange={set('comment')} />
@@ -232,6 +281,7 @@ function Schedules({ v }: { v: FinControls }) {
   const { f, set, reset } = useForm({ kind: 'prepayment' });
   const go: Go = (action, input, msg) => act.run(() => api.finControlAction(v.companyId, 'schedules', action, input), msg);
   const live = ye.schedules.filter((s) => !s.stopped);
+  const rows = useOpenRows();
   return (
     <section className="panel">
       <div className="panel-head">
@@ -285,40 +335,65 @@ function Schedules({ v }: { v: FinControls }) {
           </button>
         </div>
       )}
-      <div className="list">
-        {live.map((s) => (
-          <ScheduleLine key={s.id} s={s} go={go} busy={act.busy} close={v.banking.period} />
-        ))}
-        {!live.length && <div className="list-item muted">None running.</div>}
-      </div>
+      {/* P107: the running schedules as a table; "Open" shows the months, the next journal and "Stop" under the row. */}
+      <DataTable
+        label="Prepayments and accruals"
+        stateKey="fin.schedules"
+        rows={live}
+        rowKey={(s) => s.id}
+        columns={[
+          { id: 'what', label: 'What it is', value: (s) => s.what, phone: 'title' },
+          { id: 'kind', label: 'Type', value: schedKind, translate: true, phone: 'sub' },
+          { id: 'total', label: 'Total', value: (s) => s.total, sort: 'money', render: (s) => rm(s.total) },
+          { id: 'months', label: 'Months', value: (s) => s.months, sort: 'number' },
+          { id: 'account', label: 'Account', value: (s) => s.account, hideBelow: 1100 },
+          {
+            id: 'posted',
+            label: 'Posted',
+            value: (s) => s.lines.filter((l) => l.posted).length,
+            sort: 'number',
+            render: (s) => (
+              <>
+                {s.lines.filter((l) => l.posted).length} of {s.months}
+              </>
+            ),
+          },
+          {
+            id: 'status',
+            label: 'Status',
+            value: (s) => schedDue(s, v.banking.period),
+            sort: 'number',
+            render: (s) => {
+              const n = schedDue(s, v.banking.period);
+              return <Chip tone={n ? 'warn' : 'ok'}>{n ? `${n} to post` : 'Up to date'}</Chip>;
+            },
+          },
+        ]}
+        filters={[{ id: 'kind', label: 'Type', value: schedKind }]}
+        rowEnd={(s) => (
+          <button className="btn btn-sm" onClick={() => rows.toggle(s.id)}>
+            {rows.isOpen(s.id) ? 'Close' : 'Open'}
+          </button>
+        )}
+        rowDetail={(s) => (rows.isOpen(s.id) ? <ScheduleLine s={s} go={go} busy={act.busy} close={v.banking.period} /> : null)}
+        empty={<div className="list-item muted">None running.</div>}
+      />
     </section>
   );
 }
 
-function ScheduleLine({ s, go, busy, close }: { s: Ye['schedules'][number]; go: Go; busy: boolean; close: string }) {
-  const [open, setOpen] = useState(false);
+type Sched = Ye['schedules'][number];
+const schedKind = (s: Sched) => (s.kind === 'prepayment' ? 'Prepayment' : 'Accrual');
+const schedDue = (s: Sched, close: string) => s.lines.filter((l) => l.period <= close && !l.posted).length;
+
+/** One schedule's months, its next journal and "Stop", under its row once "Open" is pressed. */
+function ScheduleLine({ s, go, busy, close }: { s: Sched; go: Go; busy: boolean; close: string }) {
   const { f, set } = useForm();
   const due = s.lines.filter((l) => l.period <= close && !l.posted);
   const next = due[0];
-  const posted = s.lines.filter((l) => l.posted).length;
   return (
-    <div className="list-item fin-block">
-      <div className="row fin-between">
-        <span>
-          {s.kind === 'prepayment' ? 'Prepayment' : 'Accrual'} · {s.what} · {rm(s.total)} over {s.months} months
-          <span className="muted">
-            {' '}
-            · {s.account} · {posted} of {s.months} posted
-          </span>
-        </span>
-        <span className="row">
-          <Chip tone={due.length ? 'warn' : 'ok'}>{due.length ? `${due.length} to post` : 'Up to date'}</Chip>
-          <button className="btn btn-sm" onClick={() => setOpen(!open)}>
-            {open ? 'Close' : 'Open'}
-          </button>
-        </span>
-      </div>
-      {open && (
+    <div className="fin-block">
+      {(
         <div className="fin-pt">
           {next && (
             <div className="row fin-end">
@@ -372,6 +447,8 @@ function FixedAssets({ v }: { v: FinControls }) {
   const go: Go = (action, input, msg) => act.run(() => api.finControlAction(v.companyId, 'assets', action, input), msg);
   const live = ye.assets.filter((a) => !a.disposed);
   const ca = ye.allowances;
+  const rows = useOpenRows();
+  const assetRows = useMemo(() => ca.rows.map((r) => ({ r, a: ye.assets.find((x) => x.id === r.assetId)! })), [ca.rows, ye.assets]);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -463,39 +540,62 @@ function FixedAssets({ v }: { v: FinControls }) {
           </button>
         </div>
       )}
-      <div className="list">
-        {ca.rows.map((r) => {
-          const a = ye.assets.find((x) => x.id === r.assetId)!;
-          return <AssetLine key={r.assetId} a={a} r={r} go={go} busy={act.busy} />;
-        })}
-        {!ca.rows.length && <div className="list-item muted">No fixed assets recorded.</div>}
-      </div>
+      {/* P107: the assets as a table (sort by cost, class, year bought); "Dispose" opens the same box under the row. */}
+      <DataTable
+        label="Fixed assets and capital allowances"
+        stateKey="fin.fixed-assets"
+        rows={assetRows}
+        rowKey={(x) => x.r.assetId}
+        searchText={(x) => x.r.note ?? ''}
+        columns={[
+          { id: 'code', label: 'Code', value: (x) => x.a.sqlCode, phone: 'sub' },
+          {
+            id: 'name',
+            label: 'Asset',
+            value: (x) => x.a.name,
+            phone: 'title',
+            render: (x) => (
+              <>
+                {x.a.name}
+                {x.r.note && (
+                  <span className="muted small" style={block}>
+                    {x.r.note}
+                  </span>
+                )}
+              </>
+            ),
+          },
+          { id: 'cls', label: 'Class', value: (x) => CLASS_LABEL[x.a.cls] ?? x.a.cls, translate: true, hideBelow: 1200, phone: 'hidden' },
+          { id: 'cost', label: 'Cost', value: (x) => x.a.cost, sort: 'money', render: (x) => rm(x.a.cost) },
+          { id: 'bought', label: 'Bought on', value: (x) => x.a.acquiredOn, sort: 'date' },
+          { id: 'allowance', label: 'Allowance this year', value: (x) => x.r.total, sort: 'money', render: (x) => rm(x.r.total) },
+          { id: 'left', label: 'Left', value: (x) => x.r.residual, sort: 'money', render: (x) => rm(x.r.residual) },
+        ]}
+        filters={[
+          { id: 'cls', label: 'Class', value: (x) => x.a.cls, optionLabel: (k) => CLASS_LABEL[k] ?? k },
+          { id: 'year', label: 'Year bought', value: (x) => x.a.acquiredOn.slice(0, 4) },
+        ]}
+        rowEnd={(x) =>
+          !x.a.disposed ? (
+            <button className="btn btn-sm" onClick={() => rows.toggle(x.r.assetId)}>
+              {rows.isOpen(x.r.assetId) ? 'Close' : 'Dispose'}
+            </button>
+          ) : null
+        }
+        rowDetail={(x) => (rows.isOpen(x.r.assetId) && !x.a.disposed ? <AssetLine a={x.a} go={go} busy={act.busy} /> : null)}
+        empty={<div className="list-item muted">No fixed assets recorded.</div>}
+      />
     </section>
   );
 }
 
-function AssetLine({ a, r, go, busy }: { a: Ye['assets'][number]; r: Ye['allowances']['rows'][number]; go: Go; busy: boolean }) {
-  const [open, setOpen] = useState(false);
+/** The disposal box for one asset, under its row once "Dispose" is pressed. */
+function AssetLine({ a, go, busy }: { a: Ye['assets'][number]; go: Go; busy: boolean }) {
   const { f, set } = useForm();
   return (
-    <div className="list-item fin-block">
-      <div className="row fin-between">
-        <span>
-          {a.sqlCode} · {a.name} · {rm(a.cost)}
-          <span className="muted">
-            {' '}
-            · {CLASS_LABEL[a.cls]} · bought {dateLabel(a.acquiredOn)} · allowance this year {rm(r.total)}, left {rm(r.residual)}
-            {r.note ? ` · ${r.note}` : ''}
-          </span>
-        </span>
-        {!a.disposed && (
-          <button className="btn btn-sm" onClick={() => setOpen(!open)}>
-            {open ? 'Close' : 'Dispose'}
-          </button>
-        )}
-      </div>
-      {open && (
-        <div className="row fin-pt fin-end">
+    <div className="fin-block">
+      {(
+        <div className="row fin-end">
           <Field label="Disposed on">
             <input className="input" type="date" value={f.on ?? ''} onChange={set('on')} />
           </Field>
@@ -576,40 +676,55 @@ function AuditorRequests({ v }: { v: FinControls }) {
           </button>
         </div>
       )}
-      <div className="list">
-        {ye.audit.map((r) => (
-          <div key={r.id} className="list-item fin-block">
-            <div className="row fin-between">
-              <span>
-                {r.year} · {r.item}
-                <span className="muted">
-                  {' '}
-                  · {r.owner} · due {dateLabel(r.dueOn)}
-                  {r.sent ? ` · sent ${dateLabel(r.sent.on)}: ${r.sent.doc}` : ''}
-                </span>
-              </span>
-              <Chip tone={r.sent ? 'ok' : r.late ? 'crit' : 'info'}>{r.sent ? 'Sent' : r.late ? 'Late' : 'Open'}</Chip>
+      {/* P107: the auditor's requests as a table; the "What was sent" box stays under each open request. */}
+      <DataTable
+        label="Auditor requests"
+        stateKey="fin.auditor-requests"
+        rows={ye.audit}
+        rowKey={(r) => r.id}
+        columns={[
+          { id: 'item', label: 'Request', value: (r) => r.item, phone: 'title' },
+          { id: 'year', label: 'Year', value: (r) => r.year, sort: 'number', phone: 'sub', render: (r) => String(r.year) },
+          { id: 'owner', label: 'Prepared by', value: (r) => r.owner },
+          { id: 'due', label: 'Due', value: (r) => r.dueOn, sort: 'date' },
+          {
+            id: 'sent',
+            label: 'Sent',
+            value: (r) => r.sent?.on ?? null,
+            sort: 'date',
+            hideBelow: 1100,
+            render: (r) => (r.sent ? `${dateLabel(r.sent.on)}: ${r.sent.doc}` : '–'),
+          },
+          { id: 'status', label: 'Status', value: auditState, translate: true, render: (r) => <Chip tone={r.sent ? 'ok' : r.late ? 'crit' : 'info'}>{auditState(r)}</Chip> },
+        ]}
+        filters={[
+          { id: 'year', label: 'Year', value: (r) => String(r.year) },
+          { id: 'status', label: 'Status', value: auditState },
+          { id: 'owner', label: 'Prepared by', value: (r) => r.owner },
+        ]}
+        searchText={(r) => r.sent?.doc ?? ''}
+        rowDetail={(r) =>
+          !r.sent ? (
+            <div className="row fin-end">
+              <input
+                className="input"
+                placeholder="What was sent (file name or SharePoint link)"
+                value={doc[r.id] ?? ''}
+                onChange={(e) => setDoc((x) => ({ ...x, [r.id]: e.target.value }))}
+              />
+              <button className="btn btn-sm" disabled={act.busy} onClick={() => go('sent', { requestId: r.id, doc: doc[r.id] }, 'Marked sent.')}>
+                Sent
+              </button>
             </div>
-            {!r.sent && (
-              <div className="row fin-pt fin-end">
-                <input
-                  className="input"
-                  placeholder="What was sent (file name or SharePoint link)"
-                  value={doc[r.id] ?? ''}
-                  onChange={(e) => setDoc((x) => ({ ...x, [r.id]: e.target.value }))}
-                />
-                <button className="btn btn-sm" disabled={act.busy} onClick={() => go('sent', { requestId: r.id, doc: doc[r.id] }, 'Marked sent.')}>
-                  Sent
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-        {!ye.audit.length && <div className="list-item muted">No auditor requests.</div>}
-      </div>
+          ) : null
+        }
+        empty={<div className="list-item muted">No auditor requests.</div>}
+      />
     </section>
   );
 }
+
+const auditState = (r: Ye['audit'][number]) => (r.sent ? 'Sent' : r.late ? 'Late' : 'Open');
 
 /** The company's tax size (Fauzan, 2 Nov 2026): the FD or CEO records paid-up capital, income and big related companies. */
 function TaxSize({ v, go, busy }: { v: FinControls; go: Go; busy: boolean }) {

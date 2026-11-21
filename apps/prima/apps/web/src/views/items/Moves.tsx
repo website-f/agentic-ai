@@ -11,6 +11,7 @@ import { Card, Empty, Facts, Search, Steps, Toolbar, type StepState } from '../.
 import { Chip, Drawer, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../../ui';
 import { SalePapers } from './SalePapers';
 import { Scanner } from './Scanner';
+import { ReadsBox } from '../ScanBox';
 import { FilterChips, LINE_TONE, MOVE_TONE, TYPE_LABEL, TabIntro, act, any, hasText, partyName, rolesOf, skuName } from './shared';
 
 type Move = ItemBoard['movements'][number];
@@ -118,6 +119,26 @@ function ReceiveByScan() {
           )
         }
       />
+      {/* P121: an RFID reader's list pasted at once (move.receiveScan with reads), as upstream had; lost in the P85 split. */}
+      <details>
+        <summary className="muted small">Many RFID reads at once</summary>
+        <ReadsBox
+          button="Receive all read"
+          busy={a.busy}
+          onSend={(reads) =>
+            a.run(
+              () => act({ kind: 'move.receiveScan', reads }),
+              (r) => {
+                const out = (r as { result: { received: { ref: string; count: number }[]; notInTransit: string[]; unknown?: string[] } }).result;
+                const got = out.received.map((x) => `${x.count} on ${x.ref}`).join(', ');
+                const msg = `${got ? `Received: ${got}.` : 'Nothing received.'}${out.notInTransit.length ? ` Not in transit: ${out.notInTransit.join(', ')}.` : ''}${out.unknown?.length ? ` Not found: ${out.unknown.length}.` : ''}`;
+                setLast(msg);
+                return msg;
+              },
+            )
+          }
+        />
+      </details>
       {last && <p className="muted">{last}</p>}
       <ErrorNotice error={a.error} />
     </Card>

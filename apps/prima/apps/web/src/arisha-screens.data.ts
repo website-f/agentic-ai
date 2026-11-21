@@ -6002,5 +6002,85 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "notes": "If the module is not installed, the page shows \"Quality and compliance is not switched on yet. The database part waits for the CEO to approve it.\" Storekeepers and admin executives do not see it. Tabs you do not see are not for your role. The page shows test data."
+  },
+  {
+    "view": "equiprequests",
+    "title": "Ask for equipment",
+    "what": "One place to ask for a guard's uniform or site supplies, sign items over to guards, and (for the store) decide what was asked.",
+    "who": "Operations Managers and Regional OMs ask; storekeepers and the Procurement executive decide on the Store queue tab; the OGM confirms site supplies. Others see who to ask.",
+    "tabs": [
+      {
+        "name": "Ask",
+        "what": "Ask for a guard's uniform or site supplies, hand items to guards, and see your own items."
+      },
+      {
+        "name": "Store queue",
+        "what": "For the store: the uniform requests and site supplies requests waiting for a decision."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to ask for a guard's uniform",
+        "steps": [
+          "Open \"Ask\".",
+          "Under \"Uniform requests\", type the guard's staff number, pick the uniform, size and pieces (1 to 3) and the reason.",
+          "Send it. The store issues it to you or refuses with a reason."
+        ]
+      },
+      {
+        "task": "How to ask for site supplies",
+        "steps": [
+          "Open \"Ask\".",
+          "Under \"Permohonan Pesanan Barang\", pick the site and add each line: item, size, quantity and purpose.",
+          "Send it. The OGM confirms, then the store issues or buys."
+        ]
+      },
+      {
+        "task": "How to hand an item to a guard",
+        "steps": [
+          "Under \"Items to pass on\", confirm you received it from the store.",
+          "Let the patrolling officer and then the guard sign on your phone, or attach the signed slip and a photo."
+        ]
+      },
+      {
+        "task": "How the store answers (storekeeper or Procurement)",
+        "steps": [
+          "Open \"Store queue\".",
+          "Open a waiting request and choose Issue (name the patrolling officer) or Refuse with a reason."
+        ]
+      }
+    ],
+    "terms": [],
+    "notes": "Pieces after the 3rd in 12 months are paid by the guard with a receipt, never from pay. Press \"How it works\" for the full steps."
+  },
+  {
+    "view": "sop",
+    "title": "SOP and workflows",
+    "what": "Every workflow and SOP in Prima step by step: who starts it, who does each step, where to do it, the rules, and the document it comes from.",
+    "who": "Everyone. The buttons open only the screens in your own menu.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to find how something is done",
+        "steps": [
+          "Type a word in the search box, such as uniform, leave or claim, or press an app name.",
+          "Open the flow to see its steps and rules."
+        ]
+      },
+      {
+        "task": "How to start a request",
+        "steps": [
+          "Under \"Forms you can start\", press the form, or open a flow and press its green start button."
+        ]
+      },
+      {
+        "task": "How to go to the screen for a step",
+        "steps": [
+          "Open the flow and press the button under the step. \"Not in your menu\" means another role does that step."
+        ]
+      }
+    ],
+    "terms": [],
+    "notes": "Read only: nothing is changed here. \"Rules register\" lists the rule owners, approvers and time targets."
   }
 ];

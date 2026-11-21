@@ -43,6 +43,8 @@ export const NAV_SECTIONS: NavSection[] = [
     groups: [
       { title: 'Dashboards', views: ['home', 'overview', 'company', 'reports'] },
       { title: 'My work', views: ['mine', 'clock', 'work', 'meetings', 'memos'] },
+      // P121: every SOP and workflow, with links to where each step is done.
+      { title: 'Guides', views: ['sop'] },
     ],
   },
   {
@@ -64,7 +66,11 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'equip',
     title: 'Equipment',
     blurb: 'Items, uniforms, site stock, vehicles and assets.',
-    groups: [{ title: 'Equipment and vehicles', views: ['items', 'sitestock', 'fleet', 'assets'] }],
+    groups: [
+      // P121 (Fitri, 21 Nov 2026: "where to order the equipment, the form?"): asking for things first.
+      { title: 'Ask and order', views: ['equiprequests'] },
+      { title: 'Equipment and vehicles', views: ['items', 'sitestock', 'fleet', 'assets'] },
+    ],
   },
   {
     id: 'hr',
@@ -167,6 +173,8 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   work: { blurb: 'Your tasks and what "done" means for each.', words: 'work kerja task tugasan to do job assignment' },
   meetings: { blurb: 'Meetings, minutes and the actions you own.', words: 'meeting mesyuarat minutes minit action tindakan agenda' },
   memos: { blurb: 'Memos and notices sent to you.', words: 'memo notice notis announcement pengumuman circular pekeliling' },
+  sop: { blurb: 'How work is done: every flow step by step, with links.', words: 'sop workflow aliran kerja proses process procedure prosedur guide panduan how to cara steps langkah rules peraturan' },
+  equiprequests: { blurb: 'Ask for uniforms and site supplies; the store answers here.', words: 'order pesan request permohonan mohon uniform pakaian seragam supplies bekalan tapak barang form borang store stor' },
   ops: { blurb: 'Operations across regions and areas.', words: 'regional wilayah operations operasi area kawasan om region zon zone' },
   sites: { blurb: 'Every site with its posts, guards and client.', words: 'site tapak lokasi location post pos premis premises' },
   branchwork: { blurb: 'Checklists for branches far from the office.', words: 'far branch cawangan jauh checklist senarai semak' },

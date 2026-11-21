@@ -1,6 +1,7 @@
 import { api } from '../api';
 import { ErrorNotice, Loading, useLoad } from '../ui';
 import { Card, Empty } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 const STAGE: Record<string, string> = {
   review: 'Payment review',
@@ -10,6 +11,18 @@ const STAGE: Record<string, string> = {
 };
 const h = (x: number | null) => (x == null ? 'Unknown' : `${x} min`);
 const p = (x: number | null) => (x == null ? '–' : `${x}%`);
+
+type KpiData = Awaited<ReturnType<typeof api.finKpi>>;
+type PersonStage = { x: KpiData['people'][number]; s: KpiData['people'][number]['stages'][number] };
+const PEOPLE_COLUMNS: DtColumn<PersonStage>[] = [
+  { id: 'person', label: 'Person', value: ({ x }) => x.name, render: ({ x }) => <span className="fin-strong">{x.name}</span>, phone: 'title' },
+  { id: 'stage', label: 'Stage', value: ({ s }) => STAGE[s.stage] ?? s.stage, translate: true, phone: 'sub' },
+  { id: 'count', label: 'Count', value: ({ s }) => s.count, sort: false, align: 'right' },
+  { id: 'median', label: 'Median', value: ({ s }) => h(s.medianMinutes), sort: false, search: false, align: 'right' },
+  { id: 'target', label: 'Target', value: ({ s }) => h(s.targetMinutes), sort: false, search: false, align: 'right' },
+  { id: 'ontime', label: 'On time', value: ({ s }) => p(s.onTimePct), sort: false, search: false, align: 'right' },
+];
+const PEOPLE_FILTERS: DtFilter<PersonStage>[] = [{ id: 'stage', label: 'Stage', value: ({ s }) => s.stage, optionLabel: (v) => STAGE[v] ?? v }];
 
 /**
  * Finance KPIs (Fauzan, 1 Nov 2026): speed from when the work reaches each person, and quality. Provisional targets;
@@ -82,37 +95,17 @@ export function FinanceKpiTab() {
         </div>
       </Card>
       <Card title="People (by name)" sub="Listed by name, never ranked; for monitoring only" flush>
-        {data.people.length > 0 && (
-          <table className="fin-table">
-            <thead>
-              <tr>
-                <th>Person</th>
-                <th>Stage</th>
-                <th className="fin-num">Count</th>
-                <th className="fin-num">Median</th>
-                <th className="fin-num">Target</th>
-                <th className="fin-num">On time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.people.flatMap((x) =>
-                x.stages.map((s, i) => (
-                  <tr key={`${x.id}-${s.stage}`}>
-                    {i === 0 && (
-                      <td rowSpan={x.stages.length} className="fin-strong">
-                        {x.name}
-                      </td>
-                    )}
-                    <td>{STAGE[s.stage] ?? s.stage}</td>
-                    <td className="fin-num">{s.count}</td>
-                    <td className="fin-num">{h(s.medianMinutes)}</td>
-                    <td className="fin-num">{h(s.targetMinutes)}</td>
-                    <td className="fin-num">{p(s.onTimePct)}</td>
-                  </tr>
-                )),
-              )}
-            </tbody>
-          </table>
+        {/* P107: one row per person and stage (search, a stage filter, pages; cards on a phone) in place of a name cell
+            spanning its stages. Only the name and the stage sort: people are listed by name, never ranked. */}
+        {data.people.some((x) => x.stages.length > 0) && (
+          <DataTable
+            label="People (by name)"
+            stateKey="fin.kpi.people"
+            rows={data.people.flatMap((x) => x.stages.map((s) => ({ x, s })))}
+            rowKey={({ x, s }) => `${x.id}-${s.stage}`}
+            columns={PEOPLE_COLUMNS}
+            filters={PEOPLE_FILTERS}
+          />
         )}
         {data.people.some((x) => x.stages.length === 0) && (
           <div className="fin-rows">

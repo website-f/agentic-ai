@@ -6,6 +6,7 @@ import { Empty, PageHead, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, ExpiryChip, Loading, dateLabel, useLoad } from '../ui';
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
+import { SopHelp } from '../sop/SopHelp';
 import '../styles/hrx.css';
 
 type Status = 'OK' | 'DUE' | 'OVERDUE' | 'UNKNOWN';
@@ -125,6 +126,7 @@ export function ComplianceView() {
                 All
               </button>
             </div>
+            <SopHelp id="gov-licence-record" />
             <ImportButton kind="licence" />
             <RecordButton kind="licence" primary label="Add licence" />
           </>

@@ -1,13 +1,15 @@
 import { Select } from '../SearchSelect';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowLeftIcon, ArrowRightIcon, BriefcaseIcon, BuildingsIcon, CheckCircleIcon, QuestionIcon, TrayIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import type { HomeLink, OfficeGuideRole } from '@prima/core';
 import { OFFICE_GUIDE_VERSION, officeGuideFor } from '@prima/core';
 import { useLang } from '../i18n';
 import { api, type CompanyOffice, type CompanyOffices } from '../api';
 import { useApp } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Chip, ErrorNotice, Loading, useAction, useLoad, type Tone } from '../ui';
 import { Card, Empty, PageHead, Person, Stat, Stats } from '../kit';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/leadership.css';
 
 /**
@@ -38,17 +40,94 @@ const KDN_LABEL: Record<CompanyOffice['kdnLicence'], [Tone, string]> = {
   unknown: ['neutral', 'KDN licence not recorded'],
 };
 
-/** Work lists open folded to this many lines; the rest one click away. */
-const FOLD = 12;
+type OfficeRow = CompanyOffices['rows'][number];
+type WorkRow = CompanyOffices['work'][number] & { key: string };
+type QueueRow = CompanyOffice['queue'][number] & { key: string };
+const officeState = (t: Tone) => (t === 'ok' ? 'Ready' : t === 'neutral' ? 'Unknown' : t === 'crit' ? 'Short' : 'Check');
+
+const OFFICE_COLUMNS: DtColumn<OfficeRow>[] = [
+  {
+    id: 'name',
+    label: 'Company',
+    value: (r) => r.company.name,
+    render: (r) => (
+      <span className="ld-co-name">
+        <strong>{r.company.name}</strong>
+        <span className="ld-co-sub">
+          {r.company.isPilot ? 'Pilot · ' : ''}
+          {r.runBy ? `Run by the ${r.runBy.name} office` : r.runs.length > 0 ? `Also runs: ${r.runs.map((x) => x.name).join(', ')}` : ''}
+        </span>
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'state', label: 'Office', value: (r) => officeState(r.tone), translate: true, render: (r) => <Chip tone={r.tone}>{officeState(r.tone)}</Chip> },
+  {
+    id: 'heads',
+    label: 'Head',
+    value: (r) => r.heads.map((h) => h.name).join(', '),
+    render: (r) => (r.heads.length ? r.heads.map((h) => <Person key={h.name} name={h.name} sub={h.job} size={26} />) : <span className="muted small">No head entered</span>),
+    phone: 'sub',
+    hideBelow: 1100,
+  },
+  { id: 'execs', label: 'Executives', value: (r) => r.execCount, sort: 'number' },
+  { id: 'desks', label: 'Desks shared out', value: (r) => (r.unassigned === null ? null : r.desksAssigned), sort: 'number', render: (r) => (r.unassigned === null ? '–' : `${r.desksAssigned} of ${r.desksTotal}`), hideBelow: 1200 },
+  {
+    id: 'open',
+    label: 'Open work',
+    value: (r) => r.open,
+    sort: 'number',
+    render: (r) => (
+      <Chip tone={r.urgent ? 'crit' : r.open ? 'warn' : 'ok'}>
+        {r.open} open{r.urgent ? ` (${r.urgent} urgent)` : ''}
+      </Chip>
+    ),
+  },
+  { id: 'kdn', label: 'KDN licence', value: (r) => KDN_LABEL[r.kdnLicence][1], translate: true, render: (r) => <Chip tone={KDN_LABEL[r.kdnLicence][0]}>{KDN_LABEL[r.kdnLicence][1]}</Chip>, hideBelow: 1280 },
+  { id: 'notes', label: 'To fix', value: (r) => r.findings.map((f) => f.message).join(' '), sort: false, render: (r) => <span className="small">{r.findings.map((f) => f.message).join(' ') || '–'}</span>, hideBelow: 1500 },
+];
+const OFFICE_FILTERS: DtFilter<OfficeRow>[] = [
+  { id: 'state', label: 'Office', value: (r) => r.tone, optionLabel: (t) => officeState(t as Tone) },
+  { id: 'kdn', label: 'KDN licence', value: (r) => r.kdnLicence, optionLabel: (k) => KDN_LABEL[k as CompanyOffice['kdnLicence']]?.[1] ?? k },
+  { id: 'pilot', label: 'Pilot', value: (r) => (r.company.isPilot ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Pilot companies' }, { value: 'no', label: 'Not in the pilot' }] },
+];
+
+const WORK_COLUMNS: DtColumn<WorkRow>[] = [
+  { id: 'title', label: 'Work', value: (w) => w.title, render: (w) => <strong>{w.title}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (w) => w.companyName, phone: 'sub' },
+  { id: 'desk', label: 'Desk', value: (w) => w.deskLabel, translate: true },
+  { id: 'who', label: 'Who', value: (w) => w.actingName, hideBelow: 1100 },
+  { id: 'detail', label: 'Detail', value: (w) => w.detail, sort: false, hideBelow: 1200 },
+  { id: 'tag', label: 'Status', value: (w) => w.tag, translate: true, render: (w) => <Chip tone={w.tone}>{w.tag}</Chip> },
+];
+const WORK_FILTERS: DtFilter<WorkRow>[] = [
+  { id: 'desk', label: 'Desk', value: (w) => w.desk, optionLabel: (d) => d },
+  { id: 'company', label: 'Company', value: (w) => w.companyName },
+  { id: 'tag', label: 'Status', value: (w) => w.tag },
+];
+
+const QUEUE_COLUMNS: DtColumn<QueueRow>[] = [
+  { id: 'title', label: 'Work', value: (q) => q.title, render: (q) => <strong>{q.title}</strong>, phone: 'title' },
+  { id: 'detail', label: 'Detail', value: (q) => q.detail, sort: false, phone: 'sub' },
+  { id: 'desk', label: 'Desk', value: (q) => q.deskLabel, translate: true },
+  { id: 'who', label: 'Who', value: (q) => (q.actingName ? (q.mine ? 'you' : q.actingName) : ''), hideBelow: 1100 },
+  { id: 'tag', label: 'Status', value: (q) => q.tag, translate: true, render: (q) => <Chip tone={q.tone}>{q.tag}</Chip> },
+];
+const QUEUE_FILTERS: DtFilter<QueueRow>[] = [
+  { id: 'whose', label: 'Whose work', value: (q) => (q.mine ? 'mine' : 'others'), options: [{ value: 'mine', label: 'Show only mine' }, { value: 'others', label: 'Other people' }], allLabel: 'The whole office' },
+  { id: 'desk', label: 'Desk', value: (q) => q.deskLabel },
+  { id: 'tag', label: 'Status', value: (q) => q.tag },
+];
 
 function AllOffices({ open }: { open: (id: string) => void }) {
   const { me, setCompanyId, go } = useApp();
   // Fauzan, 3 Nov 2026: "cos will set" (the CEO keeps the right as owner); the server checks again.
   const canSetRunBy = (me.user.role === 'pwvsb_officer' && me.user.leadership === 'cos') || (me.user.role === 'director' && me.user.opsTier === 'ceo');
   const { data, error } = useLoad(() => api.companyOffices(), []);
-  const [desk, setDesk] = useState<string | null>(null);
-  const [all, setAll] = useState(false);
-  const [allOffices, setAllOffices] = useState(false);
+  const workTable = useTableState('board.office.work');
+  const desk = workTable.state.f.desk || null;
+  const setDesk = (d: string | null) => workTable.set({ f: { desk: d ?? '' } });
+  const workRows = useMemo(() => (data?.work ?? []).map((w, i) => ({ ...w, key: String(i) })), [data]);
   if (error)
     return (
       <div className="page">
@@ -61,8 +140,16 @@ function AllOffices({ open }: { open: (id: string) => void }) {
         <Loading what="company offices" />
       </div>
     );
-  const work = data.work.filter((w) => !desk || w.desk === desk).slice(0, 80);
-  const shownWork = all ? work : work.slice(0, FOLD);
+  const goWork = (w: WorkRow) => {
+    setCompanyId(w.companyId);
+    go({
+      view: w.go.view,
+      siteId: w.go.siteId,
+      personId: w.go.personId,
+      caseId: w.go.caseId,
+      tenderId: w.go.tenderId,
+    });
+  };
   return (
     <div className="page ld">
       <PageHead
@@ -73,6 +160,7 @@ function AllOffices({ open }: { open: (id: string) => void }) {
             are a management view, not combined company records.
           </>
         }
+        actions={<SopHelp id="board-office-desks" />}
       />
       <Stats>
         <Stat label="Companies" value={data.totals.companies} icon={<BuildingsIcon />} tone="info" />
@@ -94,56 +182,18 @@ function AllOffices({ open }: { open: (id: string) => void }) {
           <h2 id="ld-offices">Offices</h2>
           <Chip tone="neutral">{data.rows.length}</Chip>
         </div>
-        <ul className="ld-grid">
-          {(allOffices ? data.rows : data.rows.slice(0, FOLD)).map((r) => (
-            <li key={r.company.id} className="ld-co" data-tone={r.tone} data-pilot={r.company.isPilot}>
-              <div className="ld-co-head">
-                <div className="ld-co-name">
-                  <button type="button" className="ld-co-link" onClick={() => open(r.company.id)}>
-                    {r.company.name}
-                  </button>
-                  <span className="ld-co-sub">
-                    {r.company.isPilot ? 'Pilot · ' : ''}
-                    {r.execCount} executive{r.execCount === 1 ? '' : 's'}
-                    {r.unassigned !== null && ` · ${r.desksAssigned} of ${r.desksTotal} desks shared out`}
-                  </span>
-                </div>
-                <Chip tone={r.tone}>{r.tone === 'ok' ? 'Ready' : r.tone === 'neutral' ? 'Unknown' : r.tone === 'crit' ? 'Short' : 'Check'}</Chip>
-              </div>
-              <div className="ld-co-people">
-                {r.heads.length ? (
-                  r.heads.map((h) => <Person key={h.name} name={h.name} sub={h.job} size={30} />)
-                ) : (
-                  <span className="muted small">No head entered</span>
-                )}
-              </div>
-              <div className="ld-co-chips">
-                <Chip tone={r.urgent ? 'crit' : r.open ? 'warn' : 'ok'}>
-                  {r.open} open{r.urgent ? ` (${r.urgent} urgent)` : ''}
-                </Chip>
-                <Chip tone={KDN_LABEL[r.kdnLicence][0]}>{KDN_LABEL[r.kdnLicence][1]}</Chip>
-              </div>
-              {(r.runBy || r.runs.length > 0) && (
-                <p className="ld-co-note">
-                  {r.runBy && `Run by the ${r.runBy.name} office`}
-                  {r.runs.length > 0 && `Also runs: ${r.runs.map((x) => x.name).join(', ')}`}
-                </p>
-              )}
-              {r.findings.length > 0 && <p className="ld-co-note" data-tone={r.tone}>{r.findings.map((f) => f.message).join(' ')}</p>}
-              <div className="ld-co-foot">
-                <button type="button" className="btn btn-sm btn-ghost ld-go" onClick={() => open(r.company.id)}>
-                  Open office
-                  <ArrowRightIcon size={14} weight="bold" aria-hidden="true" />
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-        {data.rows.length > FOLD && (
-          <button type="button" className="btn ld-more-cards" aria-expanded={allOffices} onClick={() => setAllOffices(!allOffices)}>
-            {allOffices ? 'Show fewer offices' : `Show all ${data.rows.length} offices`}
-          </button>
-        )}
+        <DataTable
+          label="Offices"
+          stateKey="board.office.offices"
+          rows={data.rows}
+          rowKey={(r) => r.company.id}
+          columns={OFFICE_COLUMNS}
+          filters={OFFICE_FILTERS}
+          searchText={(r) => `${r.heads.map((h) => h.name).join(' ')} ${r.runBy?.name ?? ''} ${r.runs.map((x) => x.name).join(' ')}`}
+          onRowClick={(r) => open(r.company.id)}
+          rowTone={(r) => (r.tone === 'crit' ? 'crit' : r.tone === 'warn' ? 'warn' : undefined)}
+          actions={(r) => [{ label: 'Open office', onClick: () => open(r.company.id) }]}
+        />
       </section>
 
       <Card
@@ -175,47 +225,17 @@ function AllOffices({ open }: { open: (id: string) => void }) {
             </button>
           ))}
         </div>
-        {work.length === 0 ? (
-          <Empty title="Nothing waiting." />
-        ) : (
-          <ul className="ld-rows">
-            {shownWork.map((w, i) => (
-              <li key={i}>
-                <button
-                  type="button"
-                  className="ld-row"
-                  data-tone={w.tone}
-                  onClick={() => {
-                    setCompanyId(w.companyId);
-                    go({
-                      view: w.go.view,
-                      siteId: w.go.siteId,
-                      personId: w.go.personId,
-                      caseId: w.go.caseId,
-                      tenderId: w.go.tenderId,
-                    });
-                  }}
-                >
-                  <span className="ld-row-main">
-                    <span className="ld-row-title">{w.title}</span>
-                    <span className="ld-row-meta">
-                      {w.companyName} · {w.deskLabel}
-                      {w.actingName ? ` · ${w.actingName}` : ''} · {w.detail}
-                    </span>
-                  </span>
-                  <span className="ld-row-aside">
-                    <Chip tone={w.tone}>{w.tag}</Chip>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {work.length > FOLD && (
-          <button type="button" className="ld-more" aria-expanded={all} onClick={() => setAll(!all)}>
-            {all ? 'Show fewer' : `Show all ${work.length}`}
-          </button>
-        )}
+        <DataTable
+          label="All office work"
+          control={workTable}
+          rows={workRows}
+          rowKey={(w) => w.key}
+          columns={WORK_COLUMNS}
+          filters={[{ ...WORK_FILTERS[0], optionLabel: (d) => data.byDesk.find((x) => x.desk === d)?.label ?? d }, ...WORK_FILTERS.slice(1)]}
+          onRowClick={goWork}
+          rowTone={(w) => (w.tone === 'crit' ? 'crit' : w.tone === 'warn' ? 'warn' : undefined)}
+          empty={<Empty title="Nothing waiting." />}
+        />
       </Card>
       {canSetRunBy && <RunByForm rows={data.rows} />}
       <OfficeGuide role="monitor" />
@@ -319,8 +339,7 @@ function OneOffice({ companyId, back }: { companyId: string; back?: () => void }
   const { setCompanyId, go } = useApp();
   const { data, error } = useLoad(() => api.companyOffice(companyId), [companyId]);
   const [editing, setEditing] = useState(false);
-  const [onlyMine, setOnlyMine] = useState(true);
-  const [all, setAll] = useState(false);
+  const queueRows = useMemo(() => (data?.queue ?? []).map((q, i) => ({ ...q, key: String(i) })), [data]);
   if (error)
     return (
       <div className="page">
@@ -344,9 +363,6 @@ function OneOffice({ companyId, back }: { companyId: string; back?: () => void }
     });
   };
   const mine = data.queue.filter((q) => q.mine);
-  const shown = data.role === 'exec' && onlyMine ? mine : data.queue;
-  const capped = shown.slice(0, 60);
-  const visible = all ? capped : capped.slice(0, FOLD);
   return (
     <div className="page ld">
       <PageHead
@@ -358,11 +374,26 @@ function OneOffice({ companyId, back }: { companyId: string; back?: () => void }
           </>
         }
         actions={
-          back && (
-            <button className="btn btn-sm" onClick={back}>
-              <ArrowLeftIcon size={14} aria-hidden="true" /> All offices
-            </button>
-          )
+          <>
+            {back && (
+              <button className="btn btn-sm" onClick={back}>
+                <ArrowLeftIcon size={14} aria-hidden="true" /> All offices
+              </button>
+            )}
+            <SopHelp id="board-office-desks" />
+            {/* P121: the head's main step, at the top as well as on the Desks card further down. */}
+            {data.canAssign && !editing && (
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => {
+                  setEditing(true);
+                  document.getElementById('office-desks')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              >
+                Share out desks
+              </button>
+            )}
+          </>
         }
       />
       {data.runBy && (
@@ -422,48 +453,20 @@ function OneOffice({ companyId, back }: { companyId: string; back?: () => void }
       <div className="ld-main-side">
         <Card
           title={data.role === 'exec' ? 'Work' : 'Office work by desk'}
-          actions={
-            data.role === 'exec' && (
-              <div className="seg" role="group" aria-label="Whose work">
-                <button type="button" aria-pressed={onlyMine} onClick={() => setOnlyMine(true)}>
-                  Show only mine
-                </button>
-                <button type="button" aria-pressed={!onlyMine} onClick={() => setOnlyMine(false)}>
-                  The whole office
-                </button>
-              </div>
-            )
-          }
           flush
         >
-          {shown.length === 0 ? (
-            <Empty title="Nothing waiting." />
-          ) : (
-            <ul className="ld-rows">
-              {visible.map((q, i) => (
-                <li key={i}>
-                  <button type="button" className="ld-row" data-tone={q.tone} onClick={() => openLink(q.go)}>
-                    <span className="ld-row-main">
-                      <span className="ld-row-title">{q.title}</span>
-                      <span className="ld-row-meta">
-                        {q.detail} · {q.deskLabel}
-                        {q.actingName ? ` · ${q.mine ? 'you' : q.actingName}` : ''}
-                      </span>
-                    </span>
-                    <span className="ld-row-aside">
-                      <Chip tone={q.tone}>{q.tag}</Chip>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {capped.length > FOLD && (
-            <button type="button" className="ld-more" aria-expanded={all} onClick={() => setAll(!all)}>
-              {all ? 'Show fewer' : `Show all ${capped.length}`}
-            </button>
-          )}
-          {shown.length > 60 && <p className="muted small ld-pad">and {shown.length - 60} more</p>}
+          <DataTable
+            label={data.role === 'exec' ? 'Work' : 'Office work by desk'}
+            stateKey={`board.office.queue.${data.role === 'exec' ? 'exec' : 'head'}`}
+            defaults={data.role === 'exec' ? { f: { whose: 'mine' } } : undefined}
+            rows={queueRows}
+            rowKey={(q) => q.key}
+            columns={QUEUE_COLUMNS}
+            filters={data.role === 'exec' ? QUEUE_FILTERS : QUEUE_FILTERS.slice(1)}
+            onRowClick={(q) => openLink(q.go)}
+            rowTone={(q) => (q.tone === 'crit' ? 'crit' : q.tone === 'warn' ? 'warn' : undefined)}
+            empty={<Empty title="Nothing waiting." />}
+          />
         </Card>
 
         <div className="ld-side">
@@ -519,6 +522,7 @@ function OneOffice({ companyId, back }: { companyId: string; back?: () => void }
         </div>
       </div>
 
+      <div id="office-desks" />
       <Card
         title="Desks"
         sub="Each desk has an owner and a backup"

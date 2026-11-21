@@ -4,9 +4,11 @@ import { BuildingsIcon, CoinsIcon, FileTextIcon, ScalesIcon, ShieldWarningIcon, 
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { api, type Insurance, type InsuranceRenewInput } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
 import { Card, Empty, Facts, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { SopHelp } from '../sop/SopHelp';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/biz.css';
 
 type Tab = 'alerts' | 'policies' | 'premiums' | 'claims' | 'guarantees' | 'companies' | 'history';
@@ -59,7 +61,7 @@ const stripe = (t: Tone) => (t === 'crit' || t === 'warn' ? t : undefined);
  */
 export function InsuranceView() {
   const { me } = useApp();
-  const [tab, setTab] = useState<Tab>('alerts');
+  const [tab, setTab] = useRouteTab<Tab>('alerts', ['alerts', 'policies', 'premiums', 'claims', 'guarantees', 'companies', 'history']);
   const { data, error } = useLoad(() => api.insurance(), []);
   if (error)
     return (
@@ -82,6 +84,7 @@ export function InsuranceView() {
         sub={`Premiums, policies, claims and guarantees${group ? ' for every company' : ''}. The Chief of Staff's insurance section follows up; paying a premium, signing a guarantee or accepting a settlement stays with the company's board and Finance. A company with no records loaded shows Unknown, never as covered.`}
         actions={
           <>
+            <SopHelp id="finance-insurance-claim" />
             <AddFor kind="insurancePolicy" label="Add policy" primary />
             <AddFor kind="insuranceClaim" label="Record claim" />
             <AddFor kind="insuranceGuarantee" label="Add guarantee" />
@@ -162,128 +165,361 @@ export function InsuranceView() {
   );
 }
 
+type AlertRow = Insurance['alerts'][number] & { key: string };
+
+/** P107: "To chase" as a data table, most urgent first as before. */
+const ALERT_COLUMNS: DtColumn<AlertRow>[] = [
+  { id: 'title', label: 'To chase', value: (a) => a.title, render: (a) => <strong>{a.title}</strong>, phone: 'title' },
+  { id: 'detail', label: 'Details', value: (a) => a.detail, phone: 'sub' },
+  { id: 'company', label: 'Company', value: (a) => a.companyName },
+  { id: 'kind', label: 'Type', value: (a) => a.kind, translate: true, render: (a) => <Chip tone={a.tone}>{a.kind}</Chip> },
+];
+const ALERT_FILTERS: DtFilter<AlertRow>[] = [
+  { id: 'kind', label: 'Type', value: (a) => a.kind },
+  { id: 'company', label: 'Company', value: (a) => a.companyName },
+];
+
 function Alerts({ data }: { data: Insurance }) {
+  const rows = data.alerts.map((a, i) => ({ ...a, key: String(i) }));
   return (
     <Card title="To chase" sub="Most urgent first" flush>
-      {data.alerts.length === 0 ? (
-        <Empty title="Nothing to chase." />
-      ) : (
-        <ul className="bz-rows">
-          {data.alerts.map((a, i) => (
-            <li key={i} className="bz-row" data-tone={stripe(a.tone)}>
-              <span className="bz-row-main">
-                <span className="bz-row-title">{a.title}</span>
-                <span className="bz-row-meta">{a.detail}</span>
-                <span className="bz-in-co">{a.companyName}</span>
-              </span>
-              <span className="bz-row-side">
-                <Chip tone={a.tone}>{a.kind}</Chip>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <DataTable
+        label="To chase"
+        stateKey="insurance.alerts"
+        rows={rows}
+        rowKey={(a) => a.key}
+        columns={ALERT_COLUMNS}
+        filters={ALERT_FILTERS}
+        rowTone={(a) => stripe(a.tone)}
+        empty={<Empty title="Nothing to chase." />}
+      />
     </Card>
   );
 }
 
+const EXPIRY_OPTIONS = [
+  { value: 'OVERDUE', label: 'Expired' },
+  { value: 'DUE', label: 'Due soon' },
+  { value: 'OK', label: 'Valid' },
+  { value: 'UNKNOWN', label: 'Unknown' },
+];
+
+/** P107: the policies as a data table: policy, insurer, company, cover and dates, premium, renewal state. */
+const POLICY_COLUMNS: DtColumn<PolicyRow>[] = [
+  {
+    id: 'policy',
+    label: 'Policy',
+    value: (r) => r.label,
+    render: (r) => (
+      <>
+        <strong>{r.label}</strong>
+        <span className="bz-sub" style={{ display: 'block' }}>
+          {r.policy.scheduleRef ? `Schedule: ${r.policy.scheduleRef}` : 'Policy schedule not on file'}
+          {r.renewedBy ? ` · renewed as ${r.renewedBy.policyNo} from ${dateLabel(r.renewedBy.startsOn)}` : ''}
+        </span>
+      </>
+    ),
+    phone: 'title',
+  },
+  {
+    id: 'insurer',
+    label: 'Insurer',
+    value: (r) => r.policy.insurer,
+    render: (r) => (
+      <>
+        {r.policy.insurer} · <span className="mono">{r.policy.policyNo}</span>
+        {r.policy.broker ? ` · via ${r.policy.broker}` : ''}
+      </>
+    ),
+    phone: 'sub',
+  },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, hideBelow: 1200 },
+  { id: 'cover', label: 'Cover', value: (r) => r.policy.sumInsured, sort: 'money', render: (r) => rm(r.policy.sumInsured) },
+  {
+    id: 'dates',
+    label: 'Dates',
+    value: (r) => r.policy.expiresOn,
+    sort: 'date',
+    render: (r) => (
+      <span className="bz-sub">
+        {dateLabel(r.policy.startsOn)} to {dateLabel(r.policy.expiresOn)}
+      </span>
+    ),
+    hideBelow: 1100,
+  },
+  {
+    id: 'premium',
+    label: 'Premium',
+    value: (r) => r.policy.premium,
+    sort: 'money',
+    render: (r) => (
+      <>
+        {rm(r.policy.premium)} <span className="bz-sub">a year</span>
+      </>
+    ),
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => r.cover.daysLeft ?? null,
+    sort: 'number',
+    search: false,
+    align: 'left',
+    render: (r) => (
+      <span className="bz-chips">
+        <ExpiryChip status={r.cover.status} daysLeft={r.cover.daysLeft} />
+        {r.cover.status === 'DUE' && (
+          <span className="bz-sub">
+            renewal {r.policy.renewal === 'renewed' ? 'done' : r.policy.renewal === 'quotes' ? 'quotes in hand' : 'not started'}
+          </span>
+        )}
+      </span>
+    ),
+  },
+];
+const POLICY_FILTERS: DtFilter<PolicyRow>[] = [
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'status', label: 'Status', value: (r) => r.cover.status, options: EXPIRY_OPTIONS },
+  {
+    id: 'renewal',
+    label: 'Policy renewal',
+    value: (r) => r.policy.renewal,
+    options: [
+      { value: 'not_started', label: 'Not started' },
+      { value: 'quotes', label: 'Quotes in hand' },
+      { value: 'renewed', label: 'Renewed' },
+    ],
+  },
+  { id: 'insurer', label: 'Insurer', value: (r) => r.policy.insurer },
+];
+
 function Policies({ data }: { data: Insurance }) {
+  // P107: the Renew / Cancel policy form open under a row (several may be open, as before).
+  const [steps, setSteps] = useState<Record<string, 'renew' | 'cancel'>>({});
+  const setStep = (id: string, s: 'renew' | 'cancel' | null) =>
+    setSteps((x) => {
+      const next = { ...x };
+      if (s) next[id] = s;
+      else delete next[id];
+      return next;
+    });
   return (
     <Card title="Policies" sub={`Renewal starts ${data.rules.renewDays} days before expiry`} actions={<><ImportFor kind="insurancePolicy" /><AddFor kind="insurancePolicy" label="Add policy" /></>} flush>
-      {data.policies.length === 0 ? (
-        <Empty title="No policies recorded." action={<AddFor kind="insurancePolicy" label="Add policy" primary />} />
-      ) : (
-        <ul className="bz-rows">
-          {data.policies.map((r) => (
-            <li key={r.policy.id} className="bz-row bz-in-row">
-              <span className="bz-row-main">
-                <span className="bz-row-title">{r.label}</span>
-                <span className="bz-row-meta">
-                  {r.policy.insurer} · <span className="mono">{r.policy.policyNo}</span>
-                  {r.policy.broker ? ` · via ${r.policy.broker}` : ''}
-                </span>
-                <span className="bz-row-meta">
-                  {r.policy.scheduleRef ? `Schedule: ${r.policy.scheduleRef}` : 'Policy schedule not on file'}
-                  {r.renewedBy ? ` · renewed as ${r.renewedBy.policyNo} from ${dateLabel(r.renewedBy.startsOn)}` : ''}
-                </span>
-                <span className="bz-row-meta">{r.companyName}</span>
-                {r.canAct && <PolicySteps r={r} />}
-              </span>
-              <span className="bz-in-fig">
-                <span className="bz-sub">Cover</span>
-                <span className="bz-amt">{rm(r.policy.sumInsured)}</span>
-                <span className="bz-sub">
-                  {dateLabel(r.policy.startsOn)} to {dateLabel(r.policy.expiresOn)}
-                </span>
-              </span>
-              <span className="bz-in-fig">
-                <span className="bz-sub">Premium</span>
-                <span className="bz-amt">{rm(r.policy.premium)}</span>
-                <span className="bz-sub">a year</span>
-              </span>
-              <span className="bz-row-side">
-                <ExpiryChip status={r.cover.status} daysLeft={r.cover.daysLeft} />
-                {r.cover.status === 'DUE' && (
-                  <span className="bz-sub">
-                    renewal {r.policy.renewal === 'renewed' ? 'done' : r.policy.renewal === 'quotes' ? 'quotes in hand' : 'not started'}
-                  </span>
-                )}
-                {!r.renewedBy && <RecordButton kind="insurancePolicy" id={r.policy.id} />}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <DataTable
+        label="Policies"
+        stateKey="insurance.policies"
+        rows={data.policies}
+        rowKey={(r) => r.policy.id}
+        columns={POLICY_COLUMNS}
+        filters={POLICY_FILTERS}
+        searchText={(r) => `${r.policy.policyNo} ${r.policy.broker ?? ''} ${r.policy.scheduleRef ?? ''}`}
+        rowEnd={(r) => (
+          <>
+            {r.canAct && <PolicySteps r={r} open={steps[r.policy.id] ?? null} onOpen={(s) => setStep(r.policy.id, s)} />}
+            {!r.renewedBy && <RecordButton kind="insurancePolicy" id={r.policy.id} />}
+          </>
+        )}
+        rowDetail={(r) => {
+          const s = r.canAct && !r.renewedBy ? steps[r.policy.id] : undefined;
+          if (!s) return null;
+          return (
+            <div data-no-row-click>
+              {s === 'renew' ? <RenewForm r={r} onDone={() => setStep(r.policy.id, null)} /> : <CancelForm policyId={r.policy.id} onDone={() => setStep(r.policy.id, null)} />}
+            </div>
+          );
+        }}
+        empty={<Empty title="No policies recorded." action={<AddFor kind="insurancePolicy" label="Add policy" primary />} />}
+      />
     </Card>
   );
 }
+
+type PremiumState = Insurance['policies'][number]['premium'];
+const PREMIUM_ORDER: Record<PremiumState, number> = { overdue: 0, due: 1, later: 2, paid: 3 };
+
+/** P107: the premiums as one data table (the old groups are the Premiums filter; the group heads above pick it). */
+const PREMIUM_COLUMNS: DtColumn<PolicyRow>[] = [
+  { id: 'policy', label: 'Policy', value: (r) => r.label, render: (r) => <strong>{r.label}</strong>, phone: 'title' },
+  { id: 'insurer', label: 'Insurer', value: (r) => r.policy.insurer, hideBelow: 1200, phone: 'sub' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  {
+    id: 'due',
+    label: 'Due',
+    value: (r) => r.policy.premiumDueOn,
+    sort: 'date',
+    render: (r) => (
+      <span className="bz-sub">
+        {r.policy.premiumPayment
+          ? `Paid ${dateLabel(r.policy.premiumPayment.on)}, ref ${r.policy.premiumPayment.ref}`
+          : r.policy.premiumPaidOn
+            ? `Paid ${dateLabel(r.policy.premiumPaidOn)}, no payment reference recorded`
+            : r.premiumDaysLeft < 0
+              ? `Was due ${dateLabel(r.policy.premiumDueOn)}, ${-r.premiumDaysLeft} days ago`
+              : `Due ${dateLabel(r.policy.premiumDueOn)}, in ${r.premiumDaysLeft} days`}
+      </span>
+    ),
+  },
+  { id: 'premium', label: 'Premium', value: (r) => r.policy.premium, sort: 'money', render: (r) => rm(r.policy.premium) },
+  {
+    id: 'state',
+    label: 'Status',
+    value: (r) => PREMIUM[r.premium].label,
+    translate: true,
+    render: (r) => (
+      <span className="bz-chips">
+        <Chip tone={PREMIUM[r.premium].tone}>{PREMIUM[r.premium].label}</Chip>
+        {r.paidWithoutRef && <Chip tone="warn">Paid, no reference</Chip>}
+      </span>
+    ),
+  },
+];
+const PREMIUM_FILTERS: DtFilter<PolicyRow>[] = [
+  { id: 'state', label: 'Premiums', value: (r) => r.premium, options: (Object.keys(PREMIUM_ORDER) as PremiumState[]).map((k) => ({ value: k, label: PREMIUM[k].label })) },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
 
 function Premiums({ data }: { data: Insurance }) {
   const rows = [...data.policies].sort((a, b) => a.policy.premiumDueOn.localeCompare(b.policy.premiumDueOn));
-  const order = { overdue: 0, due: 1, later: 2, paid: 3 } as const;
-  rows.sort((a, b) => order[a.premium] - order[b.premium]);
-  const groups = (Object.keys(order) as (keyof typeof order)[]).map((k) => ({ k, rows: rows.filter((r) => r.premium === k) })).filter((g) => g.rows.length);
+  rows.sort((a, b) => PREMIUM_ORDER[a.premium] - PREMIUM_ORDER[b.premium]);
+  const groups = (Object.keys(PREMIUM_ORDER) as PremiumState[]).map((k) => ({ k, rows: rows.filter((r) => r.premium === k) })).filter((g) => g.rows.length);
+  const table = useTableState('insurance.premiums');
+  const chosen = table.state.f.state ?? '';
+  // P107: the Record payment form open under a row.
+  const [paying, setPaying] = useState<ReadonlySet<string>>(new Set());
+  const setPay = (id: string, on: boolean) =>
+    setPaying((x) => {
+      const next = new Set(x);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const canPay = (r: PolicyRow) => r.canAct && r.premium !== 'paid';
   return (
     <Card title="Premiums" sub="Cash before cover: an unpaid premium can leave the company without cover" flush>
-      {rows.length === 0 && <Empty title="No policies recorded." />}
-      {groups.map((g) => (
-        <div key={g.k} className="bz-in-group">
-          <div className="bz-in-group-head">
-            <Chip tone={PREMIUM[g.k].tone}>{PREMIUM[g.k].label}</Chip>
-            <span className="bz-sub">
-              {g.rows.length} · <span className="bz-amt">{rm(g.rows.reduce((n, r) => n + r.policy.premium, 0))}</span>
-            </span>
-          </div>
-          <ul className="bz-rows">
-            {g.rows.map((r) => (
-              <li key={r.policy.id} className="bz-row" data-tone={g.k === 'overdue' ? 'crit' : g.k === 'due' ? 'warn' : undefined}>
-                <span className="bz-row-main">
-                  <span className="bz-row-title">{r.label}</span>
-                  <span className="bz-row-meta">
-                    {r.policy.premiumPayment
-                      ? `Paid ${dateLabel(r.policy.premiumPayment.on)}, ref ${r.policy.premiumPayment.ref}`
-                      : r.policy.premiumPaidOn
-                        ? `Paid ${dateLabel(r.policy.premiumPaidOn)}, no payment reference recorded`
-                        : r.premiumDaysLeft < 0
-                        ? `Was due ${dateLabel(r.policy.premiumDueOn)}, ${-r.premiumDaysLeft} days ago`
-                        : `Due ${dateLabel(r.policy.premiumDueOn)}, in ${r.premiumDaysLeft} days`}{' '}
-                    · {r.policy.insurer}
-                  </span>
-                  <span className="bz-row-meta">{r.companyName}</span>
+      {groups.length > 0 && (
+        <div className="bz-in-group">
+          {/* The old group heads: each state's count and total; a click shows only that state, a second click all. */}
+          <div className="bz-chips">
+            {groups.map((g) => (
+              <button
+                key={g.k}
+                type="button"
+                className="btn btn-ghost btn-sm"
+                aria-pressed={chosen === g.k}
+                onClick={() => table.set({ f: { state: chosen === g.k ? '' : g.k } })}
+              >
+                <Chip tone={PREMIUM[g.k].tone}>{PREMIUM[g.k].label}</Chip>
+                <span className="bz-sub">
+                  {g.rows.length} · <span className="bz-amt">{rm(g.rows.reduce((n, r) => n + r.policy.premium, 0))}</span>
                 </span>
-                <span className="bz-row-side">
-                  <span className="bz-amt">{rm(r.policy.premium)}</span>
-                  {r.paidWithoutRef && <Chip tone="warn">Paid, no reference</Chip>}
-                  {r.canAct && r.premium !== 'paid' && <PremiumForm policyId={r.policy.id} />}
-                </span>
-              </li>
+              </button>
             ))}
-          </ul>
+          </div>
         </div>
-      ))}
+      )}
+      <DataTable
+        label="Premiums"
+        control={table}
+        rows={rows}
+        rowKey={(r) => r.policy.id}
+        columns={PREMIUM_COLUMNS}
+        filters={PREMIUM_FILTERS}
+        searchText={(r) => `${r.policy.policyNo} ${r.policy.premiumPayment?.ref ?? ''}`}
+        rowTone={(r) => (r.premium === 'overdue' ? 'crit' : r.premium === 'due' ? 'warn' : undefined)}
+        rowEnd={(r) =>
+          canPay(r) && !paying.has(r.policy.id) ? (
+            <button className="btn btn-sm" onClick={() => setPay(r.policy.id, true)}>
+              Record payment
+            </button>
+          ) : null
+        }
+        rowDetail={(r) =>
+          canPay(r) && paying.has(r.policy.id) ? (
+            <div data-no-row-click>
+              <PremiumForm policyId={r.policy.id} onClose={() => setPay(r.policy.id, false)} />
+            </div>
+          ) : null
+        }
+        empty={<Empty title="No policies recorded." />}
+      />
     </Card>
   );
 }
+
+/** P107: the claims as a data table: what, policy, company, incident, status, amount; Steps opens the claim drawer. */
+const CLAIM_COLUMNS: DtColumn<ClaimRow>[] = [
+  {
+    id: 'what',
+    label: 'Claim',
+    value: (r) => r.claim.what,
+    render: (r) => (
+      <>
+        <strong>{r.claim.what}</strong>
+        <span className="bz-sub" style={{ display: 'block' }}>
+          <span className="mono">{r.claim.ref}</span> · {r.policyLabel}
+        </span>
+      </>
+    ),
+    phone: 'title',
+  },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  {
+    id: 'incident',
+    label: 'Incident',
+    value: (r) => r.claim.incidentOn,
+    sort: 'date',
+    render: (r) => (
+      <>
+        {dateLabel(r.claim.incidentOn)}
+        <span className="bz-sub" style={{ display: 'block' }}>
+          {r.claim.notifiedOn ? `insurer told ${dateLabel(r.claim.notifiedOn)}` : `${r.sinceIncident} days and the insurer is not told`}
+        </span>
+      </>
+    ),
+    hideBelow: 1100,
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => CLAIM_STATUS[r.claim.status].label,
+    translate: true,
+    render: (r) => (
+      <span className="bz-chips">
+        <Chip tone={CLAIM_STATUS[r.claim.status].tone}>{CLAIM_STATUS[r.claim.status].label}</Chip>
+        {!r.covered && <Chip tone="warn">Outside cover dates</Chip>}
+      </span>
+    ),
+  },
+  {
+    id: 'claimed',
+    label: 'Amount',
+    value: (r) => r.claim.amountClaimed,
+    sort: 'money',
+    render: (r) => (
+      <>
+        {rm(r.claim.amountClaimed)} <span className="bz-sub">claimed</span>
+        {r.claim.settledAmount !== null && (
+          <span className="bz-sub" style={{ display: 'block' }}>
+            {rm(r.claim.settledAmount)} paid {dateLabel(r.claim.settledOn)}
+          </span>
+        )}
+      </>
+    ),
+  },
+];
+const CLAIM_FILTERS: DtFilter<ClaimRow>[] = [
+  { id: 'status', label: 'Status', value: (r) => r.claim.status, options: (Object.keys(CLAIM_STATUS) as ClaimRow['claim']['status'][]).map((k) => ({ value: k, label: CLAIM_STATUS[k].label })) },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  {
+    id: 'covered',
+    label: 'Cover dates',
+    value: (r) => (r.covered ? 'in' : 'out'),
+    options: [
+      { value: 'in', label: 'Within cover dates' },
+      { value: 'out', label: 'Outside cover dates' },
+    ],
+  },
+];
 
 function Claims({ data }: { data: Insurance }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -295,49 +531,25 @@ function Claims({ data }: { data: Insurance }) {
       actions={<><ImportFor kind="insuranceClaim" /><AddFor kind="insuranceClaim" label="Add claim" /></>}
       flush
     >
-      {data.claims.length === 0 ? (
-        <Empty title="No claims." action={<AddFor kind="insuranceClaim" label="Record claim" />} />
-      ) : (
-        <ul className="bz-rows">
-          {data.claims.map((r) => {
-            const s = CLAIM_STATUS[r.claim.status];
-            return (
-              <li key={r.claim.id} className="bz-row bz-in-claim" data-tone={stripe(s.tone)}>
-                <span className="bz-row-main">
-                  <span className="bz-row-title">{r.claim.what}</span>
-                  <span className="bz-row-meta">
-                    <span className="mono">{r.claim.ref}</span> · {r.policyLabel}
-                  </span>
-                  <span className="bz-row-meta">
-                    Incident {dateLabel(r.claim.incidentOn)}
-                    {r.claim.notifiedOn ? ` · insurer told ${dateLabel(r.claim.notifiedOn)}` : ` · ${r.sinceIncident} days and the insurer is not told`}
-                  </span>
-                  <span className="bz-row-meta">{r.companyName}</span>
-                  <span className="bz-chips">
-                    <Chip tone={s.tone}>{s.label}</Chip>
-                    {!r.covered && <Chip tone="warn">Outside cover dates</Chip>}
-                  </span>
-                </span>
-                <span className="bz-in-fig">
-                  <span className="bz-amt">{rm(r.claim.amountClaimed)}</span>
-                  <span className="bz-sub">claimed</span>
-                  {r.claim.settledAmount !== null && (
-                    <span className="bz-sub">
-                      {rm(r.claim.settledAmount)} paid {dateLabel(r.claim.settledOn)}
-                    </span>
-                  )}
-                </span>
-                <span className="bz-row-side bz-in-claim-acts">
-                  <button className="btn btn-sm" onClick={() => setOpenId(r.claim.id)}>
-                    Steps
-                  </button>
-                  {r.claim.status === 'to_notify' && <RecordButton kind="insuranceClaim" id={r.claim.id} />}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <DataTable
+        label="Claims"
+        stateKey="insurance.claims"
+        rows={data.claims}
+        rowKey={(r) => r.claim.id}
+        columns={CLAIM_COLUMNS}
+        filters={CLAIM_FILTERS}
+        searchText={(r) => `${r.claim.ref} ${r.policyLabel} ${r.claim.insurerRef ?? ''}`}
+        rowTone={(r) => stripe(CLAIM_STATUS[r.claim.status].tone)}
+        rowEnd={(r) => (
+          <>
+            <button className="btn btn-sm" onClick={() => setOpenId(r.claim.id)}>
+              Steps
+            </button>
+            {r.claim.status === 'to_notify' && <RecordButton kind="insuranceClaim" id={r.claim.id} />}
+          </>
+        )}
+        empty={<Empty title="No claims." action={<AddFor kind="insuranceClaim" label="Record claim" />} />}
+      />
       {open && <ClaimDrawer row={open} onClose={() => setOpenId(null)} />}
     </Card>
   );
@@ -537,6 +749,58 @@ function ClaimDrawer({ row: r, onClose }: { row: ClaimRow; onClose: () => void }
   );
 }
 
+type GuaranteeRow = Insurance['guarantees'][number];
+
+/** P107: the guarantees as a data table: guarantee, beneficiary and contract, issuer and fee, company, amount, validity, state. */
+const GUARANTEE_COLUMNS: DtColumn<GuaranteeRow>[] = [
+  { id: 'label', label: 'Guarantee', value: (r) => r.label, render: (r) => <strong>{r.label}</strong>, phone: 'title' },
+  {
+    id: 'beneficiary',
+    label: 'Beneficiary',
+    value: (r) => r.guarantee.beneficiary,
+    render: (r) => (
+      <>
+        To {r.guarantee.beneficiary} · {r.guarantee.contractRef}
+      </>
+    ),
+    phone: 'sub',
+  },
+  {
+    id: 'issuer',
+    label: 'Issuer',
+    value: (r) => r.guarantee.issuer,
+    render: (r) => (
+      <span className="bz-sub">
+        By {r.guarantee.issuer} · fee {rm(r.guarantee.fee)}
+        {r.guarantee.releasedOn ? ` · released ${dateLabel(r.guarantee.releasedOn)}` : ''}
+      </span>
+    ),
+    hideBelow: 1200,
+    phone: 'hidden',
+  },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, hideBelow: 1100 },
+  { id: 'amount', label: 'Amount', value: (r) => r.guarantee.amount, sort: 'money', render: (r) => rm(r.guarantee.amount) },
+  {
+    id: 'valid',
+    label: 'Expires on',
+    value: (r) => r.guarantee.expiresOn,
+    sort: 'date',
+    render: (r) => (
+      <>
+        <span>Valid to {dateLabel(r.guarantee.expiresOn)}</span>
+        <span className="bz-sub" style={{ display: 'block' }}>
+          Contract to {dateLabel(r.guarantee.contractEndsOn)}
+        </span>
+      </>
+    ),
+  },
+  { id: 'state', label: 'Status', value: (r) => GUARANTEE_STATE[r.state].label, translate: true, render: (r) => <Chip tone={GUARANTEE_STATE[r.state].tone}>{GUARANTEE_STATE[r.state].label}</Chip> },
+];
+const GUARANTEE_FILTERS: DtFilter<GuaranteeRow>[] = [
+  { id: 'state', label: 'Status', value: (r) => r.state, options: (Object.keys(GUARANTEE_STATE) as GuaranteeRow['state'][]).map((k) => ({ value: k, label: GUARANTEE_STATE[k].label })) },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
+
 function Guarantees({ data }: { data: Insurance }) {
   return (
     <Card
@@ -545,43 +809,18 @@ function Guarantees({ data }: { data: Insurance }) {
       actions={<><ImportFor kind="insuranceGuarantee" /><AddFor kind="insuranceGuarantee" label="Add guarantee" /></>}
       flush
     >
-      {data.guarantees.length === 0 ? (
-        <Empty title="No guarantees." action={<AddFor kind="insuranceGuarantee" label="Add guarantee" />} />
-      ) : (
-        <ul className="bz-rows">
-          {data.guarantees.map((r) => {
-            const s = GUARANTEE_STATE[r.state];
-            const g = r.guarantee;
-            return (
-              <li key={g.id} className="bz-row bz-in-row" data-tone={stripe(s.tone)}>
-                <span className="bz-row-main">
-                  <span className="bz-row-title">{r.label}</span>
-                  <span className="bz-row-meta">
-                    To {g.beneficiary} · {g.contractRef}
-                  </span>
-                  <span className="bz-row-meta">
-                    By {g.issuer} · fee {rm(g.fee)}
-                    {g.releasedOn ? ` · released ${dateLabel(g.releasedOn)}` : ''}
-                  </span>
-                  <span className="bz-row-meta">{r.companyName}</span>
-                </span>
-                <span className="bz-in-fig">
-                  <span className="bz-sub">Amount</span>
-                  <span className="bz-amt">{rm(g.amount)}</span>
-                </span>
-                <span className="bz-in-fig">
-                  <span>Valid to {dateLabel(g.expiresOn)}</span>
-                  <span className="bz-sub">Contract to {dateLabel(g.contractEndsOn)}</span>
-                </span>
-                <span className="bz-row-side">
-                  <Chip tone={s.tone}>{s.label}</Chip>
-                  <RecordButton kind="insuranceGuarantee" id={g.id} />
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <DataTable
+        label="Guarantees and bonds"
+        stateKey="insurance.guarantees"
+        rows={data.guarantees}
+        rowKey={(r) => r.guarantee.id}
+        columns={GUARANTEE_COLUMNS}
+        filters={GUARANTEE_FILTERS}
+        searchText={(r) => `${r.guarantee.contractRef} ${r.guarantee.issuer}`}
+        rowTone={(r) => stripe(GUARANTEE_STATE[r.state].tone)}
+        rowEnd={(r) => <RecordButton kind="insuranceGuarantee" id={r.guarantee.id} />}
+        empty={<Empty title="No guarantees." action={<AddFor kind="insuranceGuarantee" label="Add guarantee" />} />}
+      />
     </Card>
   );
 }
@@ -598,98 +837,137 @@ function ImportFor({ kind }: { kind: 'insurancePolicy' | 'insuranceClaim' | 'ins
   return <ImportButton kind={kind} companyId={companyId} />;
 }
 
+type CompanyRow = Insurance['rows'][number];
+type CoverState = 'unknown' | 'gaps' | 'due' | 'ok';
+
+const coverState = (r: CompanyRow): CoverState => (!r.hasDetail ? 'unknown' : r.missing.length + r.lapsed ? 'gaps' : r.expiring ? 'due' : 'ok');
+const COVER_TONE: Record<CoverState, Tone> = { unknown: 'unknown', gaps: 'crit', due: 'warn', ok: 'ok' };
+const COVER_OPTIONS: { value: CoverState; label: string }[] = [
+  { value: 'gaps', label: 'Cover gaps' },
+  { value: 'due', label: 'Renewals due' },
+  { value: 'ok', label: 'Covered' },
+  { value: 'unknown', label: 'Unknown' },
+];
+const COMPANY_FILTERS: DtFilter<CompanyRow>[] = [{ id: 'cover', label: 'Cover', value: coverState, options: COVER_OPTIONS }];
+
+/** P107: the companies as a data table: company (with what is missing), counts and amounts, other cover watched, cover state. */
+function companyColumns(armedCoverOnArmsBoard: boolean): DtColumn<CompanyRow>[] {
+  const known = (r: CompanyRow, v: number | undefined) => (r.hasDetail ? (v ?? null) : null);
+  return [
+    {
+      id: 'company',
+      label: 'Company',
+      value: (r) => r.company.name,
+      render: (r) => (
+        <>
+          <strong>{r.company.name}</strong>
+          {!r.hasDetail && (
+            <span className="bz-row-meta" style={{ display: 'block' }}>
+              Unknown: insurance records not loaded yet
+            </span>
+          )}
+          {r.hasDetail &&
+            r.missing.map((m) => (
+              <span key={m.kind} className="bz-in-missing" style={{ display: 'block' }}>
+                No {m.label.toLowerCase()}: {m.why}
+              </span>
+            ))}
+        </>
+      ),
+      phone: 'title',
+    },
+    { id: 'policies', label: 'Policies', value: (r) => known(r, r.policies), sort: 'number' },
+    {
+      id: 'premiums',
+      label: 'Premiums',
+      value: (r) => known(r, r.premiumYear),
+      sort: 'money',
+      render: (r) =>
+        r.hasDetail ? (
+          <>
+            {rm(r.premiumYear)} <span className="bz-sub">a year</span>
+          </>
+        ) : (
+          '–'
+        ),
+    },
+    { id: 'claims', label: 'Claims open', value: (r) => known(r, r.claimsOpen), sort: 'number', hideBelow: 1100 },
+    { id: 'guarantees', label: 'Guarantees', value: (r) => known(r, r.guaranteesLive), sort: 'money', render: (r) => (r.hasDetail ? rm(r.guaranteesLive) : '–'), hideBelow: 1100 },
+    {
+      id: 'other',
+      label: 'Other cover',
+      sort: false,
+      render: (r) =>
+        r.hasDetail ? (
+          <span className="bz-row-meta">
+            Group insurance licence:{' '}
+            {r.groupLicence
+              ? r.groupLicence.status === 'OK'
+                ? 'valid'
+                : r.groupLicence.status === 'DUE'
+                  ? `due in ${r.groupLicence.daysLeft} days`
+                  : r.groupLicence.status === 'OVERDUE'
+                    ? 'expired'
+                    : 'unknown'
+              : 'unknown'}{' '}
+            · Foreign worker insurance: {r.fwInsured} workers, {r.fwDue} due or unknown ·{' '}
+            {armedCoverOnArmsBoard
+              ? 'Armed-service and cash-in-transit cover: checked on the Arms Control board'
+              : `Armed-service cover: ${r.armsInsurance} client agreements, ${r.armsInsuranceDue} due or unknown`}
+          </span>
+        ) : (
+          '–'
+        ),
+      hideBelow: 1300,
+      phone: 'sub',
+    },
+    {
+      id: 'cover',
+      label: 'Cover',
+      value: (r) => COVER_OPTIONS.find((o) => o.value === coverState(r))!.label,
+      translate: true,
+      render: (r) => {
+        if (!r.hasDetail) return <Chip tone="unknown">Unknown</Chip>;
+        const gaps = r.missing.length + r.lapsed;
+        return <Chip tone={COVER_TONE[coverState(r)]}>{gaps ? `${gaps} cover gap${gaps === 1 ? '' : 's'}` : r.expiring ? 'Renewals due' : 'Covered'}</Chip>;
+      },
+    },
+  ];
+}
+
 function Companies({ data }: { data: Insurance }) {
   return (
     <Card title="By company" sub="Also shows insurance watched on other screens: group insurance licence, foreign worker and armed-service cover" flush>
-      <ul className="bz-rows">
-        {data.rows.map((r) => {
-          if (!r.hasDetail)
-            return (
-              <li key={r.company.id} className="bz-row">
-                <span className="bz-row-main">
-                  <span className="bz-row-title">{r.company.name}</span>
-                  <span className="bz-row-meta">Unknown: insurance records not loaded yet</span>
-                </span>
-                <span className="bz-row-side">
-                  <Chip tone="unknown">Unknown</Chip>
-                  <RecordButton kind="insurancePolicy" companyId={r.company.id} label="Add policy" />
-                </span>
-              </li>
-            );
-          const gaps = r.missing.length + r.lapsed;
-          const tone: Tone = gaps ? 'crit' : r.expiring ? 'warn' : 'ok';
-          return (
-            <li key={r.company.id} className="bz-row" data-tone={stripe(tone)}>
-              <span className="bz-row-main">
-                <span className="bz-row-title">{r.company.name}</span>
-                <span className="bz-in-figs">
-                  <span>
-                    <strong>{r.policies}</strong> policies
-                  </span>
-                  <span>
-                    <strong>{rm(r.premiumYear)}</strong> a year in premiums
-                  </span>
-                  <span>
-                    <strong>{r.claimsOpen}</strong> claims open
-                  </span>
-                  <span>
-                    <strong>{rm(r.guaranteesLive)}</strong> in guarantees
-                  </span>
-                </span>
-                {r.missing.map((m) => (
-                  <span key={m.kind} className="bz-in-missing">
-                    No {m.label.toLowerCase()}: {m.why}
-                  </span>
-                ))}
-                <span className="bz-row-meta">
-                  Group insurance licence:{' '}
-                  {r.groupLicence
-                    ? r.groupLicence.status === 'OK'
-                      ? 'valid'
-                      : r.groupLicence.status === 'DUE'
-                        ? `due in ${r.groupLicence.daysLeft} days`
-                        : r.groupLicence.status === 'OVERDUE'
-                          ? 'expired'
-                          : 'unknown'
-                    : 'unknown'}{' '}
-                  · Foreign worker insurance: {r.fwInsured} workers, {r.fwDue} due or unknown ·{' '}
-                  {data.armedCoverOnArmsBoard
-                    ? 'Armed-service and cash-in-transit cover: checked on the Arms Control board'
-                    : `Armed-service cover: ${r.armsInsurance} client agreements, ${r.armsInsuranceDue} due or unknown`}
-                </span>
-              </span>
-              <span className="bz-row-side">
-                <Chip tone={tone}>{gaps ? `${gaps} cover gap${gaps === 1 ? '' : 's'}` : r.expiring ? 'Renewals due' : 'Covered'}</Chip>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      <DataTable
+        label="By company"
+        stateKey="insurance.companies"
+        rows={data.rows}
+        rowKey={(r) => r.company.id}
+        columns={companyColumns(data.armedCoverOnArmsBoard)}
+        filters={COMPANY_FILTERS}
+        phoneFacts={5}
+        rowTone={(r) => (r.hasDetail ? stripe(COVER_TONE[coverState(r)]) : undefined)}
+        rowEnd={(r) => (!r.hasDetail ? <RecordButton kind="insurancePolicy" companyId={r.company.id} label="Add policy" /> : null)}
+      />
     </Card>
   );
 }
 
-/** The steps on a policy year: renew (adds next year's record) or cancel (kept as history with the reason). */
-function PolicySteps({ r }: { r: PolicyRow }) {
-  const [open, setOpen] = useState<'renew' | 'cancel' | null>(null);
-  if (r.renewedBy) return null;
+/** The steps on a policy year: renew (adds next year's record) or cancel (kept as history with the reason). P107: the
+ *  buttons sit at the row's end and the chosen form opens under the row (the table holds which one is open). */
+function PolicySteps({ r, open, onOpen }: { r: PolicyRow; open: 'renew' | 'cancel' | null; onOpen: (s: 'renew' | 'cancel') => void }) {
+  if (r.renewedBy || open) return null;
   return (
-    <>
-      {!open && (
-        <span className="bz-actions">
-          {r.cover.status !== 'OK' && (
-            <button className="btn btn-sm" onClick={() => setOpen('renew')}>
-              Renew
-            </button>
-          )}
-          <button className="btn btn-ghost btn-sm" onClick={() => setOpen('cancel')}>
-            Cancel policy
-          </button>
-        </span>
+    <span className="bz-actions">
+      {r.cover.status !== 'OK' && (
+        <button className="btn btn-sm" onClick={() => onOpen('renew')}>
+          Renew
+        </button>
       )}
-      {open === 'renew' && <RenewForm r={r} onDone={() => setOpen(null)} />}
-      {open === 'cancel' && <CancelForm policyId={r.policy.id} onDone={() => setOpen(null)} />}
-    </>
+      <button className="btn btn-ghost btn-sm" onClick={() => onOpen('cancel')}>
+        Cancel policy
+      </button>
+    </span>
   );
 }
 
@@ -812,18 +1090,12 @@ function CancelForm({ policyId, onDone }: { policyId: string; onDone: () => void
   );
 }
 
-/** Premium paid: the date and Finance's payment reference. A date on its own is not proof of payment. */
-function PremiumForm({ policyId }: { policyId: string }) {
-  const [open, setOpen] = useState(false);
+/** Premium paid: the date and Finance's payment reference. A date on its own is not proof of payment. P107: the
+ *  Record payment button sits at the row's end; this form opens under the row. */
+function PremiumForm({ policyId, onClose }: { policyId: string; onClose: () => void }) {
   const [paidOn, setPaidOn] = useState('');
   const [ref, setRef] = useState('');
   const act = useAction();
-  if (!open)
-    return (
-      <button className="btn btn-sm" onClick={() => setOpen(true)}>
-        Record payment
-      </button>
-    );
   return (
     <div className="bz-act">
       <label className="field">
@@ -839,11 +1111,11 @@ function PremiumForm({ policyId }: { policyId: string }) {
         <button
           className="btn btn-primary btn-sm"
           disabled={act.busy || !paidOn || ref.trim().length < 3}
-          onClick={() => act.run(() => api.recordInsurancePremium(policyId, { paidOn, ref }), 'Premium recorded as paid.').then((x) => x && setOpen(false))}
+          onClick={() => act.run(() => api.recordInsurancePremium(policyId, { paidOn, ref }), 'Premium recorded as paid.').then((x) => x && onClose())}
         >
           Save
         </button>
-        <button className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>
           Back
         </button>
       </div>
@@ -851,37 +1123,91 @@ function PremiumForm({ policyId }: { policyId: string }) {
   );
 }
 
+type HistoryRow = Insurance['history'][number];
+
+/** P107: past policy years as a data table: policy (and why it was cancelled), insurer, dates, premium, company, why it ended. */
+const HISTORY_COLUMNS: DtColumn<HistoryRow>[] = [
+  {
+    id: 'policy',
+    label: 'Policy',
+    value: (r) => r.label,
+    render: (r) => (
+      <>
+        <strong>{r.label}</strong>
+        {r.policy.cancelled && (
+          <span className="bz-row-meta" style={{ display: 'block' }}>
+            Cancelled from {dateLabel(r.policy.cancelled.on)} by {r.policy.cancelled.by}: {r.policy.cancelled.reason}
+          </span>
+        )}
+      </>
+    ),
+    phone: 'title',
+  },
+  {
+    id: 'insurer',
+    label: 'Insurer',
+    value: (r) => r.policy.insurer,
+    render: (r) => (
+      <>
+        {r.policy.insurer} · <span className="mono">{r.policy.policyNo}</span>
+      </>
+    ),
+    phone: 'sub',
+  },
+  {
+    id: 'dates',
+    label: 'Dates',
+    value: (r) => r.policy.expiresOn,
+    sort: 'date',
+    render: (r) => (
+      <span className="bz-sub">
+        {dateLabel(r.policy.startsOn)} to {dateLabel(r.policy.expiresOn)}
+      </span>
+    ),
+    hideBelow: 1100,
+  },
+  {
+    id: 'premium',
+    label: 'Premium',
+    value: (r) => r.policy.premium,
+    sort: 'money',
+    render: (r) => (
+      <>
+        {rm(r.policy.premium)}
+        {r.policy.premiumPayment ? <span className="bz-sub" style={{ display: 'block' }}>{`paid ref ${r.policy.premiumPayment.ref}`}</span> : null}
+      </>
+    ),
+  },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, hideBelow: 1200 },
+  { id: 'why', label: 'Why', value: (r) => (r.why === 'cancelled' ? 'Cancelled' : 'Renewed'), translate: true, render: (r) => <Chip tone="neutral">{r.why === 'cancelled' ? 'Cancelled' : 'Renewed'}</Chip> },
+];
+const HISTORY_FILTERS: DtFilter<HistoryRow>[] = [
+  {
+    id: 'why',
+    label: 'Why',
+    value: (r) => (r.why === 'cancelled' ? 'cancelled' : 'renewed'),
+    options: [
+      { value: 'renewed', label: 'Renewed' },
+      { value: 'cancelled', label: 'Cancelled' },
+    ],
+  },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
+
 /** Policy years that ended by renewal, and cancelled policies: kept on the register, no longer counted as cover. */
 function History({ data }: { data: Insurance }) {
   return (
     <Card title="History" sub="Renewed and cancelled policies stay on the register" flush>
-      {data.history.length === 0 ? (
-        <Empty title="No past policies yet." />
-      ) : (
-        <ul className="bz-rows">
-          {data.history.map((r) => (
-            <li key={r.policy.id} className="bz-row">
-              <span className="bz-row-main">
-                <span className="bz-row-title">{r.label}</span>
-                <span className="bz-row-meta">
-                  {r.policy.insurer} · <span className="mono">{r.policy.policyNo}</span> · {dateLabel(r.policy.startsOn)} to {dateLabel(r.policy.expiresOn)} · premium{' '}
-                  {rm(r.policy.premium)}
-                  {r.policy.premiumPayment ? `, paid ref ${r.policy.premiumPayment.ref}` : ''}
-                </span>
-                {r.policy.cancelled && (
-                  <span className="bz-row-meta">
-                    Cancelled from {dateLabel(r.policy.cancelled.on)} by {r.policy.cancelled.by}: {r.policy.cancelled.reason}
-                  </span>
-                )}
-                <span className="bz-row-meta">{r.companyName}</span>
-              </span>
-              <span className="bz-row-side">
-                <Chip tone="neutral">{r.why === 'cancelled' ? 'Cancelled' : 'Renewed'}</Chip>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <DataTable
+        label="History"
+        stateKey="insurance.history"
+        rows={data.history}
+        rowKey={(r) => r.policy.id}
+        columns={HISTORY_COLUMNS}
+        filters={HISTORY_FILTERS}
+        searchText={(r) => `${r.policy.policyNo} ${r.policy.premiumPayment?.ref ?? ''}`}
+        empty={<Empty title="No past policies yet." />}
+      />
     </Card>
   );
 }

@@ -19,6 +19,8 @@ import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui
 import { Card, Empty, Facts, PageHead, Person, Stat, Stats, Steps, type StepState } from '../kit';
 import { DataTable, type DtColumn } from '../DataTable';
 import { ProofPicker, readAsDataUrl, shrinkImage } from './Proof';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { readReceiptOnPhone } from '../ocr';
 import '../styles/leave.css';
 
@@ -73,20 +75,26 @@ function today(): string {
   return new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
 }
 
+type ClaimTab = 'mine' | 'queue' | 'enter' | 'rates';
+
 export function ClaimsView() {
   const { data, error } = useLoad(() => api.staffClaims(), []);
-  const [tab, setTab] = useState<'mine' | 'queue' | 'enter' | 'rates' | null>(null);
+  // P121: a link may open a tab (#claims/mine); one this person does not have falls back to their usual first tab.
+  const [tab, setTab] = useRouteTab<ClaimTab | ''>('', ['mine', 'queue', 'enter', 'rates']);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="claims" />;
-  const view = tab ?? (data.role ? (data.role === 'cos' && data.missingRates.length ? 'rates' : 'queue') : data.toVerify ? 'queue' : 'mine');
   const waiting =
     data.queue.filter((r) => r.canCos || r.canHr || r.canCoo || r.canPay || r.canHead).length + data.tripQueue.filter((t) => t.status === 'pending').length;
   const hasQueue = !!data.role || data.queue.length > 0;
+  const has = (t: ClaimTab) => (t === 'mine' ? data.canClaim : t === 'queue' ? hasQueue : t === 'enter' ? data.enterFor.length > 0 : true);
+  const view: ClaimTab =
+    tab && has(tab) ? tab : data.role ? (data.role === 'cos' && data.missingRates.length ? 'rates' : 'queue') : data.toVerify ? 'queue' : 'mine';
   return (
     <div className="page lv-page">
       <PageHead
         title="Claims"
         sub="Medical with dental up to RM1,000 a year, optical RM500 every 2 years, the yearly check-up at a panel clinic separately, and travel at the published rate per km. Valet parking cannot be claimed."
+        actions={<SopHelp id="hr-staff-claim" />}
       >
         {data.canSetRates && data.missingRates.length > 0 && (
           <div className="notice" data-tone="warn" role="status">

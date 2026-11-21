@@ -229,13 +229,22 @@ export function CompanyView() {
   );
 }
 
-/** P91: the company's licences are the records kept from this screen; Add and Import sit at the top for those who keep them. */
+/**
+ * P91: the company's licences are the records kept from this screen; Add and Import sit at the top for those who keep them.
+ * P121: the Head of Company also drafts the company record here (Central Admin 5A part 3; before, only Group had the
+ * button, which a Company Manager cannot open). The button shows only to those the server lets keep it.
+ */
 function LicenceAdd({ companyId }: { companyId: string }) {
-  if (!useRecordKinds().has('licence')) return null;
+  const kinds = useRecordKinds();
   return (
     <>
-      <RecordButton kind="licence" companyId={companyId} label="Add licence" primary />
-      <ImportButton kind="licence" companyId={companyId} />
+      <RecordButton kind="company" companyId={companyId} label="Company record" />
+      {kinds.has('licence') && (
+        <>
+          <RecordButton kind="licence" companyId={companyId} label="Add licence" primary />
+          <ImportButton kind="licence" companyId={companyId} />
+        </>
+      )}
     </>
   );
 }

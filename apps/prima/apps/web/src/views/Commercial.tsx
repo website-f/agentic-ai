@@ -4,14 +4,15 @@ import { TenderCounterPanel } from './TenderCounter';
 import { TenderOpportunitiesPanel } from './TenderOpportunities';
 import { LeadsPanel } from './Leads';
 import { ImportButton } from './ImportDrawer';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Quotation, QuotationStatus, TenderStatus } from '@prima/core';
 import { api, type Commercial, type QuotationAction } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
 import { ProtocolPanel, TenderSteps, stepsMissing } from './TenderProtocol';
 import { PriorityChip, TenderBidFiles, TenderChecklist, TenderChecks, TenderDecisionPanel, TenderPapers, TenderQueries, TenderRecordPanel } from './TenderFlow';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Card, Empty, Facts, PageHead, Stat, Stats } from '../kit';
+import { SopHelp } from '../sop/SopHelp';
 import { CalendarBlankIcon, FileTextIcon, HourglassIcon, PlusIcon, ProhibitIcon } from '@phosphor-icons/react';
 import '../styles/biz.css';
 
@@ -41,9 +42,22 @@ export function rm(n: number | null): string {
 }
 
 /** Company admin desk for bidding papers, tenders and quotations (V3 tenders, V4 admin roles, V12 quotation authority). */
+/**
+ * P121: the page is one long scroll; a link (#commercial/leads) or the "On this page" row jumps to a part of it. The
+ * page itself is unchanged.
+ */
+type Part = 'tenders' | 'quotes' | 'leads' | 'found' | 'joint' | 'counter' | 'protocol';
+const PART_IDS: Part[] = ['tenders', 'quotes', 'leads', 'found', 'joint', 'counter', 'protocol'];
+const jumpTo = (p: Part) => document.getElementById(`cm-${p}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
 export function CommercialView({ openTenderId }: { openTenderId?: string } = {}) {
   const { companyId, company, me } = useApp();
   const { data, error } = useLoad(() => api.commercial(companyId), [companyId]);
+  const [part, setPart] = useRouteTab<Part>('tenders', PART_IDS);
+  const loaded = !!data;
+  useEffect(() => {
+    if (loaded && part !== 'tenders') window.setTimeout(() => jumpTo(part), 300);
+  }, [part, loaded]);
   const [openTender, setOpenTender] = useState<string | null>(openTenderId ?? null);
   const [openQuote, setOpenQuote] = useState<string | null>(null);
   const [newQuote, setNewQuote] = useState<{ tenderId: string | null; client: string } | null>(null);
@@ -62,6 +76,7 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
       </div>
     );
 
+  const joint = me.user.role === 'company_manager' || me.user.role === 'admin_exec';
   const live = data.tenders.filter((t) => t.tender.status === 'open' || t.tender.status === 'preparing');
   const tender = data.tenders.find((t) => t.tender.id === openTender);
   const quote = data.quotations.find((q) => q.id === openQuote);
@@ -91,7 +106,9 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
           </>
         }
         actions={
-          (data.can.addTender || data.can.prepare) && (
+          <>
+            <SopHelp id="sales" />
+            {(data.can.addTender || data.can.prepare) && (
             <>
               {data.can.addTender && (
                 <button className="btn btn-primary" onClick={() => setNewTender(true)}>
@@ -107,9 +124,37 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
                 </button>
               )}
             </>
-          )
+            )}
+          </>
         }
       />
+      <nav className="cm-jump" aria-label="On this page" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, margin: '0 0 12px' }}>
+        <span className="muted small">On this page:</span>
+        {(
+          [
+            ['tenders', 'Tender pipeline'],
+            ['quotes', 'Quotations'],
+            ['leads', 'Leads and client research'],
+            ['found', 'Tenders and quotations found'],
+            ...(joint ? ([['joint', 'Joint tenders']] as [Part, string][]) : []),
+            ['counter', 'Tender counter'],
+            ['protocol', 'Tender protocol'],
+          ] as [Part, string][]
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            className="btn btn-sm"
+            aria-current={part === k ? 'true' : undefined}
+            onClick={() => {
+              setPart(k);
+              jumpTo(k);
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
 
       <Stats>
         <Stat label="Tenders to work on" value={live.length} note="Open or being prepared" icon={<FileTextIcon size={16} />} tone="info" />
@@ -130,7 +175,7 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
         />
       </Stats>
 
-      <Card title="Tender pipeline" sub="Closing date first. Open a tender to work on its papers, steps and bid files." actions={<span className="bz-count">{data.tenders.length}</span>}>
+      <Card id="cm-tenders" title="Tender pipeline" sub="Closing date first. Open a tender to work on its papers, steps and bid files." actions={<span className="bz-count">{data.tenders.length}</span>}>
         {data.tenders.length === 0 ? (
           <Empty
             title="No tenders recorded for this company yet."
@@ -182,7 +227,7 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
           </ul>
         </Card>
 
-        <Card title="Quotations" sub="Prices are typed in by the admin team until costing rules are approved" flush>
+        <Card id="cm-quotes" title="Quotations" sub="Prices are typed in by the admin team until costing rules are approved" flush>
           {data.quotations.length === 0 ? (
             <Empty
               title="No quotations yet."
@@ -222,15 +267,27 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
         </Card>
       </div>
 
-      {(me.user.role === 'company_manager' || me.user.role === 'admin_exec') && <JointTenders />}
+      {joint && (
+        <div id="cm-joint">
+          <JointTenders />
+        </div>
+      )}
 
-      <TenderOpportunitiesPanel companyId={companyId} />
+      <div id="cm-found">
+        <TenderOpportunitiesPanel companyId={companyId} />
+      </div>
 
-      <TenderCounterPanel companyId={companyId} />
+      <div id="cm-counter">
+        <TenderCounterPanel companyId={companyId} />
+      </div>
 
-      <LeadsPanel companyId={companyId} />
+      <div id="cm-leads">
+        <LeadsPanel companyId={companyId} />
+      </div>
 
-      <ProtocolPanel p={data.protocol} />
+      <div id="cm-protocol">
+        <ProtocolPanel p={data.protocol} />
+      </div>
 
       {tender && (
         <TenderDrawer

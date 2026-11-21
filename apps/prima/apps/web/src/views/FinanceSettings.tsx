@@ -3,6 +3,15 @@ import { useState } from 'react';
 import { api } from '../api';
 import { ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
 import { Card } from '../kit';
+import { DataTable, type DtColumn } from '../DataTable';
+
+type History = Awaited<ReturnType<typeof api.finSettings>>['history'][number];
+const HISTORY_COLUMNS: DtColumn<History>[] = [
+  { id: 'by', label: 'Who', value: (h) => h.set.by, render: (h) => <span className="fin-strong">{h.set.by}</span>, phone: 'title' },
+  { id: 'why', label: 'Why', value: (h) => h.set.comment, sort: false, phone: 'sub' },
+  { id: 'at', label: 'When', value: (h) => h.set.at, sort: 'date', render: (h) => <span className="fin-nowrap">{dateTimeLabel(h.set.at)}</span> },
+  { id: 'from', label: 'In force from', value: (h) => h.set.effectiveFrom ?? null, sort: 'date', render: (h) => h.set.effectiveFrom ?? '–' },
+];
 
 /**
  * Group Finance settings (Fauzan, 1 Nov 2026: "put it under the FD to approve, review or set"). Every Finance person
@@ -133,19 +142,14 @@ export function FinanceSettingsTab() {
       {data.canSet && data.teams.length > 0 && <YearEndPanel rows={data.teams} onSaved={() => setN((x) => x + 1)} />}
       {data.history.length > 0 && (
         <Card title="Earlier settings" flush>
-          <div className="fin-rows">
-            {[...data.history].reverse().map((h, i) => (
-              <div key={i} className="fin-kv">
-                <span>
-                  <span className="fin-strong">{h.set.by}</span>: {h.set.comment}
-                </span>
-                <span className="muted small fin-nowrap">
-                  {dateTimeLabel(h.set.at)}
-                  {h.set.effectiveFrom ? `, in force from ${h.set.effectiveFrom}` : ''}
-                </span>
-              </div>
-            ))}
-          </div>
+          {/* P107: a table (search, sortable dates, pages; cards on a phone), newest first as before. */}
+          <DataTable
+            label="Earlier settings"
+            stateKey="fin.settings.history"
+            rows={[...data.history].reverse()}
+            rowKey={(h) => `${h.set.at}-${h.set.by}`}
+            columns={HISTORY_COLUMNS}
+          />
         </Card>
       )}
     </>
@@ -254,25 +258,38 @@ function TeamPanel({ rows, onSaved }: { rows: { companyId: string; name: string;
       }
     >
       <ErrorNotice error={act.error} />
-      <div className="fin-rows fin-rows-2">
-        {rows.map((r) => (
-          <div key={r.companyId} className="fin-kv">
-            <span className="fin-min0">{r.name}</span>
-            <Select
-              className="select fin-w-sm"
-              aria-label={`Team for ${r.name}`}
-              value={moves[r.companyId] ?? r.team}
-              onChange={(e) => setMoves((m) => ({ ...m, [r.companyId]: Number(e.target.value) }))}
-            >
-              {[1, 2, 3, 4, 5, 6, 7].map((t) => (
-                <option key={t} value={t}>
-                  Team {t}
-                </option>
-              ))}
-            </Select>
-          </div>
-        ))}
-      </div>
+      {/* P107: a table (search, a team filter, pages; cards on a phone); each company's team pick stays in its row. */}
+      <DataTable
+        label="Teams and their companies"
+        stateKey="fin.settings.teams"
+        rows={rows}
+        rowKey={(r) => r.companyId}
+        columns={[
+          { id: 'company', label: 'Company', value: (r) => r.name, phone: 'title' },
+          {
+            id: 'team',
+            label: 'Team',
+            value: (r) => r.team,
+            sort: 'number',
+            align: 'left',
+            render: (r) => (
+              <Select
+                className="select fin-w-sm"
+                aria-label={`Team for ${r.name}`}
+                value={moves[r.companyId] ?? r.team}
+                onChange={(e) => setMoves((m) => ({ ...m, [r.companyId]: Number(e.target.value) }))}
+              >
+                {[1, 2, 3, 4, 5, 6, 7].map((t) => (
+                  <option key={t} value={t}>
+                    Team {t}
+                  </option>
+                ))}
+              </Select>
+            ),
+          },
+        ]}
+        filters={[{ id: 'team', label: 'Team', value: (r) => String(r.team), optionLabel: (t) => `Team ${t}` }]}
+      />
     </Card>
   );
 }
@@ -296,27 +313,48 @@ function YearEndPanel({ rows, onSaved }: { rows: { companyId: string; name: stri
         Every company's financial year ends on 31 December. Change one only when its year end really differs (MM-DD, for example 06-30); the reason and the old date are kept.
       </p>
       <ErrorNotice error={act.error} />
-      <div className="list">
-        {rows.map((r) => (
-          <div key={r.companyId} className="list-item" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              {r.name}
-              {r.fyEndHistory.length > 0 && (
-                <span className="muted small">
-                  {' '}
-                  · was {r.fyEndHistory[r.fyEndHistory.length - 1].from}, changed by {r.fyEndHistory[r.fyEndHistory.length - 1].by}: {r.fyEndHistory[r.fyEndHistory.length - 1].comment}
-                </span>
-              )}
-            </span>
-            <input
-              className="input"
-              aria-label={`Year end for ${r.name}`}
-              value={ends[r.companyId] ?? r.fyEnd}
-              onChange={(e) => setEnds((m) => ({ ...m, [r.companyId]: e.target.value }))}
-              style={{ width: 90 }}
-            />
-          </div>
-        ))}
+      {/* P107: a table (search, a year-end filter, pages; cards on a phone); each company's year end stays editable in its row. */}
+      <div className="panel-body">
+        <DataTable
+          label="Financial year ends"
+          stateKey="fin.settings.yearends"
+          rows={rows}
+          rowKey={(r) => r.companyId}
+          columns={[
+            {
+              id: 'company',
+              label: 'Company',
+              value: (r) => r.name,
+              render: (r) => (
+                <>
+                  {r.name}
+                  {r.fyEndHistory.length > 0 && (
+                    <span className="muted small">
+                      {' '}
+                      · was {r.fyEndHistory[r.fyEndHistory.length - 1].from}, changed by {r.fyEndHistory[r.fyEndHistory.length - 1].by}: {r.fyEndHistory[r.fyEndHistory.length - 1].comment}
+                    </span>
+                  )}
+                </>
+              ),
+              phone: 'title',
+            },
+            {
+              id: 'fyEnd',
+              label: 'Year end',
+              value: (r) => r.fyEnd,
+              render: (r) => (
+                <input
+                  className="input"
+                  aria-label={`Year end for ${r.name}`}
+                  value={ends[r.companyId] ?? r.fyEnd}
+                  onChange={(e) => setEnds((m) => ({ ...m, [r.companyId]: e.target.value }))}
+                  style={{ width: 90 }}
+                />
+              ),
+            },
+          ]}
+          filters={[{ id: 'fyEnd', label: 'Year end', value: (r) => r.fyEnd }]}
+        />
       </div>
       {odd.length === 0 && changed.length === 0 && <p className="muted small" style={{ padding: '0 12px' }}>All companies end their year on 31 December.</p>}
       {changed.length > 0 && (

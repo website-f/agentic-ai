@@ -2,6 +2,7 @@ import { Select } from '../SearchSelect';
 import { useState } from "react";
 import { api, type FinControls, type FinDesk } from "../api";
 import { Chip, ErrorNotice, dateLabel, useAction, useLoad } from "../ui";
+import { DataTable, type DtColumn, type DtFilter } from "../DataTable";
 import "../styles/finance.css";
 
 /**
@@ -395,22 +396,86 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
 
 // ---------- Staff cash advances ----------
 
+const ADVANCE_STATUS: Record<
+  string,
+  ["ok" | "warn" | "crit" | "info" | "neutral", string]
+> = {
+  open: ["info", "Not settled"],
+  submitted: ["warn", "Settlement to check"],
+  settled: ["ok", "Settled"],
+  recovered: ["neutral", "Recovered"],
+  cancelled: ["neutral", "Cancelled"],
+};
+type Advance = Cash["advances"][number];
+
+/** P107: the staff advances as a table; the settlement notes and the check and recovery boxes stay under the row. */
+const ADVANCE_COLUMNS: DtColumn<Advance>[] = [
+  {
+    id: "name",
+    label: "Name",
+    value: (x) => x.name,
+    phone: "title",
+    render: (x) => <strong>{x.name}</strong>,
+  },
+  { id: "purpose", label: "Purpose", value: (x) => x.purpose, phone: "sub" },
+  {
+    id: "amount",
+    label: "Amount",
+    value: (x) => x.amount,
+    sort: "money",
+    render: (x) => rm(x.amount),
+  },
+  {
+    id: "settleBy",
+    label: "Settle by",
+    value: (x) => x.settleBy,
+    sort: "date",
+    render: (x) => dateLabel(x.settleBy),
+  },
+  {
+    id: "payment",
+    label: "Payment",
+    value: (x) => x.paymentId,
+    hideBelow: 1100,
+    render: (x) => (
+      <>
+        {x.paymentId} ({x.paymentStatus ?? "–"})
+      </>
+    ),
+  },
+  {
+    id: "status",
+    label: "Status",
+    value: (x) => ADVANCE_STATUS[x.status][1],
+    translate: true,
+    render: (x) => (
+      <span className="row">
+        {x.overdue && <Chip tone="crit">Overdue</Chip>}
+        <Chip tone={ADVANCE_STATUS[x.status][0]}>
+          {ADVANCE_STATUS[x.status][1]}
+        </Chip>
+      </span>
+    ),
+  },
+];
+const ADVANCE_FILTERS: DtFilter<Advance>[] = [
+  {
+    id: "status",
+    label: "Status",
+    // An overdue advance is found under its own status and under "Overdue".
+    value: (x) =>
+      x.overdue
+        ? [ADVANCE_STATUS[x.status][1], "Overdue"]
+        : ADVANCE_STATUS[x.status][1],
+  },
+];
+
 export function Advances({ v, co }: { v: FinControls; co: Co }) {
   const { act, go } = useGo(v.companyId);
   const [adding, setAdding] = useState(false);
   const [f, setF] = useState<Record<string, string>>({});
   const set = (k: string) => (e: { target: { value: string } }) =>
     setF((x) => ({ ...x, [k]: e.target.value }));
-  const STATUS: Record<
-    string,
-    ["ok" | "warn" | "crit" | "info" | "neutral", string]
-  > = {
-    open: ["info", "Not settled"],
-    submitted: ["warn", "Settlement to check"],
-    settled: ["ok", "Settled"],
-    recovered: ["neutral", "Recovered"],
-    cancelled: ["neutral", "Cancelled"],
-  };
   return (
     <section className="panel">
       <div className="panel-head">
@@ -533,36 +598,50 @@ export function Advances({ v, co }: { v: FinControls; co: Co }) {
           </button>
         </div>
       )}
-      <div className="list">
-        {v.cash.advances.length === 0 && (
-          <div className="empty">No advances.</div>
-        )}
-        {v.cash.advances.map((x) => (
-          <div
-            key={x.id}
-            className="list-item fin-stack"
-          >
-            <div
-              className="row fin-between"
-            >
-              <span>
-                <strong>{x.name}</strong> · {rm(x.amount)} · {x.purpose}
-              </span>
-              <span className="row">
-                {x.overdue && <Chip tone="crit">Overdue</Chip>}
-                <Chip tone={STATUS[x.status][0]}>{STATUS[x.status][1]}</Chip>
-              </span>
-            </div>
+      <DataTable
+        label="Staff cash advances"
+        stateKey="fin.advances"
+        rows={v.cash.advances}
+        rowKey={(x) => x.id}
+        columns={ADVANCE_COLUMNS}
+        filters={ADVANCE_FILTERS}
+        rowDetail={(x) =>
+          x.settlement ||
+          x.checked ||
+          x.recovered ||
+          (x.status === "submitted" && co.canAct) ||
+          (x.overdue && co.canAct) ? (
+            <AdvanceDetail x={x} co={co} go={go} />
+          ) : null
+        }
+        empty={<div className="empty">No advances.</div>}
+      />
+    </section>
+  );
+}
+
+/** Under an advance's row: how it was settled, checked or recovered, and the check and recovery boxes. */
+function AdvanceDetail({
+  x,
+  co,
+  go,
+}: {
+  x: Advance;
+  co: Co;
+  go: ReturnType<typeof useGo>["go"];
+}) {
+  return (
+          <div className="fin-stack">
+            {(x.settlement || x.checked || x.recovered) && (
             <div className="muted small">
-              Settle by {dateLabel(x.settleBy)} · payment {x.paymentId} (
-              {x.paymentStatus ?? "–"})
               {x.settlement &&
-                ` · spent ${rm(x.settlement.spent)} (${x.settlement.receipts.length} receipt(s)), paid back ${rm(x.settlement.returned)}${x.settlement.returnRef ? ` (${x.settlement.returnRef})` : ""}${x.settlement.extra ? `, ${rm(x.settlement.extra)} more to claim` : ""}`}
+                `spent ${rm(x.settlement.spent)} (${x.settlement.receipts.length} receipt(s)), paid back ${rm(x.settlement.returned)}${x.settlement.returnRef ? ` (${x.settlement.returnRef})` : ""}${x.settlement.extra ? `, ${rm(x.settlement.extra)} more to claim` : ""}`}
               {x.checked &&
-                ` · checked by ${x.checked.by}: ${x.checked.comment}`}
+                `${x.settlement ? " · " : ""}checked by ${x.checked.by}: ${x.checked.comment}`}
               {x.recovered &&
-                ` · ${x.recovered.how.replace("_", " ")} (${x.recovered.ref}) by ${x.recovered.by}`}
+                `${x.settlement || x.checked ? " · " : ""}${x.recovered.how.replace("_", " ")} (${x.recovered.ref}) by ${x.recovered.by}`}
             </div>
+            )}
             {x.status === "submitted" && co.canAct && (
               <>
                 <Ask
@@ -605,9 +684,6 @@ export function Advances({ v, co }: { v: FinControls; co: Co }) {
               />
             )}
           </div>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -956,22 +1032,39 @@ export function Cards({ v, co }: { v: FinControls; co: Co }) {
           </button>
         </div>
       )}
-      <div className="list">
-        {v.cash.cards.length === 0 && <div className="empty">No cards.</div>}
-        {v.cash.cards.map((c) => (
-          <div
-            key={c.id}
-            className="list-item fin-stack"
-          >
-            <div
-              className="row fin-between"
-            >
-              <span>
-                <strong>
-                  {c.issuer} ****{c.last4}
-                </strong>{" "}
-                · {c.kind} · {c.holder} · limit {rm(c.limit)}
-              </span>
+      {/* P107: the cards as a table; each card's statements and the "Load a statement" form stay under its row. */}
+      <DataTable
+        label="Company credit and fuel cards"
+        stateKey="fin.cards"
+        rows={v.cash.cards}
+        rowKey={(c) => c.id}
+        columns={[
+          {
+            id: "card",
+            label: "Card",
+            value: (c) => `${c.issuer} ****${c.last4}`,
+            phone: "title",
+            render: (c) => (
+              <strong>
+                {c.issuer} ****{c.last4}
+              </strong>
+            ),
+          },
+          { id: "kind", label: "Type", value: (c) => c.kind, translate: true },
+          { id: "holder", label: "Holder", value: (c) => c.holder, phone: "sub" },
+          {
+            id: "limit",
+            label: "Limit",
+            value: (c) => c.limit,
+            sort: "money",
+            render: (c) => rm(c.limit),
+          },
+          {
+            id: "status",
+            label: "Status",
+            value: (c) => (c.status === "pending" ? "To check" : c.status),
+            translate: true,
+            render: (c) => (
               <Chip
                 tone={
                   c.status === "active"
@@ -983,7 +1076,33 @@ export function Cards({ v, co }: { v: FinControls; co: Co }) {
               >
                 {c.status === "pending" ? "To check" : c.status}
               </Chip>
-            </div>
+            ),
+          },
+        ]}
+        filters={[
+          { id: "kind", label: "Type", value: (c) => c.kind },
+          {
+            id: "status",
+            label: "Status",
+            value: (c) => (c.status === "pending" ? "To check" : c.status),
+          },
+          { id: "holder", label: "Holder", value: (c) => c.holder },
+        ]}
+        rowEnd={(c) =>
+          c.status === "active" && co.canAct ? (
+            <button
+              className="btn btn-sm"
+              onClick={() => setLoading(loading === c.id ? null : c.id)}
+            >
+              {loading === c.id ? "Close" : "Load a statement"}
+            </button>
+          ) : null
+        }
+        rowDetail={(c) =>
+          (c.status === "pending" && co.canAct) ||
+          c.statements.length > 0 ||
+          loading === c.id ? (
+          <div className="fin-stack">
             {c.status === "pending" && co.canAct && (
               <Ask
                 label="What you checked it against (bank letter, card application)"
@@ -1062,14 +1181,6 @@ export function Cards({ v, co }: { v: FinControls; co: Co }) {
                 )}
               </div>
             ))}
-            {c.status === "active" && co.canAct && (
-              <button
-                className="btn btn-sm fin-self-start"
-                onClick={() => setLoading(loading === c.id ? null : c.id)}
-              >
-                {loading === c.id ? "Close" : "Load a statement"}
-              </button>
-            )}
             {loading === c.id && (
               <div className="fin-grid">
                 <Field label="Month (YYYY-MM)">
@@ -1135,8 +1246,10 @@ export function Cards({ v, co }: { v: FinControls; co: Co }) {
               </div>
             )}
           </div>
-        ))}
-      </div>
+          ) : null
+        }
+        empty={<div className="empty">No cards.</div>}
+      />
     </section>
   );
 }
@@ -1492,16 +1605,31 @@ export function AdvancesOverdue() {
         recovery from salary is recorded by Finance and shows on the payroll
         line.
       </p>
-      <div className="list">
-        {data.map((x) => (
-          <div key={x.id} className="list-item">
-            <span>
-              {x.name} · {rm(x.amount)} · {x.purpose}
-            </span>
-            <Chip tone="crit">{x.days} day(s) overdue</Chip>
-          </div>
-        ))}
-      </div>
+      {/* P107: a table (search, sort by days overdue, pages) in place of the plain list. */}
+      <DataTable
+        label="Staff advances not settled"
+        stateKey="staffpay.advances-overdue"
+        rows={data}
+        rowKey={(x) => x.id}
+        columns={[
+          { id: "name", label: "Name", value: (x) => x.name, phone: "title" },
+          { id: "purpose", label: "Purpose", value: (x) => x.purpose, phone: "sub" },
+          {
+            id: "amount",
+            label: "Amount",
+            value: (x) => x.amount,
+            sort: "money",
+            render: (x) => rm(x.amount),
+          },
+          {
+            id: "days",
+            label: "Days overdue",
+            value: (x) => x.days,
+            sort: "number",
+            render: (x) => <Chip tone="crit">{x.days} day(s) overdue</Chip>,
+          },
+        ]}
+      />
     </section>
   );
 }

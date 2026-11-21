@@ -10,6 +10,7 @@ import { DocList, ProofPicker } from './Proof';
 import '../styles/selfservice.css';
 import { StayRequestPanel } from './ShortStays';
 import { OfficeRequestPanel } from './OfficeAm';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Operation claims and office requests (Fauzan, 26 Oct 2026). The Operations Manager sets the month's operation claim
@@ -99,7 +100,9 @@ export function RequestsView() {
         title="Claims and requests"
         sub={PAGE_SUB}
         actions={
-          (data.can.opsClaim || data.can.office) &&
+          <>
+          <SopHelp id="equip-office-request" />
+          {(data.can.opsClaim || data.can.office) &&
           !adding && (
             <>
               {data.can.opsClaim && (
@@ -115,7 +118,8 @@ export function RequestsView() {
                 </button>
               )}
             </>
-          )
+          )}
+          </>
         }
       />
       <Stats>

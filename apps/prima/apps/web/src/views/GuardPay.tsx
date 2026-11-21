@@ -24,6 +24,8 @@ import {
   type Tone,
 } from "../ui";
 import { Empty } from "../kit";
+import { SopHelp } from "../sop/SopHelp";
+import { DataTable } from "../DataTable";
 
 /**
  * Guard pay run (Fauzan, 5 Nov 2026). Guards, stationed officers and patrolling officers are paid from locked
@@ -67,6 +69,9 @@ export function GuardPayView() {
           {/* P105: plainer order of who does what (B1: the Company Manager names who prepares). */}
           Monthly pay for guards and officers, from locked attendance and the ACT pay formula used at each site. A company executive named by the Company Manager prepares it, the COO approves with a reason, and Finance pays through the bank. Prima only drafts the files.
         </p>
+        <div className="row" style={{ marginTop: 8 }}>
+          <SopHelp id="pay-guard-run" />
+        </div>
       </div>
       {!data.rule.primaPays && (
         // Fauzan, 8 Nov 2026: the switch date (rule PAY-GUARD switchDate). Until then the JA Group app pays guards.
@@ -97,8 +102,8 @@ function Preparers({ e }: { e: GuardPayBoard["employers"][number] }) {
   const [reason, setReason] = useState("");
   const names = e.preparerNames.length ? e.preparerNames.join(", ") : null;
   return (
-    <div className="small" style={{ marginTop: 4 }}>
-      <span className="muted">Prepared by: </span>
+    <div className="small">
+      {/* P107: the table's "Prepared by" heading (or the phone card's label) names this cell. */}
       {names ?? <Chip tone="warn">nobody named yet</Chip>}
       {e.canNamePreparers && !editing && (
         <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6 }} onClick={() => setEditing(true)}>
@@ -166,7 +171,6 @@ function Runs({
   const mine = data.runs.filter((r) => r.mineToAct);
   const late = data.employers.filter((e) => e.lastLate);
   const lastMonth = data.runs.filter((r) => r.period === data.prev);
-  const periods = [...new Set(data.runs.map((r) => r.period))];
   const prepare = (companyId: string, period: string) =>
     act.run(
       () => api.prepareGuardPay(companyId, period),
@@ -204,95 +208,108 @@ function Runs({
         </div>
         {data.employers.length === 0 && (
           <Empty title="No guards or officers on the pay list yet">
-            A company appears here once it has active guards or officers in People. HR then prepares each month's pay from their locked attendance.
+            A company appears here once it has active guards or officers in People. The person its Company Manager names then prepares each month's pay from their locked attendance.
           </Empty>
         )}
-        <div className="list">
-          {data.employers.map((e) => (
-            <div
-              key={e.companyId}
-              className="list-item"
-              style={{ flexWrap: "wrap", gap: 6 }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{e.companyName}</div>
-                <div className="muted small">
-                  {e.guards} guards and officers
-                </div>
-                <Preparers e={e} />
-              </div>
-              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                {(
-                  [
-                    [data.prev, e.last],
-                    [data.period, e.current],
-                  ] as const
-                ).map(([p, r]) =>
-                  r ? (
-                    <button
-                      key={p}
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => onOpen(r.id)}
-                    >
-                      {monthLabel(p)}:{" "}
-                      <Chip tone={STAGE[r.stage][0]}>{STAGE[r.stage][1]}</Chip>
-                    </button>
-                  ) : e.prepares && data.on ? (
-                    <button
-                      key={p}
-                      className={`btn btn-sm${p === data.prev ? " btn-primary" : ""}`}
-                      disabled={act.busy}
-                      onClick={() => prepare(e.companyId, p)}
-                    >
-                      Prepare {monthLabel(p)}
-                    </button>
-                  ) : (
-                    <Chip key={p} tone="unknown">
-                      {monthLabel(p)}: not prepared
-                    </Chip>
-                  ),
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-      {periods.map((p) => (
-        <section key={p} className="panel">
-          <div className="panel-head">
-            <h3>{monthLabel(p)}</h3>
+        {data.employers.length > 0 && (
+          <div className="panel-body">
+            {/* P107: a data table (search, status filter, sort, pages; cards on a phone) in place of the hand-drawn list. */}
+            <DataTable
+              label="By company"
+              stateKey="guardpay.companies"
+              rows={data.employers}
+              rowKey={(e) => e.companyId}
+              searchText={(e) => e.preparerNames.join(" ")}
+              columns={[
+                { id: "company", label: "Company", value: (e) => e.companyName, render: (e) => <strong>{e.companyName}</strong>, phone: "title" },
+                { id: "guards", label: "Guards and officers", value: (e) => e.guards, sort: "number" },
+                { id: "preparers", label: "Prepared by", value: (e) => e.preparerNames.join(", "), render: (e) => <Preparers e={e} /> },
+                { id: "last", label: "Last month", value: (e) => (e.last ? STAGE[e.last.stage][1] : "not prepared"), translate: true, render: (e) => monthCell(data.prev, e.last, e) },
+                { id: "current", label: "This month", value: (e) => (e.current ? STAGE[e.current.stage][1] : "not prepared"), translate: true, render: (e) => monthCell(data.period, e.current, e) },
+              ]}
+              filters={[
+                {
+                  id: "stage",
+                  label: "Status",
+                  value: (e) => [e.last?.stage ?? "none", e.current?.stage ?? "none"],
+                  options: [...(Object.keys(STAGE) as GuardPayStage[]).map((k) => ({ value: k, label: STAGE[k][1] })), { value: "none", label: "Not prepared" }],
+                },
+              ]}
+            />
           </div>
-          <div className="list">
-            {data.runs
-              .filter((r) => r.period === p)
-              .map((r) => (
-                <button
-                  key={r.id}
-                  className="list-item"
-                  style={{ flexWrap: "wrap", gap: 6, textAlign: "left", width: "100%" }}
-                  onClick={() => onOpen(r.id)}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>{r.companyName}</div>
-                    <div className="muted small">
-                      {r.totals.headcount} guards · gross {rm(r.totals.gross)} ·
-                      net {rm(r.totals.net)} · employer cost {rm(r.totals.cost)}
+        )}
+      </section>
+      {data.runs.length > 0 && (
+        <section className="panel">
+          <div className="panel-head">
+            <h3>Pay runs</h3>
+          </div>
+          <div className="panel-body">
+            {/* P107: every month's runs in one data table (month, status, company and "your turn" filters) in place of a panel per month. */}
+            <DataTable
+              label="Pay runs"
+              stateKey="guardpay.runs"
+              phoneFacts={5}
+              rows={data.runs}
+              rowKey={(r) => r.id}
+              onRowClick={(r) => onOpen(r.id)}
+              columns={[
+                { id: "company", label: "Company", value: (r) => r.companyName, render: (r) => <strong>{r.companyName}</strong>, phone: "title" },
+                { id: "month", label: "Month", value: (r) => r.period, sort: "date", render: (r) => monthLabel(r.period), phone: "sub" },
+                { id: "headcount", label: "Guards and officers", value: (r) => r.totals.headcount, sort: "number", hideBelow: 1100 },
+                { id: "gross", label: "Gross pay", value: (r) => r.totals.gross, sort: "money", render: (r) => rm(r.totals.gross), hideBelow: 1200 },
+                { id: "net", label: "Net pay", value: (r) => r.totals.net, sort: "money", render: (r) => rm(r.totals.net) },
+                { id: "cost", label: "Employer cost", value: (r) => r.totals.cost, sort: "money", render: (r) => rm(r.totals.cost), hideBelow: 1200 },
+                {
+                  id: "status",
+                  label: "Status",
+                  value: (r) => (r.late ? "Late" : STAGE[r.stage][1]),
+                  translate: true,
+                  render: (r) => (
+                    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      {r.trial && <Chip tone="info">Trial</Chip>}
+                      {r.mineToAct && <Chip tone="warn">Your turn</Chip>}
+                      <Chip tone={r.late ? "crit" : STAGE[r.stage][0]}>{r.late ? "Late" : STAGE[r.stage][1]}</Chip>
                     </div>
-                  </div>
-                  <div className="row" style={{ gap: 6 }}>
-                    {r.trial && <Chip tone="info">Trial</Chip>}
-                    {r.mineToAct && <Chip tone="warn">Your turn</Chip>}
-                    <Chip tone={r.late ? "crit" : STAGE[r.stage][0]}>
-                      {r.late ? "Late" : STAGE[r.stage][1]}
-                    </Chip>
-                  </div>
-                </button>
-              ))}
+                  ),
+                },
+              ]}
+              filters={[
+                { id: "month", label: "Month", value: (r) => r.period, optionLabel: monthLabel },
+                { id: "stage", label: "Status", value: (r) => r.stage, optionLabel: (v) => STAGE[v as GuardPayStage]?.[1] ?? v },
+                { id: "company", label: "Company", value: (r) => r.companyName },
+                {
+                  id: "only",
+                  label: "Show only",
+                  value: (r) => [r.mineToAct ? "mine" : "", r.late ? "late" : "", r.trial ? "trial" : ""],
+                  options: [
+                    { value: "mine", label: "Your turn" },
+                    { value: "late", label: "Late" },
+                    { value: "trial", label: "Trial" },
+                  ],
+                },
+              ]}
+            />
           </div>
         </section>
-      ))}
+      )}
     </>
   );
+
+  /** A company's month in the By company table: open its run, prepare it, or say it is not prepared (as before P107). */
+  function monthCell(p: string, r: GuardPayBoard["employers"][number]["last"], e: GuardPayBoard["employers"][number]) {
+    return r ? (
+      <button className="btn btn-ghost btn-sm" onClick={() => onOpen(r.id)}>
+        {monthLabel(p)}: <Chip tone={STAGE[r.stage][0]}>{STAGE[r.stage][1]}</Chip>
+      </button>
+    ) : e.prepares && data.on ? (
+      <button className={`btn btn-sm${p === data.prev ? " btn-primary" : ""}`} disabled={act.busy} onClick={() => prepare(e.companyId, p)}>
+        Prepare {monthLabel(p)}
+      </button>
+    ) : (
+      <Chip tone="unknown">{monthLabel(p)}: not prepared</Chip>
+    );
+  }
 }
 
 function RunDrawer({ runId, onClose }: { runId: string; onClose: () => void }) {
@@ -631,45 +648,90 @@ function RunBody({
             All ({totals.headcount})
           </button>
         </div>
-        <div className="list">
-          {lines.map((l) => (
-            <div key={l.personId} className="list-item" style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}>
-              <div className="row" style={{ justifyContent: "space-between", gap: 6, flexWrap: "wrap" }}>
-                <button className="btn btn-ghost btn-sm" style={{ padding: 0, textAlign: "left" }} onClick={() => onSlip(l)}>
-                  <span style={{ fontWeight: 600 }}>{l.name}</span>{" "}
-                  <span className="muted small">
-                    {l.staffNo} · {l.mainSiteName || "no shifts"}
-                  </span>
-                </button>
-                <span style={{ fontWeight: 600 }}>{rm(l.net)}</span>
-              </div>
-              <div className="muted small">
-                {l.formulaCode ?? "No formula"} · {l.daysWorked} days ({l.restDaysWorked} rest, {l.holidaysWorked} holiday) ·{" "}
-                {l.otHours} OT h · gross {rm(l.gross)}
-              </div>
-              {l.hours && <HoursLine h={l.hours} />}
-              {l.flags.map((f) => (
-                <div key={f} className="small" style={{ color: "var(--warn, #b45309)" }}>
-                  {f}
+        {/* P107: a data table (search by name, staff number or formula; site and formula filters; sort; pages; cards on a
+            phone). The To check / All tabs still choose the rows; a line opens its payslip as before. */}
+        <div className="panel-body">
+          <DataTable
+            label="Guards and officers"
+            stateKey={`guardpay.lines.${run.id}`}
+            rows={lines}
+            rowKey={(l) => l.personId}
+            onRowClick={onSlip}
+            searchText={(l) => `${l.staffNo} ${l.formulaCode ?? ""}`}
+            empty={<div className="empty">Nothing to check.</div>}
+            columns={[
+              {
+                id: "name",
+                label: "Name",
+                value: (l) => l.name,
+                render: (l) => (
+                  <>
+                    <span style={{ fontWeight: 600 }}>{l.name}</span> <span className="muted small">{l.staffNo}</span>
+                  </>
+                ),
+                phone: "title",
+              },
+              {
+                id: "site",
+                label: "Site",
+                value: (l) => l.mainSiteName || "no shifts",
+                render: (l) => (
+                  <>
+                    {l.mainSiteName || "no shifts"}
+                    <div className="muted small">{l.formulaCode ?? "No formula"}</div>
+                  </>
+                ),
+                phone: "sub",
+              },
+              {
+                id: "days",
+                label: "Days",
+                value: (l) => l.daysWorked,
+                sort: "number",
+                render: (l) => (
+                  <>
+                    {l.daysWorked}{" "}
+                    <span className="muted small">
+                      ({l.restDaysWorked} rest, {l.holidaysWorked} holiday)
+                    </span>
+                  </>
+                ),
+              },
+              { id: "ot", label: "Overtime hours", value: (l) => l.otHours, sort: "number" },
+              { id: "gross", label: "Gross pay", value: (l) => l.gross, sort: "money", render: (l) => rm(l.gross) },
+              { id: "net", label: "Net pay", value: (l) => l.net, sort: "money", render: (l) => <span style={{ fontWeight: 600 }}>{rm(l.net)}</span> },
+            ]}
+            filters={[
+              { id: "site", label: "Site", value: (l) => l.mainSiteName || "no shifts" },
+              { id: "formula", label: "Formula", value: (l) => l.formulaCode ?? "No formula" },
+            ]}
+            rowDetail={(l) => {
+              const consent = data.role === "hr" && (l.accountProblem || (l.bank && (l.bank.holder ?? "own") !== "own") || l.bank?.kind === "ewallet");
+              if (!l.hours && !l.flags.length && !(l.exceptions ?? []).length && !can.prepare && !consent) return null;
+              return (
+                <div data-no-row-click style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                  {l.hours && <HoursLine h={l.hours} />}
+                  {l.flags.map((f) => (
+                    <div key={f} className="small" style={{ color: "var(--warn, #b45309)" }}>
+                      {f}
+                    </div>
+                  ))}
+                  {(l.exceptions ?? []).length > 0 && (
+                    <div className="small" style={{ marginTop: 4 }}>
+                      <strong>Exception list</strong> (the rest of the month is paid)
+                      <ul style={{ margin: "2px 0 0 18px", padding: 0 }}>
+                        {(l.exceptions ?? []).map((x) => (
+                          <li key={x}>{x}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {can.prepare && <LineEdit runId={run.id} line={l} onChanged={onChanged} />}
+                  {consent && <ConsentEdit line={l} onChanged={onChanged} />}
                 </div>
-              ))}
-              {(l.exceptions ?? []).length > 0 && (
-                <div className="small" style={{ marginTop: 4 }}>
-                  <strong>Exception list</strong> (the rest of the month is paid)
-                  <ul style={{ margin: "2px 0 0 18px", padding: 0 }}>
-                    {(l.exceptions ?? []).map((x) => (
-                      <li key={x}>{x}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {can.prepare && <LineEdit runId={run.id} line={l} onChanged={onChanged} />}
-              {data.role === "hr" && (l.accountProblem || (l.bank && (l.bank.holder ?? "own") !== "own") || l.bank?.kind === "ewallet") && (
-                <ConsentEdit line={l} onChanged={onChanged} />
-              )}
-            </div>
-          ))}
-          {!lines.length && <div className="empty">Nothing to check.</div>}
+              );
+            }}
+          />
         </div>
       </section>
     </>
@@ -992,6 +1054,9 @@ function PayOut({ data, onChanged }: { data: GuardPayRunView; onChanged: () => v
   const act = useAction();
   const [reason, setReason] = useState<Record<string, string>>({});
   const cash = run.cash ?? [];
+  // P107: the cash list in its usual order (by site, then staff number), and each guard's main site for the unpayable table.
+  const cashRows = [...cash].sort((a, b) => (a.siteName ?? "").localeCompare(b.siteName ?? "") || a.staffNo.localeCompare(b.staffNo));
+  const siteOf = (personId: string) => run.lines.find((l) => l.personId === personId)?.mainSiteName || null;
   const go = async (personId: string, action: "list" | "unlist" | "supersede" | "decide", give?: boolean) => {
     if (await act.run(() => api.guardPayCash(run.id, personId, action, { reason: reason[personId] ?? "", give }), action === "decide" ? "Decision recorded." : "Cash list updated.")) {
       setReason((r) => ({ ...r, [personId]: "" }));
@@ -1022,27 +1087,47 @@ function PayOut({ data, onChanged }: { data: GuardPayRunView; onChanged: () => v
         Wages use a verified bank account or e-wallet, or the Director Office lists the named wage amount for CEO approval. Only the CEO approves wage cash; the CEO or COO hands it over and Director Office uploads the genuine receipt. Additional DOA support is separate and never deducted from ordinary wages.
       </p>
       {pay.unpayable.length > 0 && (
-        <div className="list">
-          {pay.unpayable.map((u) => (
-            <div key={u.personId} className="list-item" style={{ flexWrap: "wrap", gap: 6 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>
-                  {u.name} <span className="muted small">{u.staffNo}</span>
-                </div>
-                <div className="small" style={{ color: "var(--warn, #b45309)" }}>
-                  {u.problem} · {rm(u.net)}
-                </div>
-              </div>
-              {can.listCash && (
-                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                  {field(u.personId, "Why this guard needs cash")}
-                  <button className="btn btn-sm" disabled={act.busy || (reason[u.personId] ?? "").trim().length < 5} onClick={() => go(u.personId, "list")}>
-                    List for cash
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+        // P107: a data table (search, site filter, sort, pages; cards on a phone); the cash listing form sits under each row.
+        <div className="panel-body">
+          <DataTable
+            label="Cannot be paid into an account"
+            stateKey={`guardpay.unpayable.${run.id}`}
+            rows={pay.unpayable}
+            rowKey={(u) => u.personId}
+            searchText={(u) => u.staffNo}
+            columns={[
+              {
+                id: "name",
+                label: "Name",
+                value: (u) => u.name,
+                render: (u) => (
+                  <>
+                    <span style={{ fontWeight: 600 }}>{u.name}</span> <span className="muted small">{u.staffNo}</span>
+                  </>
+                ),
+                phone: "title",
+              },
+              { id: "site", label: "Site", value: (u) => siteOf(u.personId) },
+              { id: "problem", label: "Problem", value: (u) => u.problem, render: (u) => <span className="small" style={{ color: "var(--warn, #b45309)" }}>{u.problem}</span> },
+              { id: "net", label: "Net pay", value: (u) => u.net, sort: "money", render: (u) => rm(u.net) },
+            ]}
+            filters={[
+              { id: "site", label: "Site", value: (u) => siteOf(u.personId) },
+              { id: "problem", label: "Problem", value: (u) => u.problem },
+            ]}
+            rowDetail={
+              can.listCash
+                ? (u) => (
+                    <div className="row" data-no-row-click style={{ gap: 6, flexWrap: "wrap" }}>
+                      {field(u.personId, "Why this guard needs cash")}
+                      <button className="btn btn-sm" disabled={act.busy || (reason[u.personId] ?? "").trim().length < 5} onClick={() => go(u.personId, "list")}>
+                        List for cash
+                      </button>
+                    </div>
+                  )
+                : undefined
+            }
+          />
         </div>
       )}
       {cash.length > 0 && (
@@ -1056,52 +1141,103 @@ function PayOut({ data, onChanged }: { data: GuardPayRunView; onChanged: () => v
               {pay.cashReceipts}/{pay.cash.count}
             </p>
           )}
-          <div className="list">
-            {[...cash].sort((a, b) => (a.siteName ?? "").localeCompare(b.siteName ?? "") || a.staffNo.localeCompare(b.staffNo)).map((c) => (
-              <div key={c.personId} className="list-item" style={{ flexWrap: "wrap", gap: 6 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>
-                    {c.name} <span className="muted small">{c.staffNo}</span>
-                    {c.amount != null && <span> · {rm(c.amount)}</span>}
-                  </div>
-                  {c.siteName && <div className="muted small">Site: {c.siteName}</div>}
+          {/* P107: a data table (search, site, decision and receipt filters, sort, pages; cards on a phone). Each row's
+              decision, take-off, replace, hand-out and receipt steps sit under it with the same permission checks as before. */}
+          <div className="panel-body">
+            <DataTable
+              label="Cash list (Director Office)"
+              stateKey={`guardpay.cash.${run.id}`}
+              rows={cashRows}
+              rowKey={(c) => c.personId}
+              searchText={(c) => `${c.staffNo} ${c.reason}`}
+              columns={[
+                {
+                  id: "name",
+                  label: "Name",
+                  value: (c) => c.name,
+                  render: (c) => (
+                    <>
+                      <span style={{ fontWeight: 600 }}>{c.name}</span> <span className="muted small">{c.staffNo}</span>
+                    </>
+                  ),
+                  phone: "title",
+                },
+                { id: "site", label: "Site", value: (c) => c.siteName ?? null },
+                { id: "amount", label: "Amount", value: (c) => c.amount ?? null, sort: "money", render: (c) => (c.amount != null ? rm(c.amount) : "\u2013") },
+                {
+                  id: "decision",
+                  label: "Decision",
+                  value: (c) => (c.decision ? (c.decision.give ? "Cash given" : "Cash refused") : null),
+                  translate: true,
+                  render: (c) =>
+                    c.decision ? (
+                      <span className="small">
+                        {c.decision.give ? "Cash given" : "Cash refused"} by the {c.decision.tier.toUpperCase()} ({c.decision.by}): {c.decision.note}
+                      </span>
+                    ) : !can.decideCash ? (
+                      <Chip tone="warn">Waiting for the CEO</Chip>
+                    ) : (
+                      "\u2013"
+                    ),
+                },
+              ]}
+              filters={[
+                { id: "site", label: "Site", value: (c) => c.siteName ?? null },
+                {
+                  id: "decision",
+                  label: "Decision",
+                  value: (c) => (c.decision ? (c.decision.give ? "given" : "refused") : "waiting"),
+                  options: [
+                    { value: "waiting", label: "Undecided" },
+                    { value: "given", label: "Cash given" },
+                    { value: "refused", label: "Cash refused" },
+                  ],
+                },
+                {
+                  id: "receipt",
+                  label: "Signed receipt",
+                  value: (c) => (c.receipt ? "yes" : c.decision?.give ? "no" : null),
+                  options: [
+                    { value: "yes", label: "Uploaded" },
+                    { value: "no", label: "Not uploaded" },
+                  ],
+                },
+              ]}
+              rowDetail={(c) => (
+                <div data-no-row-click style={{ display: "grid", gap: 6, minWidth: 0 }}>
                   <div className="muted small">
                     Listed by {c.listedBy}: {c.reason}
                   </div>
-                  {c.decision && (
-                    <div className="small">
-                      {c.decision.give ? "Cash given" : "Cash refused"} by the {c.decision.tier.toUpperCase()} ({c.decision.by}): {c.decision.note}
+                  {!c.decision && can.decideCash && (
+                    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      {field(c.personId, "Reason or comment")}
+                      <button className="btn btn-primary btn-sm" disabled={act.busy || (reason[c.personId] ?? "").trim().length < 3} onClick={() => go(c.personId, "decide", true)}>
+                        Give cash
+                      </button>
+                      <button className="btn btn-sm" disabled={act.busy || (reason[c.personId] ?? "").trim().length < 3} onClick={() => go(c.personId, "decide", false)}>
+                        Refuse
+                      </button>
                     </div>
                   )}
+                  {!c.decision && can.listCash && (
+                    <div>
+                      <button className="btn btn-ghost btn-sm" disabled={act.busy} onClick={() => go(c.personId, "unlist")}>
+                        Take off the list
+                      </button>
+                    </div>
+                  )}
+                  {can.listCash && !run.paid && !c.handedOut && !c.receipt && (c.decision || c.amount !== run.lines.find(l => l.personId === c.personId)?.net || c.approvedSiteId !== run.lines.find(l => l.personId === c.personId)?.mainSiteId || c.approvalVersion !== 2) && (
+                    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      {field(c.personId, "Reason for replacing unpaid cash listing")}
+                      <button className="btn btn-sm" disabled={act.busy || (reason[c.personId] ?? "").trim().length < 5} onClick={() => go(c.personId, "supersede")}>
+                        Replace and request fresh CEO approval
+                      </button>
+                    </div>
+                  )}
+                  {c.decision?.give && <CashHandOut runId={run.id} c={c} canHandOut={can.handOutCash} canUpload={can.uploadReceipt} onChanged={onChanged} />}
                 </div>
-                {!c.decision && can.decideCash && (
-                  <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                    {field(c.personId, "Reason or comment")}
-                    <button className="btn btn-primary btn-sm" disabled={act.busy || (reason[c.personId] ?? "").trim().length < 3} onClick={() => go(c.personId, "decide", true)}>
-                      Give cash
-                    </button>
-                    <button className="btn btn-sm" disabled={act.busy || (reason[c.personId] ?? "").trim().length < 3} onClick={() => go(c.personId, "decide", false)}>
-                      Refuse
-                    </button>
-                  </div>
-                )}
-                {!c.decision && can.listCash && (
-                  <button className="btn btn-ghost btn-sm" disabled={act.busy} onClick={() => go(c.personId, "unlist")}>
-                    Take off the list
-                  </button>
-                )}
-                {!c.decision && !can.decideCash && <Chip tone="warn">Waiting for the CEO</Chip>}
-                {can.listCash && !run.paid && !c.handedOut && !c.receipt && (c.decision || c.amount !== run.lines.find(l => l.personId === c.personId)?.net || c.approvedSiteId !== run.lines.find(l => l.personId === c.personId)?.mainSiteId || c.approvalVersion !== 2) && (
-                  <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                    {field(c.personId, "Reason for replacing unpaid cash listing")}
-                    <button className="btn btn-sm" disabled={act.busy || (reason[c.personId] ?? "").trim().length < 5} onClick={() => go(c.personId, "supersede")}>
-                      Replace and request fresh CEO approval
-                    </button>
-                  </div>
-                )}
-                {c.decision?.give && <CashHandOut runId={run.id} c={c} canHandOut={can.handOutCash} canUpload={can.uploadReceipt} onChanged={onChanged} />}
-              </div>
-            ))}
+              )}
+            />
           </div>
         </>
       )}
@@ -1276,6 +1412,9 @@ export function GuardAdvancesView() {
           region; the Operations Director (private sites) or the OGM (government sites) approves once, and any change needs one more approval. The
           month's pay takes it back. An advance may not be more than last month's wages (EA s.22).
         </p>
+        <div className="row" style={{ marginTop: 8 }}>
+          <SopHelp id="pay-wage-advance" />
+        </div>
       </div>
       {!data.primaPays && (
         <div className="notice" data-tone="info">
@@ -1398,67 +1537,92 @@ function AdvanceList({ data, onChanged }: { data: GuardAdvanceBoard; onChanged: 
         </div>
       )}
       <ErrorNotice error={act.error} />
-      <div className="list">
-        {data.advances.map((a) => {
-          const e = edit[a.id];
-          return (
-            <div key={a.id} className="list-item" style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}>
-              <div className="row" style={{ justifyContent: "space-between", gap: 6, flexWrap: "wrap" }}>
-                <label className="row" style={{ gap: 6 }}>
-                  {a.can.approve && (
-                    <input
-                      type="checkbox"
-                      aria-label={`Pick ${a.staffNo}`}
-                      checked={picked.has(a.id)}
-                      onChange={(ev) => setPicked((s) => { const n = new Set(s); if (ev.target.checked) n.add(a.id); else n.delete(a.id); return n; })}
-                    />
-                  )}
-                  <span style={{ fontWeight: 600 }}>{a.name}</span>
-                  <span className="muted small">{a.staffNo}</span>
-                </label>
-                <span className="row" style={{ gap: 6 }}>
-                  <span style={{ fontWeight: 600 }}>{rm(a.amount)}</span>
-                  <Chip tone={STATUS[a.status][0]}>{STATUS[a.status][1]}</Chip>
-                </span>
+      {/* P107: a data table (search, status and approver filters, sort, pages; cards on a phone). The ticks keep feeding the
+          approve bar above; the change form opens under its row. */}
+      <div className="panel-body">
+        <DataTable
+          label="Advances"
+          stateKey="advances.list"
+          phoneFacts={5}
+          rows={data.advances}
+          rowKey={(a) => a.id}
+          searchText={(a) => `${a.staffNo} ${a.set.by}`}
+          empty={<div className="empty">No advances set for this month.</div>}
+          selection={approvable.length > 0 ? { selected: picked, onChange: setPicked, canSelect: (a) => a.can.approve } : undefined}
+          columns={[
+            {
+              id: "name",
+              label: "Name",
+              value: (a) => a.name,
+              render: (a) => (
+                <>
+                  <span style={{ fontWeight: 600 }}>{a.name}</span> <span className="muted small">{a.staffNo}</span>
+                </>
+              ),
+              phone: "title",
+            },
+            { id: "amount", label: "Amount", value: (a) => a.amount, sort: "money", render: (a) => <span style={{ fontWeight: 600 }}>{rm(a.amount)}</span> },
+            { id: "payOn", label: "Pay date", value: (a) => a.payOn, sort: "date", render: (a) => dateLabel(a.payOn) },
+            { id: "basis", label: "For", value: (a) => a.basisLabel, hideBelow: 1200 },
+            { id: "approver", label: "Approver", value: (a) => (a.approverTier === "ogm" ? "OGM" : "Operations Director"), translate: true, hideBelow: 1100 },
+            {
+              id: "status",
+              label: "Status",
+              value: (a) => STATUS[a.status][1],
+              translate: true,
+              render: (a) => <Chip tone={STATUS[a.status][0]}>{STATUS[a.status][1]}</Chip>,
+            },
+          ]}
+          filters={[
+            { id: "status", label: "Status", value: (a) => a.status, optionLabel: (v) => STATUS[v]?.[1] ?? v },
+            { id: "approver", label: "Approver", value: (a) => a.approverTier, optionLabel: (v) => (v === "ogm" ? "OGM" : "Operations Director") },
+          ]}
+          actions={
+            data.advances.some((a) => a.can.change)
+              ? (a) => [
+                  {
+                    label: "Change or cancel",
+                    hidden: !a.can.change || !!edit[a.id],
+                    onClick: () => setEdit((x) => ({ ...x, [a.id]: { amount: String(a.amount), payOn: a.payOn, reason: "" } })),
+                  },
+                ]
+              : undefined
+          }
+          rowDetail={(a) => {
+            const e = edit[a.id];
+            return (
+              <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                <div className="muted small">
+                  set by {a.set.by}
+                  {a.version > 1 ? ` · changed ${a.version - 1} time${a.version > 2 ? "s" : ""}` : ""}
+                  {a.approvals.length ? ` · last approved by ${a.approvals[a.approvals.length - 1].by}` : ""}
+                </div>
+                {a.flags.map((f) => (
+                  <div key={f} className="small" style={{ color: "var(--warn, #b45309)" }}>
+                    {f}
+                  </div>
+                ))}
+                {a.can.change && e && (
+                  <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                    <input className="input" style={{ maxWidth: 110 }} aria-label="New amount" inputMode="decimal" value={e.amount} onChange={(ev) => setEdit((x) => ({ ...x, [a.id]: { ...e, amount: ev.target.value } }))} />
+                    <input className="input" type="date" style={{ maxWidth: 170 }} aria-label="New pay date" value={e.payOn} onChange={(ev) => setEdit((x) => ({ ...x, [a.id]: { ...e, payOn: ev.target.value } }))} />
+                    <input className="input" style={{ maxWidth: 220 }} aria-label="Why it changes" placeholder="Why it changes" value={e.reason} onChange={(ev) => setEdit((x) => ({ ...x, [a.id]: { ...e, reason: ev.target.value } }))} />
+                    <button
+                      className="btn btn-sm"
+                      disabled={act.busy || e.reason.trim().length < 3}
+                      onClick={() => done(() => api.changeGuardAdvance(a.id, { action: "change", amount: Number(e.amount), payOn: e.payOn, reason: e.reason }), a.status === "approved" ? "Changed. It needs one more approval." : "Changed.")}
+                    >
+                      Save change
+                    </button>
+                    <button className="btn btn-ghost btn-sm" disabled={act.busy || e.reason.trim().length < 3} onClick={() => done(() => api.changeGuardAdvance(a.id, { action: "cancel", reason: e.reason }), "Cancelled.")}>
+                      Cancel advance
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="muted small">
-                Pay on {dateLabel(a.payOn)} · {a.basisLabel} · set by {a.set.by} · approver {a.approverTier === "ogm" ? "OGM" : "Operations Director"}
-                {a.version > 1 ? ` · changed ${a.version - 1} time${a.version > 2 ? "s" : ""}` : ""}
-                {a.approvals.length ? ` · last approved by ${a.approvals[a.approvals.length - 1].by}` : ""}
-              </div>
-              {a.flags.map((f) => (
-                <div key={f} className="small" style={{ color: "var(--warn, #b45309)" }}>
-                  {f}
-                </div>
-              ))}
-              {a.can.change && !e && (
-                <div className="row" style={{ gap: 6 }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setEdit((x) => ({ ...x, [a.id]: { amount: String(a.amount), payOn: a.payOn, reason: "" } }))}>
-                    Change or cancel
-                  </button>
-                </div>
-              )}
-              {a.can.change && e && (
-                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                  <input className="input" style={{ maxWidth: 110 }} aria-label="New amount" inputMode="decimal" value={e.amount} onChange={(ev) => setEdit((x) => ({ ...x, [a.id]: { ...e, amount: ev.target.value } }))} />
-                  <input className="input" type="date" style={{ maxWidth: 170 }} aria-label="New pay date" value={e.payOn} onChange={(ev) => setEdit((x) => ({ ...x, [a.id]: { ...e, payOn: ev.target.value } }))} />
-                  <input className="input" style={{ maxWidth: 220 }} aria-label="Why it changes" placeholder="Why it changes" value={e.reason} onChange={(ev) => setEdit((x) => ({ ...x, [a.id]: { ...e, reason: ev.target.value } }))} />
-                  <button
-                    className="btn btn-sm"
-                    disabled={act.busy || e.reason.trim().length < 3}
-                    onClick={() => done(() => api.changeGuardAdvance(a.id, { action: "change", amount: Number(e.amount), payOn: e.payOn, reason: e.reason }), a.status === "approved" ? "Changed. It needs one more approval." : "Changed.")}
-                  >
-                    Save change
-                  </button>
-                  <button className="btn btn-ghost btn-sm" disabled={act.busy || e.reason.trim().length < 3} onClick={() => done(() => api.changeGuardAdvance(a.id, { action: "cancel", reason: e.reason }), "Cancelled.")}>
-                    Cancel advance
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-        {!data.advances.length && <div className="empty">No advances set for this month.</div>}
+            );
+          }}
+        />
       </div>
     </section>
   );
@@ -1562,6 +1726,9 @@ export function GuardLoansView() {
           these records, and all deductions together stay within half the month's wages (EA s.24(8)). The wage advance on the 20th is on its own
           screen. Exceptional guard cash support is additional pay, never a repayable loan or a wage deduction; use the separate manually approved DOA handover for that support.
         </p>
+        <div className="row" style={{ marginTop: 8 }}>
+          <SopHelp id="pay-advance-loan" />
+        </div>
       </div>
       {!data.primaPays && (
         <div className="notice" data-tone="info">
@@ -1709,70 +1876,115 @@ function LoanList({ data, onChanged }: { data: GuardLoanBoard; onChanged: () => 
       </div>
       <ErrorNotice error={act.error} />
       {!data.loans.length && <p className="muted small">No advance or loan recorded for this company.</p>}
-      <div className="list">
-        {data.loans.map((l) => {
-          const n = note[l.id] ?? "";
-          return (
-            <div key={l.id} className="list-item" style={{ flexDirection: "column", alignItems: "stretch", gap: 4 }}>
-              <div className="row" style={{ justifyContent: "space-between", gap: 6, flexWrap: "wrap" }}>
-                <span>
-                  <span style={{ fontWeight: 600 }}>{l.name}</span> <span className="muted small">{l.staffNo}</span>
-                </span>
-                <span className="row" style={{ gap: 6 }}>
-                  <span style={{ fontWeight: 600 }}>{rm(l.amount)}</span>
-                  <Chip tone={LOAN_STATUS[l.status][0]}>{LOAN_STATUS[l.status][1]}</Chip>
-                </span>
-              </div>
-              <div className="muted small">
-                {l.kind === "loan" ? "Loan" : "Advance"} · {l.purpose} · limit {rm(l.limit)} · {l.months} month{l.months === 1 ? "" : "s"} at {rm(l.instalment)} from{" "}
-                {monthLabel(l.firstPeriod)} · signed agreement {l.signature.docRef} ({dateLabel(l.signature.signedOn)}) · recorded by {l.requested.by}
-              </div>
-              <div className="small">
-                {l.cos ? `Chief of Staff approved (${l.cos.by}): ${l.cos.note}` : ""}
-                {l.ceo ? ` · CEO approved: ${l.ceo.note}` : ""}
-                {l.rejected ? `${l.status === "cancelled" ? "Cancelled" : `Rejected by the ${l.rejected.tier === "cos" ? "Chief of Staff" : "CEO"}`}: ${l.rejected.note}` : ""}
-                {l.paidOut ? ` · paid out ${dateLabel(l.paidOut.paidOn)} (${l.paidOut.bankRef})` : ""}
-                {l.status === "paid_out" || l.status === "settled" ? ` · repaid ${rm(l.amount - l.balance)}, owed ${rm(l.balance)}` : ""}
-              </div>
-              {l.flags.map((f) => (
-                <div key={f} className="small" style={{ color: "var(--warn, #b45309)" }}>
-                  {f}
+      {/* P107: a data table (search, status and kind filters, sort, pages; cards on a phone). Each record's details and its
+          approve, pay-out and cancel steps sit under its row with the same checks as before. */}
+      {data.loans.length > 0 && (
+        <div className="panel-body">
+          <DataTable
+            label="Records"
+            stateKey="loans.list"
+            rows={data.loans}
+            rowKey={(l) => l.id}
+            searchText={(l) => `${l.staffNo} ${l.signature.docRef} ${l.requested.by}`}
+            columns={[
+              {
+                id: "name",
+                label: "Name",
+                value: (l) => l.name,
+                render: (l) => (
+                  <>
+                    <span style={{ fontWeight: 600 }}>{l.name}</span> <span className="muted small">{l.staffNo}</span>
+                  </>
+                ),
+                phone: "title",
+              },
+              { id: "kind", label: "Kind", value: (l) => (l.kind === "loan" ? "Loan" : "Advance"), translate: true },
+              { id: "purpose", label: "Purpose", value: (l) => l.purpose, hideBelow: 1200, phone: "sub" },
+              { id: "amount", label: "Amount", value: (l) => l.amount, sort: "money", render: (l) => <span style={{ fontWeight: 600 }}>{rm(l.amount)}</span> },
+              {
+                id: "owed",
+                label: "Owed",
+                value: (l) => (l.status === "paid_out" || l.status === "settled" ? l.balance : null),
+                sort: "money",
+                render: (l) => (l.status === "paid_out" || l.status === "settled" ? rm(l.balance) : "\u2013"),
+                hideBelow: 1100,
+              },
+              {
+                id: "status",
+                label: "Status",
+                value: (l) => LOAN_STATUS[l.status][1],
+                translate: true,
+                render: (l) => <Chip tone={LOAN_STATUS[l.status][0]}>{LOAN_STATUS[l.status][1]}</Chip>,
+              },
+            ]}
+            filters={[
+              { id: "status", label: "Status", value: (l) => l.status, optionLabel: (v) => LOAN_STATUS[v]?.[1] ?? v },
+              {
+                id: "kind",
+                label: "Kind",
+                value: (l) => l.kind,
+                options: [
+                  { value: "loan", label: "Loan" },
+                  { value: "advance", label: "Advance" },
+                ],
+              },
+            ]}
+            rowDetail={(l) => {
+              const n = note[l.id] ?? "";
+              return (
+                <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                  <div className="muted small">
+                    {l.kind === "loan" ? "Loan" : "Advance"} · {l.purpose} · limit {rm(l.limit)} · {l.months} month{l.months === 1 ? "" : "s"} at {rm(l.instalment)} from{" "}
+                    {monthLabel(l.firstPeriod)} · signed agreement {l.signature.docRef} ({dateLabel(l.signature.signedOn)}) · recorded by {l.requested.by}
+                  </div>
+                  <div className="small">
+                    {l.cos ? `Chief of Staff approved (${l.cos.by}): ${l.cos.note}` : ""}
+                    {l.ceo ? ` · CEO approved: ${l.ceo.note}` : ""}
+                    {l.rejected ? `${l.status === "cancelled" ? "Cancelled" : `Rejected by the ${l.rejected.tier === "cos" ? "Chief of Staff" : "CEO"}`}: ${l.rejected.note}` : ""}
+                    {l.paidOut ? ` · paid out ${dateLabel(l.paidOut.paidOn)} (${l.paidOut.bankRef})` : ""}
+                    {l.status === "paid_out" || l.status === "settled" ? ` · repaid ${rm(l.amount - l.balance)}, owed ${rm(l.balance)}` : ""}
+                  </div>
+                  {l.flags.map((f) => (
+                    <div key={f} className="small" style={{ color: "var(--warn, #b45309)" }}>
+                      {f}
+                    </div>
+                  ))}
+                  {data.role === "finance" && l.financeNotices.length > 0 && (
+                    <div className="muted small">Finance notices: {l.financeNotices.map((x) => `${dateTimeLabel(x.at)} ${x.text}`).join(" · ")}</div>
+                  )}
+                  {(l.can.cos || l.can.ceo) && (
+                    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      <input className="input" style={{ maxWidth: 260 }} aria-label="Reason or comment" placeholder="Reason or comment" value={n} onChange={(e) => setNote((x) => ({ ...x, [l.id]: e.target.value }))} />
+                      <button className="btn btn-primary btn-sm" disabled={act.busy || n.trim().length < 3} onClick={() => done(l.id, () => api.guardLoanStep(l.id, "decide", { decision: "approve", note: n }), "Approved. Finance has been told.")}>
+                        Approve
+                      </button>
+                      <button className="btn btn-sm" disabled={act.busy || n.trim().length < 3} onClick={() => done(l.id, () => api.guardLoanStep(l.id, "decide", { decision: "reject", note: n }), "Rejected.")}>
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                  {l.can.payOut && (
+                    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      <input className="input" style={{ maxWidth: 220 }} aria-label="Bank reference" placeholder="Bank reference" value={bankRef[l.id] ?? ""} onChange={(e) => setBankRef((x) => ({ ...x, [l.id]: e.target.value }))} />
+                      <button className="btn btn-primary btn-sm" disabled={act.busy || !(bankRef[l.id] ?? "").trim()} onClick={() => done(l.id, () => api.guardLoanStep(l.id, "payout", { bankRef: bankRef[l.id] }), "Paid out.")}>
+                        Paid out
+                      </button>
+                    </div>
+                  )}
+                  {l.can.cancel && (
+                    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      <input className="input" style={{ maxWidth: 260 }} aria-label="Why cancel" placeholder="Why cancel" value={n} onChange={(e) => setNote((x) => ({ ...x, [l.id]: e.target.value }))} />
+                      <button className="btn btn-ghost btn-sm" disabled={act.busy || n.trim().length < 3} onClick={() => done(l.id, () => api.guardLoanStep(l.id, "cancel", { note: n }), "Cancelled.")}>
+                        Cancel record
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ))}
-              {data.role === "finance" && l.financeNotices.length > 0 && (
-                <div className="muted small">Finance notices: {l.financeNotices.map((x) => `${dateTimeLabel(x.at)} ${x.text}`).join(" · ")}</div>
-              )}
-              {(l.can.cos || l.can.ceo) && (
-                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                  <input className="input" style={{ maxWidth: 260 }} aria-label="Reason or comment" placeholder="Reason or comment" value={n} onChange={(e) => setNote((x) => ({ ...x, [l.id]: e.target.value }))} />
-                  <button className="btn btn-primary btn-sm" disabled={act.busy || n.trim().length < 3} onClick={() => done(l.id, () => api.guardLoanStep(l.id, "decide", { decision: "approve", note: n }), "Approved. Finance has been told.")}>
-                    Approve
-                  </button>
-                  <button className="btn btn-sm" disabled={act.busy || n.trim().length < 3} onClick={() => done(l.id, () => api.guardLoanStep(l.id, "decide", { decision: "reject", note: n }), "Rejected.")}>
-                    Reject
-                  </button>
-                </div>
-              )}
-              {l.can.payOut && (
-                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                  <input className="input" style={{ maxWidth: 220 }} aria-label="Bank reference" placeholder="Bank reference" value={bankRef[l.id] ?? ""} onChange={(e) => setBankRef((x) => ({ ...x, [l.id]: e.target.value }))} />
-                  <button className="btn btn-primary btn-sm" disabled={act.busy || !(bankRef[l.id] ?? "").trim()} onClick={() => done(l.id, () => api.guardLoanStep(l.id, "payout", { bankRef: bankRef[l.id] }), "Paid out.")}>
-                    Paid out
-                  </button>
-                </div>
-              )}
-              {l.can.cancel && (
-                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                  <input className="input" style={{ maxWidth: 260 }} aria-label="Why cancel" placeholder="Why cancel" value={n} onChange={(e) => setNote((x) => ({ ...x, [l.id]: e.target.value }))} />
-                  <button className="btn btn-ghost btn-sm" disabled={act.busy || n.trim().length < 3} onClick={() => done(l.id, () => api.guardLoanStep(l.id, "cancel", { note: n }), "Cancelled.")}>
-                    Cancel record
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              );
+            }}
+          />
+        </div>
+      )}
     </section>
   );
 }

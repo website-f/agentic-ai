@@ -2,6 +2,7 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinControls, type FinDesk } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction, type Tone } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * Intercompany balances agreed on both sides every month, and the 13-week cash forecast (Fauzan, 2 Nov 2026:
@@ -18,6 +19,73 @@ const STATUS: Record<Pair['status'], [Tone, string]> = {
   missing: ['warn', 'Waiting for a side'],
   differs: ['crit', 'Sides differ'],
 };
+
+const pairKey = (p: Pair) => `${p.period}|${p.withId}|${p.kind}`;
+/** P107: the intercompany balances as a table: month, other company, kind, both sides, the difference and its status. */
+const PAIR_COLUMNS: DtColumn<Pair>[] = [
+  { id: 'period', label: 'Month', value: (p) => p.period, phone: 'sub' },
+  { id: 'with', label: 'Company', value: (p) => p.with, render: (p) => <strong>{p.with}</strong>, phone: 'title' },
+  { id: 'kind', label: 'Kind', value: (p) => KIND[p.kind] ?? p.kind, translate: true },
+  {
+    id: 'mine',
+    label: 'Ours',
+    value: (p) => p.mine?.balance,
+    sort: 'money',
+    render: (p) =>
+      p.mine ? (
+        <>
+          {rm(p.mine.balance)}
+          <div className="muted small">
+            {p.mine.sqlRef}, {p.mine.by}
+          </div>
+        </>
+      ) : (
+        <span className="muted small">{p.carried ? 'not recorded (there was a balance last month)' : 'not recorded'}</span>
+      ),
+  },
+  {
+    id: 'theirs',
+    label: 'Theirs',
+    value: (p) => p.theirs?.balance,
+    sort: 'money',
+    render: (p) =>
+      p.theirs ? (
+        <>
+          {rm(p.theirs.balance)}
+          <div className="muted small">
+            {p.theirs.sqlRef}, {p.theirs.by}
+          </div>
+        </>
+      ) : (
+        <span className="muted small">not recorded</span>
+      ),
+  },
+  {
+    id: 'difference',
+    label: 'Difference',
+    value: (p) => (p.difference != null && Math.abs(p.difference) >= 0.005 ? p.difference : null),
+    sort: 'money',
+    render: (p) => (p.difference != null && Math.abs(p.difference) >= 0.005 ? rm(p.difference) : '–'),
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (p) => STATUS[p.status][1],
+    translate: true,
+    render: (p) => (
+      <>
+        <Chip tone={STATUS[p.status][0]}>{STATUS[p.status][1]}</Chip>
+        {p.explained && <div className="muted small">{`explained by ${p.explained.by}: ${p.explained.reason}`}</div>}
+      </>
+    ),
+  },
+];
+const PAIR_FILTERS: DtFilter<Pair>[] = [
+  { id: 'period', label: 'Month', value: (p) => p.period },
+  { id: 'with', label: 'Company', value: (p) => p.with },
+  { id: 'kind', label: 'Kind', value: (p) => p.kind, options: Object.entries(KIND).map(([value, label]) => ({ value, label })) },
+  { id: 'status', label: 'Status', value: (p) => p.status, options: Object.entries(STATUS).map(([value, [, label]]) => ({ value, label })) },
+];
 
 export function Intercompany({ v, co }: { v: FinControls; co: Co }) {
   const ic = v.intercompany;
@@ -89,66 +157,49 @@ export function Intercompany({ v, co }: { v: FinControls; co: Co }) {
         </button>
       </div>
       <ErrorNotice error={act.error} />
-      <div className="list">
-        {ic.pairs.length === 0 && <div className="empty">No intercompany balances recorded for the last three months.</div>}
-        {ic.pairs.map((p) => {
-          const key = `${p.period}|${p.withId}|${p.kind}`;
-          const [tone, label] = STATUS[p.status];
+      <DataTable
+        label="Intercompany balances"
+        stateKey={`fin.intercompany.${co.companyId}`}
+        rows={ic.pairs}
+        rowKey={pairKey}
+        columns={PAIR_COLUMNS}
+        filters={PAIR_FILTERS}
+        empty={<div className="empty">No intercompany balances recorded for the last three months.</div>}
+        rowEnd={(p) => {
+          if (p.status !== 'differs') return null;
+          const key = pairKey(p);
           return (
-            <div key={key} className="list-item fin-block">
-              <div className="row fin-between">
-                <div>
-                  <strong>
-                    {p.period} · {p.with} · {KIND[p.kind]}
-                  </strong>
-                  <div className="muted small">
-                    Ours:{' '}
-                    {p.mine
-                      ? `${rm(p.mine.balance)} (${p.mine.sqlRef}, ${p.mine.by})`
-                      : p.carried
-                        ? 'not recorded (there was a balance last month)'
-                        : 'not recorded'}{' '}
-                    · Theirs: {p.theirs ? `${rm(p.theirs.balance)} (${p.theirs.sqlRef}, ${p.theirs.by})` : 'not recorded'}
-                    {p.difference != null && Math.abs(p.difference) >= 0.005 ? ` · difference ${rm(p.difference)}` : ''}
-                    {p.explained ? ` · explained by ${p.explained.by}: ${p.explained.reason}` : ''}
-                  </div>
-                </div>
-                <Chip tone={tone}>{label}</Chip>
-              </div>
-              {p.status === 'differs' && (
-                <div className="row fin-mt">
-                  {explain?.key === key ? (
-                    <>
-                      <input
-                        className="input"
-                        aria-label="Why the sides differ"
-                        placeholder="Why the sides differ (for example a credit note booked next month)"
-                        value={explain.comment}
-                        onChange={(e) => setExplain({ key, comment: e.target.value })}
-                      />
-                      <button
-                        className="btn btn-primary btn-sm"
-                        disabled={act.busy}
-                        onClick={() =>
-                          go('explain', { period: p.period, withId: p.withId, kind: p.kind, comment: explain.comment }, 'Explained.').then(
-                            (x) => x && setExplain(null),
-                          )
-                        }
-                      >
-                        Save
-                      </button>
-                    </>
-                  ) : (
-                    <button className="btn btn-sm" onClick={() => setExplain({ key, comment: '' })}>
-                      Explain the difference (reviewer)
-                    </button>
-                  )}
-                </div>
+            <div className="row">
+              {explain?.key === key ? (
+                <>
+                  <input
+                    className="input"
+                    aria-label="Why the sides differ"
+                    placeholder="Why the sides differ (for example a credit note booked next month)"
+                    value={explain.comment}
+                    onChange={(e) => setExplain({ key, comment: e.target.value })}
+                  />
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={act.busy}
+                    onClick={() =>
+                      go('explain', { period: p.period, withId: p.withId, kind: p.kind, comment: explain.comment }, 'Explained.').then(
+                        (x) => x && setExplain(null),
+                      )
+                    }
+                  >
+                    Save
+                  </button>
+                </>
+              ) : (
+                <button className="btn btn-sm" onClick={() => setExplain({ key, comment: '' })}>
+                  Explain the difference (reviewer)
+                </button>
               )}
             </div>
           );
-        })}
-      </div>
+        }}
+      />
     </section>
   );
 }

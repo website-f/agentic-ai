@@ -51,12 +51,18 @@ import { ItemsAddBar, mayAddTypes, mayRegister, type ItemAddIntent } from './Add
 import { SmartImport } from './SmartImport';
 import { TypeCard, TypeLabelPrint, TypeLabelsPicker } from './TypeLabels';
 import '../../styles/items.css';
+import { useRouteTab } from '../../App';
+import { SopHelp } from '../../sop/SopHelp';
 
 type Tab = 'home' | 'find' | 'catalogue' | 'stock' | 'labels' | 'moves' | 'site' | 'counts' | 'cases' | 'care' | 'uniforms' | 'reports' | 'finance' | 'mine';
+/** P121: every tab a link may open ('#items/moves'); a tab this person does not have falls back to the first screen. */
+const ALL_TABS: Tab[] = ['home', 'find', 'catalogue', 'stock', 'labels', 'moves', 'site', 'counts', 'cases', 'care', 'uniforms', 'reports', 'finance', 'mine'];
 
 export function ItemsView() {
   const { data, error } = useLoad(() => api.itemBoard(), []);
-  const [tab, setTab] = useState<Tab | null>(null);
+  // P121: a link may choose the tab ('#items/mine'); 'auto' is the old first screen (Overview, or My items for someone with no role).
+  const [routeTab, setTab] = useRouteTab<Tab | 'auto'>('auto', ALL_TABS);
+  const tab = routeTab === 'auto' ? null : routeTab;
   const [adding, setAdding] = useState<{ what: ItemAddIntent; oldTag?: string; n: number } | null>(null);
   const [importing, setImporting] = useState(false);
   const [typeOpen, setTypeOpen] = useState<string | null>(null);
@@ -109,14 +115,19 @@ export function ItemsView() {
     ['mine', 'My items', data.mine.length, true, <UserIcon key="i" size={18} aria-hidden="true" />],
   ];
   const shown = all.filter((t) => t[3]);
-  const current = tab ?? (has ? 'home' : 'mine');
+  const current = tab && shown.some((t) => t[0] === tab) ? tab : has ? 'home' : 'mine';
   const c = data.checks;
   return (
     <div className="page items-view">
       <PageHead
         title="Items and equipment"
         sub="Every uniform, device and stock item: what it is, where it is, who holds it. One label for life; the person who gets an item confirms it. Nothing is ever charged to them automatically."
-        actions={<ItemsAddBar data={data} onAdd={(what) => add(what)} onImport={() => setImporting(true)} />}
+        actions={
+          <>
+            <SopHelp id="equip" />
+            <ItemsAddBar data={data} onAdd={(what) => add(what)} onImport={() => setImporting(true)} />
+          </>
+        }
       />
       {adding && (
         <div ref={addBox} className="it-adding">

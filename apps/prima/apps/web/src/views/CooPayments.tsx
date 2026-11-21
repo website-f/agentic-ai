@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { api, type FinCooDesk } from '../api';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { SUBJECT } from './FinanceDesk';
 import { MyDailyCash } from './FinanceDailyCash';
 import { ArrowUUpLeftIcon, HourglassMediumIcon, PaperPlaneTiltIcon } from '@phosphor-icons/react';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
+import { SopHelp } from '../sop/SopHelp';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/finance.css';
 
 /**
@@ -35,26 +37,11 @@ export function CooPaymentsView() {
   const sel = data.payments.find((p) => p.id === open) ?? null;
   const toRelease = data.payments.filter((p) => p.status === 'approved').length;
   const returned = data.payments.filter((p) => p.status === 'returned').length;
-  const line = (p: Pay) => (
-    <div key={p.id} className="fin-pay" data-tone={p.may.includes('approve') ? 'warn' : undefined}>
-      <button type="button" className="fin-pay-main" onClick={() => setOpen(p.id)}>
-        <span className="fin-pay-text">
-          <span className="fin-pay-payee">{p.payee}</span>
-          <span className="muted small">
-            {p.companyName} · {SUBJECT[p.subject]} · {p.sqlRef} · due {dateLabel(p.dueOn)}
-          </span>
-        </span>
-        <span className="fin-pay-amount">{rm(p.amount)}</span>
-        <span className="fin-chips fin-pay-tags">
-          <Chip tone={STATUS[p.status][0]}>{STATUS[p.status][1]}</Chip>
-        </span>
-      </button>
-    </div>
-  );
   return (
     <div className="page fin">
       <PageHead
         title="Payments to approve"
+        actions={<SopHelp id="finance-payment" />}
         sub={
           <>
             Payments for the departments you monitor (Operations, IT, Foreign Worker Management, Procurement &amp; Inventory, Transport, Goodwill Empire).
@@ -74,10 +61,10 @@ export function CooPaymentsView() {
       </Stats>
       <MyDailyCash />
       <Card title="Waiting for you" sub={`${waiting.length} payment${waiting.length === 1 ? '' : 's'}`} flush>
-        {waiting.length === 0 ? <Empty title="Nothing waiting for you." /> : <div className="fin-pays">{waiting.map(line)}</div>}
+        <CooTable stateKey="coo.pay.waiting" rows={waiting} onOpen={setOpen} empty={<Empty title="Nothing waiting for you." />} />
       </Card>
       <Card title="Decided or with Finance" sub="Last 60 days" flush>
-        {rest.length === 0 ? <Empty title="None." /> : <div className="fin-pays">{rest.map(line)}</div>}
+        <CooTable stateKey="coo.pay.rest" rows={rest} onOpen={setOpen} empty={<Empty title="None." />} />
       </Card>
       {sel && (
         <Decide
@@ -90,6 +77,47 @@ export function CooPaymentsView() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * P107: the COO's payment lists as tables (search, status, subject and company filters, sortable due date and amount;
+ * cards on a phone) in place of the payment lines. A row opens the decide drawer as before.
+ */
+const COO_COLUMNS: DtColumn<Pay>[] = [
+  { id: 'payee', label: 'Payee', value: (p) => p.payee, render: (p) => <span className="fin-strong">{p.payee}</span>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (p) => p.companyName, phone: 'sub' },
+  { id: 'subject', label: 'Subject', value: (p) => SUBJECT[p.subject], translate: true, hideBelow: 1200 },
+  { id: 'ref', label: 'Reference', value: (p) => p.sqlRef, hideBelow: 1100, phone: 'hidden' },
+  { id: 'due', label: 'Due', value: (p) => p.dueOn, sort: 'date' },
+  { id: 'amount', label: 'Amount', value: (p) => p.amount, sort: 'money', render: (p) => <span className="fin-strong">{rm(p.amount)}</span> },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (p) => STATUS[p.status][1],
+    translate: true,
+    render: (p) => <Chip tone={STATUS[p.status][0]}>{STATUS[p.status][1]}</Chip>,
+  },
+];
+const COO_FILTERS: DtFilter<Pay>[] = [
+  { id: 'status', label: 'Status', value: (p) => p.status, options: (Object.keys(STATUS) as Pay['status'][]).map((s) => ({ value: s, label: STATUS[s][1] })) },
+  { id: 'subject', label: 'Subject', value: (p) => p.subject, optionLabel: (s) => SUBJECT[s as Pay['subject']] ?? s },
+  { id: 'company', label: 'Company', value: (p) => p.companyName },
+];
+
+function CooTable({ stateKey, rows, onOpen, empty }: { stateKey: string; rows: Pay[]; onOpen: (id: string) => void; empty: ReactNode }) {
+  return (
+    <DataTable
+      label="Payments"
+      stateKey={stateKey}
+      rows={rows}
+      rowKey={(p) => p.id}
+      columns={COO_COLUMNS}
+      filters={COO_FILTERS}
+      onRowClick={(p) => onOpen(p.id)}
+      rowTone={(p) => (p.may.includes('approve') ? 'warn' : undefined)}
+      empty={empty}
+    />
   );
 }
 

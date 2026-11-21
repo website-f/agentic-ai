@@ -4,6 +4,7 @@ import { api } from '../api';
 import { saveFile } from '../save';
 import { Chip, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { OpForm, type Field } from './ItPolicyPanel';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * Kawalan Inventori (Part U, Fitri package; Fauzan's answers 14 Nov 2026): the monthly and the 6-monthly major stock
@@ -59,6 +60,29 @@ const KPI_LABEL: Record<string, string> = {
   stockOuts: 'Kehabisan stok kritikal',
   reachedStorePct: 'Pembelian sampai ke stor %',
 };
+
+/** P107: the damage / loss charges and the items past their useful life as data tables (this panel is in Malay). */
+type Charge = Board['charges'][number];
+const CHARGE_COLUMNS: DtColumn<Charge>[] = [
+  { id: 'person', label: 'Nama', value: (c) => c.personName, render: (c) => `${c.personName} (${c.staffNo})`, phone: 'title' },
+  { id: 'item', label: 'Barang', value: (c) => c.itemName, phone: 'sub' },
+  { id: 'cause', label: 'Punca', value: (c) => c.cause },
+  { id: 'amount', label: 'Jumlah', value: (c) => c.amount, sort: 'money', render: (c) => (c.amount === null ? 'menunggu harga' : `RM${c.amount.toFixed(2)}`) },
+  { id: 'period', label: 'Gaji', value: (c) => (c.amount === null ? null : c.period), hideBelow: 1100 },
+  { id: 'status', label: 'Status', value: (c) => c.status, render: (c) => <Chip tone={c.status === 'due' ? 'warn' : 'info'}>{c.status}</Chip> },
+  { id: 'hr', label: 'HR', value: (c) => c.hr?.decision ?? null, hideBelow: 1200 },
+];
+const CHARGE_FILTERS: DtFilter<Charge>[] = [
+  { id: 'status', label: 'Status', value: (c) => c.status },
+  { id: 'period', label: 'Gaji', value: (c) => (c.amount === null ? null : c.period) },
+  { id: 'cause', label: 'Punca', value: (c) => c.cause },
+];
+type PastLife = Board['pastLife'][number];
+const PAST_LIFE_COLUMNS: DtColumn<PastLife>[] = [
+  { id: 'item', label: 'Barang', value: (p) => p.item, render: (p) => <strong>{p.item}</strong>, phone: 'title' },
+  { id: 'person', label: 'Dengan', value: (p) => p.personName, phone: 'sub' },
+  { id: 'since', label: 'Sejak', value: (p) => p.since, sort: 'date' },
+];
 
 async function pdf(op: string, id: string) {
   const p = (await api.inventoryAct(op, { id })) as { name: string; base64: string };
@@ -140,32 +164,51 @@ export function InventoryPanel({ items = [] }: { items?: { id: string; label: st
         <>
           <h4>Caj kerosakan / kehilangan barang syarikat</h4>
           <p className="muted small">{data.settings.legalFlag}</p>
-          {data.charges.map((c) => (
-            <div key={c.id} className="item small">
-              {c.personName} ({c.staffNo}) · {c.itemName} · {c.cause} · {c.amount === null ? 'menunggu harga' : `RM${c.amount.toFixed(2)} gaji ${c.period}`} <Chip tone={c.status === 'due' ? 'warn' : 'info'}>{c.status}</Chip>
-              {c.hr ? ` · HR: ${c.hr.decision}` : ''}
-              {data.can.hr && (c.status === 'due' || c.status === 'waiting_price') && (
-                <OpForm
-                  title="Semakan HR"
-                  op="chargeHr"
-                  send={send('chargeHr')}
-                  fixed={{ id: c.id }}
-                  fields={[{ k: 'decision', l: 'Keputusan', t: 'select', o: ['keep', 'reduce', 'spread', 'cancel'] }, { k: 'amount', l: 'Jumlah dikurangkan (RM)', t: 'number' }, { k: 'months', l: 'Bulan (ansuran)', t: 'number' }, { k: 'note', l: 'Sebab' }]}
-                />
-              )}
-              {c.status === 'waiting_price' && <OpForm title="Masukkan harga" op="chargePrice" send={send('chargePrice')} fixed={{ id: c.id }} fields={[{ k: 'unitPrice', l: 'Harga seunit (RM)', t: 'number' }, { k: 'note', l: 'Sumber harga' }]} />}
-            </div>
-          ))}
+          {/* P107: the charges as a data table; HR's review and the price form stay open under each row that needs them. */}
+          <DataTable
+            label="Caj kerosakan / kehilangan barang syarikat"
+            stateKey="purchasing.inv-charges"
+            rows={data.charges}
+            rowKey={(c) => c.id}
+            columns={CHARGE_COLUMNS}
+            filters={CHARGE_FILTERS}
+            searchText={(c) => c.staffNo}
+            phoneFacts={5}
+            rowDetail={(c) => {
+              const hr = data.can.hr && (c.status === 'due' || c.status === 'waiting_price');
+              const price = c.status === 'waiting_price';
+              if (!hr && !price) return null;
+              return (
+                <div data-no-row-click style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  {hr && (
+                    <OpForm
+                      title="Semakan HR"
+                      op="chargeHr"
+                      send={send('chargeHr')}
+                      fixed={{ id: c.id }}
+                      fields={[{ k: 'decision', l: 'Keputusan', t: 'select', o: ['keep', 'reduce', 'spread', 'cancel'] }, { k: 'amount', l: 'Jumlah dikurangkan (RM)', t: 'number' }, { k: 'months', l: 'Bulan (ansuran)', t: 'number' }, { k: 'note', l: 'Sebab' }]}
+                    />
+                  )}
+                  {price && <OpForm title="Masukkan harga" op="chargePrice" send={send('chargePrice')} fixed={{ id: c.id }} fields={[{ k: 'unitPrice', l: 'Harga seunit (RM)', t: 'number' }, { k: 'note', l: 'Sumber harga' }]} />}
+                </div>
+              );
+            }}
+          />
         </>
       )}
       {data.pastLife.length > 0 && (
         <>
           <h4>Melepasi jangka hayat</h4>
-          {data.pastLife.map((p) => (
-            <div key={p.issueId} className="item small">
-              {p.item} dengan {p.personName} sejak {dateLabel(p.since)}: semak untuk baiki, guna semula atau lupus
-            </div>
-          ))}
+          <p className="muted small">Semak setiap satu untuk baiki, guna semula atau lupus.</p>
+          {/* P107: a data table (search, sort, pages) in place of one line per item. */}
+          <DataTable
+            label="Melepasi jangka hayat"
+            stateKey="purchasing.inv-past-life"
+            rows={data.pastLife}
+            rowKey={(p) => p.issueId}
+            columns={PAST_LIFE_COLUMNS}
+            filters={[{ id: 'item', label: 'Barang', value: (p) => p.item }]}
+          />
         </>
       )}
       <h4>Laporan bulanan</h4>
@@ -373,6 +416,29 @@ function Disposal({ d, can, days }: { d: Board['disposals'][number]; can: Board[
   );
 }
 
+type MatchRow = { ref: string; line: string; problem: string; k: number };
+/** The kind of mismatch, from the server's wording (inventory-control.ts match). */
+const matchKind = (p: string) =>
+  p.startsWith('invoice without') ? 'invoice' : p.startsWith('received but not linked') ? 'unlinked' : p.startsWith('received ') ? 'qty' : p.startsWith('not in the store') ? 'late' : 'other';
+const MATCH_COLUMNS: DtColumn<MatchRow>[] = [
+  { id: 'ref', label: 'Rujukan', value: (r) => r.ref, render: (r) => <strong>{r.ref}</strong>, phone: 'title' },
+  { id: 'line', label: 'Barang', value: (r) => r.line, phone: 'sub' },
+  { id: 'problem', label: 'Masalah', value: (r) => r.problem },
+];
+const MATCH_FILTERS: DtFilter<MatchRow>[] = [
+  {
+    id: 'kind',
+    label: 'Masalah',
+    value: (r) => matchKind(r.problem),
+    options: [
+      { value: 'invoice', label: 'Invois tanpa terimaan barang' },
+      { value: 'unlinked', label: 'Tidak dipautkan ke barang stor' },
+      { value: 'qty', label: 'Kuantiti diterima berbeza' },
+      { value: 'late', label: 'Belum masuk stor atau daftar' },
+    ],
+  },
+];
+
 function Match() {
   const { data } = useLoad(() => api.inventoryAct('match', {}).catch(() => null) as Promise<{ rows: { ref: string; line: string; problem: string }[]; dataAsAt: string } | null>, []);
   if (!data || !data.rows.length) return null;
@@ -380,11 +446,15 @@ function Match() {
     <>
       <h4>Padanan pembelian ke stor</h4>
       <span className="muted small">Data setakat {data.dataAsAt.slice(0, 16).replace('T', ' ')}</span>
-      {data.rows.slice(0, 50).map((r, k) => (
-        <div key={k} className="item small">
-          {r.ref} · {r.line}: {r.problem}
-        </div>
-      ))}
+      {/* P107: every row the server sends, paged by the table (the screen showed only the first 50). */}
+      <DataTable
+        label="Padanan pembelian ke stor"
+        stateKey="purchasing.inv-match"
+        rows={data.rows.map((r, k) => ({ ...r, k }))}
+        rowKey={(r) => String(r.k)}
+        columns={MATCH_COLUMNS}
+        filters={MATCH_FILTERS}
+      />
     </>
   );
 }

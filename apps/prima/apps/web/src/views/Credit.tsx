@@ -2,10 +2,12 @@ import { Select } from '../SearchSelect';
 import { useState, type ReactNode } from 'react';
 import { BankIcon, CalendarCheckIcon, GavelIcon, MagnifyingGlassIcon, PlusIcon, StampIcon } from '@phosphor-icons/react';
 import { api, type CreditBoard, type CreditLoanInput } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
 import { Card, Empty, Facts, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { SopHelp } from '../sop/SopHelp';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { CentralAdminGuide } from './CentralAdminGuide';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/biz.css';
 
 /**
@@ -53,7 +55,7 @@ function F({ label, children, span }: { label: string; children: ReactNode; span
 
 export function CreditView() {
   const { data, error } = useLoad(() => api.creditBoard(), []);
-  const [tab, setTab] = useState<Tab>('cases');
+  const [tab, setTab] = useRouteTab<Tab>('cases', ['cases', 'loans']);
   const [adding, setAdding] = useState(false);
   const act = useAction();
   if (error)
@@ -84,7 +86,9 @@ export function CreditView() {
         title="PWVSB credit"
         sub="Money PWVSB lends to a company or pays on its behalf. A missed instalment opens an investigation, never a default. A default needs the checks, the credit officer and the Finance Director, and legal on a template's first default. Prima never changes ownership."
         actions={
-          (canCheck || officer) && (
+          <>
+            <SopHelp id="finance-credit-default" />
+            {(canCheck || officer) && (
             <>
               {canCheck && (
                 <button
@@ -103,7 +107,8 @@ export function CreditView() {
                 </button>
               )}
             </>
-          )
+            )}
+          </>
         }
       >
         <p className="notice" data-tone="info">
@@ -323,43 +328,119 @@ function CaseLine({ c }: { c: Case }) {
   );
 }
 
+/** P107: the loans as a data table: company, reference and purpose, kind, principal and rate, paid so far, outstanding, next due, standing. */
+const LOAN_COLUMNS: DtColumn<Row>[] = [
+  {
+    id: 'loan',
+    label: 'Loan',
+    value: (r) => `${r.companyName}: ${r.loan.ref}`,
+    render: (r) => (
+      <>
+        <strong>
+          {r.companyName}: <span className="mono">{r.loan.ref}</span>
+        </strong>
+        <span className="bz-sub" style={{ display: 'block' }}>
+          {r.loan.purpose}
+        </span>
+      </>
+    ),
+    phone: 'title',
+  },
+  { id: 'kind', label: 'Kind', value: (r) => (r.loan.kind === 'LOAN' ? 'Loan' : 'Paid on behalf'), translate: true },
+  {
+    id: 'principal',
+    label: 'Principal',
+    value: (r) => r.loan.principal,
+    sort: 'money',
+    render: (r) => (
+      <>
+        {rm(r.loan.principal)}
+        <span className="bz-sub" style={{ display: 'block' }}>
+          {r.loan.ratePct}% ({r.loan.secured ? 'secured' : 'unsecured'})
+        </span>
+      </>
+    ),
+    hideBelow: 1100,
+    phone: 'hidden',
+  },
+  {
+    id: 'paid',
+    label: 'Paid',
+    value: (r) => paidPct(r),
+    sort: 'number',
+    align: 'left',
+    render: (r) => (
+      <span className="bz-cr-paid">
+        <span className="bz-meter" data-tone={r.overdue.length ? 'warn' : undefined}>
+          <span style={{ width: `${paidPct(r)}%` }} />
+        </span>
+        <span className="bz-sub">{paidPct(r)}% of the schedule paid</span>
+      </span>
+    ),
+    hideBelow: 1200,
+    phone: 'hidden',
+  },
+  { id: 'outstanding', label: 'Outstanding', value: (r) => r.outstanding, sort: 'money', render: (r) => rm(r.outstanding) },
+  { id: 'next', label: 'Next due', value: (r) => r.next?.dueOn ?? '', sort: 'date' },
+  { id: 'status', label: 'Status', value: (r) => loanLabel(r), translate: true, render: (r) => <Chip tone={r.tone}>{loanLabel(r)}</Chip> },
+];
+const LOAN_FILTERS: DtFilter<Row>[] = [
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => (r.loan.status === 'active' ? 'active' : 'settled'),
+    options: [
+      { value: 'active', label: 'Active' },
+      { value: 'settled', label: 'Settled' },
+    ],
+  },
+  {
+    id: 'kind',
+    label: 'Kind',
+    value: (r) => r.loan.kind,
+    options: [
+      { value: 'LOAN', label: 'Loan' },
+      { value: 'PAID_ON_BEHALF', label: 'Paid on behalf' },
+    ],
+  },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  {
+    id: 'behind',
+    label: 'Instalments behind',
+    value: (r) => (r.overdue.length ? 'yes' : 'no'),
+    options: [
+      { value: 'yes', label: 'Yes' },
+      { value: 'no', label: 'No' },
+    ],
+  },
+];
+
 function Loans({ data }: { data: CreditBoard }) {
   const [open, setOpen] = useState<string | null>(null);
-  const [all, setAll] = useState(false);
-  const rows = data.rows.filter((r) => all || r.loan.status === 'active');
   const current = data.rows.find((r) => r.loan.id === open);
   return (
     <>
-      <Card
-        title="Loans and amounts paid on behalf"
-        sub="Open a loan for its schedule, papers and records."
-        actions={
-          <div className="seg" role="group" aria-label="Which loans">
-            <button aria-pressed={!all} onClick={() => setAll(false)}>
-              Active
-            </button>
-            <button aria-pressed={all} onClick={() => setAll(true)}>
-              Show settled
-            </button>
-          </div>
-        }
-        flush
-      >
-        {!rows.length ? (
-          <Empty title="No financing.">
-            {data.roles.includes('officer') || data.owner
-              ? "Record a signed loan, or an amount PWVSB paid on a company's behalf, with Add financing above."
-              : 'The credit officer records financing once the agreement is signed.'}
-          </Empty>
-        ) : (
-          <ul className="bz-rows">
-            {rows.map((r) => (
-              <li key={r.loan.id}>
-                <LoanLine r={r} onOpen={() => setOpen(r.loan.id)} />
-              </li>
-            ))}
-          </ul>
-        )}
+      <Card title="Loans and amounts paid on behalf" sub="Open a loan for its schedule, papers and records." flush>
+        {/* P107: a data table (search, filters, sort, pages; cards on a phone). Active / Show settled is now the Status filter, Active first. */}
+        <DataTable
+          label="Loans and amounts paid on behalf"
+          stateKey="credit.loans"
+          defaults={{ f: { status: 'active' } }}
+          rows={data.rows}
+          rowKey={(r) => r.loan.id}
+          columns={LOAN_COLUMNS}
+          filters={LOAN_FILTERS}
+          searchText={(r) => `${r.loan.agreementRef} ${r.loan.purpose}`}
+          onRowClick={(r) => setOpen(r.loan.id)}
+          rowTone={(r) => (r.tone === 'crit' ? 'crit' : r.tone === 'warn' ? 'warn' : undefined)}
+          empty={
+            <Empty title="No financing.">
+              {data.roles.includes('officer') || data.owner
+                ? "Record a signed loan, or an amount PWVSB paid on a company's behalf, with Add financing above."
+                : 'The credit officer records financing once the agreement is signed.'}
+            </Empty>
+          }
+        />
       </Card>
       {current && (
         <Drawer
@@ -400,36 +481,10 @@ function repaid(r: Row): { paid: number; total: number } {
   return { paid, total };
 }
 
-function LoanLine({ r, onOpen }: { r: Row; onOpen: () => void }) {
-  const l = r.loan;
+/** The share of the whole schedule paid so far, in whole per cent (as the old loan line showed it). */
+function paidPct(r: Row): number {
   const { paid, total } = repaid(r);
-  const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
-  return (
-    <button type="button" className="bz-row bz-cr-loan" data-tone={r.tone === 'crit' ? 'crit' : r.tone === 'warn' ? 'warn' : undefined} onClick={onOpen}>
-      <span className="bz-row-main">
-        <span className="bz-row-title">
-          {r.companyName}: <span className="mono">{l.ref}</span>
-        </span>
-        <span className="bz-row-meta">
-          {l.kind === 'LOAN' ? 'Loan' : 'Paid on behalf'} · {l.purpose}
-        </span>
-        <span className="bz-row-meta">
-          {rm(l.principal)} at {l.ratePct}% ({l.secured ? 'secured' : 'unsecured'})
-        </span>
-        <span className="bz-cr-paid">
-          <span className="bz-meter" data-tone={r.overdue.length ? 'warn' : undefined}>
-            <span style={{ width: `${pct}%` }} />
-          </span>
-          <span className="bz-sub">{pct}% of the schedule paid</span>
-        </span>
-      </span>
-      <span className="bz-row-side">
-        <span className="bz-amt">{rm(r.outstanding)}</span>
-        <span className="bz-sub">outstanding{r.next ? ` · next ${dateLabel(r.next.dueOn)}` : ''}</span>
-        <Chip tone={r.tone}>{loanLabel(r)}</Chip>
-      </span>
-    </button>
-  );
+  return total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
 }
 
 function LoanDetail({ r, licence, owner = false }: { r: Row; licence: LicenceCtx; owner?: boolean }) {

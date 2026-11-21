@@ -38,6 +38,7 @@ import { api } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Loading, n, useLoad, type Tone } from '../ui';
 import { Card, Stat, Stats } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 // Growth panel on the leaders' home (Fauzan, 3 Nov 2026, "Recommended set"): is the group growing, and which company
 // is pulling it down. Read only. A figure with no source recorded shows Unknown, never zero; never a ranking of people.
@@ -106,7 +107,6 @@ export function GrowthPanel() {
   const [margin, setMargin] = useState<GrowthMargin | null>(null);
   const [marginErr, setMarginErr] = useState<string | null>(null);
   const [marginBusy, setMarginBusy] = useState(false);
-  const [showUnknown, setShowUnknown] = useState(false);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="growth figures" />;
   const g = data.group;
@@ -122,6 +122,92 @@ export function GrowthPanel() {
     go({ view });
   };
   const of = (n: number) => `${n} of ${g.known.of} companies`;
+  // P107: the companies as a data table (search, sort, pages; cards on a phone). The figures and their buttons are as
+  // before; companies with no contract recorded are a filter (hidden at first, as the old "Show ..." button had them).
+  const columns: DtColumn<GrowthCompany>[] = [
+    { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'title' },
+    {
+      id: 'value',
+      label: 'Contract value a month',
+      value: (r) => r.contractValue,
+      sort: 'money',
+      render: (r) => (
+        <button className="btn btn-sm btn-ghost" onClick={() => open(r, 'contracts')}>
+          {r.contractValue == null ? 'Unknown' : rm(r.contractValue)}
+        </button>
+      ),
+    },
+    {
+      id: 'change',
+      label: 'Change',
+      value: (r) => r.changePct,
+      sort: 'number',
+      render: (r) => <Chip tone={r.changePct == null ? 'unknown' : r.changePct < 0 ? 'warn' : 'ok'}>{pct(r.changePct)}</Chip>,
+    },
+    {
+      id: 'ending',
+      label: 'Ending in 90 days',
+      value: (r) => r.ending90?.monthly,
+      sort: 'money',
+      hideBelow: 1200,
+      render: (r) => (r.ending90 ? `${r.ending90.count} · ${rm(r.ending90.monthly)}` : 'Unknown'),
+    },
+    {
+      id: 'pipeline',
+      label: 'Pipeline',
+      value: (r) => r.pipeline?.monthly,
+      sort: 'money',
+      hideBelow: 1200,
+      render: (r) =>
+        r.pipeline ? (
+          <button className="btn btn-sm btn-ghost" onClick={() => open(r, 'clients')}>
+            {`${r.pipeline.count} · ${rm(r.pipeline.monthly)}${r.pipeline.unpriced ? ` (${r.pipeline.unpriced} not priced)` : ''}`}
+          </button>
+        ) : (
+          'Unknown'
+        ),
+    },
+    {
+      id: 'under',
+      label: `Under-billed ${data.prevMonth}`,
+      value: (r) => r.billing?.underBilled,
+      sort: 'money',
+      render: (r) => (r.billing ? `${rm(r.billing.underBilled)} · ${r.billing.underContracts} under, ${r.billing.missing} missing` : 'Unknown'),
+    },
+    {
+      id: 'unfilled',
+      label: 'Unfilled, 7 days',
+      value: (r) => r.unfilled7,
+      sort: 'number',
+      render: (r) =>
+        r.unfilled7 == null ? (
+          'Unknown'
+        ) : (
+          <button className="btn btn-sm btn-ghost" onClick={() => open(r, 'roster')}>
+            {r.unfilled7}
+          </button>
+        ),
+    },
+    {
+      id: 'collection',
+      label: 'Collection days',
+      value: (r) => r.collectionDays,
+      sort: 'number',
+      hideBelow: 1100,
+      render: (r) => <span title={r.collectionNote}>{r.collectionDays ?? 'Unknown'}</span>,
+    },
+  ];
+  const filters: DtFilter<GrowthCompany>[] = [
+    {
+      id: 'contracts',
+      label: 'Contracts in Prima',
+      value: (r) => (r.contractValue == null ? 'none' : 'known'),
+      options: [
+        { value: 'known', label: 'Recorded' },
+        { value: 'none', label: 'None recorded yet' },
+      ],
+    },
+  ];
   return (
     <Card
       title={<span id="growth-title">Growth</span>}
@@ -194,63 +280,16 @@ export function GrowthPanel() {
 
       <div className="growth-companies">
       <h3>By company</h3>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Company</th>
-              <th>Contract value a month</th>
-              <th>Change</th>
-              <th>Ending in 90 days</th>
-              <th>Pipeline</th>
-              <th>Under-billed {data.prevMonth}</th>
-              <th>Unfilled, 7 days</th>
-              <th>Collection days</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...known, ...(showUnknown ? unknown : [])].map((r) => (
-              <tr key={r.companyId}>
-                <td>{r.companyName}</td>
-                <td>
-                  <button className="btn btn-sm btn-ghost" onClick={() => open(r, 'contracts')}>
-                    {r.contractValue == null ? 'Unknown' : rm(r.contractValue)}
-                  </button>
-                </td>
-                <td>
-                  <Chip tone={r.changePct == null ? 'unknown' : r.changePct < 0 ? 'warn' : 'ok'}>{pct(r.changePct)}</Chip>
-                </td>
-                <td>{r.ending90 ? `${r.ending90.count} · ${rm(r.ending90.monthly)}` : 'Unknown'}</td>
-                <td>
-                  {r.pipeline ? (
-                    <button className="btn btn-sm btn-ghost" onClick={() => open(r, 'clients')}>
-                      {`${r.pipeline.count} · ${rm(r.pipeline.monthly)}${r.pipeline.unpriced ? ` (${r.pipeline.unpriced} not priced)` : ''}`}
-                    </button>
-                  ) : (
-                    'Unknown'
-                  )}
-                </td>
-                <td>{r.billing ? `${rm(r.billing.underBilled)} · ${r.billing.underContracts} under, ${r.billing.missing} missing` : 'Unknown'}</td>
-                <td>
-                  {r.unfilled7 == null ? (
-                    'Unknown'
-                  ) : (
-                    <button className="btn btn-sm btn-ghost" onClick={() => open(r, 'roster')}>
-                      {r.unfilled7}
-                    </button>
-                  )}
-                </td>
-                <td title={r.collectionNote}>{r.collectionDays ?? 'Unknown'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {unknown.length > 0 && (
-        <button className="btn btn-sm btn-ghost growth-more" aria-expanded={showUnknown} onClick={() => setShowUnknown((x) => !x)}>
-          {showUnknown ? 'Hide' : 'Show'} {unknown.length} companies with no contracts recorded in Prima yet
-        </button>
-      )}
+      <DataTable
+        label="By company"
+        stateKey="home.growth.companies"
+        rows={[...known, ...unknown]}
+        rowKey={(r) => r.companyId}
+        columns={columns}
+        filters={filters}
+        defaults={unknown.length > 0 ? { f: { contracts: 'known' } } : undefined}
+        searchPlaceholder="Search companies"
+      />
       </div>
       </div>
     </Card>

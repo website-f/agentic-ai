@@ -2,6 +2,7 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinControls, type FinDesk } from '../api';
 import { Chip, ErrorNotice, dateTimeLabel, useAction, type Tone } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * The ledger side of Finance (Fauzan, 3 Nov 2026; masterplan section 08 items 71, 72, 76): the twelve statement tests
@@ -36,6 +37,20 @@ export function LedgerPanels({ v, co, lead, me, reviewer }: { v: FinControls; co
     </>
   );
 }
+
+type Sync = L['sql']['syncs'][number];
+/** P107: the connector's reads as a table: when, what was read, for which month, and how it went. */
+const SYNC_COLUMNS: DtColumn<Sync>[] = [
+  { id: 'at', label: 'When', value: (s) => s.at, sort: 'date', render: (s) => dateTimeLabel(s.at), phone: 'sub' },
+  { id: 'externalId', label: 'Reference', value: (s) => s.externalId, phone: 'title' },
+  { id: 'period', label: 'Month', value: (s) => s.period },
+  { id: 'status', label: 'Status', value: (s) => s.status, translate: true },
+  { id: 'reasons', label: 'Reason', value: (s) => s.reasons.join(' '), sort: false, render: (s) => <span className="small">{s.reasons.join(' ') || '–'}</span> },
+];
+const SYNC_FILTERS: DtFilter<Sync>[] = [
+  { id: 'status', label: 'Status', value: (s) => s.status },
+  { id: 'period', label: 'Month', value: (s) => s.period },
+];
 
 const n = (s: string) => (s.trim() === '' ? '' : Number(s.replace(/,/g, '')));
 
@@ -534,14 +549,7 @@ function SqlConnector({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
         </button>
       </details>
       {l.sql.syncs.length > 0 && (
-        <ul className="small">
-          {l.sql.syncs.map((s) => (
-            <li key={s.id}>
-              {dateTimeLabel(s.at)} read {s.externalId} for {s.period}: {s.status}
-              {s.reasons.length ? ` (${s.reasons.join(' ')})` : ''}
-            </li>
-          ))}
-        </ul>
+        <DataTable label="SQL Account connection" stateKey={`fin.sqlsyncs.${co.companyId}`} rows={l.sql.syncs} rowKey={(s) => s.id} columns={SYNC_COLUMNS} filters={SYNC_FILTERS} />
       )}
     </section>
   );

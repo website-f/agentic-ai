@@ -3,6 +3,7 @@ import type { StatutorySettings } from '@prima/core';
 import { api } from '../api';
 import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { tr, useLang } from '../i18n';
+import { SopHelp } from '../sop/SopHelp';
 import {
   BLANK_OTHER,
   FIELDS,
@@ -236,11 +237,14 @@ function RatesBoard({ data, onChange }: { data: Board; onChange: () => void }) {
     <div className="page sr-page">
       <Head
         actions={
-          data.canSet && (
-            <button type="button" className="btn btn-primary" onClick={onChange}>
-              Change rates
-            </button>
-          )
+          <>
+            <SopHelp id="pay-statutory-rates" />
+            {data.canSet && (
+              <button type="button" className="btn btn-primary" onClick={onChange}>
+                Change rates
+              </button>
+            )}
+          </>
         }
       />
       {!data.on && (

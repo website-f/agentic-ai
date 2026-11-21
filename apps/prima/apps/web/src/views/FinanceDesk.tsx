@@ -17,6 +17,7 @@ import {
 } from '@phosphor-icons/react';
 import { Chip, Drawer, ErrorNotice, dateLabel, dateTimeLabel, useAction, type Tone } from '../ui';
 import { Card, Empty, Stat, Stats, Steps, type StepState } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/finance.css';
 
 /**
@@ -117,27 +118,11 @@ export function PaymentsTab({ desk }: { desk: FinDesk }) {
         }
         flush
       >
-        {mine.length === 0 ? (
-          <Empty title="Nothing waiting for you." />
-        ) : (
-          <div className="fin-pays">
-            {mine.map(({ c, p }) => (
-              <PayLine key={p.id} c={c} p={p} onOpen={openPay} />
-            ))}
-          </div>
-        )}
+        <PayTable stateKey="fin.pay.mine" rows={mine} onOpen={openPay} empty={<Empty title="Nothing waiting for you." />} />
       </Card>
       <CashPanel desk={desk} />
       <Card title="Other payments" sub="Open, and closed in the last 60 days" flush>
-        {others.length === 0 ? (
-          <Empty title="None." />
-        ) : (
-          <div className="fin-pays">
-            {others.map(({ c, p }) => (
-              <PayLine key={p.id} c={c} p={p} onOpen={openPay} />
-            ))}
-          </div>
-        )}
+        <PayTable stateKey="fin.pay.others" rows={others} onOpen={openPay} byMonth empty={<Empty title="None." />} />
       </Card>
       <p className="notice" data-tone="info">
         Prima approves; the bank portal pays. One person never approves and releases the same payment. Approval is by subject (Fauzan, 1 Nov 2026: only the FD,
@@ -151,82 +136,138 @@ export function PaymentsTab({ desk }: { desk: FinDesk }) {
 }
 
 /** Cash needed (automation, 1 Nov 2026): approved payments due in 7 and 30 days against each bank's last known balance. */
+type CashLine = { c: Co; x: Co['cash'][number] };
+const coverOf = (x: CashLine['x']) => (x.balance == null ? 'unknown' : x.short7 ? 'short7' : x.short30 ? 'short30' : 'enough');
+const COVER: Record<ReturnType<typeof coverOf>, string> = {
+  short7: 'Short this week',
+  short30: 'Short in 30 days',
+  enough: 'Enough',
+  unknown: 'Unknown',
+};
+// P107: a table (search, company and cover filters, sortable amounts) in place of the plain table; amounts as before.
+const CASH_COLUMNS: DtColumn<CashLine>[] = [
+  { id: 'company', label: 'Company', value: ({ c }) => c.companyName, render: ({ c }) => <span className="fin-strong">{c.companyName}</span>, phone: 'title' },
+  { id: 'bank', label: 'Bank', value: ({ x }) => x.bank, phone: 'sub' },
+  {
+    id: 'balance',
+    label: 'Balance',
+    value: ({ x }) => x.balance,
+    sort: 'money',
+    render: ({ x }) =>
+      x.balance == null ? (
+        <span className="muted">No statement loaded, balance unknown</span>
+      ) : (
+        <>
+          {rm(x.balance)}
+          <span className="muted small fin-block">at {dateLabel(x.balanceAsOf!)}</span>
+        </>
+      ),
+  },
+  { id: 'due7', label: 'Due in 7 days', value: ({ x }) => x.due7, sort: 'money', render: ({ x }) => rm(x.due7) },
+  { id: 'due30', label: 'Due in 30 days', value: ({ x }) => x.due30, sort: 'money', render: ({ x }) => rm(x.due30) },
+  {
+    id: 'cover',
+    label: 'Cover',
+    value: ({ x }) => COVER[coverOf(x)],
+    translate: true,
+    render: ({ x }) =>
+      x.balance == null ? (
+        <Chip tone="warn">Unknown</Chip>
+      ) : x.short7 ? (
+        <Chip tone="crit">Short {rm(x.short7)} this week</Chip>
+      ) : x.short30 ? (
+        <Chip tone="warn">Short {rm(x.short30)} in 30 days</Chip>
+      ) : (
+        <Chip tone="ok">Enough</Chip>
+      ),
+  },
+];
+const CASH_FILTERS: DtFilter<CashLine>[] = [
+  { id: 'company', label: 'Company', value: ({ c }) => c.companyName },
+  { id: 'cover', label: 'Cover', value: ({ x }) => coverOf(x), options: (Object.keys(COVER) as (keyof typeof COVER)[]).map((k) => ({ value: k, label: COVER[k] })) },
+];
+
 function CashPanel({ desk }: { desk: FinDesk }) {
-  const rows = desk.companies.flatMap((c) => c.cash.filter((x) => x.due30 > 0 || (x.short7 ?? 0) > 0).map((x) => ({ c, x })));
+  const rows: CashLine[] = desk.companies.flatMap((c) => c.cash.filter((x) => x.due30 > 0 || (x.short7 ?? 0) > 0).map((x) => ({ c, x })));
   if (rows.length === 0) return null;
   return (
     <Card title="Cash needed for approved payments" sub="balance = last statement's closing less payments released since" flush>
-      <table className="fin-table">
-        <thead>
-          <tr>
-            <th>Company and bank</th>
-            <th className="fin-num">Balance</th>
-            <th className="fin-num">Due in 7 days</th>
-            <th className="fin-num">Due in 30 days</th>
-            <th>Cover</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ c, x }) => (
-            <tr key={`${c.companyId}-${x.bankId}`}>
-              <td>
-                <span className="fin-strong">{c.companyName}</span>
-                <span className="muted small fin-block">{x.bank}</span>
-              </td>
-              <td className="fin-num">
-                {x.balance == null ? (
-                  <span className="muted">No statement loaded, balance unknown</span>
-                ) : (
-                  <>
-                    {rm(x.balance)}
-                    <span className="muted small fin-block">at {dateLabel(x.balanceAsOf!)}</span>
-                  </>
-                )}
-              </td>
-              <td className="fin-num">{rm(x.due7)}</td>
-              <td className="fin-num">{rm(x.due30)}</td>
-              <td>
-                {x.balance == null ? (
-                  <Chip tone="warn">Unknown</Chip>
-                ) : x.short7 ? (
-                  <Chip tone="crit">Short {rm(x.short7)} this week</Chip>
-                ) : x.short30 ? (
-                  <Chip tone="warn">Short {rm(x.short30)} in 30 days</Chip>
-                ) : (
-                  <Chip tone="ok">Enough</Chip>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <DataTable
+        label="Cash needed for approved payments"
+        stateKey="fin.cash"
+        rows={rows}
+        rowKey={({ c, x }) => `${c.companyId}-${x.bankId}`}
+        columns={CASH_COLUMNS}
+        filters={CASH_FILTERS}
+      />
     </Card>
   );
 }
 
-function PayLine({ c, p, onOpen }: { c: Co; p: Pay; onOpen: (id: string, edit?: boolean) => void }) {
-  return (
-    <div className="fin-pay" data-tone={p.status === 'returned' ? 'crit' : undefined}>
-      <button type="button" className="fin-pay-main" onClick={() => onOpen(p.id)}>
-        <span className="fin-pay-text">
-          <span className="fin-pay-payee">{p.payee}</span>
-          <span className="muted small">
-            {c.companyName} · Team {c.team} · {p.sqlRef} · due {dateLabel(p.dueOn)} · needs the {NEEDS[p.needs]}
-          </span>
-        </span>
-        <span className="fin-pay-amount">{rm(p.amount)}</span>
-        <span className="fin-chips fin-pay-tags">
+type PayRow = { c: Co; p: Pay };
+const teamLabel = (team: number | string) => `Team ${team}`;
+const payStatus = (p: Pay) =>
+  p.status === 'reviewed' && p.approvalMethod === 'teams'
+    ? 'Waiting for approval in Teams'
+    : p.status === 'reviewed' && p.approvalMethod === 'sharepoint'
+      ? 'Waiting for approval in SharePoint'
+      : PAY[p.status][1];
+const monthOf = (iso: string) => dateLabel(`${iso.slice(0, 7)}-01`).replace(/^\d+ /, '');
+
+/**
+ * P107: the payment lists as tables (search, status, company, team and approver filters, sortable due date and amount;
+ * cards on a phone) in place of the payment lines. A row opens the payment; a returned one keeps its Edit button.
+ */
+function PayTable({ stateKey, rows, onOpen, byMonth, empty }: { stateKey: string; rows: PayRow[]; onOpen: (id: string, edit?: boolean) => void; byMonth?: boolean; empty: React.ReactNode }) {
+  const columns: DtColumn<PayRow>[] = [
+    { id: 'payee', label: 'Payee', value: ({ p }) => p.payee, render: ({ p }) => <span className="fin-strong">{p.payee}</span>, phone: 'title' },
+    { id: 'company', label: 'Company', value: ({ c }) => c.companyName, phone: 'sub' },
+    { id: 'team', label: 'Team', value: ({ c }) => c.team, sort: 'number', align: 'left', render: ({ c }) => teamLabel(c.team), hideBelow: 1400, phone: 'hidden' },
+    { id: 'ref', label: 'Reference', value: ({ p }) => p.sqlRef, hideBelow: 1100, phone: 'hidden' },
+    { id: 'due', label: 'Due', value: ({ p }) => p.dueOn, sort: 'date' },
+    { id: 'needs', label: 'Final approval by', value: ({ p }) => NEEDS[p.needs], translate: true, hideBelow: 1200 },
+    { id: 'amount', label: 'Amount', value: ({ p }) => p.amount, sort: 'money', render: ({ p }) => <span className="fin-strong">{rm(p.amount)}</span> },
+    {
+      id: 'status',
+      label: 'Status',
+      value: ({ p }) => payStatus(p),
+      translate: true,
+      render: ({ p }) => (
+        <span className="fin-chips">
           {p.budget && p.budget.over > 0 && <Chip tone="warn">Over budget {rm(p.budget.over)}</Chip>}
           {p.watch.length > 0 && <Chip tone="info">{p.watch[0]}</Chip>}
-          <Chip tone={PAY[p.status][0]}>{p.status === 'reviewed' && p.approvalMethod === 'teams' ? 'Waiting for approval in Teams' : p.status === 'reviewed' && p.approvalMethod === 'sharepoint' ? 'Waiting for approval in SharePoint' : PAY[p.status][1]}</Chip>
+          <Chip tone={PAY[p.status][0]}>{payStatus(p)}</Chip>
         </span>
-      </button>
-      {p.may.includes('resubmit') && (
-        <button className="btn btn-sm btn-primary fin-pay-edit" aria-label={`Edit returned payment to ${p.payee}`} onClick={() => onOpen(p.id, true)}>
-          Edit
-        </button>
-      )}
-    </div>
+      ),
+    },
+  ];
+  const filters: DtFilter<PayRow>[] = [
+    { id: 'status', label: 'Status', value: ({ p }) => p.status, options: (Object.keys(PAY) as Pay['status'][]).map((s) => ({ value: s, label: PAY[s][1] })) },
+    { id: 'company', label: 'Company', value: ({ c }) => c.companyName },
+    { id: 'team', label: 'Team', value: ({ c }) => String(c.team), optionLabel: teamLabel },
+    { id: 'needs', label: 'Final approval by', value: ({ p }) => NEEDS[p.needs] },
+    ...(byMonth ? [{ id: 'month', label: 'Due month', value: ({ p }: PayRow) => p.dueOn.slice(0, 7), optionLabel: monthOf }] : []),
+  ];
+  return (
+    <DataTable
+      label="Payments"
+      stateKey={stateKey}
+      rows={rows}
+      rowKey={({ p }) => p.id}
+      columns={columns}
+      filters={filters}
+      searchText={({ p }) => `${p.sqlRef} ${p.watch.join(' ')}`}
+      onRowClick={({ p }) => onOpen(p.id)}
+      rowTone={({ p }) => (p.status === 'returned' ? 'crit' : undefined)}
+      rowEnd={({ p }) =>
+        p.may.includes('resubmit') ? (
+          <button className="btn btn-sm btn-primary fin-pay-edit" aria-label={`Edit returned payment to ${p.payee}`} onClick={() => onOpen(p.id, true)}>
+            Edit
+          </button>
+        ) : null
+      }
+      empty={empty}
+    />
   );
 }
 
@@ -911,6 +952,37 @@ function closeSteps(status: string) {
   return labels.map((label, i) => ({ label, state: (at > i ? 'done' : at === i ? 'now' : 'todo') as StepState }));
 }
 
+/** P107: the companies' closes as a table (search, status and team filters, pages; cards on a phone). */
+const CLOSE_COLUMNS: DtColumn<Co>[] = [
+  { id: 'company', label: 'Company', value: (c) => c.companyName, render: (c) => <span className="fin-strong">{c.companyName}</span>, phone: 'title' },
+  { id: 'team', label: 'Team', value: (c) => c.team, sort: 'number', align: 'left', render: (c) => teamLabel(c.team), phone: 'sub' },
+  { id: 'fix', label: 'To fix', value: (c) => c.close.check.blockers.length, sort: 'number' },
+  { id: 'explain', label: 'To explain', value: (c) => c.close.check.exceptions.filter((e) => !e.explained).length, sort: 'number' },
+  {
+    id: 'steps',
+    label: 'Steps',
+    render: (c) => (
+      <span className="fin-close-steps">
+        <Steps steps={closeSteps(c.close.status)} />
+      </span>
+    ),
+    width: '24rem',
+    hideBelow: 1200,
+    phone: 'hidden',
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (c) => CLOSE[c.close.status][1],
+    translate: true,
+    render: (c) => <Chip tone={CLOSE[c.close.status][0]}>{CLOSE[c.close.status][1]}</Chip>,
+  },
+];
+const CLOSE_FILTERS: DtFilter<Co>[] = [
+  { id: 'status', label: 'Status', value: (c) => c.close.status, options: Object.keys(CLOSE).map((s) => ({ value: s, label: CLOSE[s][1] })) },
+  { id: 'team', label: 'Team', value: (c) => String(c.team), optionLabel: teamLabel },
+];
+
 export function CloseTab({ desk }: { desk: FinDesk }) {
   const [open, setOpen] = useState<string | null>(null);
   const sel = desk.companies.find((c) => c.companyId === open) ?? null;
@@ -932,22 +1004,15 @@ export function CloseTab({ desk }: { desk: FinDesk }) {
         exception explained. The team prepares, the deputy or leader reviews, and the Finance Director or the CEO approves the financials.
       </p>
       <Card title={`Close ${desk.period}`} sub="Press a company for its checklist" flush>
-        <div className="fin-closes">
-          {rows.map((c) => (
-            <button key={c.companyId} type="button" className="fin-close" onClick={() => setOpen(c.companyId)}>
-              <span className="fin-close-name">
-                <span className="fin-strong">{c.companyName}</span>
-                <span className="muted small">
-                  Team {c.team} · {c.close.check.blockers.length} to fix · {c.close.check.exceptions.filter((e) => !e.explained).length} to explain
-                </span>
-              </span>
-              <span className="fin-close-steps">
-                <Steps steps={closeSteps(c.close.status)} />
-              </span>
-              <Chip tone={CLOSE[c.close.status][0]}>{CLOSE[c.close.status][1]}</Chip>
-            </button>
-          ))}
-        </div>
+        <DataTable
+          label="Month-end close"
+          stateKey="fin.close"
+          rows={rows}
+          rowKey={(c) => c.companyId}
+          columns={CLOSE_COLUMNS}
+          filters={CLOSE_FILTERS}
+          onRowClick={(c) => setOpen(c.companyId)}
+        />
       </Card>
       {sel && <CloseDrawer c={sel} period={desk.period} onClose={() => setOpen(null)} />}
     </>

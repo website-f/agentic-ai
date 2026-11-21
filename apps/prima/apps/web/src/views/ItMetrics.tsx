@@ -1,4 +1,5 @@
 import { Select } from '../SearchSelect';
+import { SopHelp } from '../sop/SopHelp';
 import{useEffect,useMemo,useReducer,useState}from'react';import type{MetricAction,MetricBoardRow,MetricBoardView,MetricChoicesView,MetricOperation,MetricRecoveryView,MetricRef,MetricTarget,MetricTargetsView}from'@prima/core';import{api}from'../api';import{useApp}from'../App';import{Loading,useLoad}from'../ui';import type{ManualSession}from'../it-manual/session';import{createMetricsSession,decodeMetricBoard,decodeMetricChoices,decodeMetricRecovery,decodeMetricTargets,knownCount,knownFlag,knownRate,malaysiaReviewTime,metricComplexities,metricStages,metricWorkflowNames,minutes,refKey}from'../it-metrics/client';
 export const metricActionLabels:Record<MetricOperation,string>={open:'Open prospective timing',start:'Start recorded work interval',pause:'Pause to internal queue',wait:'Record external waiting',resume:'Resume recorded work interval',submit:'Mark ready for handoff',sync:'Sync verified domain completion',target:'Review provisional timing targets',reconcile:'Reconcile changed boundary as unknown'};
 type Snapshot={owner:string;choices:MetricChoicesView|null;board:MetricBoardView|null;recovery:MetricRecoveryView|null;targets:MetricTargetsView|null;errors:string[]};type Selection={kind:MetricOperation;id:string};
@@ -11,7 +12,7 @@ const unknown=(b?.rows??[]).filter(r=>!r.durations).length;
 return <section className="page ix-page">
  <header className="k-head">
   <div className="k-head-text"><h1>Workflow time and quality</h1><p className="k-head-sub">Staff-recorded workflow intervals, not attendance, continuous physical activity, screen monitoring or a staff ranking. Coverage starts when timing is opened; earlier active time is unknown. Timer controls never accept, approve, confirm, pay or submit the underlying work.</p></div>
-  <div className="k-head-actions"><button className="btn" onClick={reload}>Refresh authorized timing snapshot</button></div>
+  <div className="k-head-actions"><SopHelp id="it-workflow-timing"/><button className="btn" onClick={reload}>Refresh authorized timing snapshot</button></div>
  </header>
  <div className="ix-notes">
   <p className="notice" data-tone="info">HR KPI review is required by the owner; its scoped review workflow is not implemented by this timing screen. This screen does not grant HR access to staff measurements.</p>

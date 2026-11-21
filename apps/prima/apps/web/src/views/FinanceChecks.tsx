@@ -15,6 +15,7 @@ import { LedgerPanels } from './FinanceLedger';
 import { SqlAccountLinkPanel } from './FinanceSqlLink';
 import { ClientCredit, SupplierStatements } from './FinanceCredit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * Finance Phase 2, part 2 (Fauzan, 31 Oct 2026). The monthly checks that keep the books from going Unknown:
@@ -185,7 +186,6 @@ function Payees({ v, co }: { v: FinControls; co: Co }) {
   const [f, setF] = useState<Record<string, string>>({ kind: 'supplier' });
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const sel = v.payees.find((p) => p.id === open) ?? null;
-  const tone = (s: string) => (s === 'verified' ? 'ok' : s === 'blocked' ? 'crit' : 'warn');
   return (
     <section className="panel">
       <div className="panel-head">
@@ -261,25 +261,44 @@ function Payees({ v, co }: { v: FinControls; co: Co }) {
           </button>
         </div>
       )}
-      <div className="list">
-        {v.payees.length === 0 && <div className="empty">No payees yet.</div>}
-        {v.payees.map((p) => (
-          <button key={p.id} className="list-item" onClick={() => setOpen(open === p.id ? null : p.id)}>
-            <div className="fin-min0">
-              <div className="fin-strong">{p.name}</div>
-              <div className="muted small">
-                {p.kind} · {p.regNo} · {p.bank} ending {p.accountLast4} · {p.accountName}
-                {p.held ? ` · ${p.held} payment(s) on hold` : ''}
-              </div>
-            </div>
-            <Chip tone={tone(p.status)}>{p.status === 'pending' ? 'To verify' : p.status === 'verified' ? 'Verified' : 'Blocked'}</Chip>
-          </button>
-        ))}
-      </div>
+      <DataTable
+        label="Payees"
+        stateKey={`fin.payees.${v.companyId}`}
+        rows={v.payees}
+        rowKey={(p) => p.id}
+        columns={PAYEE_COLUMNS}
+        filters={PAYEE_FILTERS}
+        onRowClick={(p) => setOpen(open === p.id ? null : p.id)}
+        empty={<div className="empty">No payees yet.</div>}
+      />
       {sel && co.canAct && <PayeeActions v={v} p={sel} />}
     </section>
   );
 }
+
+type Payee = FinControls['payees'][number];
+const payeeTone = (s: string) => (s === 'verified' ? 'ok' : s === 'blocked' ? 'crit' : 'warn');
+const PAYEE_STATUS: Record<string, string> = { pending: 'To verify', verified: 'Verified', blocked: 'Blocked' };
+const payeeStatus = (s: string) => PAYEE_STATUS[s] ?? 'Blocked';
+/** P107: the payees as a table; clicking a row opens its verify / change / block steps under the table, as before. */
+const PAYEE_COLUMNS: DtColumn<Payee>[] = [
+  { id: 'name', label: 'Name', value: (p) => p.name, render: (p) => <span className="fin-strong">{p.name}</span>, phone: 'title' },
+  { id: 'kind', label: 'Type', value: (p) => p.kind, translate: true, phone: 'sub' },
+  { id: 'regNo', label: 'Registration number', value: (p) => p.regNo, hideBelow: 1200 },
+  { id: 'bank', label: 'Bank', value: (p) => `${p.bank} ending ${p.accountLast4}` },
+  { id: 'accountName', label: 'Account name', value: (p) => p.accountName, hideBelow: 1100 },
+  { id: 'held', label: 'On hold', value: (p) => p.held || null, sort: 'number', render: (p) => (p.held ? `${p.held} payment(s) on hold` : '–') },
+  { id: 'status', label: 'Status', value: (p) => payeeStatus(p.status), translate: true, render: (p) => <Chip tone={payeeTone(p.status)}>{payeeStatus(p.status)}</Chip> },
+];
+const PAYEE_FILTERS: DtFilter<Payee>[] = [
+  { id: 'kind', label: 'Type', value: (p) => p.kind },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (p) => (p.status in PAYEE_STATUS ? p.status : 'blocked'),
+    options: Object.entries(PAYEE_STATUS).map(([value, label]) => ({ value, label })),
+  },
+];
 
 function PayeeActions({ v, p }: { v: FinControls; p: FinControls['payees'][number] }) {
   const { act, go } = useControl(v.companyId);
@@ -570,22 +589,14 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
             Check after payment (automatic): {v.afterPayment.filter((x) => x.status === 'pass').length} passed, {v.afterPayment.filter((x) => x.status === 'fail').length} failed,{' '}
             {v.afterPayment.filter((x) => x.status === 'review').length} to compare, {v.afterPayment.filter((x) => x.status === 'waiting').length} waiting for the statement
           </summary>
-          <div className="list">
-            {v.afterPayment.map((x) => (
-              <div key={x.id} className="list-item">
-                <span className="fin-min0 fin-flex">
-                  {x.payee} {rm(x.amount)} · released {x.releasedOn ? dateLabel(x.releasedOn) : '-'}
-                  {(x.status === 'fail' || x.status === 'review') && (
-                    <span className="muted small">
-                      {' '}
-                      · {x.checks.filter((c) => c.ok === false || (c.ok === null && c.key !== 'bank')).map((c) => c.label + (c.detail ? ` (${c.detail})` : '')).join('; ')}
-                    </span>
-                  )}
-                </span>
-                <Chip tone={x.status === 'pass' ? 'ok' : x.status === 'fail' ? 'crit' : 'warn'}>{x.status === 'pass' ? 'Passed' : x.status === 'fail' ? 'Failed' : x.status === 'review' ? 'Compare' : 'Waiting'}</Chip>
-              </div>
-            ))}
-          </div>
+          <DataTable
+            label="Check after payment"
+            stateKey={`fin.afterpay.${v.companyId}`}
+            rows={v.afterPayment}
+            rowKey={(x) => x.id}
+            columns={AFTER_PAY_COLUMNS}
+            filters={AFTER_PAY_FILTERS}
+          />
         </details>
       )}
       {v.statements.map((s) => (
@@ -670,102 +681,173 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
             </div>
           )}
           {s.statement && (
-            <div className="list">
-              {s.lines.map((l) => {
-                const st = line[l.id] ?? {};
-                const setL = (k: 'paymentId' | 'comment', val: string) => setLine((x) => ({ ...x, [l.id]: { ...x[l.id], [k]: val } }));
-                return (
-                  <div key={l.id} className="list-item">
-                    <div className="fin-min0">
-                      <div>
-                        {dateLabel(l.date)} · {l.description} · {l.ref} · <b>{rm(l.amount)}</b>
-                      </div>
-                      <div className="muted small">
-                        {l.match?.kind === 'payment' && `Matched to the payment to ${l.payee} (${l.match.by})`}
-                        {l.match?.kind === 'other' && `Explained: ${l.match.note} (${l.match.by})`}
-                        {l.match?.kind === 'receipt' && `Customer receipt found by Prima for invoice case ${l.match.caseId}`}
-                        {l.match?.kind === 'regular' && `Direct debit found by Prima for ${l.match.regularId} (${l.match.period})`}
-                        {l.match?.kind === 'guarantee' && `Guarantee collateral paid back, found by Prima (${l.match.guaranteeId})`}
-                        {l.match?.kind === 'hostel' && `Hostel bill paid by the company, found by Prima (${l.match.hostelBillId})`}
-                        {l.match?.kind === 'deposit' && `Client deposit or retention paid back, found by Prima (${l.match.depositId})`}
-                        {l.match?.kind === 'fd' && `Fixed deposit placed or uplifted, found by Prima (${l.match.fdId})`}
-                        {!l.match && (l.amount < 0 ? 'Money out with no approved payment' : 'Money in')}
-                      </div>
-                      {l.nameSeen === false && <div className="small fin-crit">The payee's name is not on this bank line. Check who was paid.</div>}
-                    </div>
-                    {co.canAct && !l.match && l.suggest.length > 0 && (
-                      <div className="row">
-                        {l.suggest.map((x) => (
-                          <button
-                            key={x.paymentId}
-                            className="btn btn-sm btn-primary"
-                            disabled={act.busy}
-                            onClick={() =>
-                              go('statements', 'match', { statementId: s.statement!.id, lineId: l.id, paymentId: x.paymentId, comment: `Accepted Prima's suggestion: same amount, ${x.days} day(s) from the release` }, 'Matched.')
-                            }
-                          >
-                            Match to {x.payee} {rm(x.amount)} (released {x.releasedOn ? dateLabel(x.releasedOn) : '?'})
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {co.canAct && !l.match && l.amount < 0 && (
-                      <div className="row">
-                        <Select className="select" value={st.paymentId ?? ''} onChange={(e) => setL('paymentId', e.target.value)}>
-                          <option value="">Match to a payment…</option>
-                          {released.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.payee} {rm(p.amount)}
-                            </option>
-                          ))}
-                        </Select>
-                        <input className="input" placeholder="Comment, or why it is not a payment (10+ characters)" value={st.comment ?? ''} onChange={(e) => setL('comment', e.target.value)} />
-                        <button
-                          className="btn btn-sm"
-                          disabled={act.busy || !st.paymentId || !(st.comment ?? '').trim()}
-                          onClick={() => go('statements', 'match', { statementId: s.statement!.id, lineId: l.id, paymentId: st.paymentId, comment: st.comment }, 'Matched.')}
-                        >
-                          Match
-                        </button>
-                        <button
-                          className="btn btn-sm"
-                          disabled={act.busy || (st.comment ?? '').trim().length < 10}
-                          onClick={() => go('statements', 'explain', { statementId: s.statement!.id, lineId: l.id, comment: st.comment }, 'Explained.')}
-                        >
-                          Explain
-                        </button>
-                        <button
-                          className="btn btn-sm"
-                          title="Explain it and let Prima explain the same kind of line next time"
-                          disabled={act.busy || (st.comment ?? '').trim().length < 10}
-                          onClick={() => go('statements', 'explain', { statementId: s.statement!.id, lineId: l.id, comment: st.comment, remember: true }, 'Explained and remembered.')}
-                        >
-                          Explain and remember
-                        </button>
-                      </div>
-                    )}
-                    {co.canAct && l.match && (
-                      <div className="row">
-                        <input className="input" placeholder="Why unmatch (10+ characters)" value={st.comment ?? ''} onChange={(e) => setL('comment', e.target.value)} />
-                        <button
-                          className="btn btn-sm"
-                          disabled={act.busy || (st.comment ?? '').trim().length < 10}
-                          onClick={() => go('statements', 'unmatch', { statementId: s.statement!.id, lineId: l.id, comment: st.comment }, 'Unmatched.')}
-                        >
-                          Unmatch
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            <DataTable
+              label="Statement lines"
+              stateKey={`fin.stmt.${s.bank.id}`}
+              rows={s.lines}
+              rowKey={(l) => l.id}
+              columns={LINE_COLUMNS}
+              filters={LINE_FILTERS}
+              rowDetail={
+                co.canAct
+                  ? (l) => {
+                      const st = line[l.id] ?? {};
+                      const setL = (k: 'paymentId' | 'comment', val: string) => setLine((x) => ({ ...x, [l.id]: { ...x[l.id], [k]: val } }));
+                      if (!l.match && !l.suggest.length && l.amount >= 0) return null;
+                      return (
+                        <div data-no-row-click>
+                          {co.canAct && !l.match && l.suggest.length > 0 && (
+                            <div className="row">
+                              {l.suggest.map((x) => (
+                                <button
+                                  key={x.paymentId}
+                                  className="btn btn-sm btn-primary"
+                                  disabled={act.busy}
+                                  onClick={() =>
+                                    go('statements', 'match', { statementId: s.statement!.id, lineId: l.id, paymentId: x.paymentId, comment: `Accepted Prima's suggestion: same amount, ${x.days} day(s) from the release` }, 'Matched.')
+                                  }
+                                >
+                                  Match to {x.payee} {rm(x.amount)} (released {x.releasedOn ? dateLabel(x.releasedOn) : '?'})
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {co.canAct && !l.match && l.amount < 0 && (
+                            <div className="row">
+                              <Select className="select" value={st.paymentId ?? ''} onChange={(e) => setL('paymentId', e.target.value)}>
+                                <option value="">Match to a payment…</option>
+                                {released.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.payee} {rm(p.amount)}
+                                  </option>
+                                ))}
+                              </Select>
+                              <input className="input" placeholder="Comment, or why it is not a payment (10+ characters)" value={st.comment ?? ''} onChange={(e) => setL('comment', e.target.value)} />
+                              <button
+                                className="btn btn-sm"
+                                disabled={act.busy || !st.paymentId || !(st.comment ?? '').trim()}
+                                onClick={() => go('statements', 'match', { statementId: s.statement!.id, lineId: l.id, paymentId: st.paymentId, comment: st.comment }, 'Matched.')}
+                              >
+                                Match
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                disabled={act.busy || (st.comment ?? '').trim().length < 10}
+                                onClick={() => go('statements', 'explain', { statementId: s.statement!.id, lineId: l.id, comment: st.comment }, 'Explained.')}
+                              >
+                                Explain
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                title="Explain it and let Prima explain the same kind of line next time"
+                                disabled={act.busy || (st.comment ?? '').trim().length < 10}
+                                onClick={() => go('statements', 'explain', { statementId: s.statement!.id, lineId: l.id, comment: st.comment, remember: true }, 'Explained and remembered.')}
+                              >
+                                Explain and remember
+                              </button>
+                            </div>
+                          )}
+                          {co.canAct && l.match && (
+                            <div className="row">
+                              <input className="input" placeholder="Why unmatch (10+ characters)" value={st.comment ?? ''} onChange={(e) => setL('comment', e.target.value)} />
+                              <button
+                                className="btn btn-sm"
+                                disabled={act.busy || (st.comment ?? '').trim().length < 10}
+                                onClick={() => go('statements', 'unmatch', { statementId: s.statement!.id, lineId: l.id, comment: st.comment }, 'Unmatched.')}
+                              >
+                                Unmatch
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                  : undefined
+              }
+            />
           )}
         </div>
       ))}
     </section>
   );
 }
+
+type AfterPay = FinControls['afterPayment'][number];
+const AFTER_PAY: Record<string, [Tone, string]> = { pass: ['ok', 'Passed'], fail: ['crit', 'Failed'], review: ['warn', 'Compare'], waiting: ['warn', 'Waiting'] };
+const afterPay = (s: string) => AFTER_PAY[s] ?? AFTER_PAY.waiting;
+/** P107: the checks after payment as a table: who was paid, how much, when, what did not pass, and the result. */
+const AFTER_PAY_COLUMNS: DtColumn<AfterPay>[] = [
+  { id: 'payee', label: 'Payee', value: (x) => x.payee, phone: 'title' },
+  { id: 'amount', label: 'Amount', value: (x) => x.amount, sort: 'money', render: (x) => rm(x.amount) },
+  { id: 'released', label: 'Released', value: (x) => x.releasedOn, sort: 'date', render: (x) => (x.releasedOn ? dateLabel(x.releasedOn) : '-') },
+  {
+    id: 'checks',
+    label: 'Checks',
+    sort: false,
+    value: (x) =>
+      x.status === 'fail' || x.status === 'review'
+        ? x.checks.filter((c) => c.ok === false || (c.ok === null && c.key !== 'bank')).map((c) => c.label + (c.detail ? ` (${c.detail})` : '')).join('; ')
+        : '',
+    render: (x) =>
+      x.status === 'fail' || x.status === 'review' ? (
+        <span className="muted small">{x.checks.filter((c) => c.ok === false || (c.ok === null && c.key !== 'bank')).map((c) => c.label + (c.detail ? ` (${c.detail})` : '')).join('; ')}</span>
+      ) : (
+        '–'
+      ),
+  },
+  { id: 'status', label: 'Status', value: (x) => afterPay(x.status)[1], translate: true, render: (x) => <Chip tone={afterPay(x.status)[0]}>{afterPay(x.status)[1]}</Chip> },
+];
+const AFTER_PAY_FILTERS: DtFilter<AfterPay>[] = [
+  { id: 'status', label: 'Status', value: (x) => x.status, options: Object.entries(AFTER_PAY).map(([value, [, label]]) => ({ value, label })) },
+];
+
+type StLine = FinControls['statements'][number]['lines'][number];
+/** What a statement line was matched to, in the words the list used before. */
+function lineMatch(l: StLine): string {
+  if (l.match?.kind === 'payment') return `Matched to the payment to ${l.payee} (${l.match.by})`;
+  if (l.match?.kind === 'other') return `Explained: ${l.match.note} (${l.match.by})`;
+  if (l.match?.kind === 'receipt') return `Customer receipt found by Prima for invoice case ${l.match.caseId}`;
+  if (l.match?.kind === 'regular') return `Direct debit found by Prima for ${l.match.regularId} (${l.match.period})`;
+  if (l.match?.kind === 'guarantee') return `Guarantee collateral paid back, found by Prima (${l.match.guaranteeId})`;
+  if (l.match?.kind === 'hostel') return `Hostel bill paid by the company, found by Prima (${l.match.hostelBillId})`;
+  if (l.match?.kind === 'deposit') return `Client deposit or retention paid back, found by Prima (${l.match.depositId})`;
+  if (l.match?.kind === 'fd') return `Fixed deposit placed or uplifted, found by Prima (${l.match.fdId})`;
+  if (!l.match) return l.amount < 0 ? 'Money out with no approved payment' : 'Money in';
+  return '';
+}
+const LINE_MATCH: Record<string, string> = {
+  out: 'Money out with no approved payment',
+  in: 'Money in',
+  payment: 'Matched',
+  other: 'Explained',
+  prima: 'Found by Prima',
+};
+/** P107: each bank's statement lines as a table; the match, explain and unmatch controls sit under each line, as before. */
+const LINE_COLUMNS: DtColumn<StLine>[] = [
+  { id: 'date', label: 'Date', value: (l) => l.date, sort: 'date', render: (l) => dateLabel(l.date), phone: 'sub' },
+  { id: 'description', label: 'Description', value: (l) => l.description, phone: 'title' },
+  { id: 'ref', label: 'Reference', value: (l) => l.ref },
+  { id: 'amount', label: 'Amount', value: (l) => l.amount, sort: 'money', render: (l) => <b>{rm(l.amount)}</b> },
+  {
+    id: 'match',
+    label: 'Status',
+    value: lineMatch,
+    render: (l) => (
+      <>
+        <span className="muted small">{lineMatch(l)}</span>
+        {l.nameSeen === false && <div className="small fin-crit">The payee's name is not on this bank line. Check who was paid.</div>}
+      </>
+    ),
+  },
+];
+const LINE_FILTERS: DtFilter<StLine>[] = [
+  {
+    id: 'match',
+    label: 'Status',
+    value: (l) => (!l.match ? (l.amount < 0 ? 'out' : 'in') : l.match.kind === 'payment' || l.match.kind === 'other' ? l.match.kind : 'prima'),
+    options: Object.entries(LINE_MATCH).map(([value, label]) => ({ value, label })),
+  },
+];
 
 // ---------- Invoice problems and bad debt ----------
 
@@ -789,6 +871,35 @@ const AR_STATUS: Record<ArCase['status'], [Tone, string]> = {
   recovered: ['ok', 'Paid'],
   closed: ['neutral', 'Closed'],
 };
+
+/** P107: the invoice cases as a table; clicking a row opens the case under the table, as before. */
+const CASE_COLUMNS: DtColumn<ArCase>[] = [
+  { id: 'invoiceNo', label: 'Invoice', value: (c) => c.invoiceNo, render: (c) => <span className="fin-strong">{c.invoiceNo}</span>, phone: 'title' },
+  { id: 'customer', label: 'Customer', value: (c) => c.customer, phone: 'sub' },
+  { id: 'outstanding', label: 'Unpaid', value: (c) => c.outstanding, sort: 'money', render: (c) => rm(c.outstanding) },
+  { id: 'reason', label: 'Reason', value: (c) => AR_REASON[c.reason], translate: true, hideBelow: 1100 },
+  {
+    id: 'invoiceDate',
+    label: 'Invoice date',
+    value: (c) => c.invoiceDate,
+    sort: 'date',
+    render: (c) => `${dateLabel(c.invoiceDate)} (${c.ageDays} days)`,
+    hideBelow: 1200,
+  },
+  {
+    id: 'flags',
+    label: 'Note',
+    sort: false,
+    value: (c) => [c.priorYear ? 'in an audited year' : '', c.stale ? 'FOLLOW-UP OVERDUE' : ''].filter(Boolean).join(' · '),
+    render: (c) => <span className="muted small">{[c.priorYear ? 'in an audited year' : '', c.stale ? 'FOLLOW-UP OVERDUE' : ''].filter(Boolean).join(' · ') || '–'}</span>,
+  },
+  { id: 'status', label: 'Status', value: (c) => AR_STATUS[c.status][1], translate: true, render: (c) => <Chip tone={AR_STATUS[c.status][0]}>{AR_STATUS[c.status][1]}</Chip> },
+];
+const CASE_FILTERS: DtFilter<ArCase>[] = [
+  { id: 'status', label: 'Status', value: (c) => c.status, options: Object.entries(AR_STATUS).map(([value, [, label]]) => ({ value, label })) },
+  { id: 'reason', label: 'Reason', value: (c) => c.reason, options: Object.entries(AR_REASON).map(([value, label]) => ({ value, label })) },
+  { id: 'stale', label: 'Follow-up', value: (c) => (c.stale ? 'overdue' : 'ok'), options: [{ value: 'overdue', label: 'FOLLOW-UP OVERDUE' }, { value: 'ok', label: 'On time' }] },
+];
 
 function InvoiceCases({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }) {
   const { act, go } = useControl(v.companyId);
@@ -891,24 +1002,17 @@ function InvoiceCases({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }
           </button>
         </div>
       )}
-      <div className="list">
-        {ar.cases.length === 0 && <div className="empty">No invoice problems recorded.</div>}
-        {ar.cases.map((c) => (
-          <button key={c.id} className="list-item" onClick={() => setOpenId(openId === c.id ? null : c.id)}>
-            <div className="fin-min0">
-              <div className="fin-strong">
-                {c.invoiceNo} · {c.customer} · {rm(c.outstanding)} unpaid
-              </div>
-              <div className="muted small">
-                {AR_REASON[c.reason]} · {dateLabel(c.invoiceDate)} ({c.ageDays} days)
-                {c.priorYear ? ' · in an audited year' : ''}
-                {c.stale ? ' · FOLLOW-UP OVERDUE' : ''}
-              </div>
-            </div>
-            <Chip tone={AR_STATUS[c.status][0]}>{AR_STATUS[c.status][1]}</Chip>
-          </button>
-        ))}
-      </div>
+      <DataTable
+        label="Invoice problems and bad debt"
+        stateKey={`fin.arcases.${v.companyId}`}
+        rows={ar.cases}
+        rowKey={(c) => c.id}
+        columns={CASE_COLUMNS}
+        filters={CASE_FILTERS}
+        phoneFacts={5}
+        onRowClick={(c) => setOpenId(openId === c.id ? null : c.id)}
+        empty={<div className="empty">No invoice problems recorded.</div>}
+      />
       {sel && <CaseDetail v={v} co={co} c={sel} />}
       {co.canAct && (
         <details className="fin-pad">
@@ -2122,6 +2226,18 @@ function AuditDates({ v }: { v: FinControls }) {
   );
 }
 
+type MatchRule = FinControls['matchRules'][number];
+/** P107: the remembered explanations as a table: the words, which way the money goes, up to how much, why, who and how often. */
+const RULE_COLUMNS: DtColumn<MatchRule>[] = [
+  { id: 'pattern', label: 'Description', value: (r) => r.pattern, render: (r) => <span className="fin-strong">&quot;{r.pattern}&quot;</span>, phone: 'title' },
+  { id: 'direction', label: 'Direction', value: (r) => `money ${r.direction}`, translate: true },
+  { id: 'maxAmount', label: 'Up to', value: (r) => r.maxAmount, sort: 'money', render: (r) => rm(r.maxAmount) },
+  { id: 'note', label: 'Note', value: (r) => r.note, phone: 'sub' },
+  { id: 'by', label: 'By', value: (r) => r.by, hideBelow: 1200 },
+  { id: 'used', label: 'Used', value: (r) => r.used, sort: 'number', render: (r) => `${r.used} time(s)` },
+];
+const RULE_FILTERS: DtFilter<MatchRule>[] = [{ id: 'direction', label: 'Direction', value: (r) => `money ${r.direction}` }];
+
 /** Automation A6 (Fauzan, 2 Nov 2026): explanations Prima remembers and applies to the same kind of bank line. */
 function MatchRules({ v, co }: { v: FinControls; co: Co }) {
   const { act, go } = useControl(v.companyId);
@@ -2141,28 +2257,26 @@ function MatchRules({ v, co }: { v: FinControls; co: Co }) {
         Prima explains a bank line with these words, in this direction and up to this amount, the way a reviewer did before. The reconciliation reviewer still sees each one.
       </p>
       <ErrorNotice error={act.error} />
-      <div className="list">
-        {v.matchRules.map((r) => (
-          <div key={r.id} className="list-item">
-            <div className="fin-min0">
-              <div className="fin-strong">
-                &quot;{r.pattern}&quot;, money {r.direction}, up to {rm(r.maxAmount)}
-              </div>
-              <div className="muted small">
-                {r.note} · by {r.by} · used {r.used} time(s)
-              </div>
-            </div>
-            {co.canAct && (
-              <div className="row">
-                <input className="input" placeholder="Why remove (10+ characters)" value={why[r.id] ?? ''} onChange={(e) => setWhy((x) => ({ ...x, [r.id]: e.target.value }))} />
-                <button className="btn btn-sm" disabled={act.busy || (why[r.id] ?? '').trim().length < 10} onClick={() => go('statements', 'forget', { ruleId: r.id, comment: why[r.id] }, 'Removed.')}>
-                  Remove
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+      <DataTable
+        label="Remembered explanations"
+        stateKey={`fin.matchrules.${v.companyId}`}
+        rows={v.matchRules}
+        rowKey={(r) => r.id}
+        columns={RULE_COLUMNS}
+        filters={RULE_FILTERS}
+        rowEnd={
+          co.canAct
+            ? (r) => (
+                <div className="row">
+                  <input className="input" placeholder="Why remove (10+ characters)" value={why[r.id] ?? ''} onChange={(e) => setWhy((x) => ({ ...x, [r.id]: e.target.value }))} />
+                  <button className="btn btn-sm" disabled={act.busy || (why[r.id] ?? '').trim().length < 10} onClick={() => go('statements', 'forget', { ruleId: r.id, comment: why[r.id] }, 'Removed.')}>
+                    Remove
+                  </button>
+                </div>
+              )
+            : undefined
+        }
+      />
     </section>
   );
 }
@@ -2208,6 +2322,25 @@ function TaxCalendar({ v, co }: { v: FinControls; co: Co }) {
   );
 }
 
+type Reminder = FinControls['reminders'][number];
+const REMINDER_BAND: Record<string, string> = { d30: '30 to 59 days', d60: '60 to 89 days', d90: '90 days or more' };
+/** P107: the reminders as a table; the draft opens under its row, Copy and Mark sent stay on the row. */
+const REMINDER_COLUMNS: DtColumn<Reminder>[] = [
+  { id: 'customer', label: 'Customer', value: (r) => r.customer, render: (r) => <b>{r.customer}</b>, phone: 'title' },
+  { id: 'invoiceNo', label: 'Invoice', value: (r) => r.invoiceNo, phone: 'sub' },
+  { id: 'outstanding', label: 'Unpaid', value: (r) => r.outstanding, sort: 'money', render: (r) => rm(r.outstanding) },
+  { id: 'days', label: 'Days', value: (r) => r.days, sort: 'number' },
+  { id: 'lastReminder', label: 'Last reminder', value: (r) => r.lastReminder, sort: 'date', render: (r) => (r.lastReminder ? dateLabel(r.lastReminder) : '–') },
+];
+const REMINDER_FILTERS: DtFilter<Reminder>[] = [
+  {
+    id: 'band',
+    label: 'Days',
+    value: (r) => (r.days >= 90 ? 'd90' : r.days >= 60 ? 'd60' : 'd30'),
+    options: Object.entries(REMINDER_BAND).map(([value, label]) => ({ value, label })),
+  },
+];
+
 /** Automation A12 (Fauzan, 2 Nov 2026): reminder letters Prima drafted; staff send them and mark them sent. */
 function Reminders({ v, co }: { v: FinControls; co: Co }) {
   const { act, go } = useControl(v.companyId);
@@ -2222,38 +2355,38 @@ function Reminders({ v, co }: { v: FinControls; co: Co }) {
         Prima drafts a reminder at 30, 60 and 90 days after the invoice date. Read it, send it by email or letter, then mark it sent. Prima sends nothing.
       </p>
       <ErrorNotice error={act.error} />
-      <div className="list">
-        {v.reminders.map((r) => (
-          <div key={r.caseId} className="list-item fin-block">
-            <div className="row fin-between">
-              <div>
-                <b>{r.customer}</b> · invoice {r.invoiceNo} · {rm(r.outstanding)} · {r.days} days
-                {r.lastReminder ? ` · last reminder ${dateLabel(r.lastReminder)}` : ''}
-              </div>
-              <div className="row">
-                <button className="btn btn-sm btn-ghost" onClick={() => setOpen(open === r.caseId ? null : r.caseId)}>
-                  {open === r.caseId ? 'Hide draft' : 'Show draft'}
-                </button>
-                <button className="btn btn-sm btn-ghost" onClick={() => navigator.clipboard?.writeText(`${r.subject}\n\n${r.text}`).catch(() => undefined)}>
-                  Copy
-                </button>
-                {co.canAct && (
-                  <button className="btn btn-sm" disabled={act.busy} onClick={() => go('ar', 'note', { caseId: r.caseId, kind: 'reminder', text: `${r.subject} sent to ${r.customer}` }, 'Marked sent.')}>
-                    Mark sent
-                  </button>
-                )}
-              </div>
-            </div>
-            {open === r.caseId && (
-              <pre className="small fin-mt fin-pre">
-                {r.subject}
-                {'\n\n'}
-                {r.text}
-              </pre>
+      <DataTable
+        label="Client reminders to send"
+        stateKey={`fin.reminders.${v.companyId}`}
+        rows={v.reminders}
+        rowKey={(r) => r.caseId}
+        columns={REMINDER_COLUMNS}
+        filters={REMINDER_FILTERS}
+        rowEnd={(r) => (
+          <div className="row">
+            <button className="btn btn-sm btn-ghost" onClick={() => setOpen(open === r.caseId ? null : r.caseId)}>
+              {open === r.caseId ? 'Hide draft' : 'Show draft'}
+            </button>
+            <button className="btn btn-sm btn-ghost" onClick={() => navigator.clipboard?.writeText(`${r.subject}\n\n${r.text}`).catch(() => undefined)}>
+              Copy
+            </button>
+            {co.canAct && (
+              <button className="btn btn-sm" disabled={act.busy} onClick={() => go('ar', 'note', { caseId: r.caseId, kind: 'reminder', text: `${r.subject} sent to ${r.customer}` }, 'Marked sent.')}>
+                Mark sent
+              </button>
             )}
           </div>
-        ))}
-      </div>
+        )}
+        rowDetail={(r) =>
+          open === r.caseId ? (
+            <pre className="small fin-mt fin-pre">
+              {r.subject}
+              {'\n\n'}
+              {r.text}
+            </pre>
+          ) : null
+        }
+      />
     </section>
   );
 }

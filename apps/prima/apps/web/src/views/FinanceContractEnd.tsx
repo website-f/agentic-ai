@@ -2,6 +2,7 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinControls } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction } from '../ui';
+import { DataTable } from '../DataTable';
 
 /**
  * Contract ends and money held by clients (Fauzan, 2 Nov 2026: suggestions 3 and 24, automation A11). When a contract
@@ -23,6 +24,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function ContractEnds({ v }: { v: FinControls }) {
   const ce = v.contractEnd;
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (id: string) =>
+    setOpened((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  // A contract with steps still to do shows them at once, as the old list did; a finished one opens on "Open".
+  const shown = (e: (typeof ce.ends)[number]) => opened.has(e.contract.id) !== e.open > 0;
   if (!ce.ends.length) return null;
   return (
     <section className="panel">
@@ -33,15 +44,43 @@ export function ContractEnds({ v }: { v: FinControls }) {
         Billing stops on the day a contract ends or is terminated. Prima lists what follows; each line ticks itself when it is done elsewhere (invoice recorded,
         money seen on the bank statement, guarantee closed).
       </p>
-      <div className="list">
-        {ce.ends.map((e) => (
-          <div key={e.contract.id} className="list-item fin-block">
-            <div className="row fin-between">
-              <span className="fin-strong">
-                {e.contract.client} · {e.contract.ref} · {e.contract.terminated ? 'terminated' : 'ended'} {dateLabel(e.contract.endOn)}
-              </span>
-              <Chip tone={e.late ? 'crit' : e.open ? 'warn' : 'ok'}>{e.open ? `${e.open} to do${e.late ? `, ${e.late} late` : ''}` : 'All done'}</Chip>
-            </div>
+      {/* P107: the ended contracts as a table; "Open" shows the follow-up steps under the row. */}
+      <DataTable
+        label="Contracts that ended"
+        stateKey="fin.contract-ends"
+        rows={ce.ends}
+        rowKey={(e) => e.contract.id}
+        searchText={(e) => e.steps.map((s) => s.text).join(' ')}
+        columns={[
+          { id: 'client', label: 'Client', value: (e) => e.contract.client, phone: 'title', render: (e) => <span className="fin-strong">{e.contract.client}</span> },
+          { id: 'contract', label: 'Contract', value: (e) => e.contract.ref, phone: 'sub' },
+          {
+            id: 'ended',
+            label: 'Ended',
+            value: (e) => e.contract.endOn,
+            sort: 'date',
+            render: (e) => (
+              <>
+                {e.contract.terminated ? 'terminated' : 'ended'} {dateLabel(e.contract.endOn)}
+              </>
+            ),
+          },
+          {
+            id: 'status',
+            label: 'Status',
+            value: (e) => endState(e),
+            translate: true,
+            render: (e) => <Chip tone={e.late ? 'crit' : e.open ? 'warn' : 'ok'}>{e.open ? `${e.open} to do${e.late ? `, ${e.late} late` : ''}` : 'All done'}</Chip>,
+          },
+        ]}
+        filters={[{ id: 'status', label: 'Status', value: (e) => endState(e), options: END_STATES.map((s) => ({ value: s, label: s })) }]}
+        rowEnd={(e) => (
+          <button className="btn btn-sm" onClick={() => toggle(e.contract.id)}>
+            {shown(e) ? 'Close' : 'Open'}
+          </button>
+        )}
+        rowDetail={(e) =>
+          shown(e) ? (
             <ul className="small fin-ul">
               {e.steps.map((s, i) => (
                 <li key={i}>
@@ -52,12 +91,15 @@ export function ContractEnds({ v }: { v: FinControls }) {
               ))}
               {!e.steps.length && <li className="muted">Nothing held by the client and no guarantee linked to this contract.</li>}
             </ul>
-          </div>
-        ))}
-      </div>
+          ) : null
+        }
+      />
     </section>
   );
 }
+
+const END_STATES = ['Late', 'To do', 'All done'] as const;
+const endState = (e: FinControls['contractEnd']['ends'][number]) => (e.late ? 'Late' : e.open ? 'To do' : 'All done');
 
 const STATUS: Record<Dep['status'], [Parameters<typeof Chip>[0]['tone'], string]> = {
   pending: ['warn', 'To check'],
@@ -74,6 +116,7 @@ export function ClientDeposits({ v }: { v: FinControls }) {
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const go = (action: string, input: Record<string, unknown>, msg: string) => act.run(() => api.finControlAction(v.companyId, 'deposits', action, input), msg);
   const ce = v.contractEnd;
+  const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
   return (
     <section className="panel">
       <div className="panel-head">
@@ -136,40 +179,53 @@ export function ClientDeposits({ v }: { v: FinControls }) {
           </button>
         </div>
       )}
-      <div className="list">
-        {ce.deposits.map((d) => (
-          <DepositLine key={d.id} d={d} go={go} busy={act.busy} />
-        ))}
-        {!ce.deposits.length && <div className="list-item muted">None recorded.</div>}
-      </div>
+      {/* P107: the deposits as a table; "Act" opens the same steps under the row. */}
+      <DataTable
+        label="Deposits and retention held by clients"
+        stateKey="fin.client-deposits"
+        rows={ce.deposits}
+        rowKey={(d) => d.id}
+        columns={[
+          { id: 'client', label: 'Client', value: (d) => d.client, phone: 'title' },
+          { id: 'kind', label: 'Type', value: depKind, translate: true, phone: 'sub' },
+          { id: 'contract', label: 'Contract', value: (d) => d.contractRef ?? '' },
+          { id: 'amount', label: 'Amount', value: (d) => d.amount, sort: 'money', render: (d) => rm(d.amount) },
+          {
+            id: 'dueBack',
+            label: 'Due back',
+            value: (d) => (d.status !== 'refunded' && d.status !== 'written_off' ? d.dueBack : null),
+            sort: 'date',
+          },
+          { id: 'paidBack', label: 'Paid back', value: (d) => d.refund?.date ?? null, sort: 'date', hideBelow: 1100 },
+          { id: 'status', label: 'Status', value: (d) => STATUS[d.status][1], translate: true, render: (d) => <Chip tone={STATUS[d.status][0]}>{STATUS[d.status][1]}</Chip> },
+        ]}
+        filters={[
+          { id: 'kind', label: 'Type', value: depKind },
+          { id: 'status', label: 'Status', value: (d) => STATUS[d.status][1] },
+        ]}
+        rowEnd={(d) =>
+          ['pending', 'held', 'claimed'].includes(d.status) ? (
+            <button className="btn btn-sm" onClick={() => setOpenIds((x) => ({ ...x, [d.id]: !x[d.id] }))}>
+              {openIds[d.id] ? 'Close' : 'Act'}
+            </button>
+          ) : null
+        }
+        rowDetail={(d) => (openIds[d.id] ? <DepositLine d={d} go={go} busy={act.busy} /> : null)}
+        empty={<div className="list-item muted">None recorded.</div>}
+      />
     </section>
   );
 }
 
+const depKind = (d: Dep) => (d.kind === 'deposit' ? 'Deposit' : 'Retention');
+
+/** The steps for one deposit (check, claim back, write off), under its row once "Act" is pressed. */
 function DepositLine({ d, go, busy }: { d: Dep; go: (action: string, input: Record<string, unknown>, msg: string) => Promise<unknown>; busy: boolean }) {
-  const [open, setOpen] = useState(false);
   const [f, setF] = useState<Record<string, string>>({});
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
-  const [tone, label] = STATUS[d.status];
   return (
-    <div className="list-item fin-block">
-      <div className="row fin-between">
-        <span>
-          {d.kind === 'deposit' ? 'Deposit' : 'Retention'} {rm(d.amount)} · {d.client}
-          {d.contractRef && ` · ${d.contractRef}`}
-          {d.dueBack && d.status !== 'refunded' && d.status !== 'written_off' && <span className="muted"> · due back {dateLabel(d.dueBack)}</span>}
-          {d.refund && <span className="muted"> · paid back {dateLabel(d.refund.date)}</span>}
-        </span>
-        <span className="row">
-          <Chip tone={tone}>{label}</Chip>
-          {['pending', 'held', 'claimed'].includes(d.status) && (
-            <button className="btn btn-sm" onClick={() => setOpen(!open)}>
-              {open ? 'Close' : 'Act'}
-            </button>
-          )}
-        </span>
-      </div>
-      {open && (
+    <div className="fin-block">
+      {(
         <div className="fin-pt">
           {d.status === 'pending' && (
             <>

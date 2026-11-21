@@ -2,7 +2,8 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import type { ProofInput } from '@prima/core';
 import { api, type PdpaBoard, type PdpaConsentInput, type PdpaRegisterBoard, type PdpaRegisterInput } from '../api';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { ProofPicker } from './Proof';
 import { PlusIcon } from '@phosphor-icons/react';
 import { ImportButton } from './ImportDrawer';
@@ -82,14 +83,43 @@ const toInput = (i: Item): PdpaRegisterInput => ({
   dpia: i.dpia,
 });
 
+const REGISTER_COLUMNS: DtColumn<Row>[] = [
+  {
+    id: 'activity',
+    label: 'Activity',
+    value: (r) => r.item.activity,
+    render: (r) => (
+      <strong>
+        {r.item.activity}
+        {r.item.sensitive ? ' · sensitive' : ''}
+      </strong>
+    ),
+    phone: 'title',
+  },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'system', label: 'Where it is kept', value: (r) => r.item.system, hideBelow: 1100 },
+  { id: 'subjects', label: 'Whose data', value: (r) => r.item.subjects.map((x) => SUBJECT_LABEL[x]).join(', '), translate: true, hideBelow: 1200 },
+  { id: 'basis', label: 'Legal basis', value: (r) => BASIS_LABEL[r.item.basis], translate: true, hideBelow: 1300 },
+  { id: 'kept', label: 'Kept (days)', value: (r) => r.item.retentionDays, sort: 'number', render: (r) => (r.item.retentionDays ? r.item.retentionDays.toLocaleString('en-MY') : 'retention not set') },
+  { id: 'consents', label: 'Consents', value: (r) => (r.needsConsent ? r.consentsGiven : null), sort: 'number', render: (r) => (r.needsConsent ? `${r.consentsGiven} given, ${r.consentsWithdrawn} withdrawn` : '–'), hideBelow: 1200 },
+  { id: 'state', label: 'Status', value: (r) => STATE[r.state].label, translate: true, render: (r) => <Chip tone={STATE[r.state].tone}>{STATE[r.state].label}</Chip> },
+];
+const REGISTER_FILTERS: DtFilter<Row>[] = [
+  { id: 'show', label: 'Show', value: (r) => (r.state === 'retired' ? 'retired' : 'current'), options: [{ value: 'current', label: 'In use' }, { value: 'retired', label: 'Retired' }] },
+  { id: 'state', label: 'Status', value: (r) => r.state, optionLabel: (v) => STATE[v as Row['state']]?.label ?? v },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'basis', label: 'Legal basis', value: (r) => r.item.basis, optionLabel: (v) => BASIS_LABEL[v as Basis] ?? v },
+  { id: 'sensitive', label: 'Sensitive data', value: (r) => (r.item.sensitive ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Sensitive' }, { value: 'no', label: 'Not sensitive' }] },
+];
+
 export function RegisterPanel() {
   const { data, error } = useLoad(() => api.pdpaRegisterBoard(), []);
   const [adding, setAdding] = useState(false);
-  const [showRetired, setShowRetired] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="personal data register" />;
   const officer = data.canKeep;
-  const rows = data.rows.filter((r) => showRetired || r.state !== 'retired');
+  const open = data.rows.find((r) => r.item.id === openId);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -116,21 +146,31 @@ export function RegisterPanel() {
         <Kpi label="Live consents" value={data.counts.consents} />
       </div>
       {adding && <RegisterForm id={null} init={EMPTY} companies={data.companies} onDone={() => setAdding(false)} />}
-      <label className="small">
-        <input type="checkbox" checked={showRetired} onChange={(e) => setShowRetired(e.target.checked)} /> Show retired entries
-      </label>
-      <div className="list">
-        {rows.length === 0 && <div className="empty">No entries yet. The PDPA officer adds each kind of personal data the group keeps.</div>}
-        {rows.map((r) => (
-          <RegisterLine key={r.item.id} r={r} officer={officer} companies={data.companies} />
-        ))}
-      </div>
+      <DataTable
+        label="Personal data register"
+        stateKey="board.pdpa.register"
+        defaults={{ f: { show: 'current' } }}
+        rows={data.rows}
+        rowKey={(r) => r.item.id}
+        columns={REGISTER_COLUMNS}
+        filters={REGISTER_FILTERS}
+        searchText={(r) => `${r.item.dataKinds} ${r.item.purpose} ${r.item.ownerDept}`}
+        onRowClick={(r) => setOpenId(r.item.id)}
+        rowTone={(r) => (r.state === 'incomplete' ? 'crit' : r.state === 'review_due' ? 'warn' : undefined)}
+        actions={(r) => [{ label: 'Details', onClick: () => setOpenId(r.item.id) }]}
+        empty={<div className="empty">No entries yet. The PDPA officer adds each kind of personal data the group keeps.</div>}
+      />
+      {open && (
+        <Drawer title={open.item.activity} sub={open.companyName} onClose={() => setOpenId(null)}>
+          <RegisterLine r={open} officer={officer} companies={data.companies} startOpen />
+        </Drawer>
+      )}
     </section>
   );
 }
 
-function RegisterLine({ r, officer, companies }: { r: Row; officer: boolean; companies: PdpaRegisterBoard['companies'] }) {
-  const [open, setOpen] = useState(false);
+function RegisterLine({ r, officer, companies, startOpen }: { r: Row; officer: boolean; companies: PdpaRegisterBoard['companies']; startOpen?: boolean }) {
+  const [open, setOpen] = useState(!!startOpen);
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState('');
   const act = useAction();
@@ -298,13 +338,36 @@ function RegisterForm({ id, init, companies, onDone }: { id: string | null; init
   );
 }
 
+type ConsentRow = PdpaRegisterBoard['consents'][number];
+const CONSENT_COLUMNS: DtColumn<ConsentRow>[] = [
+  { id: 'name', label: 'Name', value: (r) => r.consent.subjectName, render: (r) => <strong>{r.consent.subjectName}</strong>, phone: 'title' },
+  { id: 'ref', label: 'Staff or guard number', value: (r) => r.consent.subjectRef, phone: 'sub' },
+  { id: 'activity', label: 'Activity', value: (r) => r.activity },
+  { id: 'notice', label: 'Notice version', value: (r) => r.consent.noticeVersion, hideBelow: 1100 },
+  { id: 'given', label: 'Signed', value: (r) => r.consent.givenOn, sort: 'date' },
+  { id: 'withdrawn', label: 'Withdrawn', value: (r) => r.consent.withdrawn?.on, sort: 'date', hideBelow: 1200 },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => (r.consent.withdrawn ? 'Withdrawn' : 'Consent given'),
+    translate: true,
+    render: (r) => <Chip tone={r.consent.withdrawn ? 'neutral' : 'ok'}>{r.consent.withdrawn ? 'Withdrawn' : 'Consent given'}</Chip>,
+  },
+];
+const CONSENT_FILTERS: DtFilter<ConsentRow>[] = [
+  { id: 'status', label: 'Status', value: (r) => (r.consent.withdrawn ? 'withdrawn' : 'given'), options: [{ value: 'given', label: 'Consent given' }, { value: 'withdrawn', label: 'Withdrawn' }] },
+  { id: 'activity', label: 'Activity', value: (r) => r.activity },
+];
+
 export function ConsentsPanel() {
   const { data, error } = useLoad(() => api.pdpaRegisterBoard(), []);
   const [adding, setAdding] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="consent register" />;
   const officer = data.role === 'officer';
   const consentItems = data.rows.filter((r) => r.needsConsent && r.state !== 'retired');
+  const openConsent = data.consents.find((r) => r.consent.id === openId);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -322,18 +385,29 @@ export function ConsentsPanel() {
       </p>
       <PaperConsentPanel />
       {adding && <ConsentForm items={consentItems} onDone={() => setAdding(false)} />}
-      <div className="list">
-        {data.consents.length === 0 && <div className="empty">No consents recorded yet.</div>}
-        {data.consents.map((r) => (
-          <ConsentLine key={r.consent.id} r={r} officer={officer} />
-        ))}
-      </div>
+      <DataTable
+        label="Consent register"
+        stateKey="board.pdpa.consents"
+        rows={data.consents}
+        rowKey={(r) => r.consent.id}
+        columns={CONSENT_COLUMNS}
+        filters={CONSENT_FILTERS}
+        searchText={(r) => r.consent.withdrawn?.note ?? ''}
+        onRowClick={(r) => setOpenId(r.consent.id)}
+        actions={(r) => [{ label: 'Withdraw', hidden: !officer || !!r.consent.withdrawn, onClick: () => setOpenId(r.consent.id) }]}
+        empty={<div className="empty">No consents recorded yet.</div>}
+      />
+      {openConsent && (
+        <Drawer title={`${openConsent.consent.subjectName} (${openConsent.consent.subjectRef})`} sub={openConsent.activity} onClose={() => setOpenId(null)}>
+          <ConsentLine r={openConsent} officer={officer} startOpen={officer && !openConsent.consent.withdrawn} />
+        </Drawer>
+      )}
     </section>
   );
 }
 
-function ConsentLine({ r, officer }: { r: PdpaRegisterBoard['consents'][number]; officer: boolean }) {
-  const [open, setOpen] = useState(false);
+function ConsentLine({ r, officer, startOpen }: { r: PdpaRegisterBoard['consents'][number]; officer: boolean; startOpen?: boolean }) {
+  const [open, setOpen] = useState(!!startOpen);
   const [on, setOn] = useState('');
   const [note, setNote] = useState('');
   const act = useAction();
@@ -446,6 +520,39 @@ function ConsentForm({ items, onDone }: { items: PdpaRegisterBoard['rows']; onDo
   );
 }
 
+type BreachCase = PdpaBoard['cases'][number];
+const notRecorded = <span style={{ color: 'var(--crit)' }}>Not recorded</span>;
+const BREACH_COLUMNS: DtColumn<BreachCase>[] = [
+  { id: 'found', label: 'Found', value: (c) => c.breach?.detectedAt, sort: 'date', render: (c) => (c.breach ? dateTimeLabel(c.breach.detectedAt) : '–') },
+  { id: 'company', label: 'Company', value: (c) => c.companyName, phone: 'sub' },
+  { id: 'title', label: 'What happened', value: (c) => c.title, render: (c) => <strong>{c.title}</strong>, phone: 'title' },
+  { id: 'data', label: 'Data involved', value: (c) => c.breach?.dataKinds, render: (c) => c.breach?.dataKinds || notRecorded, hideBelow: 1200 },
+  { id: 'people', label: 'People', value: (c) => c.breach?.affected, sort: 'number' },
+  { id: 'cause', label: 'Cause', value: (c) => c.breach?.cause, render: (c) => c.breach?.cause || notRecorded, hideBelow: 1300 },
+  {
+    id: 'commissioner',
+    label: 'Commissioner told',
+    value: (c) => c.breach?.commissionerAt,
+    sort: 'date',
+    render: (c) => (c.breach?.commissionerAt ? dateTimeLabel(c.breach.commissionerAt) : c.clock?.commissionerLate ? 'Late, not told' : 'Not yet'),
+  },
+  {
+    id: 'subjects',
+    label: 'People told',
+    value: (c) => c.breach?.subjectsAt,
+    sort: 'date',
+    render: (c) => (c.breach?.subjectsAt ? dateTimeLabel(c.breach.subjectsAt) : c.breach?.significantHarm ? 'Not yet' : 'Not needed'),
+    hideBelow: 1200,
+  },
+  { id: 'remedy', label: 'Action taken', value: (c) => c.breach?.remedy, sort: false, hideBelow: 1400 },
+  { id: 'status', label: 'Status', value: (c) => (c.status === 'closed' ? 'Closed' : 'Open'), translate: true },
+  { id: 'keep', label: 'Keep until', value: (c) => c.keepUntil, sort: 'date', hideBelow: 1300 },
+];
+const BREACH_FILTERS: DtFilter<BreachCase>[] = [
+  { id: 'status', label: 'Status', value: (c) => (c.status === 'closed' ? 'closed' : 'open'), options: [{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }] },
+  { id: 'company', label: 'Company', value: (c) => c.companyName },
+];
+
 /** Every breach, open or closed, with the register details. Closed entries are kept at least the legal period. */
 export function BreachRegisterPanel({ data }: { data: PdpaBoard }) {
   const rows = data.cases.filter((c) => c.kind === 'BREACH');
@@ -463,49 +570,16 @@ export function BreachRegisterPanel({ data }: { data: PdpaBoard }) {
           {`${data.counts.registerIncomplete} open breach${data.counts.registerIncomplete === 1 ? '' : 'es'} without the data involved or the cause.`}
         </div>
       )}
-      <div className="table-wrap">
-        <table className="small">
-          <thead>
-            <tr>
-              <th>Found</th>
-              <th>Company</th>
-              <th>What happened</th>
-              <th>Data involved</th>
-              <th>People</th>
-              <th>Cause</th>
-              <th>Commissioner told</th>
-              <th>People told</th>
-              <th>Action taken</th>
-              <th>Status</th>
-              <th>Keep until</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={11} className="muted">
-                  No breaches recorded.
-                </td>
-              </tr>
-            )}
-            {rows.map((c) => (
-              <tr key={c.id}>
-                <td>{dateTimeLabel(c.breach!.detectedAt)}</td>
-                <td>{c.companyName}</td>
-                <td>{c.title}</td>
-                <td>{c.breach!.dataKinds || <span style={{ color: 'var(--crit)' }}>Not recorded</span>}</td>
-                <td>{c.breach!.affected}</td>
-                <td>{c.breach!.cause || <span style={{ color: 'var(--crit)' }}>Not recorded</span>}</td>
-                <td>{c.breach!.commissionerAt ? dateTimeLabel(c.breach!.commissionerAt) : c.clock?.commissionerLate ? 'Late, not told' : 'Not yet'}</td>
-                <td>{c.breach!.subjectsAt ? dateTimeLabel(c.breach!.subjectsAt) : c.breach!.significantHarm ? 'Not yet' : 'Not needed'}</td>
-                <td>{c.breach!.remedy || '-'}</td>
-                <td>{c.status === 'closed' ? 'Closed' : 'Open'}</td>
-                <td>{c.keepUntil ? dateLabel(c.keepUntil) : '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Breach register"
+        stateKey="board.pdpa.breaches"
+        defaults={{ sort: 'found', dir: 'desc' }}
+        rows={rows}
+        rowKey={(c) => c.id}
+        columns={BREACH_COLUMNS}
+        filters={BREACH_FILTERS}
+        empty={<div className="empty">No breaches recorded.</div>}
+      />
     </section>
   );
 }

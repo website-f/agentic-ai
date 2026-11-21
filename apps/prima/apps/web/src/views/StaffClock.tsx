@@ -26,7 +26,8 @@ import { OfficeOshPanel } from './HrOsh';
 import { AppraisalsPanel, PoliciesPanel, TrainingPanel } from './HrDevelop';
 import { ProcessPanel } from './ProcessPage';
 import { HrGuide } from './HrGuide';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { MyCheckinCard, OUTCOME, VERDICT, whereText } from './CheckIn';
 import { CheckinPlacesView, CheckinReviewView } from './CheckinPlaces';
 import { MyTimeSlipSection, TimeSlipBoardView } from './TimeSlip';
@@ -133,7 +134,7 @@ export function MyClockView() {
   };
   return (
     <div className="page ss">
-      <PageHead title="My clock" sub={MY_CLOCK_SUB(data.pingEveryMin)} />
+      <PageHead title="My clock" sub={MY_CLOCK_SUB(data.pingEveryMin)} actions={<SopHelp id="hr" />} />
 
       <section className="ss-hero" data-on={open ? '' : undefined} aria-label="Clock status">
         <span className="ss-hero-icon" aria-hidden="true">
@@ -299,7 +300,8 @@ export function StaffClockBoardView() {
   const day = useLoad(() => (places ? api.checkinDay().catch(() => null) : Promise.resolve(null)), [places]);
   const reviews = useLoad(() => (places ? api.checkinReviews().catch(() => null) : Promise.resolve(null)), [places]);
   const [open, setOpen] = useState<string | null>(null);
-  const [tab, setTab] = useState<'clock' | 'home' | 'slips' | 'places' | 'review'>('clock');
+  // P121: a link may open a tab (#staffclock/slips); the place tabs only for those who keep check-in places.
+  const [tab, setTab] = useRouteTab<'clock' | 'home' | 'slips' | 'places' | 'review'>('clock', places ? ['clock', 'home', 'slips', 'places', 'review'] : ['clock', 'home', 'slips']);
   // P107: the team list's search, "who to show" and company filters live in its data table.
   const team = useTableState('staffclock.team');
   if (error)
@@ -344,6 +346,7 @@ export function StaffClockBoardView() {
     <div className="page ss">
       <PageHead
         title="Staff clock"
+        actions={<SopHelp id="hr" />}
         sub={
           <>
             Staff clock in and out on their own phones with face or a time-stamped photo. Location is recorded only from clock-in to clock-out. No reading for{' '}

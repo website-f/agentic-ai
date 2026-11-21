@@ -11,12 +11,15 @@ import {
   MapTrifoldIcon, MegaphoneIcon, MoneyIcon, MonitorPlayIcon, NoteIcon, PackageIcon, PlugsConnectedIcon,
   ReceiptIcon, ScalesIcon, ShoppingCartIcon, SparkleIcon, StampIcon, StorefrontIcon, TimerIcon, TrayIcon,
   TruckIcon, UmbrellaIcon, UserIcon, UserSwitchIcon, UsersThreeIcon, WalletIcon, WarningOctagonIcon,
-  ArrowClockwiseIcon, HandArrowDownIcon, type Icon as PhosphorIcon,
+  ArrowClockwiseIcon, HandArrowDownIcon, BookOpenTextIcon, ClipboardTextIcon, type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
 import { Icon } from './ui';
 
 const BY_VIEW: Record<string, PhosphorIcon> = {
   home: HouseIcon,
+  // P121
+  sop: BookOpenTextIcon,
+  equiprequests: ClipboardTextIcon,
   overview: BuildingsIcon,
   company: StorefrontIcon,
   office: BuildingOfficeIcon,

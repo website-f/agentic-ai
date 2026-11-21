@@ -1,5 +1,6 @@
 import { Select } from '../SearchSelect';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import {
   BinocularsIcon,
   BriefcaseIcon,
@@ -20,6 +21,8 @@ import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction
 import { actGuide, type ActGuideCtx, type ActGuideKind } from '../act-guide/guide';
 import { useLang } from '../i18n';
 import '../styles/gov.css';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 
 /** Read-only guide card for the task in front of this person (BM with English); names only people on the record. */
 function GuideCard({ kind, ctx }: { kind: ActGuideKind | null; ctx: ActGuideCtx }) {
@@ -59,6 +62,8 @@ function GuideCard({ kind, ctx }: { kind: ActGuideKind | null; ctx: ActGuideCtx 
  */
 
 type Tab = 'monitor' | 'work' | 'reports' | 'findings' | 'plan' | 'timing' | 'improvements' | 'fraud';
+/** P121: every ACT tab a link may ask for (#act/findings); the screen still opens only the tabs this person has. */
+const ACT_TABS: readonly (Tab | '')[] = ['monitor', 'work', 'reports', 'findings', 'plan', 'timing', 'improvements', 'fraud'];
 type FindingRow = ActBoard['findings'][number];
 type Prefill = Partial<ActFindingInput> | null;
 
@@ -76,9 +81,56 @@ const FOLLOW = { overdue: 'Past the due date', reopened: 'Fix failed the check',
 const METHOD = { call: 'Phone call', message: 'Message', email: 'Email', visit: 'Visit', meeting: 'Meeting', memo: 'Memo' } as const;
 const toneOf = (t: string) => (t === 'crit' ? 'crit' : t === 'warn' ? 'warn' : undefined);
 
+/**
+ * P107: ACT's long lists as tables. A row opens its full card (steps, notes and the forms for the next step) in a drawer,
+ * the same card the list showed inline before; the row is looked up again after each step, so the drawer stays current.
+ */
+function ActTable<T>(p: {
+  label: string;
+  stateKey: string;
+  rows: T[];
+  rowKey: (r: T) => string;
+  columns: DtColumn<T>[];
+  filters?: DtFilter<T>[];
+  title: (r: T) => string;
+  sub?: (r: T) => string;
+  card: (r: T) => ReactNode;
+  rowTone?: (r: T) => 'warn' | 'crit' | 'info' | undefined;
+  rowEnd?: (r: T) => ReactNode;
+  empty?: ReactNode;
+  searchText?: (r: T) => string;
+}) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = openId ? p.rows.find((r) => p.rowKey(r) === openId) : undefined;
+  return (
+    <>
+      <div className="gv-card-intro">
+        <DataTable
+          label={p.label}
+          stateKey={p.stateKey}
+          rows={p.rows}
+          rowKey={p.rowKey}
+          columns={p.columns}
+          filters={p.filters}
+          searchText={p.searchText}
+          onRowClick={(r) => setOpenId(p.rowKey(r))}
+          rowTone={p.rowTone}
+          rowEnd={p.rowEnd}
+          empty={p.empty}
+        />
+      </div>
+      {opened && (
+        <Drawer title={p.title(opened)} sub={p.sub?.(opened)} onClose={() => setOpenId(null)}>
+          {p.card(opened)}
+        </Drawer>
+      )}
+    </>
+  );
+}
+
 export function ActView() {
   const { data, error } = useLoad(() => api.actBoard(), []);
-  const [tab, setTab] = useState<Tab | null>(null);
+  const [tab, setTab] = useRouteTab<Tab | ''>('', ACT_TABS);
   const [prefill, setPrefill] = useState<Prefill>(null);
   const [drawer, setDrawer] = useState<'' | 'finding' | 'audit'>('');
   if (error)
@@ -95,7 +147,7 @@ export function ActView() {
     );
   const act = data.role === 'act';
   const watch = !!data.role;
-  const current: Tab = tab ?? (watch ? 'monitor' : 'findings');
+  const fallback: Tab = watch ? 'monitor' : 'findings';
   const k = data.kpis;
   const tabs: [Tab, string][] = watch
     ? [
@@ -112,6 +164,7 @@ export function ActView() {
         ['findings', 'My findings'],
         ['improvements', 'Improvements'],
       ];
+  const current: Tab = tab && tabs.some(([t]) => t === tab) ? tab : fallback;
   return (
     <div className="page gv-page">
       <PageHead
@@ -125,6 +178,7 @@ export function ActView() {
           // P91: ACT staff also see Raise a finding and Record an audit at the top, next to their role.
           (act && data.actRole) || data.canRaise || data.canRecordAudit ? (
             <>
+              <SopHelp id={watch ? 'gov' : 'gov-act-finding'} />
               {act && data.actRole && (
                 <Chip tone="info">
                   You are the ACT {ROLE[data.actRole]}
@@ -142,7 +196,9 @@ export function ActView() {
                 </button>
               )}
             </>
-          ) : undefined
+          ) : (
+            <SopHelp id="gov-act-finding" />
+          )
         }
       >
         <p className="notice" data-tone="info">
@@ -381,17 +437,54 @@ function Findings({ data, prefill, clearPrefill }: { data: ActBoard; prefill: Pr
           />
         )}
       </div>
-      {!rows.length && <Empty title="No open findings." />}
-      <ul className="gv-list">
-        {rows.map((r) => (
-          <li key={r.finding.id}>
-            <FindingLine r={r} data={data} />
-          </li>
-        ))}
-      </ul>
+      <ActTable
+        label="Findings"
+        stateKey="gov.act.findings"
+        rows={rows}
+        rowKey={(r) => r.finding.id}
+        columns={FINDING_COLUMNS}
+        filters={FINDING_FILTERS}
+        searchText={(r) => `${r.finding.ownerName} ${r.finding.raisedBy}`}
+        title={(r) => `${r.finding.ref}: ${r.finding.title}`}
+        sub={(r) => `${r.companyName} · ${r.areaName}`}
+        card={(r) => <FindingLine r={r} data={data} />}
+        rowTone={(r) => (r.overdueDays ? 'crit' : r.finding.severity === 'high' && r.finding.status !== 'closed' ? 'warn' : undefined)}
+        empty={<Empty title="No open findings." />}
+      />
     </Card>
   );
 }
+
+const findingLabel = (r: FindingRow) => (r.finding.status === 'closed' ? 'Closed' : r.overdueDays ? `${r.overdueDays} days overdue` : STATUS[r.finding.status]);
+const FINDING_COLUMNS: DtColumn<FindingRow>[] = [
+  { id: 'ref', label: 'Reference', value: (r) => r.finding.ref, render: (r) => <span className="mono">{r.finding.ref}</span>, phone: 'sub', width: '7rem' },
+  { id: 'title', label: 'Finding', value: (r) => r.finding.title, render: (r) => <strong>{r.finding.title}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, hideBelow: 1200 },
+  { id: 'area', label: 'Area', value: (r) => r.areaName, hideBelow: 1000 },
+  { id: 'severity', label: 'Severity', value: (r) => ({ high: 3, medium: 2, low: 1 })[r.finding.severity], sort: 'number', search: false, render: (r) => <Chip tone={SEVERITY_TONE[r.finding.severity]}>{SEVERITY[r.finding.severity]}</Chip> },
+  { id: 'owner', label: 'Owner', value: (r) => r.finding.ownerName, hideBelow: 1100 },
+  { id: 'due', label: 'Due', value: (r) => r.finding.dueOn, sort: 'date' },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => findingLabel(r),
+    translate: true,
+    render: (r) => (
+      <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+        {r.followUp && <Chip tone="warn">Follow up: {FOLLOW[r.followUp]}</Chip>}
+        <Chip tone={r.tone}>{findingLabel(r)}</Chip>
+      </span>
+    ),
+  },
+];
+const FINDING_FILTERS: DtFilter<FindingRow>[] = [
+  { id: 'status', label: 'Status', value: (r) => (r.overdueDays && r.finding.status !== 'closed' ? [r.finding.status, 'overdue'] : r.finding.status), options: [...Object.entries(STATUS).map(([value, label]) => ({ value, label })), { value: 'overdue', label: 'Overdue' }] },
+  { id: 'severity', label: 'Severity', value: (r) => r.finding.severity, options: Object.entries(SEVERITY).map(([value, label]) => ({ value, label })) },
+  { id: 'team', label: 'Team', value: (r) => (r.team ? String(r.team) : 'none'), optionLabel: (v) => (v === 'none' ? 'No team yet' : `Team ${v}`) },
+  { id: 'area', label: 'Area', value: (r) => r.areaName },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'source', label: 'Source', value: (r) => r.finding.source, options: Object.entries(SOURCE).map(([value, label]) => ({ value, label })) },
+];
 
 function FindingLine({ r, data }: { r: FindingRow; data: ActBoard }) {
   const act = useAction();
@@ -943,17 +1036,46 @@ function Improvements({ data }: { data: ActBoard }) {
         <p>ACT finds the cause and leads the change. The COO or CEO approves, the owner carries out each step, and ACT records whether the benefit came.</p>
         {form && <NewImprovement data={data} onDone={() => setForm(false)} />}
       </div>
-      {!data.improvements.length && <Empty title="No improvements yet." />}
-      <ul className="gv-list">
-        {data.improvements.map((r) => (
-          <li key={r.improvement.id}>
-            <ImprovementLine r={r} data={data} />
-          </li>
-        ))}
-      </ul>
+      <ActTable
+        label="Improvements"
+        stateKey="gov.act.improvements"
+        rows={data.improvements}
+        rowKey={(r) => r.improvement.id}
+        columns={IMPROVEMENT_COLUMNS}
+        filters={[{ id: 'state', label: 'Status', value: (r) => improvementState(r)[2], options: IMPROVEMENT_STATES }]}
+        title={(r) => `${r.improvement.ref}: ${r.improvement.title}`}
+        sub={(r) => `Owner ${r.improvement.ownerName}`}
+        card={(r) => <ImprovementLine r={r} data={data} />}
+        rowTone={(r) => toneOf(improvementState(r)[0])}
+        empty={<Empty title="No improvements yet." />}
+      />
     </Card>
   );
 }
+
+type ImprovementRow = ActBoard['improvements'][number];
+const improvementState = (r: ImprovementRow): ['ok' | 'crit' | 'warn' | 'info', string, string] => {
+  const i = r.improvement;
+  if (i.result) return ['ok', 'Done', 'done'];
+  if (r.late) return ['crit', 'Past target', 'late'];
+  if (!i.approved) return ['warn', 'Waiting for approval', 'approval'];
+  return ['info', `${r.done} of ${i.steps.length} steps`, 'progress'];
+};
+const IMPROVEMENT_STATES = [
+  { value: 'approval', label: 'Waiting for approval' },
+  { value: 'progress', label: 'In progress' },
+  { value: 'late', label: 'Past target' },
+  { value: 'done', label: 'Done' },
+];
+const IMPROVEMENT_COLUMNS: DtColumn<ImprovementRow>[] = [
+  { id: 'ref', label: 'Reference', value: (r) => r.improvement.ref, render: (r) => <span className="mono">{r.improvement.ref}</span>, phone: 'sub', width: '7rem' },
+  { id: 'title', label: 'Improvement', value: (r) => r.improvement.title, render: (r) => <strong>{r.improvement.title}</strong>, phone: 'title' },
+  { id: 'benefit', label: 'Benefit', value: (r) => r.improvement.benefit, sort: false, hideBelow: 1200 },
+  { id: 'owner', label: 'Owner', value: (r) => r.improvement.ownerName },
+  { id: 'led', label: 'Led by', value: (r) => r.improvement.ledBy, hideBelow: 1100 },
+  { id: 'target', label: 'Target', value: (r) => r.improvement.targetOn, sort: 'date' },
+  { id: 'state', label: 'Status', value: (r) => improvementState(r)[1], translate: true, render: (r) => <Chip tone={improvementState(r)[0]}>{improvementState(r)[1]}</Chip> },
+];
 
 function ImprovementLine({ r, data }: { r: ActBoard['improvements'][number]; data: ActBoard }) {
   const act = useAction();
@@ -1153,17 +1275,36 @@ function Work({ data }: { data: ActBoard }) {
         </p>
         {data.canAssign && <AssignWork data={data} />}
       </div>
-      {!rows.length && <Empty title="No open work." />}
-      <ul className="gv-list">
-        {rows.map((w) => (
-          <li key={w.audit.id}>
-            <WorkLine w={w} data={data} />
-          </li>
-        ))}
-      </ul>
+      <ActTable
+        label="Work given to the teams"
+        stateKey="gov.act.work"
+        rows={rows}
+        rowKey={(w) => w.audit.id}
+        columns={WORK_COLUMNS}
+        filters={WORK_FILTERS}
+        title={(w) => w.label}
+        sub={(w) => `Team ${w.audit.team}`}
+        card={(w) => <WorkLine w={w} data={data} />}
+        rowTone={(w) => (w.overdue ? 'crit' : undefined)}
+        empty={<Empty title="No open work." />}
+      />
     </Card>
   );
 }
+
+const WORK_COLUMNS: DtColumn<WorkRow>[] = [
+  { id: 'label', label: 'Work', value: (w) => w.label, render: (w) => <strong>{w.label}</strong>, phone: 'title' },
+  { id: 'kind', label: 'Kind', value: (w) => (w.audit.kind === 'report_review' ? 'Report review' : 'Workflow audit'), translate: true, phone: 'sub' },
+  { id: 'team', label: 'Team', value: (w) => (w.audit.team ? `Team ${w.audit.team}` : '') },
+  { id: 'due', label: 'Due', value: (w) => w.audit.dueOn, sort: 'date' },
+  { id: 'by', label: 'Given by', value: (w) => w.audit.assigned?.by, hideBelow: 1000 },
+  { id: 'state', label: 'Status', value: (w) => (w.overdue ? 'Overdue' : 'Open'), translate: true, render: (w) => <Chip tone={w.overdue ? 'crit' : 'info'}>{w.overdue ? 'Overdue' : 'Open'}</Chip> },
+];
+const WORK_FILTERS: DtFilter<WorkRow>[] = [
+  { id: 'team', label: 'Team', value: (w) => (w.audit.team ? String(w.audit.team) : ''), optionLabel: (v) => `Team ${v}` },
+  { id: 'kind', label: 'Kind', value: (w) => (w.audit.kind === 'report_review' ? 'report_review' : 'audit'), options: [{ value: 'audit', label: 'Workflow audit' }, { value: 'report_review', label: 'Report review' }] },
+  { id: 'state', label: 'Status', value: (w) => (w.overdue ? 'overdue' : 'open'), options: [{ value: 'overdue', label: 'Overdue' }, { value: 'open', label: 'Open' }] },
+];
 
 function WorkLine({ w, data }: { w: WorkRow; data: ActBoard }) {
   const act = useAction();
@@ -1379,56 +1520,69 @@ function Reports({ data }: { data: ActBoard }) {
         </p>
         {kind === 'department' && <Forms data={data} />}
       </div>
-      {!rows.length && <Empty title="No monthly reports set." />}
-      <ul className="gv-list">
-        {rows.map((r) => {
-          const [tone, label] = REPORT_STATUS[r.status];
-          return (
-            <li key={r.key} className="gv-item" data-tone={toneOf(tone)}>
-              <div className="gv-item-head">
-                <div className="gv-item-main">
-                  <div className="gv-item-title">{r.sender}</div>
-                  <div className="gv-item-meta">
-                    {r.report}
-                    {r.period ? ` · ${r.period}, due ${dateLabel(r.due ?? '')}` : ''}
-                    {r.sent ? ` · sent by ${r.sent.by} ${dateTimeLabel(r.sent.at)}` : ''}
-                  </div>
-                </div>
-                <div className="gv-item-state">
-                  <Chip tone={tone}>{label}</Chip>
-                </div>
-              </div>
-              <div className="gv-lines">
-                {r.form && (
-                  <div>
-                    <span className="gv-k">Form</span>
-                    {r.form.covered} of {r.form.total} sections
-                    {r.form.missing.length ? ` · missing: ${r.form.missing.join('; ')}` : ''}
-                  </div>
-                )}
-                <div>
-                  <span className="gv-k">ACT review</span>
-                  {!r.review
-                    ? 'not given to a team'
-                    : r.review.status === 'assigned'
-                      ? `with Team ${r.review.team}, due ${dateLabel(r.review.dueOn ?? '')}`
-                      : `${r.review.result === 'clean' ? 'clean' : 'findings raised'} (${r.review.by}): ${r.review.note}`}
-                </div>
-              </div>
-              {data.canAssign && r.defId && !r.review && (
-                <div className="gv-btns">
-                  {([1, 2] as const).map((t) => (
-                    <QuickAssign key={t} team={t} r={r} />
-                  ))}
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      {/* P107: the senders as a table (search, status and review filters); the review buttons stay on each row. */}
+      <div className="gv-card-intro">
+        <DataTable
+          label="Monthly reports"
+          stateKey={`gov.act.reports.${kind}`}
+          rows={rows}
+          rowKey={(r) => r.key}
+          columns={REPORT_COLUMNS}
+          filters={REPORT_FILTERS}
+          rowTone={(r) => toneOf(REPORT_STATUS[r.status][0])}
+          rowEnd={(r) =>
+            data.canAssign && r.defId && !r.review ? (
+              <span className="gv-btns">
+                {([1, 2] as const).map((t) => (
+                  <QuickAssign key={t} team={t} r={r} />
+                ))}
+              </span>
+            ) : null
+          }
+          empty={<Empty title="No monthly reports set." />}
+        />
+      </div>
     </Card>
   );
 }
+
+const reviewText = (r: ReportRow) =>
+  !r.review
+    ? 'not given to a team'
+    : r.review.status === 'assigned'
+      ? `with Team ${r.review.team}, due ${dateLabel(r.review.dueOn ?? '')}`
+      : `${r.review.result === 'clean' ? 'clean' : 'findings raised'} (${r.review.by}): ${r.review.note}`;
+const REPORT_COLUMNS: DtColumn<ReportRow>[] = [
+  { id: 'sender', label: 'Sender', value: (r) => r.sender, render: (r) => <strong>{r.sender}</strong>, phone: 'title' },
+  { id: 'report', label: 'Report', value: (r) => r.report, phone: 'sub' },
+  { id: 'due', label: 'Due', value: (r) => r.due, sort: 'date', render: (r) => (r.period ? `${r.period}, ${dateLabel(r.due ?? '')}` : '–') },
+  { id: 'sent', label: 'Sent', value: (r) => r.sent?.at, sort: 'date', render: (r) => (r.sent ? `${r.sent.by} ${dateTimeLabel(r.sent.at)}` : '–'), hideBelow: 1100 },
+  {
+    id: 'form',
+    label: 'Form',
+    value: (r) => (r.form ? r.form.covered / Math.max(1, r.form.total) : null),
+    sort: 'number',
+    search: false,
+    render: (r) => (r.form ? <span title={r.form.missing.length ? `missing: ${r.form.missing.join('; ')}` : undefined}>{r.form.covered} of {r.form.total} sections</span> : '–'),
+    hideBelow: 1200,
+  },
+  { id: 'review', label: 'ACT review', value: (r) => reviewText(r), sort: false, hideBelow: 1000 },
+  { id: 'status', label: 'Status', value: (r) => REPORT_STATUS[r.status][1], translate: true, render: (r) => <Chip tone={REPORT_STATUS[r.status][0]}>{REPORT_STATUS[r.status][1]}</Chip> },
+];
+const REPORT_FILTERS: DtFilter<ReportRow>[] = [
+  { id: 'status', label: 'Status', value: (r) => r.status, options: Object.entries(REPORT_STATUS).map(([value, [, label]]) => ({ value, label })) },
+  {
+    id: 'review',
+    label: 'ACT review',
+    value: (r) => (!r.review ? 'none' : r.review.status === 'assigned' ? `team${r.review.team}` : 'done'),
+    options: [
+      { value: 'none', label: 'Not given to a team' },
+      { value: 'team1', label: 'With Team 1' },
+      { value: 'team2', label: 'With Team 2' },
+      { value: 'done', label: 'Reviewed' },
+    ],
+  },
+];
 
 function QuickAssign({ team, r }: { team: 1 | 2; r: ReportRow }) {
   const act = useAction();
@@ -1933,18 +2087,37 @@ function Fraud({ data }: { data: ActBoard }) {
           </p>
           {canOpen && <NewInvestigation team={data.job === 'director' ? team : undefined} />}
         </div>
-        {data.investigations.length === 0 && <Empty title="No investigations." />}
-        <ul className="gv-list">
-          {data.investigations.map((v) => (
-            <li key={v.id}>
-              <InvestigationLine v={v} data={data} />
-            </li>
-          ))}
-        </ul>
+        <ActTable
+          label="Investigations"
+          stateKey="gov.act.investigations"
+          rows={data.investigations}
+          rowKey={(v) => v.id}
+          columns={INVESTIGATION_COLUMNS}
+          filters={INVESTIGATION_FILTERS}
+          title={(v) => `${v.ref}: ${v.title}`}
+          sub={(v) => (v.team ? `Team ${v.team}` : 'Not yet given to a team')}
+          card={(v) => <InvestigationLine v={v} data={data} />}
+          rowTone={(v) => (v.state === 'open' ? 'warn' : undefined)}
+          empty={<Empty title="No investigations." />}
+        />
       </Card>
     </div>
   );
 }
+
+const invState = (v: Inv) => (v.state === 'open' ? 'Open' : `Closed: ${OUTCOME[v.conclusion!.outcome]}`);
+const INVESTIGATION_COLUMNS: DtColumn<Inv>[] = [
+  { id: 'ref', label: 'Reference', value: (v) => v.ref, render: (v) => <span className="mono">{v.ref}</span>, phone: 'sub', width: '7rem' },
+  { id: 'title', label: 'Investigation', value: (v) => v.title, render: (v) => <strong>{v.title}</strong>, phone: 'title' },
+  { id: 'team', label: 'Team', value: (v) => (v.team ? `Team ${v.team}` : 'Not yet given to a team') },
+  { id: 'basis', label: 'What started it', value: (v) => v.basis.note, sort: false, hideBelow: 1000 },
+  { id: 'state', label: 'Status', value: (v) => invState(v), translate: true, render: (v) => <Chip tone={v.state === 'open' ? 'warn' : 'ok'}>{invState(v)}</Chip> },
+];
+const INVESTIGATION_FILTERS: DtFilter<Inv>[] = [
+  { id: 'state', label: 'Status', value: (v) => (v.state === 'open' ? 'open' : 'closed'), options: [{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }] },
+  { id: 'team', label: 'Team', value: (v) => (v.team ? String(v.team) : 'none'), optionLabel: (x) => (x === 'none' ? 'Not yet given to a team' : `Team ${x}`) },
+  { id: 'outcome', label: 'Outcome', value: (v) => v.conclusion?.outcome ?? null, options: Object.entries(OUTCOME).map(([value, label]) => ({ value, label })) },
+];
 
 function NewInvestigation({ team }: { team?: 1 | 2 }) {
   const act = useAction();

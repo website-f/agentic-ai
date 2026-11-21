@@ -1,7 +1,8 @@
 import { Select } from '../SearchSelect';
 import { useRef, useState } from 'react';
 import { CalendarCheckIcon, CarIcon, ClipboardTextIcon, QuestionIcon } from '@phosphor-icons/react';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { p91MayImport, type ProofInput, type VehicleRenewal } from '@prima/core';
@@ -19,6 +20,9 @@ import '../styles/ops.css';
  * CMS monitors the tracker, dashcam and driver health; nothing is connected yet, so those show as unknown. The PDPA
  * officer files each driver's consent before a monitored vehicle goes out.
  */
+
+/** P121: every section a link may open ('#fleet/mine'); one this person does not have falls back to their first. */
+const FLEET_TABS = ['due', 'vehicles', 'requests', 'monitor', 'hours', 'usage', 'rentals', 'consent', 'mine'];
 
 type Row = FleetBoard['board'][number];
 type Request = FleetBoard['requests'][number];
@@ -44,7 +48,7 @@ const dueText = (days: number) => (days < 0 ? `${-days} days late` : days === 0 
 export function FleetView() {
   const { companyId, company, me } = useApp();
   const { data, error } = useLoad(() => api.fleetBoard(), []);
-  const [tab, setTab] = useState<string | null>(null);
+  const [tab, setTab] = useRouteTab<string>('', FLEET_TABS);
   if (error)
     return (
       <div className="page">
@@ -102,14 +106,17 @@ export function FleetView() {
         title="Vehicles"
         sub="The head of Transport runs every company vehicle: renewals, servicing, payments, and each trip out and in. Staff request a vehicle here. CMS watches trackers, dashcams and driver health."
         actions={
-          full && (
+          <>
+          <SopHelp id="equip-vehicle-request" />
+          {full && (
             <>
               <ImportButton kind="vehicle" companyId={companyId} />
               <RecordButton kind="vehicle" companyId={companyId} label={company ? `Add vehicle (${company.code})` : 'Add vehicle'} primary />
               {/* P91: fuel and subsidy cards load from the old list by plate (Transport only). */}
               {p91MayImport(me.user, 'fuelCard') && <ImportButton kind="fuelCard" label="Import fuel cards" />}
             </>
-          )
+          )}
+          </>
         }
       />
       {data.board.length > 0 && (

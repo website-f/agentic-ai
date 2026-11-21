@@ -622,7 +622,8 @@ function Group({
 
 // ---------- The client file: everything about one client ----------
 
-function ClientFile({ id, onClose }: { id: string; onClose: () => void }) {
+/** P121: also opened from the client board (Clients > Client board > a client > Open the client file). */
+export function ClientFile({ id, onClose }: { id: string; onClose: () => void }) {
   const { data, error } = useLoad(() => api.crmClient(id), [id]);
   return (
     <Drawer

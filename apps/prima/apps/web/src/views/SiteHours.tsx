@@ -4,6 +4,8 @@ import { api, type SiteHoursBoard } from '../api';
 import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
 import { DataTable, useTableState } from '../DataTable';
 import { PublicHolidaysPanel } from './PublicHolidays';
+import { useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Site man-hours (Fauzan, 6 Nov 2026): each site's allowed man-hours for the month (guards per shift x hours covered a
@@ -25,7 +27,8 @@ const h = (n: number) => `${n.toLocaleString('en-MY', { maximumFractionDigits: 1
 
 export function SiteHoursView() {
   const [companyId, setCompanyId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'hours' | 'holidays'>('hours');
+  // P121: '#sitehours/holidays' opens the public holidays (links from the SOP guide).
+  const [tab, setTab] = useRouteTab<'hours' | 'holidays'>('hours', ['hours', 'holidays']);
   const tabs = (
     <div className="row" style={{ gap: 6, marginBottom: 12 }}>
       <button className={`btn btn-sm ${tab === 'hours' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('hours')}>
@@ -34,6 +37,7 @@ export function SiteHoursView() {
       <button className={`btn btn-sm ${tab === 'holidays' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('holidays')}>
         Public holidays
       </button>
+      <SopHelp id={tab === 'holidays' ? 'ops-public-holidays' : 'ops-site-hours'} />
     </div>
   );
   if (tab === 'holidays')
@@ -79,7 +83,8 @@ function SiteHoursBoardView({ companyId, setCompanyId, tabs }: { companyId: stri
               : 'You can see the hours. The Operations Director or the OGM approves extra hours.'}
         </p>
         <p className="notice" data-tone="info">
-          Test data. Hours worked are clock-in to clock-out inside the rostered shift; hours with no shift (for example a new guard on on-the-job
+          {/* P121: "Test data." only in the test version; on the live app these are real hours. */}
+          {api.mode === 'demo' ? 'Test data. ' : ''}Hours worked are clock-in to clock-out inside the rostered shift; hours with no shift (for example a new guard on on-the-job
           training) count in full. A night shift counts in the month it starts.
         </p>
         {!data.ready && (

@@ -5,7 +5,8 @@ import { Select } from '../SearchSelect';
 import { useEffect, useState } from 'react';
 import { SITE_KIT_CATEGORY_LABEL, SITE_KIT_OWNER_LABEL, dateOf, KPM_GUARD_RULES, kpmGuardKit, kpmGuardTerms, type SiteKitCategory, type SiteKitItem, type SiteKitOwner } from '@prima/core';
 import { api, type CleaningProofInput, type GuardTermsInput, type OfficerHoursInput } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, hhmm, useAction, useLoad } from '../ui';
 import { ReturnSpec, TimeMarkedPhoto } from './Cleaning';
 import { p91MayImport } from '@prima/core';
@@ -18,7 +19,8 @@ import { DataTable } from '../DataTable';
 export function SiteStockView() {
   const { me, setCompanyId } = useApp();
   const [siteId, setSiteId] = useState<string | null>(null);
-  const [mode, setMode] = useState<'board' | 'fittings'>('board');
+  // P121: '#sitestock/fittings' opens the fittings of one site (links from the SOP guide).
+  const [mode, setMode] = useRouteTab<'board' | 'fittings'>('board', ['board', 'fittings']);
   const board = useLoad(() => api.inventorySites(), []);
   const b = board.data;
   const mayAddFittings = p91MayImport(me.user, 'siteKitItem');
@@ -40,6 +42,7 @@ export function SiteStockView() {
               <ImportButton kind="siteKitItem" label="Import fittings" />
             </>
           )}
+          <SopHelp id="equip-site-fittings" />
           <div className="seg">
             <button aria-pressed={mode === 'board'} onClick={() => setMode('board')}>
               All sites
@@ -611,7 +614,8 @@ export function DutyView() {
   const { me, companyId } = useApp();
   const today = dateOf(me.now);
   const [date, setDate] = useState(today);
-  const [mode, setMode] = useState<'posts' | 'routes'>('posts');
+  // P121: '#duty/posts' or '#duty/routes' opens that part (links from the SOP guide).
+  const [mode, setMode] = useRouteTab<'posts' | 'routes'>('posts', ['posts', 'routes']);
   const [siteId, setSiteId] = useState('');
   const [officerId, setOfficerId] = useState('');
   const sites = useLoad(() => api.sites(companyId), [companyId]);
@@ -630,6 +634,7 @@ export function DutyView() {
           <p>Minute-by-minute duties for each post from the roster, and each patrolling officer's daily route. Prima plans and publishes; the JA app (or the app in use) runs the work and reports back monthly.</p>
         </div>
         <div className="row">
+          <SopHelp id="ops-duty-plan" />
           <div className="seg">
             <button aria-pressed={mode === 'posts'} onClick={() => setMode('posts')}>
               Posts

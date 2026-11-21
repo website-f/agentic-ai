@@ -4,6 +4,7 @@ import type { StatTable } from "@prima/core";
 import { api } from "../api";
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad, type Tone } from "../ui";
 import { useApp } from "../App";
+import { DataTable, type DtColumn, type DtFilter } from "../DataTable";
 
 /**
  * EPF and PERKESO contribution tables kept row by row in Prima (Fauzan, 2 Nov 2026: "Make sure epf and socso have table
@@ -241,66 +242,97 @@ function LoadForm({ onDone }: { onDone: () => void }) {
 }
 
 type Nos = { epf: string | null; socso: string | null; lhdnE: string | null; hrd: string | null } | null;
+type Employer = { companyId: string; companyName: string; nos: Nos };
 
-function EmployerNos({ employers, canEdit, onDone }: { employers: { companyId: string; companyName: string; nos: Nos }[]; canEdit: boolean; onDone: () => void }) {
+const NO_LABELS: [keyof NonNullable<Nos>, string][] = [
+  ["epf", "EPF employer number"],
+  ["socso", "PERKESO employer code"],
+  ["lhdnE", "LHDN E number"],
+  ["hrd", "HRD Corp number"],
+];
+
+/** P107: the employer numbers as a table: one column per number, a filter for the numbers still missing. */
+const EMPLOYER_COLUMNS: DtColumn<Employer>[] = [
+  { id: "company", label: "Company", value: (e) => e.companyName, render: (e) => <strong>{e.companyName}</strong>, phone: "title" },
+  ...NO_LABELS.map(
+    ([k, l], i): DtColumn<Employer> => ({
+      id: k,
+      label: l,
+      value: (e) => e.nos?.[k] ?? null,
+      render: (e) => e.nos?.[k] ?? <span className="muted">not recorded</span>,
+      hideBelow: i >= 2 ? 1100 : undefined,
+    }),
+  ),
+];
+const EMPLOYER_FILTERS: DtFilter<Employer>[] = [
+  {
+    id: "missing",
+    label: "Missing number",
+    value: (e) => NO_LABELS.filter(([k]) => !e.nos?.[k]).map(([k]) => k),
+    options: NO_LABELS.map(([k, l]) => ({ value: k, label: l })),
+  },
+];
+
+function EmployerNos({ employers, canEdit, onDone }: { employers: Employer[]; canEdit: boolean; onDone: () => void }) {
   const act = useAction();
   const [edit, setEdit] = useState<{ companyId: string; epf: string; socso: string; lhdnE: string; hrd: string } | null>(null);
-  const LABELS: [keyof NonNullable<Nos>, string][] = [
-    ["epf", "EPF employer number"],
-    ["socso", "PERKESO employer code"],
-    ["lhdnE", "LHDN E number"],
-    ["hrd", "HRD Corp number"],
-  ];
   return (
     <section className="panel">
       <div className="panel-head">
         <h3>Employer numbers</h3>
       </div>
       {employers.length === 0 && <p className="panel-empty">No employer is in your view yet. Each company's EPF, SOCSO, LHDN and HRD Corp numbers are kept here.</p>}
-      <div className="list">
-        {employers.map((e) => (
-          <div key={e.companyId} className="list-item" style={{ display: "block" }}>
-            <div style={{ fontWeight: 600 }}>{e.companyName}</div>
-            {edit?.companyId === e.companyId ? (
-              <>
-                {LABELS.map(([k, l]) => (
-                  <label key={k} className="field">
-                    <span>{l}</span>
-                    <input className="input" value={edit[k]} onChange={(x) => setEdit({ ...edit, [k]: x.target.value })} />
-                  </label>
-                ))}
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={act.busy}
-                  onClick={async () => {
-                    const { companyId, ...v } = edit;
-                    const nos = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x.trim() || null])) as NonNullable<Nos>;
-                    if (await act.run(() => api.setEmployerNos(companyId, nos), "Saved.")) {
-                      setEdit(null);
-                      onDone();
-                    }
-                  }}
-                >
-                  Save
-                </button>
-                <ErrorNotice error={act.error} />
-              </>
-            ) : (
-              <div className="row" style={{ justifyContent: "space-between", gap: 6, flexWrap: "wrap" }}>
-                <div className="muted small">{LABELS.map(([k, l]) => `${l}: ${e.nos?.[k] ?? "not recorded"}`).join(" · ")}</div>
-                {canEdit && (
+      {/* P107: a data table (search, missing-number filter, sort, pages; cards on a phone); the edit form opens under its row. */}
+      {employers.length > 0 && (
+        <div className="panel-body">
+          <DataTable
+            label="Employer numbers"
+            stateKey="stattables.employers"
+            rows={employers}
+            rowKey={(e) => e.companyId}
+            columns={EMPLOYER_COLUMNS}
+            filters={EMPLOYER_FILTERS}
+            actions={
+              canEdit
+                ? (e) => [
+                    {
+                      label: "Edit",
+                      hidden: edit?.companyId === e.companyId,
+                      onClick: () => setEdit({ companyId: e.companyId, epf: e.nos?.epf ?? "", socso: e.nos?.socso ?? "", lhdnE: e.nos?.lhdnE ?? "", hrd: e.nos?.hrd ?? "" }),
+                    },
+                  ]
+                : undefined
+            }
+            rowDetail={(e) =>
+              edit?.companyId === e.companyId ? (
+                <>
+                  {NO_LABELS.map(([k, l]) => (
+                    <label key={k} className="field">
+                      <span>{l}</span>
+                      <input className="input" value={edit[k]} onChange={(x) => setEdit({ ...edit, [k]: x.target.value })} />
+                    </label>
+                  ))}
                   <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setEdit({ companyId: e.companyId, epf: e.nos?.epf ?? "", socso: e.nos?.socso ?? "", lhdnE: e.nos?.lhdnE ?? "", hrd: e.nos?.hrd ?? "" })}
+                    className="btn btn-primary btn-sm"
+                    disabled={act.busy}
+                    onClick={async () => {
+                      const { companyId, ...v } = edit;
+                      const nos = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x.trim() || null])) as NonNullable<Nos>;
+                      if (await act.run(() => api.setEmployerNos(companyId, nos), "Saved.")) {
+                        setEdit(null);
+                        onDone();
+                      }
+                    }}
                   >
-                    Edit
+                    Save
                   </button>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+                  <ErrorNotice error={act.error} />
+                </>
+              ) : null
+            }
+          />
+        </div>
+      )}
     </section>
   );
 }

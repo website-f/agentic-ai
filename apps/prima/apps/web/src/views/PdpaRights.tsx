@@ -1,7 +1,8 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type PdpaRequestInput, type PdpaRights } from '../api';
-import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * PDPA rights. People's requests about their own data (access and correction within 21 days, refusal only on the
@@ -16,13 +17,35 @@ const KIND: Record<PdpaRequestInput['kind'], string> = {
   OBJECTION: 'Objection to processing',
 };
 
+type RequestRow = PdpaRights['requests'][number];
+const requestState = (row: RequestRow): ['ok' | 'info' | 'crit' | 'warn', string] => {
+  const r = row.request;
+  const [tone, label] = requestState(row);
+  return [tone, label];
+};
+const REQUEST_COLUMNS: DtColumn<RequestRow>[] = [
+  { id: 'ref', label: 'Reference', value: (r) => r.request.ref, render: (r) => <strong>{r.request.ref}</strong>, width: '9rem' },
+  { id: 'who', label: 'Who asked', value: (r) => r.request.subjectName, phone: 'title' },
+  { id: 'kind', label: 'Kind', value: (r) => KIND[r.request.kind], translate: true, phone: 'sub' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, hideBelow: 1100 },
+  { id: 'received', label: 'Received', value: (r) => r.request.receivedOn, sort: 'date', hideBelow: 1200 },
+  { id: 'due', label: 'Due', value: (r) => r.request.dueOn, sort: 'date' },
+  { id: 'id', label: 'Identity', value: (r) => (r.request.idVerified ? 'Checked' : 'Not checked'), translate: true, hideBelow: 1200 },
+  { id: 'status', label: 'Status', value: (r) => (r.request.status === 'open' ? r.daysLeft : null), sort: 'number', align: 'left', render: (r) => <Chip tone={requestState(r)[0]}>{requestState(r)[1]}</Chip> },
+];
+const REQUEST_FILTERS: DtFilter<RequestRow>[] = [
+  { id: 'show', label: 'Show', value: (r) => (r.request.status === 'open' ? 'open' : 'closed'), options: [{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }] },
+  { id: 'kind', label: 'Kind', value: (r) => r.request.kind, optionLabel: (v) => KIND[v as PdpaRequestInput['kind']] ?? v },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
+
 export function RequestsPanel() {
   const { data, error } = useLoad(() => api.pdpaRights(), []);
   const [form, setForm] = useState(false);
-  const [all, setAll] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="data requests" />;
-  const rows = data.requests.filter((r) => all || r.request.status === 'open');
+  const open = data.requests.find((r) => r.request.id === openId);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -33,9 +56,6 @@ export function RequestsPanel() {
               Log a request
             </button>
           )}
-          <button className="btn btn-sm" onClick={() => setAll(!all)}>
-            {all ? 'Hide closed' : 'Show closed'}
-          </button>
         </div>
       </div>
       <p className="muted small">
@@ -43,12 +63,25 @@ export function RequestsPanel() {
         {data.counts.requestsLate ? ` ${data.counts.requestsLate} past the deadline.` : ''}
       </p>
       {form && <NewRequest data={data} onDone={() => setForm(false)} />}
-      <div className="list">
-        {!rows.length && <div className="empty">No open requests.</div>}
-        {rows.map((r) => (
-          <RequestLine key={r.request.id} r={r} data={data} />
-        ))}
-      </div>
+      <DataTable
+        label="Requests about people's own data"
+        stateKey="board.pdpa.requests"
+        defaults={{ f: { show: 'open' } }}
+        rows={data.requests}
+        rowKey={(r) => r.request.id}
+        columns={REQUEST_COLUMNS}
+        filters={REQUEST_FILTERS}
+        searchText={(r) => r.request.detail}
+        onRowClick={(r) => setOpenId(r.request.id)}
+        rowTone={(r) => (requestState(r)[0] === 'crit' ? 'crit' : requestState(r)[0] === 'warn' ? 'warn' : undefined)}
+        actions={(r) => [{ label: data.role === 'officer' && r.request.status === 'open' ? 'Act' : 'Open', onClick: () => setOpenId(r.request.id) }]}
+        empty={<div className="empty">No open requests.</div>}
+      />
+      {open && (
+        <Drawer title={`${open.request.ref}: ${KIND[open.request.kind]}`} sub={open.companyName} onClose={() => setOpenId(null)}>
+          <RequestLine r={open} data={data} />
+        </Drawer>
+      )}
     </section>
   );
 }
@@ -206,36 +239,74 @@ function NewRequest({ data, onDone }: { data: PdpaRights; onDone: () => void }) 
   );
 }
 
+type DpoRow = PdpaRights['dpos'][number];
+const DPO_STATE: Record<DpoRow['state'], string> = {
+  ok: 'Complete',
+  unknown: 'Unknown: no DPO',
+  notify_late: 'Commissioner not told in time',
+  to_notify: 'Tell the Commissioner',
+  unpublished: 'Contact not published',
+};
+const dpoTone = (d: DpoRow) => (d.state === 'ok' ? 'ok' : d.state === 'notify_late' ? 'crit' : 'warn');
+const DPO_COLUMNS: DtColumn<DpoRow>[] = [
+  { id: 'company', label: 'Company', value: (d) => d.companyName, render: (d) => <strong>{d.companyName}</strong>, phone: 'title' },
+  { id: 'name', label: 'DPO', value: (d) => d.dpo?.name, render: (d) => d.dpo?.name ?? <span className="muted">No DPO on file</span>, phone: 'sub' },
+  { id: 'email', label: 'Business email', value: (d) => d.dpo?.email, hideBelow: 1200 },
+  { id: 'appointed', label: 'Appointed', value: (d) => d.dpo?.appointedOn, sort: 'date' },
+  {
+    id: 'notified',
+    label: 'Notified',
+    value: (d) => d.dpo?.notified?.on,
+    sort: 'date',
+    render: (d) => (d.dpo?.notified ? `${dateLabel(d.dpo.notified.on)} (${d.dpo.notified.ref})` : d.dpo ? `notify by ${dateLabel(d.notifyDue)}` : '–'),
+    hideBelow: 1100,
+  },
+  { id: 'state', label: 'Status', value: (d) => DPO_STATE[d.state], translate: true, render: (d) => <Chip tone={dpoTone(d)}>{DPO_STATE[d.state]}</Chip> },
+];
+const DPO_FILTERS: DtFilter<DpoRow>[] = [
+  { id: 'show', label: 'Show', value: (d) => (d.state === 'ok' ? 'complete' : 'todo'), options: [{ value: 'todo', label: 'Not complete' }, { value: 'complete', label: 'Complete' }] },
+  { id: 'state', label: 'Status', value: (d) => d.state, optionLabel: (v) => DPO_STATE[v as DpoRow['state']] ?? v },
+];
+
 export function DpoPanel() {
   const { data, error } = useLoad(() => api.pdpaRights(), []);
-  const [all, setAll] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="DPO register" />;
-  const rows = data.dpos.filter((d) => all || d.state !== 'ok');
+  const open = data.dpos.find((d) => d.companyId === openId);
   return (
     <section className="panel">
       <div className="panel-head">
         <h3>Data protection officer, by company</h3>
-        <button className="btn btn-sm" onClick={() => setAll(!all)}>
-          {all ? 'Hide complete' : 'Show complete'}
-        </button>
       </div>
       <p className="muted small">
         Each company is its own data controller and names a DPO, notified to the PDP Commissioner within {data.rule.dpoNotifyDays} days of appointment, with the
         contact published. A company with no DPO on file is unknown. {data.counts.noDpo} without one, {data.counts.notifyLate} notified late.
       </p>
-      <div className="list">
-        {rows.slice(0, 60).map((d) => (
-          <DpoLine key={d.companyId} d={d} officer={data.canAdd} />
-        ))}
-      </div>
+      <DataTable
+        label="Data protection officer, by company"
+        stateKey="board.pdpa.dpo"
+        defaults={{ f: { show: 'todo' } }}
+        rows={data.dpos}
+        rowKey={(d) => d.companyId}
+        columns={DPO_COLUMNS}
+        filters={DPO_FILTERS}
+        onRowClick={(d) => setOpenId(d.companyId)}
+        rowTone={(d) => (dpoTone(d) === 'crit' ? 'crit' : undefined)}
+        actions={(d) => [{ label: d.dpo ? 'Update' : 'Record', hidden: !data.canAdd, onClick: () => setOpenId(d.companyId) }]}
+      />
+      {open && (
+        <Drawer title={open.companyName} sub="Data protection officer" onClose={() => setOpenId(null)}>
+          <DpoLine d={open} officer={data.canAdd} startOpen={data.canAdd} />
+        </Drawer>
+      )}
     </section>
   );
 }
 
-function DpoLine({ d, officer }: { d: PdpaRights['dpos'][number]; officer: boolean }) {
+function DpoLine({ d, officer, startOpen }: { d: PdpaRights['dpos'][number]; officer: boolean; startOpen?: boolean }) {
   const act = useAction();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!startOpen);
   const [f, setF] = useState({
     name: d.dpo?.name ?? '',
     email: d.dpo?.email ?? '',
@@ -244,14 +315,8 @@ function DpoLine({ d, officer }: { d: PdpaRights['dpos'][number]; officer: boole
     notifyRef: d.dpo?.notified?.ref ?? '',
     published: d.dpo?.published ?? false,
   });
-  const tone = d.state === 'ok' ? 'ok' : d.state === 'notify_late' ? 'crit' : 'warn';
-  const label = {
-    ok: 'Complete',
-    unknown: 'Unknown: no DPO',
-    notify_late: 'Commissioner not told in time',
-    to_notify: 'Tell the Commissioner',
-    unpublished: 'Contact not published',
-  }[d.state];
+  const tone = dpoTone(d);
+  const label = DPO_STATE[d.state];
   return (
     <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
       <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>

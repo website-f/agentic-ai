@@ -5,7 +5,9 @@ import { FinGuide } from './FinGuide';
 import type { FinRequestAction } from '@prima/core';
 import { api, type FinRequestList } from '../api';
 import { Card, Empty, Facts, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { SopHelp } from '../sop/SopHelp';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/biz.css';
 
 /**
@@ -90,6 +92,42 @@ function Track({ r }: { r: Req }) {
   );
 }
 
+/** P107: "Other requests" as a data table: what, company, what it is for, needed by, payment, where it is, amount. */
+const OTHER_COLUMNS: DtColumn<Req>[] = [
+  { id: 'title', label: 'Request', value: (r) => r.title, render: (r) => <strong>{r.title}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'for', label: 'For', value: (r) => `${r.subjectLabel}${r.sector ? ` (${r.sector})` : ''}`, hideBelow: 1200 },
+  { id: 'due', label: 'Needed by', value: (r) => r.dueOn, sort: 'date' },
+  { id: 'payment', label: 'Payment', value: (r) => r.paymentId ?? '', render: (r) => (r.paymentId ? <span className="mono">{r.paymentId}</span> : '–'), hideBelow: 1400, phone: 'hidden' },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => STATUS[r.status][1],
+    translate: true,
+    render: (r) => (
+      <span className="bz-pr-progress" style={{ marginTop: 0 }}>
+        <Track r={r} />
+        <Chip tone={STATUS[r.status][0]}>{STATUS[r.status][1]}</Chip>
+      </span>
+    ),
+  },
+  { id: 'amount', label: 'Amount', value: (r) => r.amount, sort: 'money', render: (r) => rm(r.amount) },
+];
+const OTHER_FILTERS: DtFilter<Req>[] = [
+  { id: 'status', label: 'Status', value: (r) => r.status, options: (Object.keys(STATUS) as Req['status'][]).map((k) => ({ value: k, label: STATUS[k][1] })) },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'for', label: 'For', value: (r) => r.subjectLabel },
+  {
+    id: 'sector',
+    label: 'Sites',
+    value: (r) => r.sector,
+    options: [
+      { value: 'government', label: 'Government' },
+      { value: 'private', label: 'Private' },
+    ],
+  },
+];
+
 export function PaymentRequestsView() {
   const [tick, setTick] = useState(0);
   const { data, error } = useLoad(() => api.finRequests(), [tick]);
@@ -125,12 +163,15 @@ export function PaymentRequestsView() {
         title="Payment requests"
         sub="The company head creates the request and chooses what it is for. The head of that department approves, Finance checks the calculation, and the COO (or the Finance Director, for Finance) approves. Finance then pays it; that final approval is the payment's approval. Nobody acts twice on a request, and a return sends it back to the company head for the whole chain again."
         actions={
-          data.canCreate.length > 0 && (
-            <button className="btn btn-primary" onClick={() => setAdding(true)}>
-              <PlusIcon size={16} weight="bold" aria-hidden="true" />
-              New payment request
-            </button>
-          )
+          <>
+            <SopHelp id="finance-payment-request" />
+            {data.canCreate.length > 0 && (
+              <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                New payment request
+              </button>
+            )}
+          </>
         }
       />
       <Stats>
@@ -160,6 +201,26 @@ export function PaymentRequestsView() {
             >
               {!data.requests.length && title === 'Other requests' ? 'A request starts here: say what it is for, and the chain of approvers follows.' : undefined}
             </Empty>
+          ) : title === 'Other requests' ? (
+            /* P107: every request ever, so a data table (search, filters, sort, pages; cards on a phone). */
+            <DataTable
+              label="Other requests"
+              stateKey="payreq.others"
+              rows={list}
+              rowKey={(r) => r.id}
+              columns={OTHER_COLUMNS}
+              filters={OTHER_FILTERS}
+              searchText={(r) => `${r.id} ${r.payee}`}
+              onRowClick={(r) => setOpen(r.id)}
+              rowTone={(r) => (r.status === 'returned' ? 'crit' : undefined)}
+              rowEnd={(r) =>
+                r.may.includes('resubmit') ? (
+                  <button className="btn btn-sm btn-primary" aria-label={`Edit returned request ${r.title}`} onClick={() => setOpen(r.id)}>
+                    Edit
+                  </button>
+                ) : null
+              }
+            />
           ) : (
             <ul className="bz-rows">
               {list.map((r) => (

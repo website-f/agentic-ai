@@ -5,8 +5,10 @@ import { BRANCH_APPROVER_LABEL, BRANCH_COST_KINDS, BRANCH_COST_LABEL, TERMINATIO
 import { api, type BranchBoard, type BranchJv } from '../api';
 import { useApp } from '../App';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
+import { SopHelp } from '../sop/SopHelp';
 import { ImportButton } from './ImportDrawer';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/biz.css';
 
 /**
@@ -45,6 +47,41 @@ function branchState(r: Row): [Tone, string] {
   return [tone, label];
 }
 
+/** P107: a count that needs a look, or a dash. */
+const todo = (n: number | null | undefined) => (n ? <span className="bz-br-todo">{n}</span> : '–');
+
+/** P107: the branch list's columns (it was one card per company). */
+const BRANCH_COLUMNS: DtColumn<Row>[] = [
+  { id: 'branch', label: 'Branch', value: (r) => r.branch.name, render: (r) => <strong>{r.branch.name}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  {
+    id: 'model',
+    label: 'Model',
+    value: (r) => r.agreement?.model ?? '',
+    render: (r) => (r.agreement ? <>Model {r.agreement.model}</> : <span className="muted">No signed agreement</span>),
+  },
+  { id: 'manager', label: 'Branch Manager', value: (r) => r.agreement?.managerName ?? '', hideBelow: 1200, phone: 'hidden' },
+  { id: 'sites', label: 'Sites', value: (r) => r.sites, sort: 'number', hideBelow: 1200, phone: 'hidden' },
+  { id: 'review', label: 'To review', value: (r) => r.queue.length, sort: 'number', render: (r) => todo(r.queue.length) },
+  { id: 'decide', label: 'To decide', value: (r) => r.purchasesAwaiting ?? 0, sort: 'number', render: (r) => todo(r.purchasesAwaiting), phone: 'hidden' },
+  { id: 'keeps', label: 'Company keeps', value: (r) => r.split?.companyShare ?? null, sort: 'money', render: (r) => (r.split ? rm(r.split.companyShare) : '–') },
+  {
+    id: 'state',
+    label: 'Status',
+    value: (r) => branchState(r)[1],
+    translate: true,
+    render: (r) => {
+      const [tone, label] = branchState(r);
+      return <Chip tone={tone}>{label}</Chip>;
+    },
+  },
+];
+const BRANCH_FILTERS: DtFilter<Row>[] = [
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'model', label: 'Model', value: (r) => r.agreement?.model ?? null, optionLabel: (m) => MODEL[m as BranchModel] ?? m },
+  { id: 'state', label: 'Status', value: (r) => branchState(r)[1] },
+];
+
 export function BranchesView() {
   const { data, error } = useLoad(() => api.branchBoard(), []);
   const [open, setOpen] = useState<string | null>(null);
@@ -73,15 +110,18 @@ export function BranchesView() {
         title="Branches"
         sub="A branch works inside its licensed company: same licence, employer and accounts. The company approves each month's settlement under the signed agreement and reviews every branch action. A month prepared from SQL Account lines shows its references; older test months are marked as not prepared from SQL. Prima records payments; it never makes them."
         actions={
-          data.canAdd.length > 0 && (
-            <>
-              <ImportButton kind="branch" choices={data.canAdd.map((c): [string, string] => [c.id, c.name])} />
-              <button className="btn btn-primary" onClick={() => setAdding(true)}>
-                <PlusIcon size={16} weight="bold" aria-hidden="true" />
-                Propose a new branch
-              </button>
-            </>
-          )
+          <>
+            <SopHelp id="finance-branch-month" />
+            {data.canAdd.length > 0 && (
+              <>
+                <ImportButton kind="branch" choices={data.canAdd.map((c): [string, string] => [c.id, c.name])} />
+                <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                  Propose a new branch
+                </button>
+              </>
+            )}
+          </>
         }
       />
       <Stats>
@@ -112,45 +152,24 @@ export function BranchesView() {
           </Empty>
         </Card>
       )}
-      {companies.map((name) => {
-        const rows = data.rows.filter((r) => r.companyName === name);
-        return (
-          <Card key={name} title={name} sub={`${rows.length} branch${rows.length === 1 ? '' : 'es'}`} flush>
-            <ul className="bz-rows">
-              {rows.map((r) => {
-                const [tone, label] = branchState(r);
-                return (
-                  <li key={r.branch.id}>
-                    <button className="bz-row bz-br-row" data-tone={tone === 'ok' ? undefined : tone} onClick={() => setOpen(r.branch.id)}>
-                      <span className="bz-row-main">
-                        <span className="bz-row-title">{r.branch.name}</span>
-                        <span className="bz-row-meta">
-                          {r.agreement ? `Model ${r.agreement.model} · ${r.agreement.managerName}` : 'No signed agreement'} · {r.sites} sites
-                        </span>
-                        {r.queue.length > 0 && <span className="bz-row-meta bz-br-todo">{r.queue.length} to review</span>}
-                        {r.purchasesAwaiting ? (
-                          <span className="bz-row-meta bz-br-todo">
-                            {r.purchasesAwaiting} request{r.purchasesAwaiting === 1 ? '' : 's'} (purchases or expenses) to decide
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="bz-row-side">
-                        {r.split && (
-                          <>
-                            <span className="bz-amt">{rm(r.split.companyShare)}</span>
-                            <span className="bz-sub">company keeps</span>
-                          </>
-                        )}
-                        <Chip tone={tone}>{label}</Chip>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
-        );
-      })}
+      {/* P107: one table for every company's branches (it was a card per company), with a company filter. */}
+      {companies.length > 0 && (
+        <Card>
+          <DataTable
+            label="Branches"
+            stateKey="branches.list"
+            rows={data.rows}
+            rowKey={(r) => r.branch.id}
+            columns={BRANCH_COLUMNS}
+            filters={BRANCH_FILTERS}
+            onRowClick={(r) => setOpen(r.branch.id)}
+            rowTone={(r) => {
+              const [tone] = branchState(r);
+              return tone === 'warn' || tone === 'crit' ? tone : undefined;
+            }}
+          />
+        </Card>
+      )}
       {row && <BranchDrawer row={row} onClose={() => setOpen(null)} />}
       {adding && <AddBranch companies={data.canAdd} onClose={() => setAdding(false)} />}
     </div>
@@ -1390,6 +1409,46 @@ function FeeForm({ row: r }: { row: Row }) {
   );
 }
 
+type JvStaff = BranchJv['staff'][number];
+type JvPurchase = BranchJv['purchases'][number];
+
+/** P107: a JV branch's staff (it was a list cut at 50); pay shows only to those who see it, as before. */
+const JV_STAFF_COLUMNS: DtColumn<JvStaff>[] = [
+  { id: 'name', label: 'Name', value: (p) => p.name, phone: 'title' },
+  { id: 'no', label: 'Staff number', value: (p) => p.staffNo, phone: 'sub' },
+  { id: 'role', label: 'Role', value: (p) => p.role, translate: true },
+  { id: 'status', label: 'Status', value: (p) => p.status, translate: true },
+  { id: 'pay', label: 'Basic pay', value: (p) => p.basicPay ?? null, sort: 'money', render: (p) => (p.basicPay != null ? rm(p.basicPay) : '–') },
+];
+const JV_STAFF_FILTERS: DtFilter<JvStaff>[] = [
+  { id: 'role', label: 'Role', value: (p) => p.role },
+  { id: 'status', label: 'Status', value: (p) => p.status },
+];
+
+/** P107: a JV branch's purchases (it was a list cut at 30; the server sends the latest 300, newest first). */
+const JV_PURCHASE_COLUMNS: DtColumn<JvPurchase>[] = [
+  { id: 'item', label: 'Item', value: (p) => p.item, render: (p) => <strong>{p.item}</strong>, phone: 'title' },
+  { id: 'kind', label: 'Kind', value: (p) => p.kind, translate: true },
+  { id: 'on', label: 'Date', value: (p) => p.on, sort: 'date', render: (p) => dateLabel(p.on) },
+  { id: 'supplier', label: 'Supplier', value: (p) => p.supplier, phone: 'sub' },
+  { id: 'invoice', label: 'Invoice number', value: (p) => p.invoiceRef, hideBelow: 1200, phone: 'hidden' },
+  { id: 'by', label: 'Recorded by', value: (p) => p.by, hideBelow: 1100, phone: 'hidden' },
+  { id: 'amount', label: 'Amount', value: (p) => p.amount, sort: 'money', render: (p) => <strong className="bz-amt">{rm(p.amount)}</strong> },
+];
+const openQuery = (p: JvPurchase) => p.queries.find((q) => !q.answer);
+const JV_PURCHASE_FILTERS: DtFilter<JvPurchase>[] = [
+  { id: 'kind', label: 'Kind', value: (p) => p.kind },
+  {
+    id: 'query',
+    label: 'Open question',
+    value: (p) => (openQuery(p) ? 'yes' : 'no'),
+    options: [
+      { value: 'yes', label: 'Yes' },
+      { value: 'no', label: 'No' },
+    ],
+  },
+];
+
 /**
  * A JV branch (Model A or C): its staff, their pay from the company's staff payroll, and what the Branch Manager bought
  * (Fauzan, 4 Nov 2026). The Branch Manager buys from any supplier; the company sees every purchase and may ask about
@@ -1417,15 +1476,14 @@ function JvPanel({ row: r }: { row: Row }) {
       </p>
       <h4>Staff ({d.staff.length})</h4>
       {d.staff.length ? (
-        <ul className="bz-br-log">
-          {d.staff.slice(0, 50).map((p) => (
-            <li key={p.id}>
-              {p.name} <span className="bz-sub">{p.staffNo}</span> · {p.role} · {p.status}
-              {p.basicPay != null ? ` · ${rm(p.basicPay)}` : ''}
-            </li>
-          ))}
-          {d.staff.length > 50 && <li className="bz-sub">and {d.staff.length - 50} more</li>}
-        </ul>
+        <DataTable
+          label="Staff"
+          stateKey={`branches.jvStaff.${r.branch.id}`}
+          rows={d.staff}
+          rowKey={(p) => p.id}
+          columns={d.seesPay ? JV_STAFF_COLUMNS : JV_STAFF_COLUMNS.filter((c) => c.id !== 'pay')}
+          filters={JV_STAFF_FILTERS}
+        />
       ) : (
         <p className="muted small">No staff are tagged to this branch.</p>
       )}
@@ -1505,22 +1563,20 @@ function JvPanel({ row: r }: { row: Row }) {
         </p>
       )}
       {d.purchases.length ? (
-        <ul className="bz-br-list">
-          {d.purchases.slice(0, 30).map((p) => {
-            const open = p.queries.find((q) => !q.answer);
+        <DataTable
+          label="Purchases"
+          stateKey={`branches.jvPurchases.${r.branch.id}`}
+          rows={d.purchases}
+          rowKey={(p) => p.id}
+          columns={JV_PURCHASE_COLUMNS}
+          filters={JV_PURCHASE_FILTERS}
+          rowTone={(p) => (openQuery(p) ? 'warn' : undefined)}
+          rowDetail={(p) => {
+            const open = openQuery(p);
+            const canAct = (d.canQuery && !open) || (d.canAnswer && open);
+            if (!p.queries.length && !canAct) return null;
             return (
-              <li key={p.id} className="bz-br-item" data-tone={open ? 'warn' : undefined}>
-                <div className="bz-br-item-top">
-                  <div className="bz-row-main">
-                    <span className="bz-row-title">
-                      {p.item} <span className="bz-sub">({p.kind})</span>
-                    </span>
-                    <span className="bz-row-meta">
-                      {dateLabel(p.on)} · {p.supplier} · {p.invoiceRef} · {p.by}
-                    </span>
-                  </div>
-                  <strong className="bz-amt">{rm(p.amount)}</strong>
-                </div>
+              <>
                 {p.queries.length > 0 && (
                   <ul className="bz-br-log">
                     {p.queries.map((q, i) => (
@@ -1531,7 +1587,7 @@ function JvPanel({ row: r }: { row: Row }) {
                     ))}
                   </ul>
                 )}
-                {((d.canQuery && !open) || (d.canAnswer && open)) && (
+                {canAct && (
                   <div className="bz-br-inline">
                     <input className="input" aria-label={d.canAnswer ? 'Answer' : 'Question'} placeholder={d.canAnswer ? 'Your answer' : 'Ask about this purchase'} value={ask[p.id] ?? ''} onChange={(e) => setAsk({ ...ask, [p.id]: e.target.value })} />
                     <button
@@ -1543,10 +1599,10 @@ function JvPanel({ row: r }: { row: Row }) {
                     </button>
                   </div>
                 )}
-              </li>
+              </>
             );
-          })}
-        </ul>
+          }}
+        />
       ) : (
         <p className="muted small">No purchases recorded.</p>
       )}
@@ -1601,6 +1657,61 @@ function JvPanel({ row: r }: { row: Row }) {
   );
 }
 
+/** P107: a Model B branch's purchase and expense requests (it was a list cut at 30); the request's state in words. */
+const requestState = (p: JvPurchase, STATE: Record<string, string>) => {
+  const a = p.approval!;
+  return a.status === 'consented' && a.rule ? `Waiting for the ${BRANCH_APPROVER_LABEL[a.rule.approver]}` : (STATE[a.status] ?? a.status);
+};
+const requestAmount = (p: JvPurchase) => (p.approval!.status === 'bought' ? p.amount : p.approval!.quotedAmount);
+const salariedColumns = (STATE: Record<string, string>): DtColumn<JvPurchase>[] => [
+  {
+    id: 'item',
+    label: 'Item',
+    value: (p) => p.item,
+    render: (p) => (
+      <strong>
+        {p.category === 'expense' ? 'Expense: ' : ''}
+        {p.item}
+      </strong>
+    ),
+    phone: 'title',
+  },
+  { id: 'category', label: 'Category', value: (p) => (p.category === 'expense' ? 'Expense' : 'Purchase'), translate: true, hideBelow: 1200, phone: 'hidden' },
+  { id: 'kind', label: 'Kind', value: (p) => p.kind, translate: true, hideBelow: 1100, phone: 'hidden' },
+  { id: 'supplier', label: 'Supplier', value: (p) => p.supplier, phone: 'sub' },
+  { id: 'ref', label: 'Reference', value: (p) => p.approval!.quoteRef, hideBelow: 1200, phone: 'hidden' },
+  { id: 'by', label: 'Asked by', value: (p) => p.approval!.requestedBy, hideBelow: 1100 },
+  { id: 'on', label: 'Date', value: (p) => p.approval!.requestedAt.slice(0, 10), sort: 'date' },
+  { id: 'state', label: 'Status', value: (p) => requestState(p, STATE), translate: true },
+  { id: 'amount', label: 'Amount', value: requestAmount, sort: 'money', render: (p) => <strong className="bz-amt">{rm(requestAmount(p))}</strong> },
+];
+const salariedFilters = (STATE: Record<string, string>, d: BranchJv): DtFilter<JvPurchase>[] => [
+  {
+    id: 'category',
+    label: 'Category',
+    value: (p) => (p.category === 'expense' ? 'expense' : 'purchase'),
+    options: [
+      { value: 'purchase', label: 'Purchase' },
+      { value: 'expense', label: 'Expense' },
+    ],
+  },
+  { id: 'kind', label: 'Kind', value: (p) => p.kind },
+  { id: 'state', label: 'Status', value: (p) => p.approval!.status, optionLabel: (s) => STATE[s] ?? s },
+  ...(Object.keys(d.actionFor).length
+    ? [
+        {
+          id: 'mine',
+          label: 'Waiting for me',
+          value: (p: JvPurchase) => (d.actionFor[p.id] ? 'yes' : 'no'),
+          options: [
+            { value: 'yes', label: 'Yes' },
+            { value: 'no', label: 'No' },
+          ],
+        },
+      ]
+    : []),
+];
+
 /**
  * A Model B branch (salaried Branch Manager, V12): the company runs it. The manager is the company's employee on the
  * signed salary, and every purchase is approved by the company manager first. Approved purchases count in the month only
@@ -1638,30 +1749,30 @@ function SalariedPanel({ row: r }: { row: Row }) {
       </p>
       <h4>Purchase and expense requests</h4>
       {requests.length ? (
-        <ul className="bz-br-list">
-          {requests.slice(0, 30).map((p) => {
+        <DataTable
+          label="Purchase and expense requests"
+          stateKey={`branches.salariedRequests.${r.branch.id}`}
+          rows={requests}
+          rowKey={(p) => p.id}
+          columns={salariedColumns(STATE)}
+          filters={salariedFilters(STATE, d)}
+          rowTone={(p) => (d.actionFor[p.id] ? 'warn' : undefined)}
+          rowDetail={(p) => {
             const a = p.approval!;
             const i = inv[p.id] ?? { on: '', amount: String(a.quotedAmount), invoiceRef: '' };
+            // The consent and decision notes and the recorded invoice, as the row's second line said them.
+            const notes = [
+              a.consentBy ? `consent ${a.consentBy}: ${a.consentNote}` : '',
+              a.decidedBy && a.decidedById !== a.consentById ? `${a.decidedBy}: ${a.decisionNote}` : '',
+              a.status === 'bought' ? `invoice ${p.invoiceRef} on ${dateLabel(p.on)}` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ');
+            const record = a.status === 'approved' && d.canRecordBought;
+            if (!notes && !d.actionFor[p.id] && !record) return null;
             return (
-              <li key={p.id} className="bz-br-item" data-tone={d.actionFor[p.id] ? 'warn' : undefined}>
-                <div className="bz-br-item-top">
-                  <div className="bz-row-main">
-                    <span className="bz-row-title">
-                      {p.category === 'expense' ? 'Expense: ' : ''}
-                      {p.item} <span className="bz-sub">({p.kind})</span>
-                    </span>
-                    <span className="bz-row-meta">
-                      {p.supplier} · {p.category === 'expense' ? 'estimate' : 'quotation'} {a.quoteRef} · asked by {a.requestedBy} {dateLabel(a.requestedAt.slice(0, 10))}
-                    </span>
-                    <span className="bz-row-meta">
-                      {a.status === 'consented' && a.rule ? `Waiting for the ${BRANCH_APPROVER_LABEL[a.rule.approver]}` : (STATE[a.status] ?? a.status)}
-                      {a.consentBy ? ` · consent ${a.consentBy}: ${a.consentNote}` : ''}
-                      {a.decidedBy && a.decidedById !== a.consentById ? ` · ${a.decidedBy}: ${a.decisionNote}` : ''}
-                      {a.status === 'bought' ? ` · invoice ${p.invoiceRef} on ${dateLabel(p.on)}` : ''}
-                    </span>
-                  </div>
-                  <strong className="bz-amt">{rm(a.status === 'bought' ? p.amount : a.quotedAmount)}</strong>
-                </div>
+              <>
+                {notes && <span className="bz-row-meta">{notes}</span>}
                 {d.actionFor[p.id] && (
                   <div className="bz-br-inline">
                     <input className="input" aria-label="Decision comment" placeholder="Comment or reason (needed)" value={note[p.id] ?? ''} onChange={(e) => setNote({ ...note, [p.id]: e.target.value })} />
@@ -1711,10 +1822,10 @@ function SalariedPanel({ row: r }: { row: Row }) {
                     </button>
                   </div>
                 )}
-              </li>
+              </>
             );
-          })}
-        </ul>
+          }}
+        />
       ) : (
         <p className="muted small">No purchase or expense requests.</p>
       )}

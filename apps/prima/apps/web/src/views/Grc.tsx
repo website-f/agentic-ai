@@ -1,9 +1,11 @@
 import { Select } from '../SearchSelect';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { FirstAidKitIcon, GiftIcon, MegaphoneIcon, PlusIcon, QuestionIcon, ShieldWarningIcon, StampIcon } from '@phosphor-icons/react';
 import type { GrcStream } from '@prima/core';
 import { api, type GiftInput, type GrcBoard, type WhistleInput } from '../api';
-import { useApp } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { SopHelp } from '../sop/SopHelp';
 import { Card, Empty, PageHead, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { ImportButton } from './ImportDrawer';
@@ -16,6 +18,8 @@ import '../styles/gov.css';
  */
 
 type Tab = 'speak' | 'gifts' | 'obligations' | 'osh' | 'reports' | 'hr';
+/** P121: the tabs a link may ask for (#grc/gifts); a tab this person does not have falls back to Speak up. */
+const GRC_TABS: readonly Tab[] = ['speak', 'gifts', 'obligations', 'osh', 'reports', 'hr'];
 type Obl = GrcBoard['obligations'][number];
 
 const STREAM: Record<GrcStream, string> = {
@@ -49,9 +53,146 @@ const CATEGORY: Record<WhistleInput['category'], string> = {
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const toneOf = (t: string) => (t === 'crit' ? 'crit' : t === 'warn' ? 'warn' : undefined);
 
+/**
+ * P107: the long GRC lists as tables. A row opens its full card (steps, notes and the forms for the next step) in a
+ * drawer, the same card the list showed inline before; the row is looked up again after each step.
+ */
+function GrcTable<T>(p: {
+  label: string;
+  stateKey: string;
+  rows: T[];
+  rowKey: (r: T) => string;
+  columns: DtColumn<T>[];
+  filters?: DtFilter<T>[];
+  title: (r: T) => string;
+  sub?: (r: T) => string;
+  card: (r: T) => ReactNode;
+  rowTone?: (r: T) => 'warn' | 'crit' | 'info' | undefined;
+  empty?: ReactNode;
+}) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = openId ? p.rows.find((r) => p.rowKey(r) === openId) : undefined;
+  return (
+    <>
+      <div className="gv-card-intro">
+        <DataTable
+          label={p.label}
+          stateKey={p.stateKey}
+          rows={p.rows}
+          rowKey={p.rowKey}
+          columns={p.columns}
+          filters={p.filters}
+          onRowClick={(r) => setOpenId(p.rowKey(r))}
+          rowTone={p.rowTone}
+          empty={p.empty}
+        />
+      </div>
+      {opened && (
+        <Drawer title={p.title(opened)} sub={p.sub?.(opened)} onClose={() => setOpenId(null)}>
+          {p.card(opened)}
+        </Drawer>
+      )}
+    </>
+  );
+}
+
+type GiftRow = GrcBoard['gifts'][number];
+type OshRow = GrcBoard['osh'][number];
+type Handled = GrcBoard['handled'][number];
+type HrRead = NonNullable<Awaited<ReturnType<typeof api.grcBoard>>['hrReads']>[number];
+const giftState = (row: GiftRow): ['ok' | 'info' | 'warn', string] => {
+  const g = row.gift;
+  return [g.decision ? (g.decision.outcome === 'approved' ? 'ok' : 'info') : g.needsDecision ? 'warn' : 'ok', g.decision ? `Decided: ${g.decision.outcome}` : g.needsDecision ? 'Decision needed' : 'Recorded'];
+};
+const GIFT_COLUMNS: DtColumn<GiftRow>[] = [
+  { id: 'who', label: 'Declared by', value: (r) => r.gift.declarantName, render: (r) => <strong>{r.gift.declarantName}</strong>, phone: 'sub' },
+  { id: 'what', label: 'Gift', value: (r) => r.gift.description, phone: 'title' },
+  { id: 'direction', label: 'Direction', value: (r) => (r.gift.direction === 'received' ? 'Received' : 'Given'), translate: true, hideBelow: 1100 },
+  { id: 'party', label: 'From or to', value: (r) => r.gift.counterparty, render: (r) => <span>{r.gift.counterparty} <span className="muted small">({r.gift.counterpartyKind.toLowerCase().replace('_', ' ')})</span></span>, hideBelow: 1000 },
+  { id: 'value', label: 'Value', value: (r) => r.gift.value, sort: 'money' },
+  { id: 'on', label: 'Date', value: (r) => r.gift.on, sort: 'date' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, hideBelow: 1200 },
+  {
+    id: 'state',
+    label: 'Status',
+    value: (r) => giftState(r)[1],
+    translate: true,
+    render: (r) => (
+      <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+        {r.gift.cash && <Chip tone="crit">Cash</Chip>}
+        <Chip tone={giftState(r)[0]}>{giftState(r)[1]}</Chip>
+      </span>
+    ),
+  },
+];
+const GIFT_FILTERS: DtFilter<GiftRow>[] = [
+  { id: 'state', label: 'Status', value: (r) => (r.gift.decision ? 'decided' : r.gift.needsDecision ? 'needed' : 'recorded'), options: [{ value: 'needed', label: 'Decision needed' }, { value: 'decided', label: 'Decided' }, { value: 'recorded', label: 'Recorded' }] },
+  { id: 'direction', label: 'Direction', value: (r) => r.gift.direction, options: [{ value: 'received', label: 'Received' }, { value: 'given', label: 'Given' }] },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'cash', label: 'Cash', value: (r) => (r.gift.cash ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Cash' }, { value: 'no', label: 'Not cash' }] },
+];
+const OBL_COLUMNS: DtColumn<Obl>[] = [
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'title', label: 'Obligation', value: (r) => r.item.title, render: (r) => <strong>{r.item.title}</strong>, phone: 'title' },
+  { id: 'stream', label: 'Workstream', value: (r) => STREAM[r.item.stream], translate: true, hideBelow: 1000 },
+  { id: 'every', label: 'Every (months)', value: (r) => r.item.everyMonths, sort: 'number', hideBelow: 1200 },
+  { id: 'basis', label: 'Basis', value: (r) => r.item.basis, sort: false, hideBelow: 1300 },
+  { id: 'due', label: 'Next due', value: (r) => r.dueOn, sort: 'date' },
+  { id: 'state', label: 'Status', value: (r) => STATE[r.state][1], translate: true, render: (r) => <Chip tone={STATE[r.state][0]}>{STATE[r.state][1]}</Chip> },
+];
+const OBL_FILTERS: DtFilter<Obl>[] = [
+  { id: 'stream', label: 'Workstream', value: (r) => r.item.stream, options: Object.entries(STREAM).map(([value, label]) => ({ value, label })), allLabel: 'All workstreams' },
+  { id: 'state', label: 'Status', value: (r) => r.state, options: Object.entries(STATE).map(([value, [, label]]) => ({ value, label })) },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
+const OSH_LABEL = { ok: 'Current', due_soon: 'Review soon', overdue: 'Review overdue', unknown: 'Unknown: none on file' } as const;
+const oshTone = (s: OshRow) => (s.state === 'ok' ? 'ok' : s.state === 'due_soon' ? 'info' : s.state === 'overdue' ? 'crit' : 'warn');
+const OSH_COLUMNS: DtColumn<OshRow>[] = [
+  { id: 'site', label: 'Site', value: (s) => s.siteName, render: (s) => <strong>{s.siteName}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (s) => s.companyName, phone: 'sub' },
+  { id: 'assessed', label: 'Assessed', value: (s) => s.last?.assessedOn, sort: 'date' },
+  { id: 'hazards', label: 'Hazards', value: (s) => s.last?.hazards, sort: 'number', hideBelow: 1000 },
+  { id: 'high', label: 'High risks', value: (s) => s.last?.highRisks, sort: 'number', hideBelow: 1000 },
+  { id: 'review', label: 'Review by', value: (s) => s.last?.nextReviewOn, sort: 'date' },
+  { id: 'state', label: 'Status', value: (s) => OSH_LABEL[s.state], translate: true, render: (s) => <Chip tone={oshTone(s)}>{OSH_LABEL[s.state]}</Chip> },
+];
+const OSH_FILTERS: DtFilter<OshRow>[] = [
+  { id: 'state', label: 'Status', value: (s) => s.state, options: Object.entries(OSH_LABEL).map(([value, label]) => ({ value, label })) },
+  { id: 'company', label: 'Company', value: (s) => s.companyName },
+];
+const handledLabel = (h: Handled) => (h.retaliation ? 'Retaliation reported' : h.ackLate ? 'Acknowledge now' : h.replyWaiting ? 'Reporter wrote' : h.updateDue ? 'Update the reporter' : h.report.status);
+const handledTone = (h: Handled) => (h.ackLate || h.retaliation ? 'crit' : h.report.status === 'closed' && !h.replyWaiting ? 'ok' : 'warn');
+const HANDLED_COLUMNS: DtColumn<Handled>[] = [
+  { id: 'code', label: 'Code', value: (h) => h.report.code, render: (h) => <span className="mono">{h.report.code}</span>, phone: 'sub', width: '8rem' },
+  { id: 'category', label: 'Category', value: (h) => CATEGORY[h.report.category], translate: true, render: (h) => <strong>{CATEGORY[h.report.category]}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (h) => h.companyName },
+  { id: 'at', label: 'Received', value: (h) => h.report.at, sort: 'date' },
+  { id: 'from', label: 'From', value: (h) => (h.report.anonymous ? 'Anonymous' : h.report.reporterName), hideBelow: 1100 },
+  { id: 'state', label: 'Status', value: (h) => handledLabel(h), translate: true, render: (h) => <Chip tone={handledTone(h)}>{handledLabel(h)}</Chip> },
+];
+const HANDLED_FILTERS: DtFilter<Handled>[] = [
+  { id: 'status', label: 'Status', value: (h) => h.report.status },
+  { id: 'category', label: 'Category', value: (h) => h.report.category, options: Object.entries(CATEGORY).map(([value, label]) => ({ value, label })) },
+  { id: 'company', label: 'Company', value: (h) => h.companyName },
+];
+const HR_COLUMNS: DtColumn<HrRead>[] = [
+  { id: 'code', label: 'Code', value: (r) => r.code, render: (r) => <span className="mono">{r.code}</span>, phone: 'sub', width: '8rem' },
+  { id: 'category', label: 'Category', value: (r) => CATEGORY[r.category as WhistleInput['category']] ?? r.category, translate: true, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'handler', label: 'Handled by', value: (r) => r.handlerName, hideBelow: 1000 },
+  { id: 'from', label: 'From', value: (r) => (r.anonymous ? 'Anonymous' : (r.reporterName ?? 'not given')), hideBelow: 1100 },
+  { id: 'at', label: 'Date', value: (r) => r.at.slice(0, 10), sort: 'date' },
+  { id: 'status', label: 'Status', value: (r) => r.status, translate: true, render: (r) => <Chip tone="info">{r.status}</Chip> },
+];
+const HR_FILTERS: DtFilter<HrRead>[] = [
+  { id: 'status', label: 'Status', value: (r) => r.status },
+  { id: 'category', label: 'Category', value: (r) => r.category, optionLabel: (v) => CATEGORY[v as WhistleInput['category']] ?? v },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
+
 export function GrcView() {
   const { data, error } = useLoad(() => api.grcBoard(), []);
-  const [tab, setTab] = useState<Tab>('speak');
+  const [tabPick, setTab] = useRouteTab<Tab>('speak', GRC_TABS);
   const [adding, setAdding] = useState(false);
   if (error)
     return (
@@ -74,6 +215,7 @@ export function GrcView() {
   if (sees) tabs.push(['obligations', 'Obligations'], ['osh', 'Site safety']);
   if (data.handled.length || data.toReview.length) tabs.push(['reports', `Reports to handle (${k.reportsToHandle})`]);
   if (data.hrReads?.length) tabs.push(['hr', `Reports for HR (${data.hrReads.length})`]);
+  const tab: Tab = tabs.some(([t]) => t === tabPick) ? tabPick : 'speak';
   return (
     <div className="page gv-page">
       <PageHead
@@ -82,6 +224,7 @@ export function GrcView() {
         actions={
           data.obligationCompanies.length > 0 ? (
             <>
+              <SopHelp id={tab === 'gifts' ? 'gov-gift' : tab === 'obligations' || tab === 'osh' ? 'gov-obligation-proof' : 'gov-speak-up'} />
               <button className="btn btn-primary" onClick={() => setAdding(true)}>
                 <PlusIcon size={16} /> Add obligation
               </button>
@@ -91,7 +234,9 @@ export function GrcView() {
                 choices={data.obligationCompanies.map((id): [string, string] => [id, data.companies.find((c) => c.id === id)?.name ?? id])}
               />
             </>
-          ) : undefined
+          ) : (
+            <SopHelp id={tab === 'gifts' ? 'gov-gift' : 'gov-speak-up'} />
+          )
         }
       >
         <p className="notice" data-tone="info">
@@ -447,14 +592,19 @@ function Gifts({ data }: { data: GrcBoard }) {
           </div>
         )}
       </div>
-      {!data.gifts.length && <Empty title="No declarations." />}
-      <ul className="gv-list">
-        {data.gifts.map((g) => (
-          <li key={g.gift.id}>
-            <GiftLine g={g} />
-          </li>
-        ))}
-      </ul>
+      <GrcTable
+        label="Gifts"
+        stateKey="gov.grc.gifts"
+        rows={data.gifts}
+        rowKey={(g) => g.gift.id}
+        columns={GIFT_COLUMNS}
+        filters={GIFT_FILTERS}
+        title={(g) => `${g.gift.declarantName}: ${g.gift.description}`}
+        sub={(g) => g.companyName}
+        card={(g) => <GiftLine g={g} />}
+        rowTone={(g) => (giftState(g)[0] === 'warn' ? 'warn' : undefined)}
+        empty={<Empty title="No declarations." />}
+      />
     </Card>
   );
 }
@@ -510,38 +660,34 @@ function GiftLine({ g: row }: { g: GrcBoard['gifts'][number] }) {
 }
 
 function Obligations({ data }: { data: GrcBoard }) {
-  const [stream, setStream] = useState<GrcStream | ''>('');
   const [all, setAll] = useState(false);
-  const rows = data.obligations.filter((o) => (!stream || o.item.stream === stream) && (all || o.state !== 'ok'));
+  // P107: every obligation in a table (was the first 150); the workstream pick-list is now the table's filter.
+  const rows = data.obligations.filter((o) => all || o.state !== 'ok');
   return (
     <div className="gv-stack-sm">
-      <Toolbar
-        end={
+      <Card
+        title="What each company must prove"
+        sub="The company records the proof; internal audit checks it. Only checked, current proof is green."
+        flush
+        actions={
           <button className="btn btn-sm" aria-pressed={all} onClick={() => setAll(!all)}>
             {all ? 'Hide proven' : 'Show proven'}
           </button>
         }
       >
-        <Select className="select gv-filter" aria-label="Workstream" value={stream} onChange={(e) => setStream(e.target.value as GrcStream | '')}>
-          <option value="">All workstreams</option>
-          {Object.entries(STREAM).map(([v, l]) => (
-            <option key={v} value={v}>
-              {l}
-            </option>
-          ))}
-        </Select>
-      </Toolbar>
-      <Card title="What each company must prove" sub="The company records the proof; internal audit checks it. Only checked, current proof is green." flush>
-        {!rows.length && (
-          <Empty title="Nothing open.">{data.obligationCompanies.length ? 'List what a company must prove with "Add obligation" at the top.' : undefined}</Empty>
-        )}
-        <ul className="gv-list">
-          {rows.slice(0, 150).map((o) => (
-            <li key={o.item.id}>
-              <OblLine o={o} />
-            </li>
-          ))}
-        </ul>
+        <GrcTable
+          label="What each company must prove"
+          stateKey="gov.grc.obligations"
+          rows={rows}
+          rowKey={(o) => o.item.id}
+          columns={OBL_COLUMNS}
+          filters={OBL_FILTERS}
+          title={(o) => `${o.companyName}: ${o.item.title}`}
+          sub={(o) => STREAM[o.item.stream]}
+          card={(o) => <OblLine o={o} />}
+          rowTone={(o) => toneOf(STATE[o.state][0])}
+          empty={<Empty title="Nothing open.">{data.obligationCompanies.length ? 'List what a company must prove with "Add obligation" at the top.' : undefined}</Empty>}
+        />
       </Card>
     </div>
   );
@@ -644,14 +790,19 @@ function Osh({ data }: { data: GrcBoard }) {
         </button>
       }
     >
-      {!rows.length && <Empty title="Every site has a current assessment." />}
-      <ul className="gv-list">
-        {rows.slice(0, 100).map((s) => (
-          <li key={s.siteId}>
-            <OshLine s={s} />
-          </li>
-        ))}
-      </ul>
+      <GrcTable
+        label="Site risk assessments"
+        stateKey="gov.grc.osh"
+        rows={rows}
+        rowKey={(s) => s.siteId}
+        columns={OSH_COLUMNS}
+        filters={OSH_FILTERS}
+        title={(s) => s.siteName}
+        sub={(s) => s.companyName}
+        card={(s) => <OshLine s={s} />}
+        rowTone={(s) => toneOf(oshTone(s))}
+        empty={<Empty title="Every site has a current assessment." />}
+      />
     </Card>
   );
 }
@@ -766,14 +917,19 @@ function Reports({ data }: { data: GrcBoard }) {
         sub={`Acknowledge within ${data.rule.whistleAckDays} days. Keep the reporter's identity confidential; never share the report with anyone it names.`}
         flush
       >
-        {!data.handled.length && <Empty title="No reports to handle." />}
-        <ul className="gv-list">
-          {data.handled.map((h) => (
-            <li key={h.report.id}>
-              <ReportLine h={h} />
-            </li>
-          ))}
-        </ul>
+        <GrcTable
+          label="Reports you handle"
+          stateKey="gov.grc.handled"
+          rows={data.handled}
+          rowKey={(h) => h.report.id}
+          columns={HANDLED_COLUMNS}
+          filters={HANDLED_FILTERS}
+          title={(h) => `${h.report.code}: ${CATEGORY[h.report.category]}`}
+          sub={(h) => h.companyName}
+          card={(h) => <ReportLine h={h} />}
+          rowTone={(h) => toneOf(handledTone(h))}
+          empty={<Empty title="No reports to handle." />}
+        />
       </Card>
       {data.toReview.length > 0 && (
         <Card title="Closures for a second handler to agree" flush>
@@ -1099,10 +1255,26 @@ function NewObligation({ data, onDone }: { data: GrcBoard; onDone: (saved: boole
 function HrReads({ rows }: { rows: NonNullable<Awaited<ReturnType<typeof api.grcBoard>>['hrReads']> }) {
   return (
     <Card title="Reports for HR" sub="Read only. The handler decides and talks to the reporter. Reports that name you are not shown. An anonymous reporter is never identified." flush>
-      {!rows.length && <Empty title="No reports for HR." />}
-      <ul className="gv-list">
-        {rows.map((r) => (
-          <li key={r.code} className="gv-item">
+      <GrcTable
+        label="Reports for HR"
+        stateKey="gov.grc.hr"
+        rows={rows}
+        rowKey={(r) => r.code}
+        columns={HR_COLUMNS}
+        filters={HR_FILTERS}
+        title={(r) => `${r.code} · ${CATEGORY[r.category as WhistleInput['category']] ?? r.category}`}
+        sub={(r) => r.companyName}
+        card={(r) => <HrReadLine r={r} />}
+        empty={<Empty title="No reports for HR." />}
+      />
+    </Card>
+  );
+}
+
+function HrReadLine({ r }: { r: HrRead }) {
+  return (
+    <ul className="gv-list">
+          <li className="gv-item">
             <div className="gv-item-head">
               <div className="gv-item-main">
                 <div className="gv-item-title">
@@ -1126,8 +1298,6 @@ function HrReads({ rows }: { rows: NonNullable<Awaited<ReturnType<typeof api.grc
               )}
             </div>
           </li>
-        ))}
-      </ul>
-    </Card>
+    </ul>
   );
 }

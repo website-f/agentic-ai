@@ -1,9 +1,11 @@
 import { Select } from '../SearchSelect';
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { api } from "../api";
 import type { DirectorOfficeCounter } from "../api/types";
+import { DataTable, type DtColumn, type DtFilter } from "../DataTable";
 import {
   Chip,
+  Drawer,
   ErrorNotice,
   Kpi,
   Loading,
@@ -42,6 +44,12 @@ const STATUS: Record<
  * The Director Office's counter of reports and meetings (Fauzan, 4 Nov 2026): every report each company and
  * department sent each month, with the date and time sent, and every meeting with whether its minutes are in.
  */
+type Sender = DirectorOfficeCounter["reports"]["senders"][number];
+type Group = DirectorOfficeCounter["meetings"]["groups"][number];
+const SENDER_FILTERS: DtFilter<Sender>[] = [
+  { id: "app", label: "On Prima", value: (s) => (s.onApp ? "yes" : "no"), options: [{ value: "yes", label: "On Prima" }, { value: "no", label: "Not on Prima yet" }] },
+];
+
 export function DirectorOfficeCounterPanel() {
   const { data, error } = useLoad(() => api.directorOfficeCounter(), []);
   const [m, setM] = useState<number | null>(null);
@@ -58,6 +66,36 @@ export function DirectorOfficeCounterPanel() {
   const missing = data.meetings.missingMinutes.filter(
     (x) => x.start.slice(0, 7) === month,
   );
+  const senderLog = (s: Sender) =>
+    s.log.filter((l) => (l.period.includes("-W") ? l.label.replace("Week of ", "").slice(0, 7) : l.period) === month);
+  const openSender = data.reports.senders.find((s) => s.key === open);
+  const senderColumns: DtColumn<Sender>[] = [
+    {
+      id: "name",
+      label: "Company or department",
+      value: (s) => s.name,
+      render: (s) => (
+        <span>
+          <strong>{s.name}</strong>
+          {!s.onApp && <span className="muted small"> (not on Prima yet)</span>}
+        </span>
+      ),
+      phone: "title",
+    },
+    { id: "sent", label: "Sent", value: (s) => (s.onApp ? s.months[i].onTime + s.months[i].late : null), sort: "number", render: (s) => (s.onApp ? `${s.months[i].onTime + s.months[i].late} of ${s.months[i].expected}` : "-") },
+    { id: "onTime", label: "On time", value: (s) => s.months[i].onTime, sort: "number" },
+    { id: "late", label: "Late", value: (s) => s.months[i].late, sort: "number" },
+    { id: "missing", label: "Not sent", value: (s) => s.months[i].missing, sort: "number" },
+  ];
+  const groupColumns: DtColumn<Group>[] = [
+    { id: "name", label: "Company, department or group", value: (g) => g.name, render: (g) => <strong>{g.name}</strong>, phone: "title" },
+    { id: "held", label: "Held", value: (g) => g.months[i].held, sort: "number" },
+    { id: "minutes", label: "Minutes in", value: (g) => g.months[i].minutes, sort: "number" },
+    { id: "noMinutes", label: "No minutes", value: (g) => g.months[i].noMinutes, sort: "number" },
+    { id: "summary", label: "Summary checked", value: (g) => g.months[i].summaryChecked, sort: "number", hideBelow: 1100 },
+    { id: "scheduled", label: "Still to come", value: (g) => g.months[i].scheduled, sort: "number", hideBelow: 1100 },
+    { id: "cancelled", label: "Cancelled", value: (g) => g.months[i].cancelled, sort: "number", hideBelow: 1100 },
+  ];
   return (
     <section className="panel">
       <div className="panel-head">
@@ -104,135 +142,41 @@ export function DirectorOfficeCounterPanel() {
       </div>
 
       <h4 style={{ margin: "12px 0 4px" }}>Reports, {monthLabel(month)}</h4>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Company or department</th>
-              <th className="num">Sent</th>
-              <th className="num">On time</th>
-              <th className="num">Late</th>
-              <th className="num">Not sent</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.reports.senders.length === 0 && (
-              <tr>
-                <td colSpan={5} className="muted">
-                  No reports are set yet.
-                </td>
-              </tr>
-            )}
-            {data.reports.senders.map((s) => {
-              const c = s.months[i];
-              const log = s.log.filter(
-                (l) =>
-                  (l.period.includes("-W")
-                    ? l.label.replace("Week of ", "").slice(0, 7)
-                    : l.period) === month,
-              );
-              return (
-                <Fragment key={s.key}>
-                  <tr
-                    style={{ cursor: "pointer" }}
-                    onClick={() => setOpen(open === s.key ? null : s.key)}
-                  >
-                    <td>
-                      {open === s.key ? "▾ " : "▸ "}
-                      {s.name}
-                      {!s.onApp && (
-                        <span className="muted small"> (not on Prima yet)</span>
-                      )}
-                    </td>
-                    <td className="num">
-                      {s.onApp ? `${c.onTime + c.late} of ${c.expected}` : "-"}
-                    </td>
-                    <td className="num">{c.onTime}</td>
-                    <td className="num">{c.late}</td>
-                    <td className="num">{c.missing}</td>
-                  </tr>
-                  {open === s.key && (
-                    <tr>
-                      <td colSpan={5}>
-                        {log.length === 0 && (
-                          <div className="muted small">
-                            No report was due this month.
-                          </div>
-                        )}
-                        {log.map((l) => (
-                          <div
-                            key={l.report + l.period}
-                            className="row small"
-                            style={{
-                              gap: 6,
-                              flexWrap: "wrap",
-                              marginBottom: 2,
-                            }}
-                          >
-                            <Chip tone={STATUS[l.status]?.tone ?? "neutral"}>
-                              {STATUS[l.status]?.text ?? l.status}
-                            </Chip>
-                            <span>
-                              {l.report} · {l.label} · due {dateLabel(l.due)}
-                              {l.sentAt
-                                ? ` · sent ${dateTimeLabel(l.sentAt)} by ${l.by}`
-                                : ""}
-                            </span>
-                          </div>
-                        ))}
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Reports counter"
+        stateKey="board.doa.counter.reports"
+        rows={data.reports.senders}
+        rowKey={(s) => s.key}
+        columns={senderColumns}
+        filters={SENDER_FILTERS}
+        onRowClick={(s) => setOpen(s.key)}
+        empty={<div className="muted small">No reports are set yet.</div>}
+      />
+      {openSender && (
+        <Drawer title={openSender.name} sub={`Reports, ${monthLabel(month)}`} onClose={() => setOpen(null)}>
+          {senderLog(openSender).length === 0 && <div className="muted small">No report was due this month.</div>}
+          {senderLog(openSender).map((l) => (
+            <div key={l.report + l.period} className="row small" style={{ gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
+              <Chip tone={STATUS[l.status]?.tone ?? "neutral"}>{STATUS[l.status]?.text ?? l.status}</Chip>
+              <span>
+                {l.report} · {l.label} · due {dateLabel(l.due)}
+                {l.sentAt ? ` · sent ${dateTimeLabel(l.sentAt)} by ${l.by}` : ""}
+              </span>
+            </div>
+          ))}
+        </Drawer>
+      )}
 
       <h4 style={{ margin: "12px 0 4px" }}>Meetings, {monthLabel(month)}</h4>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Company, department or group</th>
-              <th className="num">Held</th>
-              <th className="num">Minutes in</th>
-              <th className="num">No minutes</th>
-              <th className="num hide-sm">Summary checked</th>
-              <th className="num hide-sm">Still to come</th>
-              <th className="num hide-sm">Cancelled</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.meetings.groups.filter((gr) =>
-              Object.values(gr.months[i]).some((v) => v > 0),
-            ).length === 0 && (
-              <tr>
-                <td colSpan={7} className="muted">
-                  No meetings this month.
-                </td>
-              </tr>
-            )}
-            {data.meetings.groups
-              .filter((gr) => Object.values(gr.months[i]).some((v) => v > 0))
-              .map((gr) => {
-                const c = gr.months[i];
-                return (
-                  <tr key={gr.key}>
-                    <td>{gr.name}</td>
-                    <td className="num">{c.held}</td>
-                    <td className="num">{c.minutes}</td>
-                    <td className="num">{c.noMinutes}</td>
-                    <td className="num hide-sm">{c.summaryChecked}</td>
-                    <td className="num hide-sm">{c.scheduled}</td>
-                    <td className="num hide-sm">{c.cancelled}</td>
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Meetings counter"
+        stateKey="board.doa.counter.meetings"
+        rows={data.meetings.groups.filter((gr) => Object.values(gr.months[i]).some((v) => v > 0))}
+        rowKey={(g) => g.key}
+        columns={groupColumns}
+        phoneFacts={6}
+        empty={<div className="muted small">No meetings this month.</div>}
+      />
       {missing.length > 0 && (
         <div style={{ marginTop: 8 }}>
           <div className="small" style={{ fontWeight: 600 }}>
