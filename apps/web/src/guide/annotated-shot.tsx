@@ -267,14 +267,30 @@ export function ShotThumb({ shot, alt, className }: { shot?: GuideShot; alt: str
       </div>
     );
   }
+  return <ThumbImg shot={shot} alt={alt} className={className} />;
+}
+
+/** P122 (speed): a card shows only the top of the page, so it loads the small picture made for it
+ * (scripts/guide-thumbs.py: the top at 16:10, 480 px wide, ~8 KB instead of ~70 KB), and the full
+ * shot only if that is missing. */
+export function thumbOf(src: string): string {
+  return src.replace("/guide-media/shots/", "/guide-media/thumbs/");
+}
+
+function ThumbImg({ shot, alt, className }: { shot: GuideShot; alt: string; className?: string }) {
+  const thumb = thumbOf(shot.src);
+  const [src, setSrc] = useState(thumb);
   return (
     <img
-      src={shot.src}
-      width={shot.w}
-      height={shot.h}
+      src={src}
+      width={480}
+      height={300}
       alt={alt}
       loading="lazy"
       decoding="async"
+      onError={() => {
+        if (src !== shot.src) setSrc(shot.src);
+      }}
       className={cn("block aspect-[16/10] w-full object-cover object-top", className)}
     />
   );
