@@ -3409,3 +3409,77 @@ button.k-stat:active {
     display: none;
   }
 }
+
+/* P123: the Agentic Office, the last entry of Prima's home menu and of the phone's More sheet. */
+.agentic-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, transform 0.15s;
+}
+.agentic-entry:hover {
+  background: var(--surface-2);
+  border-color: color-mix(in oklab, var(--primary) 40%, var(--line));
+}
+.agentic-entry:active {
+  transform: translateY(1px);
+}
+.agentic-entry:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.agentic-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #1f6f5c;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+}
+.agentic-text {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+.agentic-text strong {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.agentic-text small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+.agentic-caret {
+  margin-left: auto;
+  flex: none;
+  color: var(--muted);
+}
+.agentic-entry-sheet {
+  border-radius: var(--r-sm, 8px);
+}
+
+.agentic-entries {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.agentic-entries-sheet {
+  padding: 8px 0;
+}
+.agentic-entries .agentic-entry:nth-child(2) .agentic-mark {
+  background: var(--primary);
+}

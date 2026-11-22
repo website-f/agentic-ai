@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { ApiError, errorMessage, readCookie } from "@/lib/api";
 import { meQuery, setupStatusQuery } from "@/lib/queries";
+import { inOffice, setInOffice, startsInPrima } from "@/lib/start-in-prima";
 import { assistantsFallback, canAssist, TWIN_TABS, type TwinTab } from "@/lib/my-ai";
 import { staffOnly, twinQuery } from "@/lib/twin";
 import type { AppPath } from "@/nav";
@@ -212,6 +213,7 @@ const loginRoute = createRoute({
     ]);
     if (signedIn) throw redirect({ to: "/" });
     if (s?.needs_setup) throw redirect({ to: "/setup" });
+    setInOffice(false); // P123: signing in starts on Prima again
   },
   // P104: while the person types, the code of where they land next (their workspace, or the
   // page they were on their way to) downloads in the background.
@@ -268,6 +270,12 @@ const appRoute = createRoute({
     if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
     // P99: a Prima-only person has no office pages: Prima opens for them.
     if (me.access === "prima_only") throw redirect({ to: "/prima-only" });
+    // P123: the site's start opens Prima first; "/?office=1" (Prima opened on its own) enters the office.
+    if (location.pathname === "/" && (location.search as { office?: unknown }).office) {
+      setInOffice(true);
+      throw redirect({ to: "/", replace: true });
+    }
+    if (location.pathname === "/" && startsInPrima(me) && !inOffice()) throw redirect({ to: "/prima", replace: true });
     // P36: one guard for every page, the same rule as the sidebar: staff keep to their own
     // desk, their AI and the work they are part of. Their AI's profile is My AI.
     if (!pathAllowed(location.pathname, me.permissions)) {

@@ -1,5 +1,6 @@
 import { setBadge, syncPush } from "@/lib/push";
 import {
+  ArrowLeftIcon,
   BuildingsIcon,
   CaretDownIcon,
   CaretUpDownIcon,
@@ -31,7 +32,10 @@ import { ALL_COMPANIES, useCompanies } from "@/lib/company";
 import { AiFab } from "@/components/ai-fab";
 import { GettingStartedChip } from "@/components/getting-started-chip";
 import { PrimaHost, PrimaWarm } from "@/components/prima-host";
+import { MyAiSheet } from "@/components/my-ai-sheet";
 import { PrimaNav } from "@/components/prima-nav";
+import { usePrima } from "@/lib/prima-embed";
+import { setInOffice, startsInPrima } from "@/lib/start-in-prima";
 import { useBackClose } from "@/lib/back-close";
 import { useLiveEvents } from "@/lib/live";
 import { meQuery, systemStatusQuery } from "@/lib/queries";
@@ -130,8 +134,11 @@ function useVisibleNav() {
         // P52: a hub's pages are one entry (its tabs); hidden pages of a hub can lead it.
         items: sidebarItems(s.items.filter((i) => (!i.hidden || hubOf(i.to)) && allowedItem(i, me.permissions)), me.permissions)
           .filter((i) => showAll || !i.advanced || isActive(pathname, i.to)),
-      })).filter((s) => s.items.length),
-    [me.permissions, showAll, pathname],
+      }))
+        .filter((s) => s.items.length)
+        // P123: Prima is the app people start in, with its own menu: "Back to Prima" replaces the group.
+        .filter((s) => !(s.title === "Prima" && startsInPrima(me))),
+    [me, showAll, pathname],
   );
 }
 
@@ -331,6 +338,7 @@ function Sidebar({ drawer = false, onPick }: { drawer?: boolean; onPick?: () => 
           <SidebarSimpleIcon size={19} weight="fill" />
         </button>
       ) : null}
+      <BackToPrima onPick={onPick} />
       <NavSearch />
       <GettingStartedChip />
       <nav className="flex-1 overflow-y-auto overscroll-contain px-3 pb-4" aria-label={t("Main")}>
@@ -687,6 +695,7 @@ function Header() {
       <Link to="/" className="-m-1.5 p-1.5 md:hidden" aria-label={t("Home")}>
         <LogoMark className="size-7" />
       </Link>
+      <BackToPrima compact />
       <div className="min-w-0 flex-1">
         <BranchSwitcher />
       </div>
@@ -937,20 +946,26 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [setOpen]);
 
+  // P123: Prima shows full screen with its own menu (the office's sidebar, header and tabs wait
+  // behind it, loaded, and cannot be reached); its "Agentic Office" entry brings them back.
+  const primaFull = usePrimaFull();
   return (
-    <div className="flex min-h-dvh md:pr-[env(safe-area-inset-right)] md:pl-[env(safe-area-inset-left)]">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Header />
-        <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
-          <Outlet />
-          {/* P119: Prima, kept loaded once opened (shown on /prima only). */}
-          <PrimaHost />
-        </main>
+    <>
+      {/* P119: Prima, kept loaded once opened. P123: first, so it never reloads. */}
+      <PrimaHost />
+      <div className="flex min-h-dvh md:pr-[env(safe-area-inset-right)] md:pl-[env(safe-area-inset-left)]" inert={primaFull || undefined}>
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Header />
+          <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
+            <Outlet />
+          </main>
+        </div>
       </div>
-      <MobileTabBar />
+      {primaFull ? null : <MobileTabBar />}
       <NavDrawer />
-      <AiFab />
+      {primaFull ? null : <AiFab />}
+      <MyAiSheet />
       <PrimaWarm />
       <LazyCommandPalette />
       <LazyTaskComposerHost />
@@ -959,6 +974,49 @@ export function AppShell() {
       <OfflineBanner />
       <NavProgress />
       <InstallApp />
+    </>
+  );
+}
+
+/** P123: back to Prima, kept loaded (on the screen the person left), at once. On the sidebar's top
+ * (wide: with its name; folded: the P mark) and, compact, in the phone's header. */
+function BackToPrima({ compact = false, onPick }: { compact?: boolean; onPick?: () => void }) {
+  const t = useT();
+  const navigate = useNavigate();
+  const { data: me } = useSuspenseQuery(meQuery);
+  if (!startsInPrima(me)) return null;
+  const go = () => {
+    setInOffice(false);
+    onPick?.();
+    void navigate({ to: "/prima" });
+  };
+  if (compact) {
+    return (
+      <Button variant="outline" size="sm" className="h-9 gap-1.5 px-2.5 md:hidden" onClick={go} aria-label={t("Back to Prima")}>
+        <ArrowLeftIcon size={15} weight="bold" /> <span className="grid size-5 place-items-center rounded-[5px] bg-[#13895f] text-[11px] font-bold text-white">P</span>
+      </Button>
+    );
+  }
+  return (
+    <div className="mx-3 mb-2 shrink-0">
+      <button
+        type="button"
+        onClick={go}
+        title={t("Back to Prima")}
+        className="group flex h-10 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border border-border bg-surface-2/60 px-2 text-[13.5px] font-medium text-fg transition-colors hover:border-accent/40 hover:bg-accent-soft wide:justify-start wide:px-2.5"
+      >
+        <ArrowLeftIcon size={15} weight="bold" className="hidden shrink-0 text-muted transition-transform group-hover:-translate-x-0.5 wide:block" />
+        <span className="grid size-6 shrink-0 place-items-center rounded-[6px] bg-[#13895f] text-[12px] font-bold text-white">P</span>
+        <span className="hidden truncate wide:inline">{t("Back to Prima")}</span>
+      </button>
     </div>
   );
+}
+
+/** P123: Prima is the page shown, full screen (it opened for this person). */
+function usePrimaFull(): boolean {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const people = useRouterState({ select: (s) => !!(s.location.search as { people?: unknown }).people });
+  const mounted = usePrima((s) => s.mounted);
+  return pathname === "/prima" && !people && mounted;
 }

@@ -1,10 +1,10 @@
 import { Select } from './SearchSelect';
 import { installScrollStrips } from './scroll-strip';
 import { CleanupReceiptRecovery } from './views/ItCleanup';
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
 import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch } from '@prima/core';
 import { ApiError, api, type Me } from './api';
-import { ArrowLeftIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon, XIcon } from '@phosphor-icons/react';
+import { CaretRightIcon, ChatCircleDotsIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon, XIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
 import { backClosedSheet, useBackClose } from './back-close';
 import { ViewIcon } from './icons';
@@ -365,6 +365,63 @@ const framed = inOffice && inFrame;
 // opened: /prima/?menu=1 framed by the office only works out the menu and sends it (office-embed.ts). Nothing else
 // runs: no clock-in, no survey sync, no tracking, no screen, no prefetch.
 const menuProbe = framed && new URLSearchParams(window.location.search).has('menu');
+
+/** P123: the Agentic Office from Prima. Inside the office page it is shown at once (both stay loaded); Prima opened on
+ * its own goes to the office's page. */
+function openAgentic(): void {
+  if (framed) tellOffice({ type: 'open-office' });
+  else window.top?.location.assign('/?office=1');
+}
+
+/** P123 (Fitri, 23 Nov 2026): "My AI" from Prima: give a task to one's AI or to teammates and chat with one's AI, in a
+ * sheet the office opens over Prima. Prima opened on its own goes to the office's My AI page. */
+function openMyAi(): void {
+  if (framed) tellOffice({ type: 'open-my-ai' });
+  else window.top?.location.assign('/my-worker');
+}
+
+function ShellEntry({ onOpen, sheet, mark, title, sub }: { onOpen: () => void; sheet?: boolean; mark: ReactNode; title: string; sub: string }) {
+  return (
+    <button type="button" className={sheet ? 'sheet-item agentic-entry agentic-entry-sheet' : 'agentic-entry'} onClick={onOpen}>
+      <span className="agentic-mark" aria-hidden="true">
+        {mark}
+      </span>
+      <span className="agentic-text">
+        <strong>{title}</strong>
+        <small>{sub}</small>
+      </span>
+      <CaretRightIcon size={16} aria-hidden="true" className="agentic-caret" />
+    </button>
+  );
+}
+
+/** The Agentic Office, then My AI: the last two entries of Prima's home menu and of the phone's More sheet. */
+function AgenticEntries({ sheet, onPick }: { sheet?: boolean; onPick?: () => void }) {
+  return (
+    <div className={sheet ? 'agentic-entries agentic-entries-sheet' : 'agentic-entries'}>
+      <ShellEntry
+        sheet={sheet}
+        mark="A"
+        title="Agentic Office"
+        sub="AI team, tasks, Library, Microsoft 365"
+        onOpen={() => {
+          onPick?.();
+          openAgentic();
+        }}
+      />
+      <ShellEntry
+        sheet={sheet}
+        mark={<ChatCircleDotsIcon size={18} weight="fill" />}
+        title="My AI"
+        sub="Give a task, chat with your AI"
+        onOpen={() => {
+          onPick?.();
+          openMyAi();
+        }}
+      />
+    </div>
+  );
+}
 
 // P90: the sections, their small groups and the search words live in nav-catalog.ts; NavMenu.tsx draws the menu.
 
@@ -931,6 +988,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   const dept = me.user.department;
   const leader = isGroupLeader(me.user);
   const { bump } = useContext(RefreshContext);
+  // P123: the Agentic Office entry: everyone who has the office (not Prima-only people, not the menu probe).
+  const agentic = inOffice && !primaOnly(me) && !menuProbe;
   // P122: opened ahead by the office (office-embed.ts, ?warm=1), Prima waits to be shown before it does any of this.
   const shown = useSyncExternalStore(onShown, isShown);
   // Opening the system signed in clocks staff in; the clock runs until they sign out, idle or asleep (Fauzan, 27 Oct 2026).
@@ -1575,8 +1634,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       {!me.user.integration && (
         <Launcher key={me.user.id} user={asTop(me) ? { ...me.user, name: myName(me) } : me.user} view={route.view} viewLabel={nav.find((n) => n.view === route.view)?.label ?? route.view} menu={nav.map((n) => n.label)} />
       )}
-      <div className={framed ? 'shell embedded' : 'shell'}>
-        {!framed && (
+      {/* P123 (boss, 23 Nov 2026: Prima first, with its own apps menu; the Agentic Office is one entry in it): Prima's own
+          rail and phone tabs show inside the office as well. */}
+      <div className="shell">
+        {(
         <aside className="rail">
           <div className="brand">
             <div className="brand-mark">P</div>
@@ -1585,13 +1646,6 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
               <div className="brand-sub">{inOffice ? 'Agentic Office' : 'PWVSB Security Group'}</div>
             </div>
           </div>
-          {inOffice && !primaOnly(me) && (
-            // P71: Prima is a module of the Agentic Office; one step back to the rest of it. P99: not for Prima only.
-            <a className="rail-back" href="/" target="_top">
-              <ArrowLeftIcon size={16} aria-hidden="true" />
-              Back to the office
-            </a>
-          )}
           {apps && space && <SpaceRailHead id={space} menu={menu} onHome={() => openSpace(null)} onSpace={openSpace} />}
           <nav className="nav" aria-label="Main">
             <NavMenu
@@ -1607,6 +1661,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
               onHotkeyHidden={openMoreSearch}
             />
           </nav>
+          {/* P123: the Agentic Office, the last entry of Prima's home menu (not for Prima-only people). */}
+          {agentic && !space && <AgenticEntries />}
           <div className="rail-foot">
             <div>
               <div style={{ fontWeight: 600 }} data-no-translate>{myName(me)}</div>
@@ -1687,7 +1743,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             </span>
             {/* P86: the draft review queue sits in the top bar as a pop-over, not a strip of its own above it. */}
             {!me.user.integration && <ArishaReviewQueue key={`review-${me.user.id}`} user={me.user} companies={me.companies} />}
-            {!framed && (
+            {(
               <button className="btn btn-sm hide-sm" onClick={onSignOut}>
                 {api.mode === 'demo' ? 'Switch person' : 'Sign out'}
               </button>
@@ -1700,7 +1756,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             <Suspense fallback={<Loading what="the screen" />}>{view}</Suspense>
           </div>
         </div>
-        {!framed && (
+        {(
         <nav className="tabs" aria-label="Main">
           {/* P91: with apps, the phone's tabs are Home, Apps, Search, the person's own clock or work, and More. */}
           {apps && (
@@ -1764,6 +1820,15 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
                   go({ view: v });
                 }}
               />
+              {agentic && (
+                <AgenticEntries
+                  sheet
+                  onPick={() => {
+                    setMoreOpen(false);
+                    setMoreSearch(false);
+                  }}
+                />
+              )}
               <button
                 className="sheet-item"
                 onClick={() => {

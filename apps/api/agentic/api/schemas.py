@@ -108,6 +108,8 @@ class MeOut(BaseModel):
     # P99: Prima only (the office's pages are closed to them) and their chosen Prima screens.
     access: Access = "agentic"
     prima_modules: PrimaModules = None
+    # P123: Prima is set up for this workspace: the app opens on Prima after signing in.
+    prima: bool = False
 
 
 class DepartmentRef(BaseModel):

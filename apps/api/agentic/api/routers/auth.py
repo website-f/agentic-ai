@@ -10,6 +10,7 @@ from ...core.config import settings
 from ...core.db import get_db
 from ...core.security import hash_password, needs_rehash, verify_password
 from ...models import AuthSession, Membership, PushSubscription, User, Workspace
+from ...prima import client as prima_client
 from ...services import audit, loginguard, signin_mail, two_factor
 from ...services.text import slugify
 from ..deps import (
@@ -78,6 +79,7 @@ async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeO
         # P99: Prima only (the app opens Prima for them) and their chosen Prima screens.
         access="prima_only" if m and is_prima_only(m.access, role) else "agentic",
         prima_modules=m.prima_modules if m and role != "owner" else None,
+        prima=prima_client.enabled(ws.id),
     )
 
 

@@ -41,6 +41,8 @@ export interface Me {
   /** P99: Prima only (the office opens Prima for them) and their chosen Prima screens (null: all). */
   access?: Access;
   prima_modules?: string[] | null;
+  /** P123: Prima is set up here: the app opens on Prima after signing in (lib/start-in-prima.ts). */
+  prima?: boolean;
 }
 
 /** P99: what a member reaches: the office and Prima, or Prima only. */

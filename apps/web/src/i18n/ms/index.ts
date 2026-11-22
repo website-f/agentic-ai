@@ -56,6 +56,7 @@ import { LESSONS } from "./lessons";
 import { STAFF_PHONE } from "./staff-phone";
 import { PRIMA_SOP_GUIDE } from "./prima-sop-guide";
 import { APPROVALS_P122 } from "./approvals-p122";
+import { SHELL_P123 } from "./shell-p123";
 import { MAIL_P122 } from "./mail-p122";
 import { TABLES } from "./tables";
 import { TEAM } from "./team";
@@ -166,5 +167,6 @@ export const MS: Record<string, string> = {
   ...STAFF_PHONE,
   ...PRIMA_SOP_GUIDE,
   ...APPROVALS_P122,
+  ...SHELL_P123,
   ...MAIL_P122, // P122: Work and Personal email, connecting another account by address
 };

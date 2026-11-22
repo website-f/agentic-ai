@@ -5434,6 +5434,10 @@ const ROWS: Row[] = [
   ['Looking up the address…', 'Mencari alamat…', null],
   ['Address not looked up here', 'Alamat tidak dicari di sini', null],
   ['No street address found for this point', 'Tiada alamat jalan ditemui untuk titik ini', null],
+  // P123: the Agentic Office entry in Prima's menu
+  ['AI team, tasks, Library, Microsoft 365', 'Pasukan AI, tugasan, Pustaka, Microsoft 365', null],
+  ['Give a task, chat with your AI', 'Beri tugasan, berbual dengan AI anda', null],
+  ['My AI', 'AI saya', null],
 ];
 
 const DICT = new Map<string, [string, string]>();

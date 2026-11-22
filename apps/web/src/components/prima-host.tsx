@@ -16,6 +16,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { useLang, useT } from "@/i18n";
 import { cleanMenu, primaGo, usePrima } from "@/lib/prima-embed";
+import { setInOffice } from "@/lib/start-in-prima";
+import { useMyAiSheet } from "@/components/my-ai-sheet";
 import { handPrimaLanguage, primaScreen } from "@/lib/prima-screen";
 import { meQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -100,6 +102,13 @@ function PrimaFrame() {
           // P122: Prima works for this person: kept, as if opened, so /prima shows it at once.
           setMounted(true);
         }
+      } else if (d.type === "open-my-ai") {
+        // P123: Prima's "My AI" entry: give a task or chat with one's AI, over Prima.
+        useMyAiSheet.getState().setOpen(true);
+      } else if (d.type === "open-office") {
+        // P123: Prima's "Agentic Office" entry: the office, at once (Prima stays loaded behind it).
+        setInOffice(true);
+        void navigate({ to: "/" });
       } else if (d.type === "route" && typeof d.hash === "string" && /^#@?[a-z][a-z0-9-]{0,39}$/.test(d.hash)) {
         setRoute({ hash: d.hash, view: typeof d.view === "string" ? d.view : "", space: typeof d.space === "string" ? d.space : null });
         reported.current = d.hash.slice(1);
@@ -111,8 +120,11 @@ function PrimaFrame() {
     return () => window.removeEventListener("message", on);
   }, [navigate, setMenu, setRoute, setMounted]);
   // P122: shown for the first time (it was opened ahead): Prima starts the person's day now.
+  // P123: while Prima shows, the site's start is Prima again.
   useEffect(() => {
-    if (shown) tellShown();
+    if (!shown) return;
+    tellShown();
+    setInOffice(false);
   }, [shown]);
   // The address changed from outside Prima (the sidebar, the Clock in tab, a link): open that screen in it.
   useEffect(() => {
@@ -133,7 +145,8 @@ function PrimaFrame() {
         if (shownRef.current) tellShown();
       }}
       className={cn(
-        "w-full border-0 bg-bg h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-4.5rem-env(safe-area-inset-bottom))] md:h-[calc(100dvh-3.5rem-env(safe-area-inset-top))]",
+        // P123: Prima fills the whole screen with its own menu; the office waits, loaded, behind it.
+        "fixed inset-0 z-[35] h-dvh w-full border-0 bg-bg",
         shown ? "block" : "hidden",
       )}
     />
