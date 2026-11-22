@@ -5,6 +5,7 @@ import json
 import time
 import uuid
 from datetime import timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import func, select, text
@@ -113,12 +114,6 @@ async def readyz(response: Response, db: AsyncSession = Depends(get_db)) -> dict
     return {"ok": ok, "checks": [c.model_dump() for c in checks]}
 
 
-async def _documents_review(db: AsyncSession, principal: Principal) -> int:
-    from .documents import review_waiting
-
-    return await review_waiting(db, principal)
-
-
 def _cond(c) -> tuple:
     return () if c is None else (c,)
 
@@ -127,116 +122,119 @@ def _cond(c) -> tuple:
 async def system_status(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> SystemStatusOut:
-    components = [
-        await _timed("Database", _db_check(db)),
-        *await asyncio.gather(
+    # P123 (polled every 15 s by the home page): Valkey, Temporal and the worker are asked while
+    # the database counts run (they never touch this session), and the counts are one query.
+    others = asyncio.ensure_future(
+        asyncio.gather(
             _timed("Valkey", _valkey_check()),
             _timed("Temporal", _temporal_check()),
             _timed("Worker", _worker_check()),
-        ),
-    ]
-    ws = principal.workspace_id
+        )
+    )
+    try:
+        database = await _timed("Database", _db_check(db))
+        counts = await _counts(db, principal)
+    except BaseException:
+        others.cancel()
+        raise
+    components = [database, *await others]
     # P92: the office beyond one's own work (members, companies, AI providers, skills, every
     # agent and task) is for people who may open the office (office.view). Everyone else, staff
     # above all, gets their own numbers: their agents, their work, the decisions waiting for
     # them (the app badge), and no infrastructure detail.
+    if not can(principal.role, "office.view"):
+        components = [c.model_copy(update={"detail": ""}) for c in components]
+    return SystemStatusOut(
+        ok=all(c.ok for c in components), version=__version__, components=components, counts=counts
+    )
+
+
+async def _counts(db: AsyncSession, principal: Principal) -> dict[str, int]:
+    """The status card's numbers, each read by its own count, all in one round trip."""
+    from .documents import review_queue_query
+
+    ws = principal.workspace_id
     office = can(principal.role, "office.view")
     sc = principal.scope
     task_cond = sc.task_where()
     approval_cond = sc.approval_where()
-    if not office:
-        components = [c.model_copy(update={"detail": ""}) for c in components]
 
-    async def count(model) -> int:
-        if not office:
-            return 0
-        return (
-            await db.scalar(select(func.count()).select_from(model).where(model.workspace_id == ws))
-            or 0
-        )
+    def count(model) -> Any:
+        return select(func.count()).select_from(model).where(model.workspace_id == ws)
 
-    counts = {
-        "members": await count(Membership),
-        "branches": await count(Branch),
-        "departments": await count(Department),
-        "providers": await count(AIProvider),
-        "agents": await db.scalar(
-            select(func.count())
-            .select_from(Agent)
-            .where(Agent.workspace_id == ws, Agent.status != "retired", sc.agent_where())
-        )
-        or 0,
-        "tasks_running": await db.scalar(
-            select(func.count())
-            .select_from(Task)
-            .where(Task.workspace_id == ws, Task.status.in_(("running", "blocked")))
-            .where(*_cond(task_cond))
-        )
-        or 0,
-        "tasks_review": await db.scalar(
-            select(func.count())
-            .select_from(Task)
-            .where(Task.workspace_id == ws, Task.status == "review")
-            .where(*_cond(task_cond))
-        )
-        or 0,
-        "approvals_pending": await db.scalar(
-            select(func.count())
-            .select_from(Approval)
-            .where(Approval.workspace_id == ws, Approval.status == "pending")
-            .where(*_cond(approval_cond))
-        )
-        or 0,
-        "skill_proposals_pending": (
-            await db.scalar(
-                select(func.count())
-                .select_from(SkillProposal)
-                .where(SkillProposal.workspace_id == ws, SkillProposal.status == "pending")
-            )
-            or 0
-        )
-        if office
-        else 0,
+    asked: dict[str, Any] = {}
+    if office:
+        asked |= {
+            "members": count(Membership),
+            "branches": count(Branch),
+            "departments": count(Department),
+            "providers": count(AIProvider),
+        }
+    asked |= {
+        "agents": select(func.count())
+        .select_from(Agent)
+        .where(Agent.workspace_id == ws, Agent.status != "retired", sc.agent_where()),
+        "tasks_running": select(func.count())
+        .select_from(Task)
+        .where(Task.workspace_id == ws, Task.status.in_(("running", "blocked")))
+        .where(*_cond(task_cond)),
+        "tasks_review": select(func.count())
+        .select_from(Task)
+        .where(Task.workspace_id == ws, Task.status == "review")
+        .where(*_cond(task_cond)),
+        "approvals_pending": select(func.count())
+        .select_from(Approval)
+        .where(Approval.workspace_id == ws, Approval.status == "pending")
+        .where(*_cond(approval_cond)),
         # P25: documents agents made that wait for this person (scoped like Documents).
-        "documents_review": await _documents_review(db, principal),
-        # P36 setup steps: models agents can chat with, the company's documents in the
-        # library, and the first work given.
-        "chat_models": 0
-        if not office
-        else len(
+        "documents_review": review_queue_query(principal).with_only_columns(func.count()),
+        "tasks": select(func.count())
+        .select_from(Task)
+        .where(Task.workspace_id == ws)
+        .where(*_cond(task_cond)),
+    }
+    if office:
+        asked |= {
+            "skill_proposals_pending": select(func.count())
+            .select_from(SkillProposal)
+            .where(SkillProposal.workspace_id == ws, SkillProposal.status == "pending"),
+            # P36 setup steps: the company's documents in the library, and its active SOPs.
+            "library_files": select(func.count())
+            .select_from(DocFile)
+            .where(DocFile.workspace_id == ws, DocFile.library.is_(True)),
+            "library_sops": select(func.count())
+            .select_from(SOP)
+            .where(SOP.workspace_id == ws, SOP.status == "active"),
+        }
+    row = (
+        await db.execute(select(*(q.scalar_subquery().label(k) for k, q in asked.items())))
+    ).one()
+    got = {k: int(v or 0) for k, v in zip(asked, row, strict=True)}
+    # P36: the models agents can chat with ("smart" group).
+    chat_models = (
+        len(
             await db.scalar(
                 select(ModelGroup.members).where(
                     ModelGroup.workspace_id == ws, ModelGroup.name == "smart"
                 )
             )
             or []
-        ),
-        "library": 0
-        if not office
-        else (
-            await db.scalar(
-                select(func.count())
-                .select_from(DocFile)
-                .where(DocFile.workspace_id == ws, DocFile.library.is_(True))
-            )
-            or 0
         )
-        + (
-            await db.scalar(
-                select(func.count())
-                .select_from(SOP)
-                .where(SOP.workspace_id == ws, SOP.status == "active")
-            )
-            or 0
-        ),
-        "tasks": await db.scalar(
-            select(func.count())
-            .select_from(Task)
-            .where(Task.workspace_id == ws)
-            .where(*_cond(task_cond))
-        )
-        or 0,
-    }
-    return SystemStatusOut(
-        ok=all(c.ok for c in components), version=__version__, components=components, counts=counts
+        if office
+        else 0
     )
+    return {
+        "members": got.get("members", 0),
+        "branches": got.get("branches", 0),
+        "departments": got.get("departments", 0),
+        "providers": got.get("providers", 0),
+        "agents": got["agents"],
+        "tasks_running": got["tasks_running"],
+        "tasks_review": got["tasks_review"],
+        "approvals_pending": got["approvals_pending"],
+        "skill_proposals_pending": got.get("skill_proposals_pending", 0),
+        "documents_review": got["documents_review"],
+        "chat_models": chat_models,
+        "library": got.get("library_files", 0) + got.get("library_sops", 0),
+        "tasks": got["tasks"],
+    }

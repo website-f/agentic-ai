@@ -28,6 +28,7 @@ Prima as its top record like owners (opens_as_top).
 Tests swap in a fake Prima: `client.transport = httpx.MockTransport(handler)`.
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -51,6 +52,10 @@ from . import modules
 
 transport: httpx.AsyncBaseTransport | None = None
 TIMEOUT = httpx.Timeout(30.0, connect=5.0)
+# P123: one kept-alive client per event loop (and transport: tests swap it), as microsoft/http.py,
+# instead of a new client and a new connection to Prima for every call.
+LIMITS = httpx.Limits(max_connections=40, max_keepalive_connections=20, keepalive_expiry=60)
+_shared: dict[tuple[int, int], httpx.AsyncClient] = {}
 
 # Prima's own paths only, in a plain alphabet so the path Prima sees is the one signed.
 _PATH = re.compile(r"^api/[A-Za-z0-9_\-./~]{0,300}$")
@@ -849,6 +854,18 @@ def via_agent(name: str) -> str:
     return f"agent:{plain[:80]}"
 
 
+def _client() -> httpx.AsyncClient:
+    """The shared client for this loop and transport. Never closed here: the next call reuses
+    its connections."""
+    key = (id(asyncio.get_running_loop()), id(transport))
+    c = _shared.get(key)
+    if c is None or c.is_closed:
+        if len(_shared) >= 8:  # loops that ended (tests): forget them, they cannot be closed here
+            _shared.clear()
+        c = _shared[key] = httpx.AsyncClient(timeout=TIMEOUT, transport=transport, limits=LIMITS)
+    return c
+
+
 def sign(ts: str, method: str, url: str, user: str, via: str, body: bytes) -> str:
     head = f"{ts}\n{method.upper()}\n{url}\n{user}\n{via}\n".encode()
     return hmac.new(settings.prima_secret.encode(), head + body, hashlib.sha256).hexdigest()
@@ -871,13 +888,12 @@ async def _send(
         # Prima limits calls per address (behind one trusted proxy): the person's, not ours.
         headers["x-forwarded-for"] = client_ip
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT, transport=transport) as http:
-            r = await http.request(
-                method,
-                (base or settings.prima_url).rstrip("/") + url,
-                headers=headers,
-                content=body or None,
-            )
+        r = await _client().request(
+            method,
+            (base or settings.prima_url).rstrip("/") + url,
+            headers=headers,
+            content=body or None,
+        )
     except httpx.HTTPError as e:
         raise PrimaError(
             503, Msg("Prima is not answering right now. Try again in a minute.")

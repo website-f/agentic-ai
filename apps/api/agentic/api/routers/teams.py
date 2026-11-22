@@ -838,22 +838,23 @@ async def budgets(
 ) -> list[dict[str, Any]]:
     """Spend against budget for every active agent (the command center card)."""
     ws = await _ws(db, principal.workspace_id)
-    out = []
-    for a in (
-        await db.scalars(
-            select(Agent)
-            .where(
-                Agent.workspace_id == ws.id,
-                Agent.status != "retired",
-                Agent.clone_of.is_(None),
-                *([c] if (c := principal.scope.agent_where()) is not None else []),
+    agents = list(
+        (
+            await db.scalars(
+                select(Agent)
+                .where(
+                    Agent.workspace_id == ws.id,
+                    Agent.status != "retired",
+                    Agent.clone_of.is_(None),
+                    *([c] if (c := principal.scope.agent_where()) is not None else []),
+                )
+                .order_by(Agent.name)
             )
-            .order_by(Agent.name)
-        )
-    ).all():
-        st = await budget.state(db, a, ws.timezone)
-        out.append({"agent_id": a.id, "name": a.name, "color": a.color, **st.dict()})
-    return out
+        ).all()
+    )
+    # P123: every agent's spend in two queries, not three per agent.
+    st = await budget.states(db, agents, ws.timezone)
+    return [{"agent_id": a.id, "name": a.name, "color": a.color, **st[a.id].dict()} for a in agents]
 
 
 # ---------------------------------------------------------------- P47 the working day

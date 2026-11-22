@@ -713,6 +713,8 @@ export class PgStore implements Store {
     if(r.rows[0]?.installed===false)return false;if(r.rows[0]?.installed!==true||(await this.itCleanupProblems()).length)throw Error('Controlled cleanup protections need setup.');return true;
   })();}
   async itCleanupArchived(kind:CleanupKind,id:string){if(!await this.cleanupInstalled())return false;const r=await this.client.query('SELECT prima.ic_archived($1,$2) AS archived',[kind,id]);if(typeof r.rows[0]?.archived!=='boolean')throw Error('Archive state unavailable.');return r.rows[0].archived as boolean;}
+  /** P123: the same prima.ic_archived check for every id, in one query instead of one round trip per row. */
+  async itCleanupArchivedMany(kind:CleanupKind,ids:string[]){if(!ids.length)return [];if(!await this.cleanupInstalled())return ids.map(()=>false);const r=await this.client.query('SELECT prima.ic_archived($1,x.id) AS archived FROM unnest($2::text[]) WITH ORDINALITY AS x(id,n) ORDER BY x.n',[kind,ids]);if(r.rows.length!==ids.length||r.rows.some((x:{archived?:unknown})=>typeof x.archived!=='boolean'))throw Error('Archive state unavailable.');return r.rows.map((x:{archived:boolean})=>x.archived);}
   async itCleanupDependencies(kind:CleanupKind,id:string){if(!await this.cleanupInstalled())return {complete:false,reasons:['cleanup_storage_unavailable']};const r=await this.client.query('SELECT prima.ic_dependencies($1,$2) AS value',[kind,id]);const v=r.rows[0]?.value;if(!v||typeof v.complete!=='boolean'||!Array.isArray(v.reasons)||v.reasons.length>30||v.reasons.some((x:unknown)=>typeof x!=='string'||! /^[A-Za-z0-9_]{1,100}$/.test(x)))return {complete:false,reasons:['dependency_coverage_missing']};return v as {complete:boolean;reasons:string[]};}
 
 

@@ -128,6 +128,64 @@ async def state(db: AsyncSession, agent: Agent, tz: str) -> BudgetState:
     return BudgetState(int(tokens), float(usd), token_limit, usd_limit, p)
 
 
+async def states(db: AsyncSession, agents: list[Agent], tz: str) -> dict[str, BudgetState]:
+    """state() for many agents at once (P123: the command center card asked three queries per
+    agent): the same numbers, in two queries for all of them."""
+    if not agents:
+        return {}
+    p = periods(tz)
+    ids = [a.id for a in agents]
+    used: dict[str, tuple[int, float]] = {
+        agent_id: (int(tokens or 0), float(usd or 0))
+        for agent_id, tokens, usd in (
+            await db.execute(
+                select(
+                    LLMCall.agent_id,
+                    func.coalesce(
+                        func.sum(LLMCall.prompt_tokens + LLMCall.completion_tokens).filter(
+                            LLMCall.ts >= p.day_start
+                        ),
+                        0,
+                    ),
+                    func.coalesce(func.sum(LLMCall.cost_usd), 0),
+                )
+                # The month starts on or before today: one pass over the month for both.
+                .where(LLMCall.agent_id.in_(ids), LLMCall.ts >= p.month_start)
+                .group_by(LLMCall.agent_id)
+            )
+        ).all()
+    }
+    extra: dict[str, tuple[int, float]] = {}
+    for agent_id, period, t, u in (
+        await db.execute(
+            select(
+                BudgetGrant.agent_id,
+                BudgetGrant.period,
+                func.sum(BudgetGrant.extra_tokens),
+                func.sum(BudgetGrant.extra_usd),
+            )
+            .where(BudgetGrant.agent_id.in_(ids), BudgetGrant.period_key.in_((p.day, p.month)))
+            .group_by(BudgetGrant.agent_id, BudgetGrant.period)
+        )
+    ).all():
+        tokens, usd = extra.get(agent_id, (0, 0.0))
+        if period == "day":
+            tokens += int(t or 0)
+        if period == "month":
+            usd += float(u or 0)
+        extra[agent_id] = (tokens, usd)
+    out: dict[str, BudgetState] = {}
+    for a in agents:
+        tokens, usd = used.get(a.id, (0, 0.0))
+        extra_tokens, extra_usd = extra.get(a.id, (0, 0.0))
+        token_limit = a.budget_daily_tokens + extra_tokens if a.budget_daily_tokens else None
+        usd_limit = (
+            float(a.budget_monthly_usd) + extra_usd if a.budget_monthly_usd is not None else None
+        )
+        out[a.id] = BudgetState(tokens, usd, token_limit, usd_limit, p)
+    return out
+
+
 async def grant(db: AsyncSession, agent: Agent, st: BudgetState, actor: str) -> None:
     now = datetime.now(UTC)
     if agent.budget_daily_tokens and st.token_ratio >= 1:

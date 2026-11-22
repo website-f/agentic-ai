@@ -74,6 +74,8 @@ export interface Store {
   guardPayReady?(): Promise<boolean>;
   itCleanupDependencies?(kind:CleanupKind,id:string):Promise<{complete:boolean;reasons:string[]}>;
   itCleanupArchived?(kind:CleanupKind,id:string):Promise<boolean>;
+  /** P123: itCleanupArchived for many rows in one read (same answer for each id, in the same order). */
+  itCleanupArchivedMany?(kind:CleanupKind,ids:string[]):Promise<boolean[]>;
   itManualProblems?(): Promise<string[]>;
   itOperationsProblems?(): Promise<string[]>;
   procurementProblems?(): Promise<string[]>;
@@ -206,6 +208,7 @@ export class MemoryStore implements Store {
   async itCleanupProblems(){return [];}
   async itCleanupDependencies(kind:CleanupKind,id:string){return memoryCleanupDependencies(this.data,kind,id);}
   async itCleanupArchived(kind:CleanupKind,id:string){return (this.data.itCleanupArchives??[]).some(a=>a.kind===kind&&a.recordId===id&&a.archived);}
+  async itCleanupArchivedMany(kind:CleanupKind,ids:string[]){return Promise.all(ids.map(id=>this.itCleanupArchived(kind,id)));}
   async procurementProblems(): Promise<string[]> { return []; }
   /** Explicit synthetic-only adapter; not PostgreSQL catalog evidence. */
   async rentalCorrectionProblems(): Promise<string[]> { return []; }

@@ -45,10 +45,6 @@ router = APIRouter(prefix="/api/me", tags=["me"])
 FAILED_DAYS = 7
 
 
-async def _count(db: AsyncSession, q: Any) -> int:
-    return int(await db.scalar(select(func.count()).select_from(q.subquery())) or 0)
-
-
 PER_KIND = 25  # the newest of each kind listed in the bell (the count covers them all)
 
 
@@ -78,14 +74,17 @@ async def needs(
         search: dict[str, Any] | None = None,
         link: Callable[[str], dict[str, Any]] | None = None,
     ) -> None:
-        """One kind: its count, and its newest PER_KIND items (id, title, when) as links."""
-        n = await _count(db, q)
+        """One kind: its count, and its newest PER_KIND items (id, title, when) as links.
+        P123: one query for both (the count of every row rides on each of the newest)."""
+        newest = (
+            q.with_only_columns(*cols, func.count().over()).order_by(cols[2].desc()).limit(PER_KIND)
+        )
+        rows = (await db.execute(newest)).all()
+        n = int(rows[0][3]) if rows else 0
         if not n:
             return
         items.append({"key": key, "count": n, "to": to, "search": search or {}})
-        newest = q.with_only_columns(*cols).order_by(cols[2].desc()).limit(PER_KIND)
-        rows = (await db.execute(newest)).all()
-        for rid, title, at in rows:
+        for rid, title, at, _ in rows:
             entries.append(
                 {
                     "key": key,

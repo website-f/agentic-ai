@@ -25,7 +25,10 @@ export function memoryCleanupDependencies(data:Dataset,kind:CleanupKind,id:strin
 /** No generic read filtering: reservation, audit and receipt paths continue to see original rows. */
 export async function liveItRows<T extends 'itAssets'|'itAccounts'|'itOnboarding'>(store:Store,table:T,rows?:Row<T>[]):Promise<Row<T>[]>{
  const all=rows??await store.list(table,{});if(!store.itCleanupArchived)return all;
- const kind=table==='itAssets'?'asset':table==='itAccounts'?'system':'intake';const flags=await Promise.all(all.map(r=>store.itCleanupArchived!(kind,r.id)));return all.filter((_r,n)=>!flags[n]);
+ const kind=table==='itAssets'?'asset':table==='itAccounts'?'system':'intake';
+ // P123: one read for every row where the store can (PostgreSQL: one query instead of one per row).
+ const flags=store.itCleanupArchivedMany&&all.length?await store.itCleanupArchivedMany(kind,all.map(r=>r.id)):await Promise.all(all.map(r=>store.itCleanupArchived!(kind,r.id)));
+ if(flags.length!==all.length)throw Error('Archive state unavailable.');return all.filter((_r,n)=>!flags[n]);
 }
 /** Synchronous MemoryStore boundary closes a check/write microtask race; SQL owns the production equivalent. */
 export function assertMemoryCleanupWrite(data:Dataset,table:TableName,value:unknown){

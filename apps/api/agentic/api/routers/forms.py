@@ -154,65 +154,121 @@ def expects(principal: Principal, f: Form) -> bool:
 
 
 async def form_out(db: AsyncSession, principal: Principal, f: Form, today: date) -> dict[str, Any]:
-    mine_rows = (
+    return (await forms_out(db, principal, [f], today))[0]
+
+
+async def forms_out(
+    db: AsyncSession, principal: Principal, forms: list[Form], today: date
+) -> list[dict[str, Any]]:
+    """Each form as the person sees it. P123: the list reads everything for all its forms
+    at once (their own hand-ins, files, companies, departments, and the managers' progress)
+    instead of four to six queries per form."""
+    if not forms:
+        return []
+    ids = [f.id for f in forms]
+    mine_of: dict[str, list[FormSubmission]] = {i: [] for i in ids}
+    for s in (
         await db.scalars(
             select(FormSubmission).where(
-                FormSubmission.form_id == f.id, FormSubmission.user_id == principal.user.id
+                FormSubmission.form_id.in_(ids), FormSubmission.user_id == principal.user.id
             )
         )
-    ).all()
-    mine = {s.period: s for s in mine_rows}
-    period, w = store.shown_round(f, today, set(mine))
-    sub = mine.get(period)
-    if (f.schedule or {}).get("every", "none") == "none":
-        # Whenever needed: the latest one still in play.
-        live = [s for s in mine_rows if s.status in ("draft", "returned", "submitted")]
-        sub = max(live, key=lambda s: s.updated_at) if live else None
+    ).all():
+        mine_of[s.form_id].append(s)
+    shown: list[tuple[str, Any, FormSubmission | None]] = []
+    for f in forms:
+        mine_rows = mine_of[f.id]
+        mine = {s.period: s for s in mine_rows}
+        period, w = store.shown_round(f, today, set(mine))
+        sub = mine.get(period)
+        if (f.schedule or {}).get("every", "none") == "none":
+            # Whenever needed: the latest one still in play.
+            live = [s for s in mine_rows if s.status in ("draft", "returned", "submitted")]
+            sub = max(live, key=lambda s: s.updated_at) if live else None
+        shown.append((period, w, sub))
     files = await _files(
-        db, ({f.file_id} if f.file_id else set()) | set(sub.file_ids if sub else [])
+        db,
+        {f.file_id for f in forms if f.file_id}
+        | {i for _, _, sub in shown if sub for i in sub.file_ids or []},
     )
-    branch = await db.get(Branch, f.branch_id) if f.branch_id else None
-    dept = await db.get(Department, f.department_id) if f.department_id else None
-    template = files.get(f.file_id) if f.file_id else None
-    out: dict[str, Any] = {
-        "id": f.id,
-        "name": f.name,
-        "description": f.description,
-        "kind": f.kind,
-        "branch_id": f.branch_id,
-        "branch_name": branch.name if branch else None,
-        "department_id": f.department_id,
-        "department_name": dept.name if dept else None,
-        "schedule": f.schedule,
-        "guide": f.guide,
-        "status": f.status,
-        "template": (
-            {"id": template.id, "name": template.name, "mime": template.mime, "size": template.size}
-            if template
-            else None
-        ),
-        "period": period,
-        "opens": w.opens if w else None,
-        "due": w.due if w else None,
-        "state": F.state(w, today, sub.status if sub else None),
-        "mine": sub_out(sub, files) if sub else None,
-        "can_manage": manages(principal, f.branch_id),
-        "expected": expects(principal, f),
-        "progress": None,
-    }
-    if out["can_manage"]:
-        people = await _expected(db, f)
-        q = select(FormSubmission).where(FormSubmission.form_id == f.id)
-        if (f.schedule or {}).get("every", "none") != "none":
-            q = q.where(FormSubmission.period == period)
-        subs = (await db.scalars(q)).all()
-        handed = {s.user_id: s.status for s in subs}
-        out["progress"] = {
-            "expected": len(people),
-            "submitted": sum(1 for v in handed.values() if v in ("submitted", "accepted")),
-            "accepted": sum(1 for v in handed.values() if v == "accepted"),
-            "waiting": sum(1 for x in subs if x.status == "submitted"),
+    branch_ids = {f.branch_id for f in forms if f.branch_id}
+    dept_ids = {f.department_id for f in forms if f.department_id}
+    branches = (
+        {b.id: b for b in (await db.scalars(select(Branch).where(Branch.id.in_(branch_ids))))}
+        if branch_ids
+        else {}
+    )
+    depts = (
+        {d.id: d for d in (await db.scalars(select(Department).where(Department.id.in_(dept_ids))))}
+        if dept_ids
+        else {}
+    )
+    managed = [
+        (f, period)
+        for f, (period, _, _) in zip(forms, shown, strict=True)
+        if manages(principal, f.branch_id)
+    ]
+    subs_of: dict[str, list[FormSubmission]] = {f.id: [] for f, _ in managed}
+    if managed:
+        rounds = [
+            FormSubmission.form_id == f.id
+            if (f.schedule or {}).get("every", "none") == "none"
+            else (FormSubmission.form_id == f.id) & (FormSubmission.period == period)
+            for f, period in managed
+        ]
+        for s in (await db.scalars(select(FormSubmission).where(or_(*rounds)))).all():
+            subs_of[s.form_id].append(s)
+    expected: dict[tuple[str, str | None, str | None], int] = {}
+    out: list[dict[str, Any]] = []
+    for f, (period, w, sub) in zip(forms, shown, strict=True):
+        branch = branches.get(f.branch_id) if f.branch_id else None
+        dept = depts.get(f.department_id) if f.department_id else None
+        template = files.get(f.file_id) if f.file_id else None
+        one: dict[str, Any] = {
+            "id": f.id,
+            "name": f.name,
+            "description": f.description,
+            "kind": f.kind,
+            "branch_id": f.branch_id,
+            "branch_name": branch.name if branch else None,
+            "department_id": f.department_id,
+            "department_name": dept.name if dept else None,
+            "schedule": f.schedule,
+            "guide": f.guide,
+            "status": f.status,
+            "template": (
+                {
+                    "id": template.id,
+                    "name": template.name,
+                    "mime": template.mime,
+                    "size": template.size,
+                }
+                if template
+                else None
+            ),
+            "period": period,
+            "opens": w.opens if w else None,
+            "due": w.due if w else None,
+            "state": F.state(w, today, sub.status if sub else None),
+            "mine": sub_out(sub, files) if sub else None,
+            "can_manage": manages(principal, f.branch_id),
+            "expected": expects(principal, f),
+            "progress": None,
         }
+        if one["can_manage"]:
+            # Forms of the same company and department expect the same people: counted once.
+            key = (f.workspace_id, f.branch_id, f.department_id)
+            if key not in expected:
+                expected[key] = len(await _expected(db, f))
+            subs = subs_of[f.id]
+            handed = {s.user_id: s.status for s in subs}
+            one["progress"] = {
+                "expected": expected[key],
+                "submitted": sum(1 for v in handed.values() if v in ("submitted", "accepted")),
+                "accepted": sum(1 for v in handed.values() if v == "accepted"),
+                "waiting": sum(1 for x in subs if x.status == "submitted"),
+            }
+        out.append(one)
     return out
 
 
@@ -229,7 +285,7 @@ async def list_forms(
         q = q.where(or_(Form.branch_id == branch_id, Form.branch_id.is_(None)))
     today = await store.today_in(db, principal.workspace_id)
     rows = (await db.scalars(q.order_by(Form.name))).all()
-    return [await form_out(db, principal, f, today) for f in rows]
+    return await forms_out(db, principal, list(rows), today)
 
 
 # ---------------------------------------------------------------- adding forms

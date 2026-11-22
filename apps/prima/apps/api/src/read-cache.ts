@@ -47,7 +47,9 @@ export function forgetCatalog(): void {
 
 /** Plain reads (no change): everything else on the store counts as a change. hrItProblems sets the tenant for the
  *  transaction, so it is a read but is never kept. */
-const READS = new Set<string>(['list', 'get', 'hasTable', 'companyOfficeReady', 'companyRunLinksReady', ...CATALOG, 'hrItProblems', 'itImportProblems', 'rentalSimulation', 'hrItTrustedTenant']);
+// P123: the archive checks (prima.ic_archived, a STABLE read) are reads too: as changes they dropped every snapshot once
+// per IT record, so a leader's home read the same tables again and again.
+const READS = new Set<string>(['list', 'get', 'hasTable', 'companyOfficeReady', 'companyRunLinksReady', ...CATALOG, 'hrItProblems', 'itImportProblems', 'rentalSimulation', 'hrItTrustedTenant', 'itCleanupArchived', 'itCleanupArchivedMany']);
 
 type Snap = { rows: Record<string, unknown>[]; byId: Map<string, Record<string, unknown>> } | 'too-big';
 

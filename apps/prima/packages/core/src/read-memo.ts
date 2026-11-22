@@ -42,7 +42,8 @@ export function readMemo(store: Store, tables: ReadonlySet<TableName> = MEMO_TAB
       }
       const v = Reflect.get(target, prop, receiver);
       if (typeof v !== 'function') return v;
-      if (prop === 'get' || prop === 'hasTable') return v.bind(target);
+      // P123: the IT archive checks only read (a write still goes through the clearing path below).
+      if (prop === 'get' || prop === 'hasTable' || prop === 'itCleanupArchived' || prop === 'itCleanupArchivedMany') return v.bind(target);
       // Anything else may write: forget what was read, then pass straight through.
       return (...args: unknown[]) => {
         memo.clear();

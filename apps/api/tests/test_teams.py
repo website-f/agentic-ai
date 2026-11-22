@@ -157,6 +157,80 @@ async def test_chat_over_budget_answers_without_a_model(client, llm, team_tempor
     assert r.status_code == 200 and "budget" in r.json()["reply"] and llm.requests == []
 
 
+async def test_budgets_card_reads_all_agents_at_once_with_the_same_numbers(client, team_temporal):
+    """P123: the command center card reads every agent's spend in two queries; each agent's
+    numbers are still exactly what its own budget.state() says (today, this month, grants)."""
+    from datetime import timedelta
+    from decimal import Decimal
+
+    from agentic.models import BudgetGrant, Workspace
+    from agentic.teams import budget
+
+    NAMES = ("agent_id", "name", "color")
+
+    o = await office(client)
+    a = await new_agent(client, o, "Aina", budget_daily_tokens=1000)
+    b = await new_agent(client, o, "Badrul")
+    c = await new_agent(client, o, "Chong", budget_daily_tokens=2000)
+    async with SessionLocal() as db:
+        agent = await db.get(Agent, a["id"])
+        assert agent is not None
+        agent.budget_monthly_usd = Decimal("5")
+        ws = await db.get(Workspace, agent.workspace_id)
+        assert ws is not None
+        tz = ws.timezone
+        p = budget.periods(tz)
+        for agent_id, at, tokens, usd in (
+            (a["id"], datetime.now(UTC), 300, "0.5"),
+            (a["id"], p.month_start, 50, "1.25"),  # this month, maybe not today
+            (a["id"], p.month_start - timedelta(minutes=1), 999, "9"),  # last month
+            (c["id"], p.month_start - timedelta(days=3), 700, "2"),
+        ):
+            db.add(
+                LLMCall(
+                    workspace_id=agent.workspace_id,
+                    ts=at,
+                    task="agent.task",
+                    provider_name="Good",
+                    model="m1",
+                    agent_id=agent_id,
+                    prompt_tokens=tokens,
+                    completion_tokens=10,
+                    cost_usd=Decimal(usd),
+                    status="ok",
+                )
+            )
+        for period, key, tokens, usd in (
+            ("day", p.day, 500, "0"),
+            ("month", p.month, 0, "2.5"),
+            ("day", "2000-01-01", 7, "0"),
+        ):
+            db.add(
+                BudgetGrant(
+                    agent_id=a["id"],
+                    period=period,
+                    period_key=key,
+                    extra_tokens=tokens,
+                    extra_usd=Decimal(usd),
+                    granted_by="test",
+                    created_at=datetime.now(UTC),
+                )
+            )
+        await db.commit()
+    rows = {r["agent_id"]: r for r in (await client.get("/api/budgets")).json()}
+    assert {a["id"], b["id"], c["id"]} <= set(rows)
+    async with SessionLocal() as db:
+        for agent_id in (a["id"], b["id"], c["id"]):
+            agent = await db.get(Agent, agent_id)
+            assert agent is not None
+            want = (await budget.state(db, agent, tz)).dict()
+            got = {k: v for k, v in rows[agent_id].items() if k not in NAMES}
+            assert got == json.loads(json.dumps(want, default=str)), agent_id
+    assert rows[a["id"]]["token_limit"] == 1500 and rows[a["id"]]["usd_limit"] == 7.5
+    assert rows[b["id"]]["tokens_today"] == 0 and rows[b["id"]]["token_limit"] is None
+    assert rows[c["id"]]["tokens_today"] == 0 and rows[c["id"]]["usd_month"] == 0
+
+
 # ---------------------------------------------------------------- delegation
 
 

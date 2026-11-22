@@ -37,7 +37,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import launch
@@ -203,6 +203,12 @@ def _mine(principal: Principal, agent_ids: list[str]) -> Any:
         Task.parent_task_id.is_(None),
         or_(*parts),
     )
+
+
+def _in_family(roots: Any) -> Any:
+    """SQL on Task: coalesce(root_task_id, id) IN roots, written so the database can use the
+    indexes on root_task_id and id (P123: the coalesce read the whole tasks table)."""
+    return or_(Task.root_task_id.in_(roots), and_(Task.root_task_id.is_(None), Task.id.in_(roots)))
 
 
 def _agent_card(a: Agent, current: Task | None, open_count: int) -> dict[str, Any]:
@@ -676,7 +682,10 @@ def _steps(w: Workflow) -> list[dict[str, str]]:
 
 
 async def _procedures(
-    db: AsyncSession, principal: Principal, agent_ids: list[str]
+    db: AsyncSession,
+    principal: Principal,
+    agent_ids: list[str],
+    can_assign: list[Agent] | None = None,
 ) -> dict[str, Any]:
     """The SOPs for this person's job (their department's first, then their company's, then
     everyone's) and the workflows they can run (the ones their AI workers follow first),
@@ -709,7 +718,9 @@ async def _procedures(
             )
         ).all()
     }
-    can = {a.id for a in await assignable(db, principal)}
+    if can_assign is None:
+        can_assign = await assignable(db, principal)
+    can = {a.id for a in can_assign}
 
     def person(a: Agent) -> dict[str, Any]:
         return {
@@ -821,7 +832,7 @@ async def _work(
     if ids:
         roots = func.coalesce(Task.root_task_id, Task.id)
         under = select(Task.id, roots.label("root")).where(
-            Task.workspace_id == principal.workspace_id, roots.in_(ids)
+            Task.workspace_id == principal.workspace_id, _in_family(ids)
         )
         root_of = {tid: root for tid, root in (await db.execute(under)).all()}
         docs = (
@@ -949,13 +960,18 @@ async def _waiting(db: AsyncSession, principal: Principal, agent_ids: list[str])
     from ...agents.tools import TOOLS  # P102: a tool's name for people, never its code name
 
     mine = select(Task.id).where(*_mine(principal, agent_ids))
+    # P123: the pending approvals whose task is in the family of one of mine, read from the
+    # approvals' own tasks (the family first read the whole tasks table, by coalesce).
     roots = func.coalesce(Task.root_task_id, Task.id)
-    family = select(Task.id).where(Task.workspace_id == principal.workspace_id, roots.in_(mine))
     approvals = (
         await db.execute(
             select(Approval, Task.title)
             .join(Task, Task.id == Approval.task_id)
-            .where(Approval.status == "pending", Approval.task_id.in_(family))
+            .where(
+                Approval.status == "pending",
+                Task.workspace_id == principal.workspace_id,
+                roots.in_(mine),
+            )
             .order_by(Approval.created_at.desc())
             .limit(10)
         )
@@ -1009,20 +1025,30 @@ async def desk(
 ) -> dict[str, Any]:
     agents = await my_agents(db, principal)
     agent_ids = [a.id for a in agents]
-    cards: list[dict[str, Any]] = []
-    for a in agents:
-        current = await db.scalar(
-            select(Task)
-            .where(Task.assignee_agent_id == a.id, Task.status == "running")
-            .order_by(Task.started_at.desc())
-            .limit(1)
-        )
-        n = await db.scalar(
-            select(func.count())
-            .select_from(Task)
-            .where(Task.assignee_agent_id == a.id, Task.status.in_(OPEN))
-        )
-        cards.append(_agent_card(a, current, int(n or 0)))
+    # P123: every agent's current task and open count in two queries, not two per agent.
+    current: dict[str, Task] = {}
+    open_count: dict[str, int] = {}
+    if agent_ids:
+        for t in (
+            await db.scalars(
+                select(Task)
+                .where(Task.assignee_agent_id.in_(agent_ids), Task.status == "running")
+                .order_by(Task.started_at.desc())
+            )
+        ).all():
+            current.setdefault(t.assignee_agent_id or "", t)
+        open_count = {
+            str(agent_id): int(n or 0)
+            for agent_id, n in (
+                await db.execute(
+                    select(Task.assignee_agent_id, func.count())
+                    .where(Task.assignee_agent_id.in_(agent_ids), Task.status.in_(OPEN))
+                    .group_by(Task.assignee_agent_id)
+                )
+            ).all()
+        }
+    cards = [_agent_card(a, current.get(a.id), open_count.get(a.id, 0)) for a in agents]
+    can_assign = await assignable(db, principal)
     pins = await _my_pins(db, principal)
     from ...models import Branch, Department
 
@@ -1046,13 +1072,13 @@ async def desk(
                 "work_hours": a.work_hours,
                 "mine": a.id in agent_ids,
             }
-            for a in await assignable(db, principal)
+            for a in can_assign
         ],
         "pins": await _resolve(db, principal, pins),
         "layout": layout_of(await db.get(User, principal.user.id), pins),
         # P97: whether today's meetings can come from their own calendar (assistants' Google).
         "may_assist": may_assist(principal.role),
-        "procedures": await _procedures(db, principal, agent_ids),
+        "procedures": await _procedures(db, principal, agent_ids, can_assign),
         "work": await _work(db, principal, agent_ids),
         "waiting": await _waiting(db, principal, agent_ids),
         "recent_searches": (await vocab.recent_searches(principal.workspace_id, principal.user.id))[

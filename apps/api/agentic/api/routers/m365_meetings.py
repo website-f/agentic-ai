@@ -101,7 +101,13 @@ async def summary(
             raw = await valkey().get(key)
             if raw:
                 return {**out, **json.loads(raw)}
-    _, g = await _mine(db, principal)
+    mine, g = await _mine(db, principal)
+    # P123: the access token first, once. With none kept (it lasts an hour; the tile is opened a
+    # few times a day) the four calls below each refreshed it at once: four sign-ins to
+    # Microsoft on the one database session, each storing its own rotated refresh token. A
+    # refusal shows below as null numbers, as before.
+    with contextlib.suppress(Exception):
+        await auth.access_token(db, mine)
     me_id = acct.ms_user_id or ""
     now = datetime.now(UTC)
 
