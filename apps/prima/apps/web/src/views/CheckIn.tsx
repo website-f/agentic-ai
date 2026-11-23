@@ -192,12 +192,18 @@ const WAIT_MS = SETTLE.waitMs;
  * P93: when the best after WAIT_MS is still too rough, keep looking (the phone's GPS often needs half a minute indoors)
  * and show how close it is, instead of failing; only after this long is the person asked to move and try again.
  */
-const LONG_WAIT_MS = 45_000;
+const LONG_WAIT_MS = 25_000; // P123: was 45 s
+/** P123: a reading the browser already has counts when it is at most this old. */
+const FRESH_MS = 20_000;
+/** P123: within GOOD_M: taken after this (one more reading may sharpen it). */
+const QUICK_MS = 800;
+/** P123: within the check-in limit but rougher than GOOD_M: taken after this short look for better. */
+const FAST_MS = 3_000;
 /**
  * P122: a computer has no GPS; its Wi-Fi or network guess does not get better by waiting. With nothing within the
  * limit by then, it stops here and shows the guess with what to do (good readings still settle by the P120 rules).
  */
-const COMPUTER_WAIT_MS = 20_000;
+const COMPUTER_WAIT_MS = 10_000; // P123: was 20 s
 
 /** Demo only: a pretend device sending the readings of the chosen test place, so the real search and its map run on
  * screen: a rough first guess, then closer readings. 'wifi': a computer with only a Wi-Fi guess, kilometres wide. */
@@ -333,20 +339,24 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
     // P120: every reading is kept and combined (location-fix.ts): cached and jumping readings dropped, the precise
     // cluster averaged by accuracy, taken once it is precise and steady (or the best there is at the time limit).
     const started = Date.now();
+    // P123 (owner, 23 Nov 2026: "the map shows my pin but check-in does not detect it; detect it at once"): a reading
+    // the browser already had, up to 20 s old, counts like a new one (it is where the person is), so the quick first
+    // answer that puts the pin on the map can also be the check-in point.
+    const since = started - FRESH_MS;
     const readings: Reading[] = [];
     const rules = { ...SETTLE, goodM: Math.min(GOOD_M, me.maxAccuracyM), maxM: me.maxAccuracyM, waitMs: WAIT_MS };
     const device = dev;
     let done = false;
     // P122: the browser's last error code (1 denied, 2 unavailable, 3 timeout), to say why when no reading came at all.
     let lastError: number | null = null;
-    const current = () => fuse(usable(readings, started));
+    const current = () => fuse(usable(readings, since));
     const finish = () => {
       if (done) return;
       done = true;
       stopWatch.current();
       // P122: readings that came are never reported as "took too long": a good one is checked, a rough one is shown
       // with its real accuracy; only with no reading at all is it a problem (denied, switched off, or no answer).
-      const end = locateEnd(readings, started, me.maxAccuracyM, lastError);
+      const end = locateEnd(readings, since, me.maxAccuracyM, lastError);
       if (end.kind === 'none') {
         if (end.problem === 'denied') setPerm('denied');
         return setLoc({ phase: 'problem', problem: end.problem });
@@ -359,9 +369,11 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
     const review = () => {
       if (done) return;
       const elapsed = Date.now() - started;
-      if (settled(usable(readings, started), elapsed, rules) || elapsed >= LONG_WAIT_MS) return finish();
+      if (settled(usable(readings, since), elapsed, rules) || elapsed >= LONG_WAIT_MS) return finish();
       const f = current();
-      if (device === 'computer' && elapsed >= COMPUTER_WAIT_MS && (!f || f.accuracyM > me.maxAccuracyM) && bestEstimate(readings, started)) finish();
+      // P123: good enough is taken at once: within GOOD_M straight away, within the limit after a short look for better.
+      if (f && f.accuracyM <= me.maxAccuracyM && elapsed >= (f.accuracyM <= rules.goodM ? QUICK_MS : FAST_MS)) return finish();
+      if (device === 'computer' && elapsed >= COMPUTER_WAIT_MS && (!f || f.accuracyM > me.maxAccuracyM) && bestEstimate(readings, since)) finish();
     };
     const take = (p: GeolocationPosition) => {
       if (done) return;
@@ -371,7 +383,7 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
       readings.push({ lat: p.coords.latitude, lng: p.coords.longitude, accuracyM: p.coords.accuracy, at });
       const f = current();
       // P122: the map shows the best there is from the first reading on, even a rough one (never sent as such).
-      const e = bestEstimate(readings, started);
+      const e = bestEstimate(readings, since);
       setLoc({ phase: 'asking', accuracy: e ? e.accuracyM : null, readings: f?.used ?? 0, spot: e ? { lat: e.lat, lng: e.lng, accuracyM: e.accuracyM } : null });
       review();
     };
@@ -388,13 +400,21 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
       // The quick first answer failing says nothing yet: the watch keeps looking.
       if (!fromWatch) return;
       // P93/P122: a slow device that already gave a reading (even a rough one): use what there is instead of failing.
-      if (bestEstimate(readings, started)) return finish();
+      if (bestEstimate(readings, since)) return finish();
       if (problem === 'timeout') return; // keep listening until the time limit
       done = true;
       stopWatch.current();
       setLoc({ phase: 'problem', problem });
     };
     const id = geo.watchPosition(take, (err) => fail(err, true), { enableHighAccuracy: true, maximumAge: 0, timeout: LONG_WAIT_MS });
+    // P123: a second watch on the quick network location (Wi-Fi, cell): indoors it answers in a second or two while
+    // the GPS is still looking; both go through the same rules.
+    let quickWatch: number | null = null;
+    try {
+      quickWatch = geo.watchPosition(take, () => undefined, { enableHighAccuracy: false, maximumAge: FRESH_MS, timeout: LONG_WAIT_MS });
+    } catch {
+      quickWatch = null;
+    }
     // P122: a quick first answer (Wi-Fi or network, or one the browser already has, up to a minute old) in parallel, so
     // the map shows where the person is at once. It goes through the same rules: too old or too rough, it is shown only.
     try {
@@ -408,14 +428,16 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
     stopWatch.current = () => {
       done = true;
       geo.clearWatch(id);
+      if (quickWatch !== null) geo.clearWatch(quickWatch);
       window.clearInterval(tick);
       window.clearTimeout(limit);
     };
   };
 
-  // Already allowed: start finding the location at once.
+  // Already allowed: start finding the location at once. P123: not yet asked either: the browser asks now, as the
+  // check-in opens (Allow), instead of after a button press.
   useEffect(() => {
-    if (perm === 'granted' && loc.phase === 'idle') locate();
+    if ((perm === 'granted' || perm === 'prompt') && loc.phase === 'idle') locate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perm]);
 

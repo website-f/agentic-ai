@@ -77,7 +77,8 @@ const MEASURE: Partial<Record<MovementSummary['measure'], string>> = {
   no_place: 'No place is set for this person, so time outside cannot be measured. HR or the manager sets it on Check-in places.',
   outstation: 'Outstation day: anywhere is allowed, so time outside is not counted.',
   home: 'Working from home: the location is checked once at the start and not followed.',
-  no_location: 'No usable location reading yet.',
+  // P123: say why and what to do (a computer's location is often only a rough guess from the internet connection).
+  no_location: 'No location within 100 m yet. On a computer, turn on Windows location and Wi-Fi; on a phone, allow precise location for Prima.',
 };
 
 /** The short line on a list row: moved, and outside when it was. */
