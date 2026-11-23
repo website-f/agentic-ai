@@ -42,7 +42,7 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
-import { FormError } from "@/components/ui/field";
+import { Field, FormError } from "@/components/ui/field";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
 import { SearchSelect } from "@/components/ui/search-select";
@@ -68,6 +68,7 @@ import { useIsPhone } from "@/lib/use-media";
 import { cn, initials } from "@/lib/utils";
 
 import { TeamDialog } from "./members-org";
+import { OrgChartDownload, PrimaSyncLine } from "./org-chart-sync";
 
 const ALL = "__all__";
 const NO_ONE = "__none__";
@@ -208,6 +209,8 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
           </div>
         ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-1">
+          {/* P127: the chart as Excel or PDF (what this reader may see). */}
+          <OrgChartDownload />
           {withKids.length ? (
             <>
               <Button size="sm" variant="ghost" onClick={() => setCollapsed(new Set())} aria-label={t("Open every level")}>
@@ -250,6 +253,8 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
           </Link>
         ) : null}
       </div>
+      {/* P127: in step with Prima's org chart (members.manage only). */}
+      <PrimaSyncLine me={me} />
 
       <div ref={area} className="min-w-0">
         {!trees.length ? (
@@ -622,6 +627,7 @@ export function ChangeManagerDialog({ person, people, above, onClose }: { person
   const t = useT();
   const qc = useQueryClient();
   const [value, setValue] = useState(person.reports_to_user_id ?? NO_ONE);
+  const [reason, setReason] = useState("");
   const under = useMemo(() => descendantsOf(people, person.user_id), [people, person.user_id]);
   const options = [
     { value: NO_ONE, label: t("No one (top of a line)") },
@@ -635,7 +641,7 @@ export function ChangeManagerDialog({ person, people, above, onClose }: { person
       })),
   ];
   const save = useMutation({
-    mutationFn: () => setReportsTo(person.user_id, value === NO_ONE ? null : value),
+    mutationFn: () => setReportsTo(person.user_id, value === NO_ONE ? null : value, reason),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.members });
       qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -652,6 +658,9 @@ export function ChangeManagerDialog({ person, people, above, onClose }: { person
       <div className="grid gap-3">
         <SearchSelect value={value} onValueChange={setValue} label={t("Reports to")} searchPlaceholder={t("Search by name, title, company or department")} options={options} />
         <p className="text-[12.5px] text-muted">{t("A manager in a managing role (such as Head of department) can also give them tasks and follow their work.")}</p>
+        {/* P127: the line also goes to Prima's org chart, which keeps a reason with every change. */}
+        <Field label={t("Reason (optional)")} hint={t("Kept with the change in Prima's org chart.")} value={reason} maxLength={300}
+          onChange={(e) => setReason(e.target.value)} />
         <FormError message={save.error ? errorMessage(save.error) : null} />
       </div>
     </ResponsiveDialog>

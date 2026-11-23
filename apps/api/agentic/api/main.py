@@ -588,6 +588,11 @@ from .routers import held_changes as held_changes_router  # noqa: E402
 
 app.include_router(held_changes_router.router)
 
+# P127: the organization chart in step with Prima's, and its Excel and PDF downloads.
+from .routers import org_chart_files as org_chart_files_router  # noqa: E402
+
+app.include_router(org_chart_files_router.router)
+
 # P94: only the API process holds the PC sockets (devices/hub.py); the worker reaches them
 # through /internal/devices/*. Set here, not when a module is imported.
 from ..devices import bridge as _devices_bridge  # noqa: E402

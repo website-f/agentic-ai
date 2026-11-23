@@ -32,7 +32,7 @@ from ...models import (
 )
 from ...org import heads as dept_heads
 from ...org import hierarchy as org_chart
-from ...prima import autolink, modules
+from ...prima import autolink, modules, org_sync
 from ...prima import client as prima_client
 from ...prima.client import PrimaError
 from ...services import audit, identity
@@ -854,6 +854,7 @@ async def add_member(
 async def update_member(
     user_id: str,
     body: MemberUpdateIn,
+    background: BackgroundTasks,
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
@@ -875,7 +876,8 @@ async def update_member(
             db, principal, user_id, body.role, body.branch_id, body.department_id, body.branch_ids
         )
     if "reports_to_user_id" in body.model_fields_set:
-        await set_manager(db, principal, user_id, body.reports_to_user_id)
+        await set_manager(db, principal, user_id, body.reports_to_user_id, body.line_reason)
+        org_sync.later(background, principal.workspace_id)  # P127: to Prima, after the answer
     if "job_title" in body.model_fields_set:  # P111
         await set_title(db, principal, user_id, body.job_title)
     if body.head_of is not None:  # P109: every department they head
@@ -1021,7 +1023,11 @@ async def _check_lead(db: AsyncSession, principal: Principal, boss: Membership) 
 
 
 async def set_manager(
-    db: AsyncSession, principal: Principal, user_id: str, manager_id: str | None
+    db: AsyncSession,
+    principal: Principal,
+    user_id: str,
+    manager_id: str | None,
+    reason: str | None = None,
 ) -> Membership:
     """One person reports to `manager_id` (None: to no one), with every rule; the caller
     commits. P111: the manager is any active member here (the organization chart: a store head
@@ -1074,6 +1080,11 @@ async def set_manager(
         target=user_id,
         before={"reports_to": before},
         after={"reports_to": manager_id},
+    )
+    # P127: the line goes to Prima's org chart on the next sync (only once it is applied: the
+    # note is in this transaction).
+    await org_sync.note_office_change(
+        db, principal.workspace_id, user_id, principal.user.name, reason
     )
     await db.flush()
     return m
@@ -1261,6 +1272,7 @@ async def member_team(
 async def set_member_team(
     user_id: str,
     body: MemberTeamIn,
+    background: BackgroundTasks,
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> MembersBulkOut:
@@ -1296,6 +1308,8 @@ async def set_member_team(
         results.append(MembersBulkResult(user_id=uid, ok=True))
     await db.commit()
     done = sum(1 for r in results if r.ok)
+    if done:
+        org_sync.later(background, principal.workspace_id)  # P127: to Prima, after the answer
     return MembersBulkOut(results=results, done=done, skipped=len(results) - done)
 
 
@@ -1551,6 +1565,7 @@ async def remove_member(
 @router.post("/bulk")
 async def bulk(
     body: MembersBulkIn,
+    background: BackgroundTasks,
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> MembersBulkOut:
@@ -1574,7 +1589,7 @@ async def bulk(
                 if body.action == "remove":
                     await remove_one(db, principal, user_id)
                 elif body.action == "manager":  # P97: they all report to this manager
-                    await set_manager(db, principal, user_id, body.manager_id)
+                    await set_manager(db, principal, user_id, body.manager_id, body.line_reason)
                 elif body.action == "prima":  # P99: what they reach
                     await set_prima_access(
                         db,
@@ -1608,6 +1623,8 @@ async def bulk(
         results.append(MembersBulkResult(user_id=user_id, ok=True))
     await db.commit()
     done = sum(1 for r in results if r.ok)
+    if done and body.action == "manager":
+        org_sync.later(background, principal.workspace_id)  # P127: to Prima, after the answer
     return MembersBulkOut(results=results, done=done, skipped=len(results) - done)
 
 

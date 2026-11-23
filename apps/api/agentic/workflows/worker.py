@@ -66,6 +66,7 @@ from .minutes_activities import (
     minutes_write,
 )
 from .minutes_workflows import MeetingMinutesWorkflow, MinutesPurgeWorkflow
+from .prima_org_workflows import PrimaOrgSyncTickWorkflow, prima_org_tick  # P127
 from .reconcile_activities import liveness_reconcile
 from .reconcile_workflows import LivenessReconcileWorkflow
 from .skill_activities import skill_eval, skill_reflect, skill_reflect_chat
@@ -118,6 +119,7 @@ WORKFLOWS = [
     LinkedSyncWorkflow,
     LinkedSyncTickWorkflow,
     MailBackupWorkflow,
+    PrimaOrgSyncTickWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -171,6 +173,7 @@ ACTIVITIES = [
     linked_sync,
     linked_tick,
     mail_backup_round,
+    prima_org_tick,
 ]
 
 
@@ -196,6 +199,8 @@ async def ensure_schedules(client: Client) -> None:
         ("mail-sync", MailSyncTickWorkflow.run, timedelta(minutes=1)),
         # P80: linked SharePoint / OneDrive folders, each synced every few hours.
         ("linked-sync", LinkedSyncTickWorkflow.run, timedelta(minutes=30)),
+        # P127: the organization hierarchy and Prima's org chart kept in step.
+        ("prima-org-sync", PrimaOrgSyncTickWorkflow.run, timedelta(minutes=30)),
     ]
     for schedule_id, run, every in jobs:
         try:

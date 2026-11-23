@@ -192,6 +192,8 @@ class MembersBulkIn(BaseModel):
     # P98: every branch they work in (branch_id, or the department's branch, is the home).
     branch_ids: list[str] | None = Field(default=None, max_length=100)
     manager_id: str | None = Field(default=None, max_length=40)
+    # P127 (action "manager"): why, sent with the line to Prima's org chart (optional).
+    line_reason: str | None = Field(default=None, max_length=300)
     # P99 (action "prima"): leave out what does not change; prima_modules null = all.
     access: Access | None = None
     prima_modules: PrimaModules = Field(default=None, max_length=200)
@@ -238,6 +240,8 @@ class MemberUpdateIn(BaseModel):
     # P97: heads their department; reports to this manager (send null to clear).
     heads_department: bool | None = None
     reports_to_user_id: str | None = Field(default=None, max_length=40)
+    # P127: why the line changed, sent with it to Prima's org chart (optional).
+    line_reason: str | None = Field(default=None, max_length=300)
     # P109: every department they head (any company; [] = none). Replaces heads_department.
     head_of: list[str] | None = Field(default=None, max_length=50)
     # P99: what they reach, and their Prima screens (send null for all their role allows).

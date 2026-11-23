@@ -111,6 +111,9 @@ NOT_HELD: tuple[tuple[str, str], ...] = (
     (r"/api/org/(proxies/test|web/check|web/ask)", "check"),
     # Owner only: the route refuses everyone else (IT support included) itself.
     (r"/api/org/role-access", "owner"),
+    # P127 "Sync with Prima": applies no choice of its own, only aligns reporting lines already
+    # applied in the office or in Prima (prima/org_sync.py).
+    (r"/api/org-chart/prima-sync", "sync"),
 )
 _NOT_HELD = tuple(re.compile(rx) for rx, _ in NOT_HELD)
 

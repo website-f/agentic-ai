@@ -350,7 +350,7 @@ def test_every_mutating_route_under_the_held_prefixes_is_held():
     # Every exception names a real route (none left behind by a rename).
     samples = {_sample(p) for _, p, _ in _mutating()}
     for rx, why in held.NOT_HELD:
-        assert why in ("own", "check", "owner", "webhook")
+        assert why in ("own", "check", "owner", "webhook", "sync")  # sync: P127
         assert any(re.fullmatch(rx, s) for s in samples), rx
 
 

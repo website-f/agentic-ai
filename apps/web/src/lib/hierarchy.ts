@@ -67,8 +67,8 @@ export const myHierarchyQuery = queryOptions({
 });
 
 /** Who reports to `user_id` (null: to no one). The server checks every rule (no loops). */
-export const setReportsTo = (userId: string, managerId: string | null) =>
-  api(`/api/members/${userId}`, "PATCH", { reports_to_user_id: managerId });
+export const setReportsTo = (userId: string, managerId: string | null, reason?: string) =>
+  api(`/api/members/${userId}`, "PATCH", { reports_to_user_id: managerId, ...(reason?.trim() ? { line_reason: reason.trim() } : {}) });
 
 export interface OrgNode {
   person: OrgPerson;
