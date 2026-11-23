@@ -59,8 +59,12 @@ describe('office accounts: what an office account can be', () => {
     for (const role of ['director', 'company_manager', 'supervisor', 'guard', 'site_device', 'owner']) {
       assert.throws(() => checkAccountInput({ ...GOOD, role }), /role must be one of/, role);
     }
-    for (const department of ['finance', 'it', 'audit', 'legal', 'director_office', 'arms_control']) {
+    // P125: every working central department may be given; never the Director Office or arms control.
+    for (const department of ['director_office', 'arms_control', 'nope']) {
       assert.throws(() => checkAccountInput({ ...GOOD, department }), /department must be one of/, department);
+    }
+    for (const department of ['finance', 'it', 'audit', 'legal', 'chief_of_staff', 'operations', 'asset', 'pdpa', 'fwm', 'cms']) {
+      assert.doesNotThrow(() => checkAccountInput({ ...GOOD, department }), department);
     }
     for (const field of ['id', 'leadership', 'opsTier', 'integration', 'entraOid', 'accessClosedFrom', 'siteIds', 'personId', 'actRole']) {
       assert.throws(() => checkAccountInput({ ...GOOD, [field]: 'x' }), /cannot set/, field);
@@ -78,6 +82,10 @@ describe('office accounts: what an office account can be', () => {
     // A central employer's account is central staff anyway, so hr is fine there.
     assert.equal(checkAccountInput({ ...GOOD, role: 'admin_exec', companyIds: ['pwvsb'], department: 'hr' }).role, 'pwvsb_officer');
     assert.equal(checkAccountInput({ ...GOOD, role: 'admin_exec', department: 'procurement' }).department, 'procurement');
+    // P125: finance, the Chief of Staff's office, audit and legal are central staff only too.
+    for (const department of ['finance', 'chief_of_staff', 'audit', 'legal'])
+      assert.throws(() => checkAccountInput({ ...GOOD, role: 'admin_exec', department }), /must be central staff/, department);
+    assert.equal(checkAccountInput({ ...GOOD, role: 'admin_exec', department: 'it' }).department, 'it');
   });
 
   it('P92: takes relink (the office corrected their details) only as true or false', () => {

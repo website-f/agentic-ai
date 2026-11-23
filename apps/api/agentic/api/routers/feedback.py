@@ -51,7 +51,8 @@ from ..table import like as like_word
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 
 # P109: who reads every piece of feedback besides the developer (feedback.read in /me).
-READER_ROLES = frozenset({"owner", "admin", "management"})  # Fitri, 17 Nov 2026: + admins
+# Fitri, 17 Nov 2026: + admins (P125: + IT support)
+READER_ROLES = frozenset({"owner", "admin", "it_support", "management"})
 READ_PERMISSION = "feedback.read"
 
 

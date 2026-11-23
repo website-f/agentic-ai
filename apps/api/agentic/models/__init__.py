@@ -80,7 +80,9 @@ class Membership(Timestamps, Base):
         CheckConstraint("access IN ('agentic', 'prima_only')", name="ck_memberships_access"),
         CheckConstraint("prima_opens_as IN ('top', 'own')", name="ck_memberships_prima_opens_as"),
         CheckConstraint(
-            "prima_department IS NULL OR prima_department IN ('transport', 'procurement', 'hr')",
+            "prima_department IS NULL OR prima_department IN ('transport', 'procurement', 'hr', "
+            "'finance', 'chief_of_staff', 'it', 'legal', 'audit', 'operations', 'asset', 'pdpa', "
+            "'fwm', 'cms')",
             name="ck_memberships_prima_department",
         ),
         CheckConstraint(
@@ -2361,6 +2363,9 @@ from ..mailbox.models import ExternalMailAccount, MailBackupJob  # noqa: E402, F
 
 # P109b: Teams meetings made from the Microsoft 365 workspace and their Prima record.
 from ..microsoft.meeting_models import TeamsMeeting  # noqa: E402, F401
+
+# P125: an IT support person's changes, held until an owner or global admin approves them.
+from ..org.held_models import HeldChange  # noqa: E402, F401
 
 # P109: who heads which departments, and files uploaded for other companies (org/models.py).
 from ..org.models import DepartmentHead, FileHandoff, PersonRequest  # noqa: E402, F401

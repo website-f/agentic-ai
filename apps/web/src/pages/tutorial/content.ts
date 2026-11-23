@@ -789,7 +789,7 @@ export function lessonState(
 
 /** Mirror of the server's role -> track map, used before progress loads. */
 export function trackOfRole(role: string): Track {
-  if (role === "owner" || role === "admin") return "owner";
+  if (role === "owner" || role === "admin" || role === "it_support") return "owner";
   if (role === "staff") return "staff";
   if (role === "approver" || role === "viewer") return "approver";
   return "management";

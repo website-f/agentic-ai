@@ -3,6 +3,7 @@ import { msg } from "@/i18n";
 export type Role =
   | "owner"
   | "admin"
+  | "it_support"
   | "branch_manager"
   | "hod"
   | "group_hod"
@@ -77,7 +78,7 @@ export interface Member {
   access?: Access;
   prima_modules?: string[] | null;
   /** P106: the Prima department their own Prima account gets (null or missing: none). */
-  prima_department?: "transport" | "procurement" | "hr" | null;
+  prima_department?: "transport" | "procurement" | "hr" | "finance" | "chief_of_staff" | "it" | "legal" | "audit" | "operations" | "asset" | "pdpa" | "fwm" | "cms" | null;
   /** P109: the departments they head (any company), what of the Library they read, and
    * whether they may upload files for other companies. */
   head_of?: { id: string; name: string; branch_id?: string | null; branch_name?: string | null }[];
@@ -145,7 +146,11 @@ export interface SystemStatus {
 /** English keys (msg): render with t(ROLE_INFO[r].label). */
 export const ROLE_INFO: Record<Role, { label: string; blurb: string }> = {
   owner: { label: msg("Owner"), blurb: msg("Everything, including owner access and workspace-level budgets.") },
-  admin: { label: msg("Admin"), blurb: msg("Members, organization, AI keys and policies.") },
+  // P125: "Admin" is shown as "Global admin" (the id stays "admin").
+  admin: { label: msg("Global admin"), blurb: msg("Members, organization, AI keys and policies.") },
+  // P125: an admin's access, but every change to members, the organization, access and settings
+  // waits for an owner or a global admin to approve it.
+  it_support: { label: msg("IT support"), blurb: msg("Like a global admin, but every change they make to members, the organization, access and settings waits for an owner or a global admin to approve it.") },
   branch_manager: { label: msg("Branch manager"), blurb: msg("Runs their branches (one or more): agents, work, approvals, logins and people.") },
   hod: { label: msg("Head of department"), blurb: msg("Runs one department: its agents, work, approvals and people.") },
   // P120: an HOD over several companies (each one they are added to).

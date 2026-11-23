@@ -20,7 +20,7 @@ SETTING = "require_2fa"
 # "Owners and admins": the roles that run the whole workspace (members, settings, every
 # login and file). Office roles (branch manager, HOD) are covered by "everyone".
 # P92: management and HR manage members (and passwords) like an admin, so the rule asks them too.
-ADMIN_ROLES = frozenset({"owner", "admin", "management", "hr"})
+ADMIN_ROLES = frozenset({"owner", "admin", "it_support", "management", "hr"})  # P125: + IT
 
 ISSUER = "Agentic Office"
 RECOVERY_COUNT = 10

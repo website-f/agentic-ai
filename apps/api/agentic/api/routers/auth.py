@@ -98,7 +98,8 @@ async def _extra_permissions(
     """P92: only an owner edits what each role may do (Settings > Roles and access).
     P73: the developer (an owner marked by the operator) also manages feedback.
     P109: owners, admins and management read it (feedback.read: the Feedbacks page, comments)."""
-    if role in ("management", "admin"):  # Fitri, 17 Nov 2026: admins read feedback too
+    # Fitri, 17 Nov 2026: admins read feedback too (P125: and IT support)
+    if role in ("management", "admin", "it_support"):
         return {"feedback.read"}
     if role != "owner":
         return set()

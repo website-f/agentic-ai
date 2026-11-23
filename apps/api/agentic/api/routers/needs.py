@@ -23,7 +23,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
-from ...core.security import can
+from ...core.security import APPROVER_ROLES, HELD_ROLE, can
 from ...microsoft import access as mail_access
 from ...models import (
     Approval,
@@ -277,7 +277,7 @@ async def _p109_needs(db: AsyncSession, principal: Principal, add: Any) -> None:
     from ...org.models import PersonRequest
 
     first = PersonRequest.approver_id == me
-    if can(principal.role, "org.manage"):
+    if can(principal.role, "org.manage") and principal.role != HELD_ROLE:  # P125
         first = or_(first, PersonRequest.approver_id.is_(None))
     await add(
         "requests",
@@ -292,6 +292,19 @@ async def _p109_needs(db: AsyncSession, principal: Principal, add: Any) -> None:
         {"tab": "people"},
         lambda i: {"tab": "people", "request": i},
     )
+    # P125: IT support's changes waiting for an owner or global admin.
+    if principal.role in APPROVER_ROLES:
+        from ...org.held_models import HeldChange
+        from .held_changes import pending_count_where
+
+        await add(
+            "it_changes",
+            select(HeldChange.id).where(pending_count_where(principal)),
+            (HeldChange.id, HeldChange.title, HeldChange.created_at),
+            "/approvals",
+            {"tab": "it"},
+            lambda i: {"tab": "it", "change": i},
+        )
     await add(
         "handoffs_check",
         select(FileHandoff.id).where(

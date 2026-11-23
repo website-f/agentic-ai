@@ -20,6 +20,7 @@ from agentic.core.db import SessionLocal
 from agentic.models import AuditLog, Membership, PrimaLink, User
 from agentic.prima import autolink, org_link
 from agentic.prima import client as prima
+from agentic.prima import client as prima_client
 
 from .conftest import csrf
 from .test_agents import office
@@ -177,7 +178,7 @@ async def test_the_developer_switches_between_the_ceo_record_and_their_own_accou
     # Today's behaviour is the default: the CEO record, which Prima's web shows as such.
     d = (await client.get("/api/prima/opens-as")).json()
     assert d["can_choose"] and d["opens_as"] == "top" and d["account"] is None
-    assert d["departments"] == ["transport", "procurement", "hr"]
+    assert d["departments"] == list(prima_client.PRIMA_DEPARTMENTS)  # P125: every office department
     me = (await client.get("/api/prima/api/me")).json()
     assert me["user"]["id"] == "u-ceo" and me["office"]["asTop"] is True
     assert fake.accounts() == []
@@ -270,7 +271,7 @@ async def test_only_the_developer_chooses(client, fake):
         u = await db.scalar(select(User).where(User.email == "owner@example.com"))
         u.is_developer = True
         await db.commit()
-    r = await _put(client, opens_as="own", department="finance")
+    r = await _put(client, opens_as="own", department="director_office")  # P125: never offered
     assert r.status_code == 422 and fake.accounts() == []
 
 
@@ -324,7 +325,7 @@ async def test_members_access_gives_a_prima_department_hr_included(client, fake)
     )  # fmt: skip
     assert r.status_code == 200 and r.json()["prima_department"] == "transport"
     r = await client.put(
-        f"/api/members/{boss_id}/prima-access", json={"prima_department": "finance"},
+        f"/api/members/{boss_id}/prima-access", json={"prima_department": "director_office"},
         headers=csrf(client),
     )  # fmt: skip
     assert r.status_code == 422

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import __version__
 from ...core.config import settings
 from ...core.db import get_db
-from ...core.security import can
+from ...core.security import APPROVER_ROLES, can
 from ...core.temporal import temporal_client
 from ...core.valkey import valkey
 from ...models import (
@@ -206,6 +206,13 @@ async def _counts(db: AsyncSession, principal: Principal) -> dict[str, int]:
             .select_from(SOP)
             .where(SOP.workspace_id == ws, SOP.status == "active"),
         }
+    if principal.role in APPROVER_ROLES:  # P125: IT support's changes for an owner / admin
+        from ...org.held_models import HeldChange
+        from .held_changes import pending_count_where
+
+        asked["it_changes_pending"] = (
+            select(func.count()).select_from(HeldChange).where(pending_count_where(principal))
+        )
     row = (
         await db.execute(select(*(q.scalar_subquery().label(k) for k, q in asked.items())))
     ).one()
@@ -233,6 +240,7 @@ async def _counts(db: AsyncSession, principal: Principal) -> dict[str, int]:
         "tasks_review": got["tasks_review"],
         "approvals_pending": got["approvals_pending"],
         "skill_proposals_pending": got.get("skill_proposals_pending", 0),
+        "it_changes_pending": got.get("it_changes_pending", 0),
         "documents_review": got["documents_review"],
         "chat_models": chat_models,
         "library": got.get("library_files", 0) + got.get("library_sops", 0),

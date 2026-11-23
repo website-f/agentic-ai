@@ -1,4 +1,6 @@
 /** Thin fetch wrapper: same-origin cookies, JSON in and out, CSRF echo, typed errors. */
+import { toast } from "sonner";
+
 import { t, useLang } from "@/i18n";
 
 export class ApiError extends Error {
@@ -57,8 +59,9 @@ export async function api<T>(path: string, method: Method = "GET", body?: unknow
 
   if (res.status === 204) return undefined as T;
   const data = (await res.json().catch(() => null)) as
-    | (T & { code?: string; message?: string; fields?: Record<string, string> })
+    | (T & { code?: string; message?: string; fields?: Record<string, string>; held?: boolean; summary?: string; request_id?: string })
     | null;
+  if (res.status === 202 && data?.held === true) throw heldForApproval(data.summary ?? "", data.request_id ?? "");
   if (!res.ok) {
     throw new ApiError(
       res.status,
@@ -120,6 +123,49 @@ export async function streamNdjson<E>(path: string, body: unknown, onEvent: (e: 
     }
   }
   if (buffer.trim()) onEvent(JSON.parse(buffer) as E);
+}
+
+/**
+ * P125: an IT support person's change to members, the organization, access or settings is not
+ * done: the server keeps it for an owner or a global admin to approve and answers 202
+ * {"held": true, "summary", "request_id"}. The call ends as an ApiError with code
+ * "held_for_approval" (so no screen treats it as done), the person sees ONE info toast saying
+ * where it went, and the red error toast a screen would show for it is skipped
+ * (installHeldGuard, from main.tsx).
+ */
+export const HELD_FOR_APPROVAL = "held_for_approval";
+const HELD_EVENT = "agentic:held";
+let lastHeld = { message: "", at: 0 };
+
+export function isHeld(err: unknown): boolean {
+  return err instanceof ApiError && err.code === HELD_FOR_APPROVAL;
+}
+
+function heldForApproval(summary: string, requestId: string): ApiError {
+  const message = t("Sent to the admins for approval: {summary}", { summary });
+  lastHeld = { message, at: Date.now() };
+  toast.info(message, { id: `held-${requestId}`, duration: 7000 });
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(HELD_EVENT, { detail: { id: requestId } }));
+  return new ApiError(202, HELD_FOR_APPROVAL, message);
+}
+
+/** Calls `fn` whenever one of this person's changes is sent for approval (to refresh lists). */
+export function onHeld(fn: () => void): () => void {
+  window.addEventListener(HELD_EVENT, fn);
+  return () => window.removeEventListener(HELD_EVENT, fn);
+}
+
+let guarded = false;
+/** Once, at start: a screen's `toast.error(errorMessage(e))` for a held change is not shown
+ * (the info toast already said it went for approval). */
+export function installHeldGuard(): void {
+  if (guarded) return;
+  guarded = true;
+  const original = toast.error;
+  toast.error = ((message: Parameters<typeof toast.error>[0], data?: Parameters<typeof toast.error>[1]) => {
+    if (typeof message === "string" && message === lastHeld.message && Date.now() - lastHeld.at < 10_000) return "";
+    return original(message, data);
+  }) as typeof toast.error;
 }
 
 export function errorMessage(err: unknown): string {

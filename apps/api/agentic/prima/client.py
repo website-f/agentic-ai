@@ -97,7 +97,24 @@ ACCOUNT_LINK = "auto:account"
 # P106: the Prima departments an office account may be in (Prima's office-accounts.ts
 # OFFICE_DEPARTMENTS), set per member in Members > Access. "hr" opens Prima's HR and pay walls
 # (staff personal data and payroll) and is for central staff (pwvsb_officer) only.
-PRIMA_DEPARTMENTS = ("transport", "procurement", "hr")
+PRIMA_DEPARTMENTS = (
+    "transport",
+    "procurement",
+    "hr",
+    "finance",
+    "chief_of_staff",
+    "it",
+    "legal",
+    "audit",
+    "operations",
+    "asset",
+    "pdpa",
+    "fwm",
+    "cms",
+)
+# P125: the departments that open staff personal data, payroll or money: central staff only (Prima
+# refuses them on any other role, CENTRAL_ONLY_DEPARTMENTS in its office-accounts.ts).
+CENTRAL_ONLY_DEPARTMENTS = ("hr", "finance", "chief_of_staff", "audit", "legal")
 # P106: how the developer opens Prima: as its top record (the default, as every owner) or as
 # their own Prima account (central staff), so they can prepare loads someone else OKs.
 OPENS_AS = ("top", "own")
@@ -191,7 +208,7 @@ def account_department(m: Membership, role: str) -> str | None:
     """The Prima department to give this person's own account: theirs, and never hr on a role
     other than central staff (Prima refuses it; a branch manager keeps their account)."""
     dept = m.prima_department if m.prima_department in PRIMA_DEPARTMENTS else None
-    return None if dept == "hr" and role != "pwvsb_officer" else dept
+    return None if dept in CENTRAL_ONLY_DEPARTMENTS and role != "pwvsb_officer" else dept
 
 
 def matchable(records: list[StaffRecord]) -> list[StaffRecord]:

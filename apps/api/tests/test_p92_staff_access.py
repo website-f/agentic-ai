@@ -292,7 +292,11 @@ STAFF_OK = {
     "/api/integrations/microsoft/accounts",  # P118: their own Microsoft accounts only
     # P122: their own accounts, and only the shared mailboxes the P34 rules give them
     "/api/integrations/microsoft/my-mailboxes",
+    # P124: where Microsoft returns another company's IT admin after the shared approval link
+    # (no sign-in needed; it records nothing for this office without an owner's bound state)
+    "/api/integrations/microsoft/adminconsent",
     "/api/requests",  # P120: their own requests (and their people's, to decide)
+    "/api/held-changes",  # P125: IT support's own held changes (none for staff: empty lists)
     "/api/mail-accounts",  # P109: their own other email accounts only (test_p109_mail_accounts)
     "/api/m365/summary",  # P109b: their own Microsoft 365 tile ("not connected" until they are)
     "/api/me/prefs", "/api/me/staff", "/api/me/twin", "/api/me/worker", "/api/meetings",
@@ -552,6 +556,7 @@ PRIMA_ONLY_OK = {
     "/api/feedback/config", "/api/feedback/mine",
     # no sign-in needed
     "/api/auth/setup-status", "/api/auth/sso",
+    "/api/integrations/microsoft/adminconsent",  # P124: the shared approval link's return page
 }  # fmt: skip
 PRIMA_ONLY_WRITE_OK = {
     ("PUT", "/api/me/prefs"), ("POST", "/api/auth/2fa/setup"), ("POST", "/api/auth/logout"),

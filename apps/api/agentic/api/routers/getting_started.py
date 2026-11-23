@@ -57,6 +57,7 @@ Group = Literal["owner", "admin", "branch", "hod", "staff"]
 GROUP_OF_ROLE: dict[str, Group] = {
     "owner": "owner",
     "admin": "admin",
+    "it_support": "admin",
     "management": "admin",
     "hr": "admin",
     "operator": "admin",

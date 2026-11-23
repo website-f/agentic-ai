@@ -71,10 +71,12 @@ def test_management_and_hr_are_admin_without_the_engine_storage_and_mcp():
         assert Scope.of(role, "u1", None, None).everything
     # The three new switches go to exactly who reached those pages before (nothing changes).
     assert {r for r in ROLES if "engine.view" in PERMISSIONS[r]} == {
-        "owner", "admin", "operator", "approver", "viewer",
+        "owner", "admin", "it_support", "operator", "approver", "viewer",
     }  # fmt: skip
-    assert {r for r in ROLES if "storage.manage" in PERMISSIONS[r]} == {"owner", "admin"}
-    assert {r for r in ROLES if "mcp.manage" in PERMISSIONS[r]} == {"owner", "admin"}
+    # P125: IT support has an admin's access (its admin changes wait for approval).
+    admins = {"owner", "admin", "it_support"}
+    assert {r for r in ROLES if "storage.manage" in PERMISSIONS[r]} == admins
+    assert {r for r in ROLES if "mcp.manage" in PERMISSIONS[r]} == admins
     assert {r for r in ROLES if "members.assign_owner" in PERMISSIONS[r]} == {"owner"}
     # Two-step sign-in "owners and admins" covers them: they manage members and passwords.
     assert two_factor.covers("admins", "management") and two_factor.covers("admins", "hr")

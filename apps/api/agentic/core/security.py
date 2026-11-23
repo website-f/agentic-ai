@@ -51,7 +51,14 @@ def temp_password(length: int = 14) -> str:
 
 ROLES = (
     "owner",
+    # P125: shown as "Global admin" (one day "admin" may also mean an administrator per branch;
+    # the id stays "admin").
     "admin",
+    # P125 (the owner, 23 Nov 2026: "another high-privilege role under admin: IT support"): an
+    # admin's access, but every change they make to members, the organization, access and the
+    # workspace's settings waits for an owner, the developer or a global admin to approve it
+    # (org/held.py). They never give the owner, global admin or IT support roles themselves.
+    "it_support",
     "branch_manager",
     "hod",
     # P120 (Fitri, 20 Nov 2026: "HOD is for one company, so create another HOD role that
@@ -75,6 +82,12 @@ ROLES = (
 SCOPED_ROLES = frozenset({"branch_manager", "group_hod", "hod", "supervisor", "staff"})
 # P120: the scoped roles that see and run whole companies (each company they are added to).
 COMPANY_ROLES = frozenset({"branch_manager", "group_hod"})
+
+# P125: the roles above everyone else. IT support never gives (or changes someone in) one of
+# them; only owners and global admins approve what IT support asks (org/held.py).
+HIGH_ROLES = frozenset({"owner", "admin", "it_support"})
+HELD_ROLE = "it_support"
+APPROVER_ROLES = frozenset({"owner", "admin"})  # the developer is an owner
 
 _ADMIN = {
     "read",
@@ -115,6 +128,8 @@ _LEADERSHIP = _ADMIN - {"engine.manage", "engine.view", "storage.manage", "mcp.m
 PERMISSIONS: dict[str, frozenset[str]] = {
     "owner": frozenset(_ADMIN | {"members.assign_owner"}),
     "admin": frozenset(_ADMIN),
+    # P125: an admin's access; their admin changes are held for approval (org/held.py).
+    "it_support": frozenset(_ADMIN),
     # Manage agents, work, approvals, logins and their own people, within the branch.
     "branch_manager": frozenset(
         {
@@ -237,3 +252,24 @@ def role_permissions(role: str) -> frozenset[str]:
 
 def can(role: str, permission: str) -> bool:
     return permission in role_permissions(role)
+
+
+# ---------------------------------------------------------------- P125: on behalf of IT support
+#
+# While an owner or global admin approves an IT support person's held change, the change runs
+# again with the approver's own sign-in (org/held.py). For that run this holds (role, user id)
+# of the person who asked, so the member rules also apply theirs: no owner, global admin or IT
+# support role given or touched, and never their own account. It only ever narrows.
+_acting_for: ContextVar[tuple[str, str] | None] = ContextVar("agentic_acting_for", default=None)
+
+
+def acting_for() -> tuple[str, str] | None:
+    return _acting_for.get()
+
+
+def set_acting_for(value: tuple[str, str] | None) -> Any:
+    return _acting_for.set(value)
+
+
+def reset_acting_for(token: Any) -> None:
+    _acting_for.reset(token)

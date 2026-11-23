@@ -69,6 +69,8 @@ ROLE_WORDS: dict[str, str] = {
     "pemilik": "owner",
     "tuan punya": "owner",
     "administrator": "admin",
+    "admin": "admin",  # P125: shown as "Global admin" now
+    "sokongan teknikal": "it_support",
     "pentadbir": "admin",
     "manager": "branch_manager",
     "pengurus": "branch_manager",

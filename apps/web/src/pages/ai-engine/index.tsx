@@ -39,7 +39,7 @@ export function AIEnginePage() {
   const canManage = me.permissions.includes("engine.manage");
   const search = useSearch({ strict: false }) as { tab?: AITab };
   // P115 (Fitri, 18 Nov 2026): owners, admins and the system's developer have AI usage per user.
-  const usageReader = me.role === "owner" || me.role === "admin"; // the developer is always an owner
+  const usageReader = me.role === "owner" || me.role === "admin" || me.role === "it_support"; // the developer is always an owner
   const tabs = AI_TABS.filter((k) => k !== "people" || usageReader);
   const tab: AITab = search.tab && tabs.includes(search.tab) ? search.tab : "providers";
   const navigate = useNavigate();

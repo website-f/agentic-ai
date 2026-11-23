@@ -7,8 +7,11 @@ from ...assistants import access as assistant_access
 from ...core.access import ACCESS, AGENTIC, is_prima_only
 from ...core.db import get_db
 from ...core.security import (
+    HELD_ROLE,
+    HIGH_ROLES,
     ROLES,
     SCOPED_ROLES,
+    acting_for,
     can,
     hash_password,
     role_permissions,
@@ -202,12 +205,22 @@ def within_own(actor: Principal, role: str) -> bool:
     """P92: nobody but an owner gives a role (or changes someone in a role) with more access
     than their own, so management cannot make an admin to reach the AI engine. Managing all
     members includes managing a team (team.manage)."""
+    if role in HIGH_ROLES and not high_ok(actor.role):
+        return False  # P125: IT support (or a change approved for them) never reaches these
     if actor.role == "owner":
         return True
     mine = set(role_permissions(actor.role))
     if "members.manage" in mine:
         mine.add("team.manage")
     return role_permissions(role) - _PERSONAL <= mine
+
+
+def high_ok(role: str) -> bool:
+    """P125: whether someone in `role` may give the owner, global admin or IT support roles or
+    change people in them: never IT support, and never a change run on IT support's behalf
+    (an approved request: core/security.acting_for)."""
+    behalf = acting_for()
+    return role != HELD_ROLE and (behalf is None or behalf[0] != HELD_ROLE)
 
 
 def assignable_roles(actor: Principal) -> list[str]:
@@ -222,8 +235,11 @@ def assignable_for(role: str) -> list[str]:
         return [
             r
             for r in ROLES
-            if (r == "owner" and can(role, "members.assign_owner"))
-            or (r != "owner" and (role == "owner" or role_permissions(r) - _PERSONAL <= mine))
+            if (r not in HIGH_ROLES or high_ok(role))
+            and (
+                (r == "owner" and can(role, "members.assign_owner"))
+                or (r != "owner" and (role == "owner" or role_permissions(r) - _PERSONAL <= mine))
+            )
         ]
     allowed = TEAM_ROLES.get(role, set())
     return [r for r in ROLES if r in allowed]

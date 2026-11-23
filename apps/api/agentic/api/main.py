@@ -124,6 +124,12 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# P125: IT support's admin changes wait for an owner or global admin (org/held.py). Added
+# first, so it is the innermost middleware: after the CSRF and JSON checks, before any route.
+from .held_guard import HoldForApproval  # noqa: E402
+
+app.add_middleware(HoldForApproval)
+
 
 @app.middleware("http")
 async def csrf_guard(request: Request, call_next):
@@ -576,6 +582,11 @@ app.include_router(my_notifications_router.router)
 from .routers import person_requests as person_requests_router  # noqa: E402
 
 app.include_router(person_requests_router.router)
+
+# P125: IT support's changes waiting for approval (the Approvals page).
+from .routers import held_changes as held_changes_router  # noqa: E402
+
+app.include_router(held_changes_router.router)
 
 # P94: only the API process holds the PC sockets (devices/hub.py); the worker reaches them
 # through /internal/devices/*. Set here, not when a module is imported.

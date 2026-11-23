@@ -33,6 +33,7 @@ from ..deps import (
     require,
     require_developer,
 )
+from ..schemas import PrimaDepartment
 
 router = APIRouter(prefix="/api/prima", tags=["prima"])
 
@@ -410,7 +411,7 @@ async def companies_sync(
 
 class OpensAsIn(BaseModel):
     opens_as: Literal["top", "own"]
-    department: Literal["transport", "procurement", "hr"] | None = None
+    department: PrimaDepartment | None = None  # P125: every office department
 
 
 async def _opens_as_out(db: AsyncSession, principal: Principal) -> dict[str, object]:

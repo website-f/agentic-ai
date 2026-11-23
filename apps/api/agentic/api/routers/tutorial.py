@@ -52,6 +52,7 @@ Track = Literal["owner", "management", "staff", "approver"]
 TRACK_OF_ROLE: dict[str, Track] = {
     "owner": "owner",
     "admin": "owner",
+    "it_support": "owner",
     "branch_manager": "management",
     "hod": "management",
     "group_hod": "management",

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { ApprovalCard } from "@/components/approval-card";
 import { EmptyState, Page, PageHeader } from "@/components/page";
+import { ItChanges } from "@/components/held-changes";
 import { PeopleRequests } from "@/components/people-requests";
 import { DataTable, filterOf, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { Pill } from "@/components/ui/pill";
@@ -14,11 +15,12 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locale, msg, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
+import { heldQuery } from "@/lib/held";
 import { meQuery } from "@/lib/queries";
 import { requestsQuery } from "@/lib/requests";
 import { approvalsQuery, workKeys, type Approval } from "@/lib/work";
 
-type Tab = "pending" | "history" | "people";
+type Tab = "pending" | "history" | "people" | "it";
 
 /** Waiting approvals are a short inbox of cards to decide on. */
 function Waiting({ canDecide }: { canDecide: boolean }) {
@@ -147,12 +149,15 @@ export function ApprovalsPage() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canDecide = me.permissions.includes("approvals.decide");
-  const search = useSearch({ strict: false }) as { tab?: Tab; request?: string };
+  const search = useSearch({ strict: false }) as { tab?: Tab; request?: string; change?: string };
   const navigate = useNavigate();
-  const tab: Tab = search.tab === "history" || search.tab === "people" ? search.tab : "pending";
+  const tab: Tab = search.tab === "history" || search.tab === "people" || search.tab === "it" ? search.tab : "pending";
   const { data: pending } = useQuery(approvalsQuery("pending"));
   // P120: people's requests (always asked: the count shows on the tab).
   const { data: asks } = useQuery(requestsQuery);
+  // P125: changes by IT support, for owners and global admins (and IT support's own).
+  const itTab = ["owner", "admin", "it_support"].includes(me.role);
+  const { data: itChanges } = useQuery({ ...heldQuery, enabled: itTab });
   const [historyTotal, setHistoryTotal] = useState<number | undefined>(undefined);
   return (
     <Page>
@@ -169,10 +174,11 @@ export function ApprovalsPage() {
         options={[
           { value: "pending", label: t("From AI"), count: pending?.length },
           { value: "people", label: t("From people"), count: asks?.to_decide.length },
+          ...(itTab ? [{ value: "it" as const, label: t("Changes by IT support"), count: itChanges?.is_approver ? itChanges.to_decide.length : itChanges?.mine.filter((c) => c.status === "pending").length }] : []),
           { value: "history", label: t("AI history"), count: tab === "history" ? historyTotal : undefined },
         ]}
       />
-      {tab === "pending" ? <Waiting canDecide={canDecide} /> : tab === "people" ? <PeopleRequests open={search.request} /> : <History onTotal={setHistoryTotal} />}
+      {tab === "pending" ? <Waiting canDecide={canDecide} /> : tab === "people" ? <PeopleRequests open={search.request} /> : tab === "it" ? <ItChanges open={search.change} /> : <History onTotal={setHistoryTotal} />}
     </Page>
   );
 }

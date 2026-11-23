@@ -57,8 +57,10 @@ import { STAFF_PHONE } from "./staff-phone";
 import { PRIMA_SOP_GUIDE } from "./prima-sop-guide";
 import { APPROVALS_P122 } from "./approvals-p122";
 import { SHELL_P123 } from "./shell-p123";
+import { PRIMA_DEPTS_P125 } from "./prima-depts-p125";
 import { MAIL_P122 } from "./mail-p122";
 import { WORK_MAIL_P124 } from "./work-mail-p124";
+import { IT_SUPPORT_P125 } from "./it-support-p125";
 import { TABLES } from "./tables";
 import { TEAM } from "./team";
 import { ROLES_P98 } from "./roles-p98";
@@ -169,6 +171,8 @@ export const MS: Record<string, string> = {
   ...PRIMA_SOP_GUIDE,
   ...APPROVALS_P122,
   ...SHELL_P123,
+  ...PRIMA_DEPTS_P125,
   ...MAIL_P122, // P122: Work and Personal email, connecting another account by address
   ...WORK_MAIL_P124, // P124: extra work email accounts wait for approval
+  ...IT_SUPPORT_P125, // P125: the IT support role and its changes that wait for approval
 };

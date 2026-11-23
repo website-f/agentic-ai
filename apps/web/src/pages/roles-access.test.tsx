@@ -61,14 +61,14 @@ describe("Roles and access", { timeout: 30_000 }, () => {
     const heads = within(within(matrix).getAllByRole("row")[0]!).getAllByRole("columnheader").map((h) => h.textContent);
     expect(heads[0]).toBe("Permission");
     expect(heads[1]).toBe("Owner Locked");
-    expect(heads.slice(2).map((h) => h?.replace(/\d+ changed.*/, ""))).toEqual(["Admin", "Viewer", "Management", "HR"]);
+    expect(heads.slice(2).map((h) => h?.replace(/\d+ changed.*/, ""))).toEqual(["Global admin", "Viewer", "Management", "HR"]);
     expect(heads[5]).toContain("1 changed"); // HR without the audit log
     const ownerEngine = within(matrix).getByLabelText("AI engine: change for Owner");
     expect(ownerEngine).toHaveAttribute("aria-checked", "true");
     expect(ownerEngine).toBeDisabled();
     const engine = within(matrix).getByLabelText("AI engine: see for Management");
     expect(engine).toHaveAttribute("aria-checked", "false");
-    expect(within(matrix).getByLabelText("AI engine: see for Admin")).toHaveAttribute("aria-checked", "true");
+    expect(within(matrix).getByLabelText("AI engine: see for Global admin")).toHaveAttribute("aria-checked", "true");
     expect(within(matrix).getByLabelText("Audit log for HR")).toHaveAttribute("aria-checked", "false");
     // Areas group the rows; each row says what it opens.
     expect(within(matrix).getByRole("columnheader", { name: "System and connections" })).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe("Roles and access", { timeout: 30_000 }, () => {
     expect(within(matrix).getByLabelText("Audit log for HR")).toHaveAttribute("aria-checked", "true");
     expect(screen.getByText("Not saved yet")).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText("Search permissions or pages"), { target: { value: "storage" } });
-    expect(within(matrix).getByLabelText("File storage for Admin")).toBeInTheDocument();
+    expect(within(matrix).getByLabelText("File storage for Global admin")).toBeInTheDocument();
     expect(within(matrix).queryByLabelText("Audit log for HR")).toBeNull();
     fireEvent.change(screen.getByPlaceholderText("Search permissions or pages"), { target: { value: "zzz" } });
     expect(screen.getByText("Nothing matches")).toBeInTheDocument();

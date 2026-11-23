@@ -39,7 +39,17 @@ from .branches import member_in_branches
 log = logging.getLogger(__name__)
 
 MANAGER_ROLES = frozenset(
-    {"owner", "admin", "management", "hr", "branch_manager", "group_hod", "hod", "supervisor"}
+    {
+        "owner",
+        "admin",
+        "it_support",
+        "management",
+        "hr",
+        "branch_manager",
+        "group_hod",
+        "hod",
+        "supervisor",
+    }
 )
 
 # The moves a person's task may make by hand (drag or button). No "failed": people do not

@@ -38,14 +38,31 @@ export interface PrimaCatalog {
 }
 
 /** P106: the Prima departments a member's own Prima account may be in (the API's own list). */
-export const PRIMA_DEPARTMENTS = ["transport", "procurement", "hr"] as const;
+// P125: every working central department (Prima opens a person's screens by department; ticking
+// Prima modules only narrows what the role and department allow).
+export const PRIMA_DEPARTMENTS = [
+  "operations", "finance", "procurement", "hr", "chief_of_staff", "it", "legal", "audit",
+  "transport", "asset", "pdpa", "fwm", "cms",
+] as const;
 export type PrimaDepartment = (typeof PRIMA_DEPARTMENTS)[number];
 
 const DEPARTMENT_LABELS: Record<PrimaDepartment, string> = {
-  transport: msg("Transport"),
+  operations: msg("Operations"),
+  finance: msg("Finance"),
   procurement: msg("Procurement and stores"),
   hr: msg("HR"),
+  chief_of_staff: msg("Chief of Staff office"),
+  it: msg("IT"),
+  legal: msg("Legal"),
+  audit: msg("Audit (ACT)"),
+  transport: msg("Transport"),
+  asset: msg("Asset management"),
+  pdpa: msg("PDPA"),
+  fwm: msg("Foreign workers"),
+  cms: msg("CMS (control and monitoring)"),
 };
+/** P125: these open staff personal data, payroll or money: central staff only. */
+const SENSITIVE_DEPARTMENTS: readonly PrimaDepartment[] = ["hr", "finance", "chief_of_staff", "audit", "legal"];
 
 /** `department` left out: not changed (the bulk dialog never sets it). */
 export interface AccessValue { access: Access; modules: string[] | null; department?: PrimaDepartment | null }
@@ -99,11 +116,16 @@ export function PrimaDepartmentField({ value, onChange, label }: {
       <span className="text-[13px] font-medium">{name}</span>
       <Select value={value ?? NO_DEPARTMENT} options={options} label={name} className="w-full sm:w-72"
         onValueChange={(v) => onChange(v === NO_DEPARTMENT ? null : (v as PrimaDepartment))} />
-      <p className="text-[12.5px] text-muted">{t("For their own Prima account. Procurement can import items; HR can prepare the staff directory. A Prima staff record keeps the department set in Prima.")}</p>
+      <p className="text-[12.5px] text-muted">{t("For their own Prima account: Prima opens the screens of their department (Finance: finance, credit, buying; Chief of Staff office: requests, insurance). A Prima staff record keeps the department set in Prima.")}</p>
       {value === "hr" ? (
         <p role="note" className="flex items-start gap-1.5 rounded-sm border border-warn/30 bg-warn/8 px-2.5 py-2 text-[12.5px]">
           <WarningIcon size={14} weight="fill" className="mt-0.5 shrink-0 text-warn" />
           <span>{t("HR sees staff personal data and payroll in Prima. Give it only to people who do HR work. Central staff only, not branch managers.")}</span>
+        </p>
+      ) : value && SENSITIVE_DEPARTMENTS.includes(value) ? (
+        <p role="note" className="flex items-start gap-1.5 rounded-sm border border-warn/30 bg-warn/8 px-2.5 py-2 text-[12.5px]">
+          <WarningIcon size={14} weight="fill" className="mt-0.5 shrink-0 text-warn" />
+          <span>{t("This department sees money, pay or staff records in Prima. Give it only to people who do that work. Central staff only, not branch managers.")}</span>
         </p>
       ) : null}
     </div>

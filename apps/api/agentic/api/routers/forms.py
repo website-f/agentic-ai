@@ -56,7 +56,7 @@ from .files import check_branch, visible_files
 router = APIRouter(tags=["forms"])
 
 MANAGERS = ("org.manage", "team.manage", "agents.manage")
-WORKSPACE_ROLES = ("owner", "admin")
+WORKSPACE_ROLES = ("owner", "admin", "it_support")
 Kind = Literal["claim", "advance", "payroll", "request", "report", "record", "checklist", "other"]
 
 

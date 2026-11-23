@@ -10,7 +10,8 @@ from . import Msg
 
 ROLES: dict[str, str] = {  # the same names the app shows (lib/types ROLE_INFO)
     "owner": "Owner",
-    "admin": "Admin",
+    "admin": "Global admin",  # P125: the id stays "admin"
+    "it_support": "IT support",  # P125
     "branch_manager": "Branch manager",
     "hod": "Head of department",
     "group_hod": "Group HOD",

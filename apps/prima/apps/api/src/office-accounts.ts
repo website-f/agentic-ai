@@ -59,9 +59,27 @@ export const OFFICE_ROLES: readonly UserRole[] = ['admin_exec', 'pwvsb_officer']
  * data, payroll), so it is for central staff only (pwvsb_officer, as Prima's own central HR): never on admin_exec,
  * whether the office asked admin_exec or the person's own staff record makes them a company's office staff (accessFor).
  */
-export const OFFICE_DEPARTMENTS: readonly NonNullable<User['department']>[] = ['transport', 'procurement', 'hr'];
-/** P106: departments only central staff may be in (see OFFICE_DEPARTMENTS). */
-export const CENTRAL_ONLY_DEPARTMENTS: readonly NonNullable<User['department']>[] = ['hr'];
+// P125 (Fitri, 23 Nov 2026: the office's Prima module choice showed nothing for a supervisor, because finance, chief of
+// staff and the other central departments could not be given to an office account): every working central department,
+// so the office can open a person's department screens. Not director_office or arms_control (leadership and arms).
+export const OFFICE_DEPARTMENTS: readonly NonNullable<User['department']>[] = [
+  'transport',
+  'procurement',
+  'hr',
+  'finance',
+  'chief_of_staff',
+  'it',
+  'legal',
+  'audit',
+  'operations',
+  'asset',
+  'pdpa',
+  'fwm',
+  'cms',
+];
+/** P106: departments only central staff may be in (see OFFICE_DEPARTMENTS). P125: the ones that open staff personal data,
+ *  payroll or money (HR, finance, the Chief of Staff's office, audit, legal) stay central staff only. */
+export const CENTRAL_ONLY_DEPARTMENTS: readonly NonNullable<User['department']>[] = ['hr', 'finance', 'chief_of_staff', 'audit', 'legal'];
 
 const OFFICE_USER_ID = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const COMPANY_ID = /^[A-Za-z0-9_-]{1,60}$/;

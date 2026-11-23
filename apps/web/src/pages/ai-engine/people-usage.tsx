@@ -214,7 +214,7 @@ export const FEATURE_LABELS: Record<string, string> = {
 
 export const OFFICE = "office";
 const ALL = "all";
-const ROLES: Role[] = ["owner", "admin", "management", "hr", "branch_manager", "group_hod", "hod", "supervisor", "staff", "operator", "approver", "viewer"];
+const ROLES: Role[] = ["owner", "admin", "it_support", "management", "hr", "branch_manager", "group_hod", "hod", "supervisor", "staff", "operator", "approver", "viewer"];
 
 export function useFeature() {
   const t = useT();

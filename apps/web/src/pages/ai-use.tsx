@@ -39,7 +39,7 @@ import { ROLE_INFO, type Role } from "@/lib/types";
 import { cn, initials, timeAgo } from "@/lib/utils";
 
 // Roles a policy can cover (the owner never: they set their own if they want one).
-const LIMITABLE: Role[] = ["staff", "supervisor", "hod", "group_hod", "branch_manager", "operator", "approver", "viewer", "admin", "management", "hr"];
+const LIMITABLE: Role[] = ["staff", "supervisor", "hod", "group_hod", "branch_manager", "operator", "approver", "viewer", "admin", "it_support", "management", "hr"];
 const ALL_ROLES: Role[] = ["owner", ...LIMITABLE];
 const WHERE: Record<string, string> = { chat: msg("Chat"), task: msg("Task") };
 const PRESETS = [50_000, 100_000, 300_000, 500_000];

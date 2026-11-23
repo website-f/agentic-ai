@@ -33,7 +33,7 @@ from ..models import Agent, Membership, MicrosoftAccount, SharedMailbox
 from ..teams.branches import member_in_branches
 
 # P92: management and HR see the whole workspace like an admin.
-MAILBOX_ADMINS = frozenset({"owner", "admin", "management", "hr"})
+MAILBOX_ADMINS = frozenset({"owner", "admin", "it_support", "management", "hr"})
 
 
 async def has_twin(db: AsyncSession, workspace_id: str, user_id: str) -> bool:

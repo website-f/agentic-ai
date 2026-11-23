@@ -32,7 +32,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, and_, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.security import COMPANY_ROLES, can
+from ..core.security import COMPANY_ROLES, HELD_ROLE, can
 from ..i18n import Msg
 from ..models import Membership, User
 from ..services import audit
@@ -57,7 +57,9 @@ class RequestError(Exception):
 
 
 def _overseer(principal: Any) -> bool:
-    return can(principal.role, "org.manage")
+    # P125: IT support runs the office like an admin, but what they decide for others waits
+    # for approval (org/held.py), so they are not the office-wide deciders here.
+    return can(principal.role, "org.manage") and principal.role != HELD_ROLE
 
 
 async def company_deciders(db: AsyncSession, workspace_id: str, branch_id: str | None) -> list[str]:

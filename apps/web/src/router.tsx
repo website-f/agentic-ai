@@ -441,9 +441,11 @@ const approvalsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/approvals",
   // P120: "people" is the requests from people (a folder for the Library), `request` opens one.
-  validateSearch: (s: Record<string, unknown>): { tab?: "pending" | "history" | "people"; request?: string } => ({
-    tab: s.tab === "history" || s.tab === "people" ? s.tab : undefined,
+  // P125: "it" is the changes by IT support waiting for an owner or global admin, `change` opens one.
+  validateSearch: (s: Record<string, unknown>): { tab?: "pending" | "history" | "people" | "it"; request?: string; change?: string } => ({
+    tab: s.tab === "history" || s.tab === "people" || s.tab === "it" ? s.tab : undefined,
     request: str(s.request),
+    change: str(s.change),
   }),
   loader: ({ context, preload }) => prefetch((p) => p.warmApprovals(context.queryClient, preload)),
   component: page.approvals,

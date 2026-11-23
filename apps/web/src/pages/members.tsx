@@ -8,6 +8,7 @@ import { useNavigate, useParams, useRouterState, useSearch } from "@tanstack/rea
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import { ItSupportNotice } from "@/components/held-changes";
 import { Page, PageHeader, Section } from "@/components/page";
 import { SignInEmailsBar, useEmailMember } from "@/components/sign-in-emails";
 import { ResetTwoFactorDialog, TwoFactorPill, useMemberTwoFactor } from "@/components/two-factor";
@@ -38,7 +39,7 @@ import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, 
 import { ImportMembersDialog } from "./members-import";
 import { addsDepartments, BulkManagerDialog, editsLines, editsOrg, HodBadge, ManagesField, NewDepartment, OrgFields, OrgLine, saveManages, TeamDialog } from "./members-org";
 
-const ROLES: Role[] = ["owner", "admin", "branch_manager", "group_hod", "hod", "supervisor", "staff", "operator", "approver", "viewer", "management", "hr"];
+const ROLES: Role[] = ["owner", "admin", "it_support", "branch_manager", "group_hod", "hod", "supervisor", "staff", "operator", "approver", "viewer", "management", "hr"];
 // What a branch manager or HOD may hand out (mirrors api/routers/members.py TEAM_ROLES).
 const TEAM_ROLES: Partial<Record<Role, Role[]>> = { branch_manager: ["hod", "supervisor", "staff"], group_hod: ["hod", "supervisor", "staff"], hod: ["supervisor", "staff"] };
 const NONE = "none";
@@ -46,7 +47,8 @@ const NONE = "none";
 // Roles that are not tied to a branch or department (the English keeps its plural).
 const WHOLE_WORKSPACE: Partial<Record<Role, string>> = {
   owner: msg("Owners see the whole workspace."),
-  admin: msg("Admins see the whole workspace."),
+  admin: msg("Global admins see the whole workspace."),
+  it_support: msg("IT support see the whole workspace. Their changes wait for approval."),
   operator: msg("Operators see the whole workspace."),
   approver: msg("Approvers see the whole workspace."),
   viewer: msg("Viewers see the whole workspace."),
@@ -433,7 +435,7 @@ function TeamCell({ member }: { member: Member }) {
 
 function RolePill({ role }: { role: Role }) {
   const t = useT();
-  return <Pill tone={role === "owner" || role === "admin" ? "accent" : "neutral"}>{ROLE_INFO[role] ? t(ROLE_INFO[role].label) : role}</Pill>;
+  return <Pill tone={role === "owner" || role === "admin" || role === "it_support" ? "accent" : "neutral"}>{ROLE_INFO[role] ? t(ROLE_INFO[role].label) : role}</Pill>;
 }
 
 /** How they sign in: with Microsoft or a password, and when they last did. */
@@ -889,6 +891,8 @@ export function MembersPage() {
           </>
         ) : null}
       />
+      {/* P125: IT support's changes wait for an owner or a global admin. */}
+      <ItSupportNotice role={me.role} />
       {me.permissions.includes("members.manage") ? <SignInEmailsBar isOwner={me.role === "owner"} /> : null}
       {/* P106: the developer chooses how they open Prima (CEO record or their own account). */}
       {me.user.is_developer ? <PrimaOpensAsCard /> : null}

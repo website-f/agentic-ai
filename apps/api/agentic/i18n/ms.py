@@ -2069,3 +2069,8 @@ MS.update({k: v for k, v in MS_MAIL_CONNECT.items() if k not in MS})
 from .ms_work_mail import MS_WORK_MAIL  # noqa: E402
 
 MS.update({k: v for k, v in MS_WORK_MAIL.items() if k not in MS})
+
+# P125: the IT support role and its changes that wait for approval.
+from .ms_held import MS_HELD  # noqa: E402
+
+MS.update({k: v for k, v in MS_HELD.items() if k not in MS})

@@ -652,14 +652,15 @@ export function UserMenu() {
 
 function useApprovalCount() {
   const { data } = useQuery(systemStatusQuery);
-  return data?.counts.approvals_pending ?? 0;
+  return (data?.counts.approvals_pending ?? 0) + (data?.counts.it_changes_pending ?? 0); // P125
 }
 
 /** Things waiting for a person, per nav item: decisions and skill proposals. */
 function useWaiting(): Partial<Record<string, number>> {
   const { data } = useQuery(systemStatusQuery);
   return {
-    "/approvals": data?.counts.approvals_pending ?? 0,
+    // P125: + changes by IT support waiting for an owner or global admin.
+    "/approvals": (data?.counts.approvals_pending ?? 0) + (data?.counts.it_changes_pending ?? 0),
     "/skills": data?.counts.skill_proposals_pending ?? 0,
     "/documents": data?.counts.documents_review ?? 0, // P25: what AI made, waiting for review
     "/files": data?.counts.documents_review ?? 0, // the file store's "Needs review" view

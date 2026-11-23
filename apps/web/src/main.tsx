@@ -7,7 +7,7 @@ import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 
 import { loadLanguage, setDictionaryLoader, useLang } from "@/i18n";
-import { ApiError } from "@/lib/api";
+import { ApiError, installHeldGuard, onHeld } from "@/lib/api";
 import { installNativeLinks, markNativeApp } from "@/lib/native";
 import { useTheme } from "@/lib/stores";
 import { applyUpdate } from "@/lib/unsaved";
@@ -50,6 +50,11 @@ const queryClient: QueryClient = new QueryClient({
 });
 
 const router = makeRouter(queryClient);
+
+// P125: an IT support person's admin change went for approval: one info toast (lib/api.ts), no
+// red failure toast, and their "Waiting for approval" lists refresh.
+installHeldGuard();
+onHeld(() => void queryClient.invalidateQueries({ queryKey: ["held-changes"] }));
 // P104: the code of the page being opened downloads while "who am I" is asked, not after.
 preloadMatchedChunks(router);
 

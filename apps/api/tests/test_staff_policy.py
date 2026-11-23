@@ -27,6 +27,7 @@ from .test_twins import ANSWERS, staff_in
 MANAGERS = {
     "owner",
     "admin",
+    "it_support",  # P125: an admin's access
     "branch_manager",
     "group_hod",
     "hod",

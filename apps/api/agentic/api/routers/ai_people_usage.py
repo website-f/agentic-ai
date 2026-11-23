@@ -63,7 +63,7 @@ from .allowances import _grants
 router = APIRouter(prefix="/api/ai/people-usage", tags=["ai-engine"])
 
 # P115 (Fitri, 18 Nov 2026): "the AI usage report open for owner and admins as well".
-READERS = ("owner", "admin")
+READERS = ("owner", "admin", "it_support")  # P125: IT support reads it too
 
 
 async def require_usage_reader(principal: Principal = Depends(current_principal)) -> Principal:

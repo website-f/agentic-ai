@@ -8,6 +8,7 @@ from ..core.security import MIN_PASSWORD_LENGTH
 Role = Literal[
     "owner",
     "admin",
+    "it_support",  # P125
     "branch_manager",
     "hod",
     "group_hod",
@@ -25,7 +26,10 @@ Access = Literal["agentic", "prima_only"]
 # P99: Prima screen ids (prima/modules.py); null = all their Prima role allows.
 PrimaModules = list[str] | None
 # P106: the Prima department their own Prima account gets (prima/client.PRIMA_DEPARTMENTS).
-PrimaDepartment = Literal["transport", "procurement", "hr"]
+PrimaDepartment = Literal[
+    "transport", "procurement", "hr", "finance", "chief_of_staff", "it", "legal", "audit",
+    "operations", "asset", "pdpa", "fwm", "cms",
+]  # fmt: skip
 # P109: what of the Library a member reads (knowledge/dept_scope.py).
 LibraryScope = Literal["company", "department"]
 

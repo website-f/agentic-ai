@@ -47,7 +47,7 @@ from ..teams.branches import member_in_branches
 from .models import PersonRequest
 
 APPROVAL_FREE = frozenset(
-    {"owner", "admin", "management", "hr", "branch_manager", "hod", "group_hod"}
+    {"owner", "admin", "it_support", "management", "hr", "branch_manager", "hod", "group_hod"}
 )
 PENDING = "pending"
 MICROSOFT = "microsoft"
