@@ -2130,6 +2130,9 @@ export class HttpApi implements Api {
   setGuardPayLine(runId: string, personId: string, patch: Parameters<Api['setGuardPayLine']>[2]) {
     return this.call<unknown>('POST', `/guard-pay/${encodeURIComponent(runId)}/lines/${encodeURIComponent(personId)}`, patch);
   }
+  importGuardPayLines(runId: string, body: Parameters<Api['importGuardPayLines']>[1]) {
+    return this.call<Awaited<ReturnType<Api['importGuardPayLines']>>>('POST', `/guard-pay/${encodeURIComponent(runId)}/import`, body);
+  }
   guardPayStep(runId: string, action: Parameters<Api['guardPayStep']>[1], body: Parameters<Api['guardPayStep']>[2]) {
     return this.call<unknown>('POST', `/guard-pay/${encodeURIComponent(runId)}/${action}`, body);
   }

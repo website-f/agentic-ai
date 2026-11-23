@@ -3371,6 +3371,21 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.setGuardPayLine(u, id.slice(0, 120), personId.slice(0, 120), { pcb, extra }));
   }
 
+  // Guard pay Add and Import (Fitri, 23 Nov 2026): many lines of a draft run, from a file read on the device or the Add
+  // form; a dry run first, then all or none with a reason. The preparer only, as for one line (checked in the service).
+  @Post('guard-pay/:id/import')
+  importGuardPayLines(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const rows = Array.isArray(b.rows) ? b.rows.slice(0, 2001) : b.rows;
+    return this.db.asUser(uid, (svc, u) =>
+      svc.importGuardPayLines(u, id.slice(0, 120), {
+        rows,
+        note: b.note == null ? '' : str(b.note, 'note', 300),
+        dryRun: b.dryRun === true,
+        source: typeof b.source === 'string' ? b.source.slice(0, 120) : undefined,
+      }),
+    );
+  }
+
   @Post('guard-pay/:id/files/:kind')
   guardPayExport(@UserId() uid: string, @Param('id') id: string, @Param('kind') kind: string) {
     const k = (['bank', 'ewallet', 'cash', 'sql', 'epf', 'socso', 'pcb'] as const).find((x) => x === kind);

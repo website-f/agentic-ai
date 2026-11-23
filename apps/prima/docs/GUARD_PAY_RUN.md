@@ -219,3 +219,31 @@ Older drafts (version 2) must be recalculated before they move on. Staff payroll
 by working days), and no staff member is paid by the hour in Prima today, so the check runs on guard pay only. The demo
 data now gives 8-hour and office-hours sites their own test formulas (STD-8H, STD-9H-R1); a guard who works shifts of
 different lengths in one month on one formula is held, as in real use.
+
+## Add and Import (Fitri, 23 Nov 2026)
+
+"In prima, for guard pay, add import button, from csv, excel, pdf and other and auto reads the columns and add into our
+data for guard pay." Guard pay now has **Add** and **Import** at the top, shown only to the person the Company Manager
+named to prepare a company's run (the board's own `prepares`); the server checks every call again.
+
+- **What comes in** is only what the preparer could already key in on a draft line (`setGuardPayLine`): allowances and
+  other one-off pay, deductions with their reason (uniform number for a 4th or later set), and the PCB from e-PCB.
+  Every row goes through the same rules: at most 5 one-off items, no equipment, advance, loan, fine, deposit, fee or
+  penalty taken, hours paid must match hours recorded, COO flags added.
+- **Compared only, never written**: days worked, overtime hours, rest days, public holidays worked, advances, gross and
+  net pay. A difference is shown with where to fix it (attendance or leave record, the holiday list, the Advances
+  screen). Days and hours stay with locked attendance; advances and loans stay with their approved records.
+- **Files**: Excel (.xlsx and the older .xls, read by `xls-read.ts` without a library), CSV, text/TSV, a Word table,
+  a text PDF (the built-in table reader, then the PDF reader as a fallback), or rows pasted from Excel. Read on the
+  device; the header row is found under any title block and the columns are matched in English or Malay
+  (`GUARD_PAY_IMPORT_FIELDS` in `guard-pay-import.ts`); the person can change any match. Up to 2,000 rows a file.
+- **Guards** are found by staff number, then IC (full numbers only for the HR database wall; otherwise the characters
+  the person record shows), then name. A name given beside a number must be close to the name in Prima. A guard kept
+  out of the run while an absence waits, an unknown or ambiguous guard, or the same guard twice is a problem row.
+- **Check, then import** (`POST /guard-pay/:id/import`, `importGuardPayLines`): the check (`dryRun`) keeps nothing and
+  shows each row's items, net pay before and after, problems and differences. The import needs a reason, saves all or
+  none of the rows sent (rows with a problem can be left out first), writes one `guardpay.line` audit entry per line and
+  one `guardpay.import` entry with the reason. Importing the same file again replaces its own items instead of adding
+  them. Add (one guard) uses the same call with one row.
+- No new database module: the lines are the existing `prima.guard_pay_runs` rows. The run stays a trial until the switch
+  date.

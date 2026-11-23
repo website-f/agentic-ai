@@ -26,6 +26,7 @@ import {
 import { Empty } from "../kit";
 import { SopHelp } from "../sop/SopHelp";
 import { DataTable } from "../DataTable";
+import { GuardPayAddImport } from "./GuardPayImport";
 
 /**
  * Guard pay run (Fauzan, 5 Nov 2026). Guards, stationed officers and patrolling officers are paid from locked
@@ -69,7 +70,9 @@ export function GuardPayView() {
           {/* P105: plainer order of who does what (B1: the Company Manager names who prepares). */}
           Monthly pay for guards and officers, from locked attendance and the ACT pay formula used at each site. A company executive named by the Company Manager prepares it, the COO approves with a reason, and Finance pays through the bank. Prima only drafts the files.
         </p>
-        <div className="row" style={{ marginTop: 8 }}>
+        <div className="row" style={{ marginTop: 8, gap: 8, flexWrap: "wrap" }}>
+          {/* Fitri, 23 Nov 2026: Add and Import, for the person named to prepare a company's run (the server's rule). */}
+          <GuardPayAddImport data={data} />
           <SopHelp id="pay-guard-run" />
         </div>
       </div>

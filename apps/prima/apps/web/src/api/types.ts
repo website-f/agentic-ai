@@ -1,7 +1,7 @@
 import { type DraftHelpClient } from './draft-help';
 import { type KeyInClient } from './key-in';
 import { type ExtractionClient } from './it-extraction';
-import { type AlertItem, type ClientShareLink, type ClientShareReport, type ClientLostReason, type ArishaDraft, type CmsServiceKind, type ArishaAnswer, type ArishaFinanceDraft, type ArishaReviewDraft, type ArishaTurn, type DataMode, type ArmedJobStatus, type AttendanceIssue, type Case, type CaseType, type Company, type DisciplineStep, type FaceCapture, type FollowUpKind, type Home, type GrowthPanel, type GrowthMargin, type IsoDate, type PrimaService, type RecordKind, type ReportDef, type RecordValues, type EvidenceDoc, type FwPaper, type SocsoStatus, type ProofInput, type Quotation, type Severity, type Tender, type TenderDecisionChoice, type TenderBidPart, type TenderPaperKind, type TenderQuery, type TenderRecord, type TenderStatus, type User, type CleaningService, type SecurityPlanService, type CleaningProofInput, type CleaningSetupInput, type FinRequestAction, type FinCheckSection, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FwRecruitStep, type TenderAttendanceKind, type ImportKind, type ImportOptions, type OrgImportReceipt } from '@prima/core';
+import { type AlertItem, type ClientShareLink, type ClientShareReport, type ClientLostReason, type ArishaDraft, type CmsServiceKind, type ArishaAnswer, type ArishaFinanceDraft, type ArishaReviewDraft, type ArishaTurn, type DataMode, type ArmedJobStatus, type AttendanceIssue, type Case, type CaseType, type Company, type DisciplineStep, type FaceCapture, type FollowUpKind, type Home, type GrowthPanel, type GrowthMargin, type IsoDate, type PrimaService, type RecordKind, type ReportDef, type RecordValues, type EvidenceDoc, type FwPaper, type SocsoStatus, type ProofInput, type Quotation, type Severity, type Tender, type TenderDecisionChoice, type TenderBidPart, type TenderPaperKind, type TenderQuery, type TenderRecord, type TenderStatus, type User, type CleaningService, type SecurityPlanService, type CleaningProofInput, type CleaningSetupInput, type FinRequestAction, type FinCheckSection, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FwRecruitStep, type TenderAttendanceKind, type ImportKind, type ImportOptions, type OrgImportReceipt, type GuardPayImportRow } from '@prima/core';
 import { type ConnectionsClient } from './connections';
 import type { CheckinClient } from './checkin';
 export type * from './checkin';
@@ -365,6 +365,9 @@ export type GuardPayAction = Parameters<PrimaService['guardPayStep']>[2];
 export type GuardPayStepBody = NonNullable<Parameters<PrimaService['guardPayStep']>[3]>;
 export type GuardPayFile = Parameters<PrimaService['guardPayExport']>[2];
 export type GuardPayLinePatch = Parameters<PrimaService['setGuardPayLine']>[3];
+/** Guard pay Add and Import (Fitri, 23 Nov 2026): the rows checked (dry run) or saved. */
+export type GuardPayImportResult = R<'importGuardPayLines'>;
+export type GuardPayImportBody = { rows: GuardPayImportRow[]; note: string; dryRun: boolean; source?: string };
 export type GuardAdvanceBoard = R<'guardAdvances'>;
 export type GuardAdvanceInput = Parameters<PrimaService['setGuardAdvances']>[1];
 export type GuardAdvanceChange = Parameters<PrimaService['changeGuardAdvance']>[2];
@@ -1113,6 +1116,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   prepareGuardPay(companyId: string, period: string, holidays?: { date: string; label: string }[]): Promise<unknown>;
   prepareGuardPayLater(runId: string): Promise<unknown>;
   setGuardPayLine(runId: string, personId: string, patch: GuardPayLinePatch): Promise<unknown>;
+  importGuardPayLines(runId: string, body: GuardPayImportBody): Promise<GuardPayImportResult>;
   setGuardPayPreparers(companyId: string, userIds: string[], reason: string): Promise<unknown>;
   guardPayStep(runId: string, action: GuardPayAction, body: GuardPayStepBody): Promise<unknown>;
   guardPayExport(runId: string, kind: GuardPayFile): Promise<{ filename: string; body: string; note: string }>;

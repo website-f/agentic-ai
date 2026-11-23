@@ -89,8 +89,8 @@ async function inflatePdf(b: Uint8Array): Promise<Uint8Array> {
   return out;
 }
 
-/** Any supported file to its sheets of cell text. */
-async function sheetsOf(f: File): Promise<XlsxSheet[]> {
+/** Any supported file to its sheets of cell text (also the guard pay import's reader). */
+export async function sheetsOf(f: File): Promise<XlsxSheet[]> {
   const name = f.name.toLowerCase();
   if (name.endsWith('.xls') || name.endsWith('.numbers') || name.endsWith('.ods') || name.endsWith('.doc'))
     throw new Error('This is an older or other office format. Open it and save it as Excel (.xlsx), Word (.docx), PDF or CSV, then choose it again.');

@@ -325,6 +325,7 @@ import { GUARD_PAY_CALCULATION_VERSION } from "./guard-pay";
 import { GUARD_PAY_ROLES } from "./guard-pay";
 import { attendanceDate } from "./guard-pay";
 import { buildGuardPayLine } from "./guard-pay";
+import { cleanGuardPayImportRow, guardPayImportDiffs, guardPayImportItems, matchGuardPayRow, mergeGuardPayExtras, GUARD_PAY_IMPORT_RULE, type GuardPayExtra, type GuardPayImportPerson } from "./guard-pay-import";
 import { checkRoster, coverageProblem, isDuty, lateChange, lumpSumConsentProblem, monthDates, rosterDashboard, rosterExceptions, rosterStepProblem, ROSTER_STATUS_LABEL } from "./roster-engine";
 import type { ComplianceEvidence, LawRule, LumpSumAgreement, RosterPerson, RosterRole, RosterStatus, RosterStep } from "./roster-engine";
 import { carryCompletedDays, currentVersion, lumpSumText, proposeRoster, rosterLeaveOn, rosterPayInput } from "./roster-records";
@@ -34957,28 +34958,21 @@ export class PrimaService {
     });
   }
 
-  /** HR adds one-off pay (with a reason in the label) or enters the PCB from LHDN's calculator, while the month is a draft. */
-  async setGuardPayLine(user: User, runId: Id, personId: Id, patch: { pcb?: number | null; extra?: { label: string; amount: number; uniformNo?: number }[] }) {
-    const run = await this.guardPayRunFor(user, runId);
-    if (!(await this.guardPayPreparer(user, run.companyId))) throw new AccessDenied('view', '(the person the Company Manager named prepares this company\'s guard pay run)');
-    await this.store.lock?.('guardPayRuns', runId);
-    const fresh = (await this.store.get('guardPayRuns', runId))!;
-    if (fresh.stage !== 'draft') throw new BadRequest('Only a draft can change.');
-    const old = fresh.lines.find((l) => l.personId === personId);
-    if (!old) throw new NotFound('Pay line');
-    const keptOld = this.keptOf(fresh).get(personId)!;
-    const pcb = patch.pcb === undefined ? keptOld.pcb : patch.pcb;
-    if (pcb != null && !(Number.isFinite(pcb) && pcb >= 0 && pcb < 100000)) throw new BadRequest('Give the PCB in RM.');
-    const extra = (patch.extra ?? keptOld.extra).map((a) => ({ label: String(a.label ?? '').trim().slice(0, 60), amount: Math.round(Number(a.amount) * 100) / 100 }));
+  /**
+   * The one-off items of a guard pay line, checked (the hand-keyed line and the import use the same rules): each with a
+   * reason and an amount, at most 5, no equipment, advance, loan, fine, deposit, fee or penalty taken, and a uniform only
+   * for a set after the 3rd (it then names the uniform number).
+   */
+  private guardPayExtraChecked(items: GuardPayExtra[]): { label: string; amount: number }[] {
+    const extra = items.map((a) => ({ label: String(a.label ?? '').trim().slice(0, 60), amount: Math.round(Number(a.amount) * 100) / 100 }));
     if (extra.length > 5) throw new BadRequest('At most 5 one-off items on a line.');
     if (extra.some((a) => !a.label || !Number.isFinite(a.amount) || a.amount === 0 || Math.abs(a.amount) > 20000))
       throw new BadRequest('Each one-off item needs a reason and an amount in RM (a minus amount is a deduction).');
     // Uniforms and equipment are never charged to the guard (EA s.24, rule PUR); Fauzan, 6 Nov 2026: only a 4th or 5th
     // uniform is paid by the guard. Such a deduction names the uniform number.
-    const given = (patch.extra ?? []) as { label: string; amount: number; uniformNo?: number }[];
     for (const [k, a] of extra.entries()) {
       if (a.amount >= 0) continue;
-      const no = Number(given[k]?.uniformNo ?? (/uniform no\. ([0-9]+)/i.exec(a.label)?.[1] ?? NaN));
+      const no = Number(items[k]?.uniformNo ?? (/uniform no\. ([0-9]+)/i.exec(a.label)?.[1] ?? NaN));
       const isUniform = Number.isFinite(no) || /uniform|seragam|pakaian/i.test(a.label);
       if (/radio|walkie|torch|lampu suluh|baton|cota|equipment|peralatan|bodycam|kasut|boot/i.test(a.label))
         throw new BadRequest('Equipment is never charged to the guard (EA s.24). Remove this deduction.');
@@ -34999,8 +34993,16 @@ export class PrimaService {
         if (!/uniform no\. [0-9]+/i.test(a.label)) extra[k] = { ...a, label: `${a.label} (uniform no. ${no}, paid by the guard)`.slice(0, 80) };
       }
     }
-    const [line] = await this.guardPayLines(run.companyId, run.period, fresh.holidays.map((h) => h.date), new Map([[personId, { extra, pcb: pcb == null ? null : Math.round(pcb * 100) / 100 }]]), personId);
-    if (!line) throw new NotFound('Pay line');
+    return extra;
+  }
+
+  private guardPayPcbChecked(pcb: number | null): number | null {
+    if (pcb != null && !(Number.isFinite(pcb) && pcb >= 0 && pcb < 100000)) throw new BadRequest('Give the PCB in RM.');
+    return pcb == null ? null : Math.round(pcb * 100) / 100;
+  }
+
+  /** A worked-out line with its hand-entered items: the hours must match (B1b) and the COO's flags are added. */
+  private guardPayLineFlagged(user: User, line: GuardPayLine, extra: { label: string; amount: number }[]): GuardPayLine {
     // B1b: a line whose hours do not match cannot be saved; the fix is the attendance or leave record, not the pay line.
     if (line.hours && !line.hours.match) throw new BadRequest(`${line.staffNo}: hours paid ${line.hours.paid} do not match hours recorded ${line.hours.recorded}. Correct the attendance or leave record (with its own approval and reason) first.`);
     const big = RULES.insiderControls.value.allowanceFlagAbove;
@@ -35008,6 +35010,28 @@ export class PrimaService {
     if (extra.length) line.flags.push(`One-off items entered by ${user.name}: the COO checks them`);
     if (extra.some((x) => x.amount < 0 && /uniform no\. [45]/i.test(x.label)))
       line.flags.push('Uniform charged to the guard (set after the 3rd): EA s.24 deduction, check the guard asked in writing; legal point for the CEO');
+    return line;
+  }
+
+  private guardPayLineSummary(run: GuardPayRun, line: GuardPayLine, pcb: number | null, extra: { label: string; amount: number }[], how = ''): string {
+    return `Guard pay ${run.period}, ${line.staffNo}${how}: ${pcb == null ? 'PCB estimated' : `PCB entered RM${line.pcb.toFixed(2)}`}, ${extra.length} one-off item(s)${extra.length ? `: ${extra.map((x) => `${x.label} RM${x.amount.toFixed(2)}`).join('; ')}` : ''}.`;
+  }
+
+  /** HR adds one-off pay (with a reason in the label) or enters the PCB from LHDN's calculator, while the month is a draft. */
+  async setGuardPayLine(user: User, runId: Id, personId: Id, patch: { pcb?: number | null; extra?: { label: string; amount: number; uniformNo?: number }[] }) {
+    const run = await this.guardPayRunFor(user, runId);
+    if (!(await this.guardPayPreparer(user, run.companyId))) throw new AccessDenied('view', '(the person the Company Manager named prepares this company\'s guard pay run)');
+    await this.store.lock?.('guardPayRuns', runId);
+    const fresh = (await this.store.get('guardPayRuns', runId))!;
+    if (fresh.stage !== 'draft') throw new BadRequest('Only a draft can change.');
+    const old = fresh.lines.find((l) => l.personId === personId);
+    if (!old) throw new NotFound('Pay line');
+    const keptOld = this.keptOf(fresh).get(personId)!;
+    const pcb = this.guardPayPcbChecked(patch.pcb === undefined ? keptOld.pcb : patch.pcb);
+    const extra = this.guardPayExtraChecked(patch.extra ?? keptOld.extra);
+    const [computed] = await this.guardPayLines(run.companyId, run.period, fresh.holidays.map((h) => h.date), new Map([[personId, { extra, pcb }]]), personId);
+    if (!computed) throw new NotFound('Pay line');
+    const line = this.guardPayLineFlagged(user, computed, extra);
     const lines = fresh.lines.map((l) => (l.personId === personId ? line : l));
     return this.store.transaction(async (tx) => {
       await tx.update('guardPayRuns', runId, { lines });
@@ -35018,9 +35042,149 @@ export class PrimaService {
         action: 'guardpay.line',
         entity: 'guard_pay_run',
         entityId: runId,
-        summary: `Guard pay ${run.period}, ${line.staffNo}: ${pcb == null ? 'PCB estimated' : `PCB entered RM${line.pcb.toFixed(2)}`}, ${extra.length} one-off item(s)${extra.length ? `: ${extra.map((x) => `${x.label} RM${x.amount.toFixed(2)}`).join('; ')}` : ''}.`,
+        summary: this.guardPayLineSummary(run, line, pcb, extra),
       });
       return line;
+    });
+  }
+
+  /**
+   * Guard pay Add and Import (Fitri, 23 Nov 2026): many lines of a draft run at once, from a file read on the person's
+   * device or from the Add form. The same person may do it who may change one line by hand (the named preparer), and every
+   * row goes through the same checks as the hand-keyed line: one-off pay and deductions with their reason, and the PCB.
+   * Days, hours, advances and pay in the file are compared, never written: a difference is fixed at its own record.
+   *  - dryRun: each row's result (matched guard, problems, notes, pay before and after); nothing is kept.
+   *  - otherwise: a reason is needed; every row must be clean (all or none for the rows sent); each changed line gets its
+   *    own audit entry, and the import one more with the reason.
+   */
+  async importGuardPayLines(user: User, runId: Id, body: { rows?: unknown; note?: unknown; dryRun?: unknown; source?: unknown }) {
+    const run = await this.guardPayRunFor(user, runId);
+    if (!(await this.guardPayPreparer(user, run.companyId))) throw new AccessDenied('view', '(the person the Company Manager named prepares this company\'s guard pay run)');
+    const dryRun = body.dryRun === true;
+    const note = typeof body.note === 'string' ? body.note.trim().slice(0, 300) : '';
+    const source = typeof body.source === 'string' && body.source.trim() ? body.source.trim().slice(0, 120) : 'the Add form';
+    if (!dryRun && note.length < 5) throw new BadRequest('Give a reason for this change (at least 5 characters).');
+    if (!Array.isArray(body.rows) || !body.rows.length) throw new BadRequest('No rows to bring in.');
+    if (body.rows.length > GUARD_PAY_IMPORT_RULE.maxRows) throw new BadRequest(`At most ${GUARD_PAY_IMPORT_RULE.maxRows} rows in one import. Split the file.`);
+    const rows = body.rows.map((r, i) => cleanGuardPayImportRow(r, i));
+    if (new Set(rows.map((r) => r.row)).size !== rows.length) throw new BadRequest('Each row needs its own row number.');
+    if (!dryRun) await this.store.lock?.('guardPayRuns', runId);
+    const fresh = (await this.store.get('guardPayRuns', runId))!;
+    if (fresh.stage !== 'draft') throw new BadRequest('Only a draft can change. This month has been submitted: it must be returned to the company first.');
+    // Who a row can be for: the run's guards, and those kept out while an absence waits (to say why). Full IC numbers only
+    // for those behind the HR database wall; anyone else matches the IC on the characters the person record shows.
+    const people = new Map((await this.store.list('people', { companyId: run.companyId })).map((p) => [p.id, p]));
+    const inRun = [...fresh.lines, ...(fresh.waiting ?? [])].map((l) => l.personId);
+    const fullIds = seesStaffIds(user) && inRun.length ? new Map((await this.store.list('staffIds', { personId: inRun })).map((x) => [x.personId, x.idFull])) : new Map<Id, string>();
+    const candidates: GuardPayImportPerson[] = [
+      ...fresh.lines.map((l) => ({ personId: l.personId, staffNo: l.staffNo, name: l.name, idMasked: people.get(l.personId)?.idMasked, idFull: fullIds.get(l.personId) ?? null })),
+      ...(fresh.waiting ?? []).map((l) => ({ personId: l.personId, staffNo: l.staffNo, name: l.name, idMasked: people.get(l.personId)?.idMasked, idFull: fullIds.get(l.personId) ?? null, waiting: true })),
+    ];
+    const kept = this.keptOf(fresh);
+    const sameItems = (a: { label: string; amount: number }[], b: { label: string; amount: number }[]) => a.length === b.length && a.every((x, i) => x.label === b[i].label && x.amount === b[i].amount);
+    type Planned = { row: number; personId: Id | null; staffNo: string; name: string; errors: string[]; notes: string[]; extra: { label: string; amount: number }[]; pcb: number | null; changes: boolean };
+    const planned: Planned[] = [];
+    const firstRowOf = new Map<Id, number>();
+    for (const r of rows) {
+      const p: Planned = { row: r.row, personId: null, staffNo: r.staffNo ?? '', name: r.name ?? '', errors: [], notes: [], extra: [], pcb: null, changes: false };
+      planned.push(p);
+      const m = matchGuardPayRow(r, candidates);
+      if ('error' in m) {
+        p.errors.push(m.error);
+        continue;
+      }
+      p.personId = m.person.personId;
+      p.staffNo = m.person.staffNo;
+      p.name = m.person.name;
+      if (firstRowOf.has(p.personId)) {
+        p.errors.push(`Row ${firstRowOf.get(p.personId)} already gives this guard's figures. Put them in one row.`);
+        continue;
+      }
+      firstRowOf.set(p.personId, r.row);
+      const was = kept.get(p.personId) ?? { extra: [], pcb: null };
+      const { items, errors } = guardPayImportItems(r);
+      p.errors.push(...errors);
+      try {
+        p.extra = this.guardPayExtraChecked(mergeGuardPayExtras(was.extra, items));
+        p.pcb = this.guardPayPcbChecked(r.pcb === undefined || r.pcb === null ? was.pcb : r.pcb);
+      } catch (e) {
+        if (!(e instanceof BadRequest)) throw e;
+        p.errors.push(e.message);
+      }
+      p.changes = !p.errors.length && (!sameItems(p.extra, was.extra) || p.pcb !== was.pcb);
+    }
+    // Every changed line worked out once, together, from the latest attendance (as the single line is).
+    const changing = planned.filter((p) => p.changes && p.personId);
+    const keptNew = new Map(changing.map((p) => [p.personId!, { extra: p.extra, pcb: p.pcb }]));
+    const worked = changing.length ? new Map((await this.guardPayLines(run.companyId, run.period, fresh.holidays.map((h) => h.date), keptNew)).map((l) => [l.personId, l])) : new Map<Id, GuardPayLine>();
+    const before = new Map(fresh.lines.map((l) => [l.personId, l]));
+    const after = new Map<Id, GuardPayLine>();
+    for (const p of changing) {
+      const computed = worked.get(p.personId!);
+      if (!computed) {
+        p.errors.push('This guard has no pay line this month any more. Recalculate the month first.');
+        p.changes = false;
+        continue;
+      }
+      try {
+        after.set(p.personId!, this.guardPayLineFlagged(user, computed, p.extra));
+      } catch (e) {
+        if (!(e instanceof BadRequest)) throw e;
+        p.errors.push(e.message);
+        p.changes = false;
+      }
+    }
+    rows.forEach((r, i) => {
+      const p = planned[i];
+      const line = p.personId ? (after.get(p.personId) ?? before.get(p.personId)) : undefined;
+      if (line && r.compare) p.notes.push(...guardPayImportDiffs(r.compare, line));
+    });
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const result = planned.map((p) => {
+      const b = p.personId ? before.get(p.personId) : undefined;
+      const a = p.personId ? after.get(p.personId) : undefined;
+      return {
+        row: p.row,
+        personId: p.personId,
+        staffNo: p.staffNo,
+        name: p.name,
+        status: (p.errors.length ? 'problem' : p.changes ? 'change' : 'same') as 'problem' | 'change' | 'same',
+        errors: p.errors,
+        notes: p.notes,
+        items: p.errors.length ? [] : p.extra,
+        pcb: p.errors.length ? null : p.pcb,
+        before: b ? { gross: b.gross, net: b.net } : null,
+        after: a ? { gross: a.gross, net: a.net } : null,
+      };
+    });
+    const counts = { rows: result.length, change: result.filter((x) => x.status === 'change').length, same: result.filter((x) => x.status === 'same').length, problem: result.filter((x) => x.status === 'problem').length };
+    const delta = {
+      gross: r2([...after.values()].reduce((n, l) => n + l.gross - (before.get(l.personId)?.gross ?? 0), 0)),
+      net: r2([...after.values()].reduce((n, l) => n + l.net - (before.get(l.personId)?.net ?? 0), 0)),
+    };
+    const out = { dryRun, runId, period: run.period, companyId: run.companyId, counts, delta, rows: result, saved: 0 };
+    if (dryRun) return out;
+    if (counts.problem) {
+      const first = result.filter((x) => x.status === 'problem').slice(0, 3).map((x) => `row ${x.row}: ${x.errors[0]}`);
+      throw new BadRequest(`${counts.problem} row(s) have a problem; fix them or leave them out, then import again (${first.join('; ')}).`);
+    }
+    if (!after.size) throw new BadRequest('Nothing to change: every line already has these figures.');
+    const lines = fresh.lines.map((l) => after.get(l.personId) ?? l);
+    return this.store.transaction(async (tx) => {
+      await tx.update('guardPayRuns', runId, { lines });
+      const at = this.now();
+      for (const p of changing.filter((x) => after.has(x.personId!)))
+        await tx.audit({ at, actor: user.name, companyId: run.companyId, action: 'guardpay.line', entity: 'guard_pay_run', entityId: runId, summary: this.guardPayLineSummary(run, after.get(p.personId!)!, p.pcb, p.extra, ` (row ${p.row} of ${source})`) });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: run.companyId,
+        action: 'guardpay.import',
+        entity: 'guard_pay_run',
+        entityId: runId,
+        summary: `Guard pay ${run.period}: ${after.size} line(s) changed from ${source} (${counts.rows} row(s), ${counts.same} unchanged); gross ${delta.gross >= 0 ? '+' : ''}RM${delta.gross.toFixed(2)}, net ${delta.net >= 0 ? '+' : ''}RM${delta.net.toFixed(2)}. Reason: ${note}`,
+      });
+      return { ...out, saved: after.size };
     });
   }
 

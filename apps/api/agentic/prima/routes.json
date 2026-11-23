@@ -4066,6 +4066,15 @@
  },
  {
   "method": "POST",
+  "path": "api/guard-pay/:id/import",
+  "name": "importGuardPayLines",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/guard-pay/:id/later",
   "name": "prepareGuardPayLater",
   "params": [

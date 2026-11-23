@@ -84,6 +84,7 @@ export * from './site-hours';
 export * from './public-holidays';
 export * from './salary-calc';
 export * from './guard-pay';
+export * from './guard-pay-import';
 export * from './contracts';
 export * from './branches';
 export * from './assets';
@@ -279,6 +280,7 @@ export * from './item-reports';
 // P81 (office): any spreadsheet, auto-aligned to the record's fields; .xlsx read without a library.
 export * from './import-align';
 export * from './xlsx-read';
+export * from './xls-read';
 // P81 (office): past attendance from the InfoTech monthly PDF reports.
 export * from './attendance-reports';
 export * from './attendance-timesheet';

@@ -14,6 +14,8 @@ export interface AddEntry {
   onAdd?: () => void;
   /** The import kind, when this record loads from a file. */
   importKind?: ImportKind;
+  /** A screen with its own import (guard pay lines): opens that screen's import instead of the shared one. */
+  onImport?: () => void;
 }
 
 function Menu({ label, icon, primary, children }: { label: string; icon: ReactNode; primary?: boolean; children: (close: () => void) => ReactNode }) {
@@ -50,7 +52,7 @@ function Menu({ label, icon, primary, children }: { label: string; icon: ReactNo
 export function AddImportMenu({ entries, addLabel = 'Add', importLabel = 'Import from file' }: { entries: AddEntry[]; addLabel?: string; importLabel?: string }) {
   const [importing, setImporting] = useState<ImportKind | null>(null);
   const adds = entries.filter((e) => e.onAdd);
-  const imports = entries.filter((e) => e.importKind);
+  const imports = entries.filter((e) => e.importKind || e.onImport);
   if (!adds.length && !imports.length) return null;
   return (
     <>
@@ -69,7 +71,7 @@ export function AddImportMenu({ entries, addLabel = 'Add', importLabel = 'Import
         <Menu label={importLabel} icon={<UploadSimpleIcon size={16} weight="bold" aria-hidden="true" />}>
           {(close) =>
             imports.map((e) => (
-              <button key={e.key} type="button" role="menuitem" className="p91-menu-item" onClick={() => (close(), setImporting(e.importKind!))}>
+              <button key={e.key} type="button" role="menuitem" className="p91-menu-item" onClick={() => (close(), e.onImport ? e.onImport() : setImporting(e.importKind!))}>
                 {e.label}
               </button>
             ))
