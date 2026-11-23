@@ -39,6 +39,17 @@ DELEGATED_SCOPES = (
     " Chat.Read ChatMessage.Send Team.ReadBasic.All Channel.ReadBasic.All"
 )
 TEAMS_SCOPES = ("Chat.Read", "ChatMessage.Send", "Team.ReadBasic.All", "Channel.ReadBasic.All")
+# P124 (23 Nov 2026: connecting an account of another company or an outlook.com one stopped at
+# "Need admin approval"): an extra account (Add another Microsoft account) asks only for mail,
+# calendar and the profile. These are the permissions a person may most often approve
+# themselves in another company's Microsoft 365, and the ones personal Microsoft accounts
+# (outlook.com, hotmail.com, live.com) have. Teams, files and approvals stay with the main one.
+EXTRA_SCOPES = (
+    "openid profile email offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite"
+)
+# P124: the sign-in authority for personal Microsoft accounts as well as work ones. Used for extra
+# accounts only when the owner turned on personal accounts (the Azure app must accept them).
+COMMON = "common"
 # P80: read (never write) the SharePoint and OneDrive files a person can already open, so the
 # Library can learn from a folder they link. Never part of everyone's sign-in (a tenant that
 # lets users consent only to low-risk permissions would stop every sign-in at "needs admin
@@ -64,6 +75,18 @@ def with_scopes(scopes: str, extra: tuple[str, ...]) -> str:
     """The scopes plus `extra` (each once)."""
     have = scopes.split()
     return " ".join(have + [s for s in extra if s not in have])
+
+
+# P124: delegated permissions Microsoft lets only an organisation's admin approve. Asked for only
+# from people of the organisation whose admin approved the office (auth.scopes_for): anyone else
+# would stop at "Need admin approval" over them.
+ADMIN_ONLY_SCOPES = ("ChannelMessage.Read.All", "ApprovalSolution.ReadWrite")
+
+
+def without(scopes: str, drop: tuple[str, ...]) -> str:
+    """The scopes without `drop` (case-insensitive)."""
+    gone = {d.lower() for d in drop}
+    return " ".join(s for s in scopes.split() if s.lower() not in gone)
 
 
 def with_files(scopes: str) -> str:
@@ -124,6 +147,9 @@ class AppConfig:
     # (ApprovalSolution.ReadWrite, admin consent): asked for only once an admin turns them on.
     teams_channel_send: bool = False
     teams_approvals: bool = False
+    # P124: extra accounts may be personal Microsoft accounts (the Azure app registration must
+    # allow "personal Microsoft accounts"; off until the owner turns it on).
+    personal_accounts: bool = False
 
     @property
     def configured(self) -> bool:
@@ -177,6 +203,7 @@ async def load(db: AsyncSession, workspace_id: str) -> AppConfig:
         teams_channels=data.get("teams_channels") is True,
         teams_channel_send=data.get("teams_channel_send") is True,
         teams_approvals=data.get("teams_approvals") is True,
+        personal_accounts=data.get("personal_accounts") is True,
     )
     if data.get("client_id") and data.get("client_secret"):
         cfg.client_id, cfg.client_secret = data["client_id"], data["client_secret"]

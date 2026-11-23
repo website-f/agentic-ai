@@ -40,10 +40,12 @@ export interface MicrosoftConfig {
   teams_channel_send?: boolean;
   /** P109: Teams Approvals are asked for (ApprovalSolution.ReadWrite, admin consent first). */
   teams_approvals?: boolean;
+  /** P124: extra accounts may be personal Microsoft accounts (the Azure app must accept them). */
+  personal_accounts?: boolean;
 }
 
 /** P63: the admin switches on Channels > Microsoft 365. */
-export const setMicrosoftOptions = (body: { sign_in?: boolean; teams_channels?: boolean; teams_channel_send?: boolean; teams_approvals?: boolean }) =>
+export const setMicrosoftOptions = (body: { sign_in?: boolean; teams_channels?: boolean; teams_channel_send?: boolean; teams_approvals?: boolean; personal_accounts?: boolean }) =>
   api<MicrosoftConfig>("/api/integrations/microsoft/options", "PUT", body);
 
 export interface MicrosoftConfigIn {

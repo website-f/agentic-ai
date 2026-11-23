@@ -239,9 +239,14 @@ function SignInOptions({ cfg }: { cfg: MicrosoftConfig }) {
         <SwitchField checked={!!cfg.teams_approvals} disabled={save.isPending} onCheckedChange={(v) => save.mutate({ teams_approvals: v })}
           label={t("Teams Approvals")}
           hint={t("People see the approvals waiting for them in the Teams Approvals app and approve or reject them on the Microsoft 365 page. First, in Microsoft Entra, add the delegated Microsoft Graph permission ApprovalSolution.ReadWrite and grant admin consent (only an admin can); then turn this on. People reconnect Microsoft once.")} />
+        {/* P124: personal Outlook.com / Hotmail as extra accounts (mail and calendar only). */}
+        <SwitchField checked={!!cfg.personal_accounts} disabled={save.isPending} onCheckedChange={(v) => save.mutate({ personal_accounts: v })}
+          label={t("Personal Microsoft accounts")}
+          hint={t("People may add a personal Outlook.com, Hotmail or Live account beside their work one (mail and calendar only). First, in Microsoft Entra > App registrations > this app > Authentication, set Supported account types to accounts in any organizational directory and personal Microsoft accounts; then turn this on.")} />
         <Button size="sm" variant="outline" className="w-fit" loading={consent.isPending} onClick={() => consent.mutate()}>
           {t("Grant admin consent")}
         </Button>
+        {cfg.adminconsent_url ? <CopyLink url={cfg.adminconsent_url} label={t("Copy the approval link for another company's IT admin")} /> : null}
       </div>
     </div>
   );
@@ -649,5 +654,16 @@ Test-ServicePrincipalAuthorization -Identity <client-id> -Resource accounts@comp
         </section>
       </div>
     </SideSheet>
+  );
+}
+
+/** P124: the shared approval link, for another company's Microsoft 365 admin (no sign-in here needed). */
+function CopyLink({ url, label }: { url: string; label: string }) {
+  const t = useT();
+  return (
+    <Button size="sm" variant="ghost" className="w-fit"
+      onClick={() => void navigator.clipboard.writeText(url).then(() => toast.success(t("Link copied. Send it to that company's IT admin.")), () => toast.error(t("Could not copy: select the link and copy it.")))}>
+      {label}
+    </Button>
   );
 }

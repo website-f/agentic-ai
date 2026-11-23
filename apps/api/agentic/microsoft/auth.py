@@ -114,7 +114,45 @@ async def scopes_for(
         files = files or has_scope(granted, app.FILES_SCOPES[0])
         chats = chats or has_scope(granted, app.CHAT_CREATE)
     scope = app.with_files(cfg.scopes) if files else cfg.scopes
-    return app.with_new_chats(scope) if chats else scope
+    scope = app.with_new_chats(scope) if chats else scope
+    if cfg.multi_tenant and not await _in_consented_tenant(db, cfg, workspace_id, user_id):
+        scope = app.without(scope, app.ADMIN_ONLY_SCOPES)
+    return scope
+
+
+async def _in_consented_tenant(
+    db: AsyncSession, cfg: app.AppConfig, workspace_id: str, user_id: str | None
+) -> bool:
+    """P124: whether this person's Microsoft 365 organisation is the one whose admin approved
+    the office's permissions (cfg.admin_tenant). Known from their own sign-in (their
+    membership's tenant), else from colleagues on the same email domain who signed in from it.
+    Someone of another organisation is never asked for the admin-only permissions, so their
+    sign-in does not stop at "Need admin approval" over them."""
+    tenant = (cfg.admin_tenant or "").lower()
+    if not tenant or not user_id:
+        return False
+    from ..models import User
+
+    m = await db.get(Membership, (workspace_id, user_id))
+    if m is not None and m.ms_tenant_id:
+        return m.ms_tenant_id.lower() == tenant
+    user = await db.get(User, user_id)
+    domain = (
+        user.email.rsplit("@", 1)[-1] if user is not None and "@" in user.email else ""
+    ).lower()
+    if not domain:
+        return False
+    same = await db.scalar(
+        select(func.count())
+        .select_from(Membership)
+        .join(User, User.id == Membership.user_id)
+        .where(
+            Membership.workspace_id == workspace_id,
+            func.lower(Membership.ms_tenant_id) == tenant,
+            func.lower(User.email).like(f"%@{domain}"),
+        )
+    )
+    return bool(same)
 
 
 async def auth_url(
@@ -134,7 +172,14 @@ async def auth_url(
     `with_files` also asks to read their SharePoint / OneDrive files (the Library). P102:
     `with_new_chats` also asks to start new Teams chats (the Teams tab)."""
     cfg = await _configured(db, workspace_id)
-    scope = await scopes_for(db, cfg, workspace_id, user_id, with_files, with_new_chats)
+    if another:
+        # P124: an extra account asks for mail and calendar only, through "common" when the
+        # owner allowed personal Microsoft accounts (and the app is multi-tenant).
+        scope = app.EXTRA_SCOPES
+        authority = app.COMMON if cfg.personal_accounts and cfg.multi_tenant else cfg.tenant
+    else:
+        scope = await scopes_for(db, cfg, workspace_id, user_id, with_files, with_new_chats)
+        authority = cfg.tenant
     state = secrets.token_urlsafe(24)
     verifier = secrets.token_urlsafe(48)
     challenge = (
@@ -154,6 +199,7 @@ async def auth_url(
                 "files": with_files,
                 "chats": with_new_chats,
                 "another": another,
+                "authority": authority,
             }
         ),
         ex=STATE_TTL,
@@ -169,7 +215,7 @@ async def auth_url(
         "code_challenge_method": "S256",
         "prompt": "select_account",
     }
-    return f"{app.LOGIN}/{cfg.tenant}/oauth2/v2.0/authorize?{urllib.parse.urlencode(q)}"
+    return f"{app.LOGIN}/{authority}/oauth2/v2.0/authorize?{urllib.parse.urlencode(q)}"
 
 
 async def _started(state: str, key: str) -> bool:
@@ -230,7 +276,7 @@ async def finish(
         )
     cfg = await _configured(db, workspace_id)
     status, tok = await _token_call(
-        cfg.tenant,
+        st.get("authority") or cfg.tenant,  # P124: the authority the sign-in used
         {
             "client_id": cfg.client_id,
             "client_secret": cfg.client_secret,

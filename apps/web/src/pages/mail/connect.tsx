@@ -19,7 +19,7 @@ import {
   MicrosoftOutlookLogoIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -31,6 +31,7 @@ import { useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { addMailAccount, discoverMail, m365Keys, type Discovered, type MailAccount, type MailAccounts } from "@/lib/m365";
 import { isConsumerDomain } from "@/lib/mail-kind";
+import { microsoftConfigQuery } from "@/lib/microsoft";
 import { cn } from "@/lib/utils";
 
 import { useMicrosoftAdd } from "./mailbox-pick";
@@ -72,6 +73,7 @@ export function ConnectAccountDialog({ google, personalMsOk, hasMain = true, onC
               : t("Google sign-in is not set up here: type the Gmail address below instead.")}
             disabled={!googleReady} loading={googleGo.isPending} onClick={() => googleGo.mutate()} />
         </div>
+        <ApprovalLinkNote />
         {!personalMsOk ? (
           <p className="flex items-start gap-2 text-[12.5px] text-muted">
             <InfoIcon size={15} className="mt-0.5 shrink-0" />
@@ -83,6 +85,24 @@ export function ConnectAccountDialog({ google, personalMsOk, hasMain = true, onC
         <OtherEmail google={google} googleReady={googleReady} personalMsOk={personalMsOk} hasMain={hasMain} onAdded={(a) => { onAdded?.(a); onClose(); }} />
       </div>
     </ResponsiveDialog>
+  );
+}
+
+/** P124: another company's Microsoft 365 often lets only its IT admin approve an outside app. Once
+ * that admin opens this link and accepts, everyone there can connect. */
+function ApprovalLinkNote() {
+  const t = useT();
+  const cfg = useQuery(microsoftConfigQuery);
+  const url = cfg.data?.adminconsent_url;
+  if (!url) return null;
+  return (
+    <div className="grid gap-1.5 rounded-[var(--radius-md)] border border-border bg-surface-2/50 p-3 text-[12.5px]">
+      <p className="text-muted">{t("Another company's Microsoft 365 says \"Need admin approval\"? Its IT admin approves the office once: send them this link.")}</p>
+      <Button type="button" size="sm" variant="outline" className="w-fit"
+        onClick={() => void navigator.clipboard.writeText(url).then(() => toast.success(t("Link copied. Send it to that company's IT admin.")), () => toast.error(t("Could not copy: select the link and copy it.")))}>
+        {t("Copy the approval link")}
+      </Button>
+    </div>
   );
 }
 

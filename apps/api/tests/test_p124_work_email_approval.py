@@ -382,3 +382,38 @@ async def test_main_account_connects_at_once_only_as_their_own_identity(
     finally:
         for c in (sam, zoe, hana, mia):
             await c.aclose()
+
+
+async def test_admin_only_permissions_only_for_the_approving_organisation(client, llm, temporal):  # noqa: F811
+    """P124: sign-in and connect ask for the admin-only permissions (Teams channel messages,
+    Teams Approvals) only from people of the organisation whose admin approved the office;
+    anyone else would stop at Microsoft's "Need admin approval" over them."""
+    from agentic.microsoft import app as ms_app
+    from agentic.models import Membership
+
+    o = await office(client)
+    ws_id = (
+        o["workspace"]["id"]
+        if "workspace" in o
+        else (await client.get("/api/auth/me")).json()["workspace"]["id"]
+    )
+    owner, _ = await user_id("owner@example.com")
+    cfg = ms_app.AppConfig(
+        client_id="c", client_secret="s", tenant="organizations", admin_tenant="tid-home",
+        teams_channels=True, teams_approvals=True,
+    )  # fmt: skip
+    async with SessionLocal() as db:
+        m = await db.get(Membership, (ws_id, owner))
+        m.ms_tenant_id = "tid-other"
+        await db.commit()
+        other = await auth.scopes_for(db, cfg, ws_id, owner, False)
+        assert "ChannelMessage.Read.All" not in other and "ApprovalSolution.ReadWrite" not in other
+        assert "Mail.ReadWrite" in other and "Chat.Read" in other
+        m.ms_tenant_id = "TID-HOME"
+        await db.commit()
+        home = await auth.scopes_for(db, cfg, ws_id, owner, False)
+        assert "ChannelMessage.Read.All" in home and "ApprovalSolution.ReadWrite" in home
+        # Not known at all (a first sign-in by someone new): the light set.
+        assert "ApprovalSolution.ReadWrite" not in await auth.scopes_for(
+            db, cfg, ws_id, None, False
+        )

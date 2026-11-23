@@ -13,13 +13,14 @@
 
 import asyncio
 import contextlib
+import html
 import json
 import logging
 import urllib.parse
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response, status
-from fastapi.responses import PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,6 +86,8 @@ async def _status(db: AsyncSession, principal: Principal, base: str) -> dict[str
         # P109: posting in Teams channels, and Teams Approvals (after an admin's consent).
         "teams_channel_send": cfg.teams_channel_send,
         "teams_approvals": cfg.teams_approvals,
+        # P124: extra accounts may be personal Microsoft accounts (outlook.com, hotmail.com).
+        "personal_accounts": cfg.personal_accounts,
     }
 
 
@@ -102,6 +105,7 @@ class MicrosoftOptionsIn(BaseModel):
     teams_channels: bool | None = None
     teams_channel_send: bool | None = None  # P109
     teams_approvals: bool | None = None  # P109
+    personal_accounts: bool | None = None  # P124
 
 
 @router.put(f"{BASE}/options")
@@ -130,7 +134,8 @@ async def microsoft_options(
         before={"kind": "microsoft", "sign_in": before.sign_in,
                 "teams_channels": before.teams_channels,
                 "teams_channel_send": before.teams_channel_send,
-                "teams_approvals": before.teams_approvals},
+                "teams_approvals": before.teams_approvals,
+                "personal_accounts": before.personal_accounts},
         after={"kind": "microsoft", **changes},
     )  # fmt: skip
     await db.commit()
@@ -864,7 +869,8 @@ async def my_mailboxes(
         "configured": cfg.configured,
         "company_domains": company,
         # Outlook.com / Hotmail sign in only when the app accepts personal accounts ("common").
-        "personal_ms_ok": cfg.configured and cfg.tenant == "common",
+        "personal_ms_ok": cfg.configured
+        and (cfg.tenant == "common" or (cfg.personal_accounts and cfg.multi_tenant)),
         "can_manage": can(principal.role, "channels.manage"),
         "accounts": [await _account_row(db, principal, a, kind(a), waiting) for a in rows],
         "shared": [await _mailbox_out(db, mb) for mb in shared],
@@ -968,6 +974,31 @@ async def adminconsent_start(
     return {"url": url}
 
 
+def _shared_consent_page(ok: bool, why: str) -> str:
+    """P124: what an outside IT admin sees after the shared approval link."""
+    if ok:
+        title, body = (
+            "Approved",
+            "Your organisation's people can now connect their Microsoft 365 mail and calendar to "
+            "Agentic Office. You can close this page.",
+        )
+    else:
+        title, body = (
+            "Not approved",
+            f"Microsoft did not record the approval ({html.escape(why[:200]) or 'cancelled'}). "
+            "Open the link again and choose Accept.",
+        )
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{title}</title></head>"
+        "<body style='font-family:system-ui,sans-serif;max-width:34rem;margin:15vh auto;"
+        "padding:0 1rem;color:#1b2420;background:#f6f8f7'>"
+        f"<h1 style='font-size:1.4rem'>{title}</h1>"
+        f"<p style='line-height:1.5'>{body}</p></body></html>"
+    )
+
+
 @router.get(f"{BASE}/adminconsent")
 async def adminconsent_callback(
     background: BackgroundTasks,
@@ -983,6 +1014,12 @@ async def adminconsent_callback(
         q = urllib.parse.urlencode({"ms_admin": result, **({"msg": msg[:200]} if msg else {})})
         return RedirectResponse(f"/channels?{q}", status_code=303)
 
+    if not state:
+        # P124: the shared approval link (no state), finished by another company's IT admin who
+        # has no sign-in here: a plain page, never the office's sign-in.
+        ok = admin_consent.lower() == "true" and not error
+        why = (error_description or error).splitlines()[0] if (error_description or error) else ""
+        return HTMLResponse(_shared_consent_page(ok, why))
     if error:
         if error == "access_denied":
             return back("error", tr("Admin consent was not given."))
