@@ -20,7 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from ..core.db import Base, Timestamps
 from ..core.ids import new_id
 
-ACCOUNT_STATUSES = ("untested", "ok", "error")
+ACCOUNT_STATUSES = ("untested", "ok", "error", "pending")  # P124: pending approval
 JOB_STATUSES = ("queued", "running", "done", "failed", "cancelled")
 SOURCES = ("imap", "gmail")
 

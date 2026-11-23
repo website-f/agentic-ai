@@ -87,6 +87,7 @@ async def company_domains(db: AsyncSession, workspace_id: str, user_email: str) 
         select(func.distinct(func.split_part(func.lower(MicrosoftAccount.email), "@", 2))).where(
             MicrosoftAccount.workspace_id == workspace_id,
             MicrosoftAccount.is_primary.is_(True),
+            MicrosoftAccount.status != "pending",  # P124: not the company's until approved
             MicrosoftAccount.email != "",
         )
     )

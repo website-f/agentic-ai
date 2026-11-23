@@ -201,10 +201,20 @@ async def drop_state(state: str) -> None:
 
 
 async def finish(
-    db: AsyncSession, state: str, code: str, *, workspace_id: str, user_id: str, session_id: str
+    db: AsyncSession,
+    state: str,
+    code: str,
+    *,
+    workspace_id: str,
+    user_id: str,
+    session_id: str,
+    hold: bool = False,
+    hold_main: bool = False,
 ) -> MicrosoftAccount:
     """The callback: trade the code for tokens and remember the mailbox (one per person).
-    Only in the browser session that started it (P29)."""
+    Only in the browser session that started it (P29). `hold` (P124): a new extra account
+    starts pending (the caller decides whether it waits for approval); `hold_main`: so does
+    a main account that is not the person's own identity (`own_identity`)."""
     raw = await valkey().getdel(f"msauth:{state}") if state else None
     if not raw:
         raise MicrosoftError(
@@ -242,7 +252,14 @@ async def finish(
             Msg("Mail access was not granted. Accept the mail permissions on Microsoft's screen.")
         )
     return await store(
-        db, workspace_id, user_id, tok, await profile_of(tok), another=bool(st.get("another"))
+        db,
+        workspace_id,
+        user_id,
+        tok,
+        await profile_of(tok),
+        another=bool(st.get("another")),
+        hold=hold,
+        hold_main=hold_main,
     )
 
 
@@ -267,10 +284,15 @@ async def store(
     profile: dict[str, Any],
     *,
     another: bool = False,
+    hold: bool = False,
+    hold_main: bool = False,
 ) -> MicrosoftAccount:
     """Keep this person's connection: its refresh token, encrypted. Commits. P118: their main
     account, or with `another` an extra one beside it (the same Microsoft account connected
-    again updates its own row either way)."""
+    again updates its own row either way). P124: with `hold`, a NEW extra account starts
+    'pending' (unused until approved, org/work_mail.py); one that waits keeps waiting. With
+    `hold_main`, the main account is 'pending' too unless it is the person's own identity
+    (`own_identity`); a pending main account is never linked to Prima."""
     granted = str(tok.get("scope") or "")
     claims = _claims(str(tok.get("id_token") or ""))
     oid = str(profile.get("id") or claims.get("oid") or "")[:80]
@@ -278,6 +300,7 @@ async def store(
         MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
     )
     acct = await db.scalar(mine.where(MicrosoftAccount.ms_user_id == oid)) if oid else None
+    fresh = False
     if acct is None and another:
         extra = await db.scalar(
             select(func.count())
@@ -299,6 +322,7 @@ async def store(
         acct = MicrosoftAccount(workspace_id=workspace_id, user_id=user_id, is_primary=False)
         db.add(acct)
         await db.flush()
+        fresh = True
     if acct is None:
         acct = await db.scalar(mine.where(MicrosoftAccount.is_primary.is_(True)))
     if acct is None:
@@ -325,7 +349,12 @@ async def store(
         granted = app.with_new_chats(granted)  # P102: the same for new Teams chats
     acct.scopes = granted
     acct.token_enc = crypto.encrypt(tok["refresh_token"], acct.aad)
-    acct.status, acct.last_error = "connected", None
+    member = await db.get(Membership, (workspace_id, user_id))
+    if acct.is_primary:
+        waits = hold_main and not await own_identity(db, member, acct)
+    else:
+        waits = acct.status == "pending" or (fresh and hold)
+    acct.status, acct.last_error = ("pending" if waits else "connected"), None
     if changed_mailbox:
         # Another Microsoft account than before: nothing of the old mailbox stays, and its
         # sync starts afresh. (Its old subscription cannot be deleted with this account's
@@ -334,26 +363,47 @@ async def store(
         await db.execute(delete(MailSubscription).where(MailSubscription.account_id == acct.id))
         acct.delta_link = None
         acct.last_sync_at = None
-    # P66: the same verified account, for Prima (agentic/prima). P116: only when it is the
-    # person's own (not a shared work mailbox or someone else's account they connected).
-    member = await db.get(Membership, (workspace_id, user_id))
+    if acct.status != "pending":  # P124: a waiting main account is never linked
+        await link_member(
+            db,
+            member,
+            acct,
+            [str(profile.get(k) or "").strip().lower() for k in ("mail", "userPrincipalName")],
+        )
+    await db.commit()
+    if acct.status != "pending":  # P124: a waiting account's token is not used
+        await _cache(acct.id, tok)
+    return acct
+
+
+async def link_member(
+    db: AsyncSession, member: Membership | None, acct: MicrosoftAccount, emails: list[str]
+) -> None:
+    """P66: the same verified account, for Prima (agentic/prima). P116: only when it is the
+    person's own (not a shared work mailbox or someone else's account they connected)."""
     if (
         member is not None
         and acct.is_primary
         and acct.ms_user_id
         and acct.tenant_id
-        and await own_microsoft(
-            db,
-            workspace_id,
-            user_id,
-            acct.ms_user_id,
-            [str(profile.get(k) or "").strip().lower() for k in ("mail", "userPrincipalName")],
-        )
+        and await own_microsoft(db, member.workspace_id, member.user_id, acct.ms_user_id, emails)
     ):
         member.ms_oid, member.ms_tenant_id = acct.ms_user_id, acct.tenant_id
-    await db.commit()
-    await _cache(acct.id, tok)
-    return acct
+
+
+async def own_identity(db: AsyncSession, member: Membership | None, acct: MicrosoftAccount) -> bool:
+    """P124: the connected account is the person's own Microsoft identity: its object id is
+    their membership's ms_oid (their own Microsoft sign-in, P66/P115), or, with none recorded
+    yet, its address is their office sign-in email."""
+    if member is None:
+        return False
+    if member.ms_oid:
+        return bool(acct.ms_user_id) and acct.ms_user_id == member.ms_oid
+    from ..models import User
+
+    user = await db.get(User, member.user_id)
+    login = (user.email if user else "").strip().lower()
+    return bool(login) and (acct.email or "").strip().lower() == login
 
 
 async def own_microsoft(
@@ -415,6 +465,8 @@ async def _cache(account_id: str, tok: dict[str, Any]) -> None:
 async def access_token(db: AsyncSession, acct: MicrosoftAccount, force: bool = False) -> str:
     """A valid access token for this person's mailbox: cached, else refreshed (and the
     rotated refresh token stored). `force` skips the cache (after a 401)."""
+    if acct.status == "pending":  # P124: waits for approval: never used
+        raise ReconnectNeeded(Msg("This email account is waiting for approval."))
     if acct.status in ("reconnect_needed", "disconnected") or not acct.token_enc:
         raise ReconnectNeeded(Msg("Outlook needs reconnecting. Connect Microsoft 365 again."))
     if not force:

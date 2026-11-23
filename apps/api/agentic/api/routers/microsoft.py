@@ -29,11 +29,13 @@ from ...core import crypto
 from ...core.db import SessionLocal, get_db
 from ...core.security import can
 from ...core.valkey import valkey
-from ...i18n import render, tr
+from ...i18n import Msg, render, tr
 from ...microsoft import access, app, auth, domains, graph, signin, sync
 from ...microsoft import rules as mail_rules
 from ...microsoft.errors import Forbidden, MicrosoftError, NotConfigured, NotFound
-from ...models import Agent, Branch, MailItem, MicrosoftAccount, SharedMailbox
+from ...models import Agent, Branch, MailItem, Membership, MicrosoftAccount, SharedMailbox
+from ...org import requests as asks
+from ...org import work_mail
 from ...services import audit
 from ..deps import Principal, api_error, optional_principal, require
 
@@ -384,23 +386,67 @@ async def microsoft_callback(
             workspace_id=principal.workspace_id,
             user_id=principal.user.id,
             session_id=principal.session_id,
+            # P124: a new extra account of someone below HOD waits until it is known to be
+            # work (then it waits for approval) or personal (then it connects at once); so does
+            # a main account that is not their own Microsoft identity.
+            hold=another and work_mail.needs_approval(principal.role),
+            hold_main=not another and work_mail.needs_approval(principal.role),
         )
     except MicrosoftError as e:
         return back("error", _say(e))
     except Exception:  # noqa: BLE001 - Microsoft unreachable and the like
         log.warning("Microsoft sign-in failed", exc_info=True)
         return back("error", tr("Could not reach Microsoft. Try again."))
+    if acct.status == work_mail.PENDING:
+        try:
+            if await _waits(db, principal, acct):
+                return back("pending", acct.email)
+        except asks.RequestError as e:
+            return back("error", render(Msg(e.message, **e.vars)))
+    else:  # P124: no longer waiting (their own identity now, or a HOD): nothing left to ask
+        await work_mail.cancel_for_account(db, principal, acct.id)
+        await db.commit()
     await sync.queue_box(acct)
     background.add_task(sync.kick)
     return back("connected", acct.email)
+
+
+async def _waits(db: AsyncSession, principal: Principal, acct: MicrosoftAccount) -> bool:
+    """P124: a held extra account. Work, and the person is below HOD: it waits for approval
+    (the request is asked, the approver told). Otherwise it connects now."""
+    if work_mail.needs_approval(principal.role) and await work_mail.microsoft_is_work(
+        db, principal, acct
+    ):
+        try:
+            r, new = await work_mail.ask(db, principal, work_mail.MICROSOFT, acct)
+        except asks.RequestError:  # too many requests open: the account is not kept
+            await work_mail.drop_unasked(db, acct)
+            raise
+        await db.commit()
+        if new:
+            await asks.tell_asked(db, r, principal.user.name or principal.user.email)
+        return True
+    acct.status, acct.last_error = "connected", None
+    if acct.is_primary:  # a personal main account: linked as before (P66/P116)
+        member = await db.get(Membership, (principal.workspace_id, principal.user.id))
+        await auth.link_member(db, member, acct, [acct.email])
+    await work_mail.cancel_for_account(db, principal, acct.id)
+    await db.commit()
+    return False
 
 
 @router.get(f"{BASE}/account")
 async def microsoft_account(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
-    acct = await access.personal_account_of(db, principal.workspace_id, principal.user.id)
-    if acct is None or acct.status == "disconnected":
+    acct = await access.main_row(db, principal.workspace_id, principal.user.id)
+    if acct is None or acct.status in ("disconnected", work_mail.PENDING):
+        pending = acct is not None and acct.status == work_mail.PENDING
+        waiting = (
+            await work_mail.waiting_for(db, principal.workspace_id, principal.user.id)
+            if pending
+            else {}
+        )
         return {
             "connected": False,
             "email": None,
@@ -417,6 +463,17 @@ async def microsoft_account(
             "last_sync_at": None,
             "webhooks": "off",
             "last_error": None,
+            # P124: a main account that is not their own identity waits for approval: shown
+            # (address, who decides), never used.
+            **(
+                {
+                    "pending": True,
+                    "approval": waiting.get(acct.id),
+                    "email": acct.email,
+                }
+                if acct is not None and pending
+                else {}
+            ),
         }
     return {
         "connected": True,
@@ -717,11 +774,16 @@ class AccountLabelIn(BaseModel):
 
 
 async def _account_row(
-    db: AsyncSession, principal: Principal, a: Any, kind: str | None = None
+    db: AsyncSession,
+    principal: Principal,
+    a: Any,
+    kind: str | None = None,
+    waiting: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """One of my accounts, and how many other people here connected the same one (shared).
     P122: `kind` is "work" (the main account, or one on a company domain or in the company's
-    Microsoft tenant) or "personal" (microsoft/domains.py)."""
+    Microsoft tenant) or "personal" (microsoft/domains.py). P124: a work account that waits for
+    approval is `pending` (not connected: nothing reads it), with who was asked."""
     others = 0
     if a.ms_user_id:
         others = int(
@@ -742,7 +804,9 @@ async def _account_row(
         "label": a.label or "",
         "primary": bool(a.is_primary),
         "status": a.status,
-        "connected": a.status != "disconnected",
+        "connected": a.status not in ("disconnected", work_mail.PENDING),
+        "pending": a.status == work_mail.PENDING,
+        "approval": (waiting or {}).get(a.id) if a.status == work_mail.PENDING else None,
         "last_sync_at": a.last_sync_at,
         "shared_with": others,
         "is_sign_in": a.email.lower() == principal.user.email.lower(),
@@ -766,7 +830,8 @@ async def my_accounts(
     """Every Microsoft account I connected, the main one first; never anyone else's."""
     rows = await access.accounts_of(db, principal.workspace_id, principal.user.id)
     kind, _company = await _kinds(db, principal, rows)
-    return [await _account_row(db, principal, a, kind(a)) for a in rows]
+    waiting = await work_mail.waiting_for(db, principal.workspace_id, principal.user.id)
+    return [await _account_row(db, principal, a, kind(a), waiting) for a in rows]
 
 
 @router.get(f"{BASE}/my-mailboxes")
@@ -781,6 +846,7 @@ async def my_mailboxes(
     cfg = await app.load(db, principal.workspace_id)
     rows = await access.accounts_of(db, principal.workspace_id, principal.user.id)
     kind, company = await _kinds(db, principal, rows)
+    waiting = await work_mail.waiting_for(db, principal.workspace_id, principal.user.id)
     shared = (
         await db.scalars(
             select(SharedMailbox)
@@ -800,7 +866,7 @@ async def my_mailboxes(
         # Outlook.com / Hotmail sign in only when the app accepts personal accounts ("common").
         "personal_ms_ok": cfg.configured and cfg.tenant == "common",
         "can_manage": can(principal.role, "channels.manage"),
-        "accounts": [await _account_row(db, principal, a, kind(a)) for a in rows],
+        "accounts": [await _account_row(db, principal, a, kind(a), waiting) for a in rows],
         "shared": [await _mailbox_out(db, mb) for mb in shared],
     }
 
@@ -828,7 +894,8 @@ async def name_account(
     kind, _company = await _kinds(
         db, principal, await access.accounts_of(db, principal.workspace_id, principal.user.id)
     )
-    return await _account_row(db, principal, acct, kind(acct))
+    waiting = await work_mail.waiting_for(db, principal.workspace_id, principal.user.id)
+    return await _account_row(db, principal, acct, kind(acct), waiting)
 
 
 @router.delete(f"{BASE}/accounts/{{account_id}}", status_code=status.HTTP_204_NO_CONTENT)
@@ -846,6 +913,8 @@ async def remove_account(
             "main_account",
             "This is your main Microsoft account. Disconnect it under Connections instead.",
         )
+    if acct.status == work_mail.PENDING:  # P124: its request is cancelled with it
+        await work_mail.cancel_for_account(db, principal, acct.id)
     if acct.status != "disconnected":
         await sync.disconnect_account(db, acct)  # commits
     await audit.record(
@@ -865,8 +934,15 @@ async def remove_account(
 async def microsoft_disconnect(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> Response:
-    acct = await access.personal_account_of(db, principal.workspace_id, principal.user.id)
-    if acct is not None and acct.status != "disconnected":
+    acct = await access.main_row(db, principal.workspace_id, principal.user.id)
+    if acct is not None and acct.status == work_mail.PENDING:  # P124: withdrawn: it goes
+        r = await work_mail.pending_request(db, principal.workspace_id, acct.id)
+        if r is not None:
+            await asks.cancel(db, principal, r)
+        else:
+            await db.delete(acct)
+        await db.commit()
+    elif acct is not None and acct.status != "disconnected":
         await sync.disconnect_account(db, acct)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

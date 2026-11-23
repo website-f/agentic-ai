@@ -850,7 +850,9 @@ async def digests(at: datetime | None = None) -> int:
     async with SessionLocal() as db:
         accounts = (
             await db.scalars(
-                select(MicrosoftAccount).where(MicrosoftAccount.status != "disconnected")
+                select(MicrosoftAccount).where(
+                    MicrosoftAccount.status.not_in(("disconnected", "pending"))
+                )
             )
         ).all()
         shared = (

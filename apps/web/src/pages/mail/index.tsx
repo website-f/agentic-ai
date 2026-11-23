@@ -148,7 +148,8 @@ export function MailPage() {
   const box = search.box && shared.some((b) => b.id === search.box) ? search.box : "personal";
   const current = shared.find((b) => b.id === box) ?? null;
   const setBox = (v: string | undefined) => void navigate({ search: (s) => ({ ...s, box: v }), replace: true });
-  const otherOk = !!other && (other === "google" ? !!others.data?.google.account : !!others.data?.accounts.some((a) => a.id === other));
+  // P124: a waiting (pending) account is never opened.
+  const otherOk = !!other && (other === "google" ? !!others.data?.google.account : !!others.data?.accounts.some((a) => a.id === other && a.status !== "pending"));
   const places = useMemo(() => buildPlaces(t, mm.data, account.data, others.data), [t, mm.data, account.data, others.data]);
   const selected = box !== "personal" ? `box:${box}` : otherOk ? (other === "google" ? "google" : `x:${other}`) : extraId ? `ms:${extraId}` : "main";
   const place = places.find((p) => p.key === selected) ?? places[0];
@@ -166,11 +167,15 @@ export function MailPage() {
     } else pickMs(p.type === "ms" ? p.id : null);
   };
   const onTab = (k: MailKind) => {
-    const first = places.find((p) => p.kind === k);
+    const first = places.find((p) => p.kind === k && !p.pending);
     if (first && place?.kind !== k) pick(first);
     else setTab(k);
   };
   const onAdded = (a: MailAccount) => {
+    if (a.status === "pending") {  // P124: it waits on the Work tab, not opened
+      setTab("work");
+      return;
+    }
     if (search.box) setBox(undefined);
     pickMs(null);
     pickOther(a.id);

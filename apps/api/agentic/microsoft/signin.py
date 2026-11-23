@@ -241,7 +241,7 @@ async def finish(db: AsyncSession, state: str, code: str) -> SignedIn:
                     MicrosoftAccount.workspace_id == ws_id,
                     MicrosoftAccount.tenant_id == tid,
                     MicrosoftAccount.ms_user_id == oid,
-                    MicrosoftAccount.status != "disconnected",
+                    MicrosoftAccount.status.not_in(("disconnected", "pending")),
                 )
             )
         ).all()

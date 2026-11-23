@@ -319,7 +319,14 @@ def address_of(box: MicrosoftAccount | SharedMailbox) -> str:
 async def personal_account_of(
     db: AsyncSession, workspace_id: str, user_id: str
 ) -> MicrosoftAccount | None:
-    """The person's MAIN Microsoft account (P118: their AI, Teams and SharePoint use only it)."""
+    """The person's MAIN Microsoft account (P118: their AI, Teams and SharePoint use only it).
+    P124: one that waits for approval is not theirs to use yet: None (see `main_row`)."""
+    acct = await main_row(db, workspace_id, user_id)
+    return None if acct is None or acct.status == "pending" else acct
+
+
+async def main_row(db: AsyncSession, workspace_id: str, user_id: str) -> MicrosoftAccount | None:
+    """The main account's row, even while it waits for approval (P124: shown, never used)."""
     return await db.scalar(
         select(MicrosoftAccount).where(
             MicrosoftAccount.workspace_id == workspace_id,

@@ -157,7 +157,10 @@ function OtherEmail({ google, googleReady, personalMsOk, hasMain, onAdded }: {
     }),
     onSuccess: (a) => {
       void qc.invalidateQueries({ queryKey: m365Keys.accounts });
-      if (a.status === "ok") toast.success(t("Connected and signed in fine."));
+      if (a.status === "pending") {
+        // P124: a work address of someone below HOD waits for the person above them.
+        toast.info(t("{email} is a work account, so it waits for approval. It shows on the Work tab and you can use it once it is approved.", { email: a.email }), { duration: 10_000 });
+      } else if (a.status === "ok") toast.success(t("Connected and signed in fine."));
       else toast.error(a.last_error ?? t("Saved, but the office could not sign in yet."));
       onAdded(a);
     },

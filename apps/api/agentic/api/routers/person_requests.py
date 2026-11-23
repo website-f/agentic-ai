@@ -5,6 +5,8 @@ POST /api/requests/{id}/decide     approve or decline, with a reason
 POST /api/requests/{id}/cancel     take back my own request while it waits
 
 A SharePoint or OneDrive folder is asked for at POST /api/library/linked/requests.
+P124: an extra work email account (work_mail) is asked for when it is connected
+(api/routers/microsoft.py callback, POST /api/mail-accounts); approving starts its first sync.
 """
 
 from datetime import datetime
@@ -41,7 +43,8 @@ class RequestOut(BaseModel):
     decided_at: datetime | None
     decided_by_name: str | None
     decision_note: str
-    # What it is about, for the screen (library_link: the link, its name, folder or file).
+    # What it is about, for the screen (library_link: the link, its name, folder or file;
+    # work_mail: the address, its domain, "microsoft" or "imap", the account's id).
     detail: dict[str, Any]
     result_id: str | None
     can_decide: bool
@@ -63,7 +66,19 @@ def fail(e: rules.RequestError) -> Exception:
     return api_error(e.status, e.code, e.message, **{k: str(v) for k, v in e.vars.items()})
 
 
-DETAIL_KEYS = ("url", "web_url", "name", "is_folder", "provider")
+DETAIL_KEYS = (
+    "url",
+    "web_url",
+    "name",
+    "is_folder",
+    "provider",
+    # P124: work_mail
+    "email",
+    "domain",
+    "source",
+    "account_id",
+    "display_name",
+)
 
 
 async def outs(
@@ -190,8 +205,22 @@ async def decide(
         from .linked_sources import _start
 
         await _start(background, r.result_id)
+    if r.status == "approved" and r.kind == rules.WORK_MAIL and r.result_id:
+        await _first_sync(db, background, r)
     await rules.tell_decided(db, r, principal.user.name or principal.user.email)
     return await one_out(db, principal, r)
+
+
+async def _first_sync(db: AsyncSession, background: BackgroundTasks, r: PersonRequest) -> None:
+    """P124: an approved Microsoft account syncs the normal way (an IMAP one has no sync)."""
+    from ...microsoft import sync
+    from ...models import MicrosoftAccount
+    from ...org import work_mail
+
+    acct = await work_mail.account_of(db, r)
+    if isinstance(acct, MicrosoftAccount):
+        await sync.queue_box(acct)
+        background.add_task(sync.kick)
 
 
 @router.post("/{request_id}/cancel")

@@ -73,6 +73,12 @@ async def _mine(db: AsyncSession, principal: Principal) -> tuple[MicrosoftAccoun
             )
     else:
         acct = await access.personal_account_of(db, principal.workspace_id, principal.user.id)
+    if acct is not None and acct.status == "pending":  # P124: waits for approval: unused
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "waiting_approval",
+            "This email account is waiting for approval. You can use it once it is approved.",
+        )
     if acct is None or acct.status not in access.USABLE_ACCOUNT:
         raise api_error(
             status.HTTP_409_CONFLICT,

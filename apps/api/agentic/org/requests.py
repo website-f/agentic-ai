@@ -19,6 +19,10 @@ Kinds:
 - library_link: a folder (or file) for the Library. The link was opened with the asker's own
   Microsoft 365 sign-in when they asked (so it exists and they may open it); approving connects
   it in their name, synced with their sign-in, for the company they picked (one of theirs).
+- work_mail (P124): an extra work email account (Microsoft or IMAP) someone below HOD
+  connected. It waits, unused, until approved (org/work_mail.py); the person asked first is
+  their line manager, else a head of their department, else their branch manager, else the
+  office's owners and admins. Declining or cancelling deletes the account and what it stored.
 """
 
 import logging
@@ -39,6 +43,8 @@ from .models import PersonRequest
 log = logging.getLogger(__name__)
 
 LIBRARY_LINK = "library_link"
+WORK_MAIL = "work_mail"  # P124
+_LINE = "<line>"  # ask(): the approver is the first person up the line
 MAX_NOTE = 1000
 MIN_REASON = 3
 MAX_OPEN_PER_PERSON = 20
@@ -85,6 +91,8 @@ async def may_decide(db: AsyncSession, principal: Any, r: PersonRequest) -> bool
         return False  # nobody approves their own
     if _overseer(principal) or _company_manager(principal, r):
         return True
+    if r.approver_id and r.approver_id == principal.user.id:
+        return True  # P124: the one asked first (a HOD or branch manager, not always above)
     return principal.user.id in await people.above(db, r.workspace_id, r.requested_by)
 
 
@@ -95,7 +103,8 @@ async def to_decide_where(db: AsyncSession, principal: Any) -> ColumnElement[boo
         return PersonRequest.requested_by != me
     below = set(principal.team) or await people.below(db, principal.workspace_id, me)
     parts: list[ColumnElement[bool]] = [
-        PersonRequest.requested_by.in_(sorted(below)) if below else false()
+        PersonRequest.requested_by.in_(sorted(below)) if below else false(),
+        PersonRequest.approver_id == me,  # P124: the one asked first
     ]
     sc = principal.scope
     if sc.kind == "branch" and sc.branch_ids and can(principal.role, "agents.manage"):
@@ -116,8 +125,11 @@ async def ask(
     data: dict[str, Any],
     branch_id: str | None,
     note: str = "",
+    *,
+    approver_id: str | None = _LINE,
 ) -> PersonRequest:
-    """A new request from this person; the caller commits and then calls `tell_asked`."""
+    """A new request from this person; the caller commits and then calls `tell_asked`.
+    `approver_id`: who is asked first (default: the person they report to)."""
     open_now = await db.scalar(
         select(PersonRequest.id)
         .where(
@@ -135,12 +147,14 @@ async def ask(
             "You have {n} requests waiting already. Wait for an answer, or cancel one.",
             n=MAX_OPEN_PER_PERSON,
         )
-    line = await people.above(db, principal.workspace_id, principal.user.id)
+    if approver_id == _LINE:
+        line = await people.above(db, principal.workspace_id, principal.user.id)
+        approver_id = line[0] if line else None
     r = PersonRequest(
         workspace_id=principal.workspace_id,
         kind=kind,
         requested_by=principal.user.id,
-        approver_id=line[0] if line else None,
+        approver_id=approver_id,
         branch_id=branch_id,
         title=title[:300],
         note=" ".join((note or "").split())[:MAX_NOTE],
@@ -164,6 +178,10 @@ async def ask(
 async def first_told(db: AsyncSession, r: PersonRequest) -> list[str]:
     if r.approver_id:
         return [r.approver_id]
+    if r.kind == WORK_MAIL:  # P124: nobody above them: the office's owners and admins
+        from .work_mail import office_admins
+
+        return await office_admins(db, r.workspace_id, r.requested_by)
     return [
         u for u in await company_deciders(db, r.workspace_id, r.branch_id) if u != r.requested_by
     ]
@@ -206,7 +224,22 @@ async def tell_decided(db: AsyncSession, r: PersonRequest, by_name: str) -> None
         if r.status == "approved"
         else Msg("Declined: {title}", title=r.title[:100])
     )
-    await _notify(db, r, [r.requested_by], title, Msg("{name} decided it.", name=by_name))
+    body = Msg("{name} decided it.", name=by_name)
+    if r.kind == WORK_MAIL:  # P124: the account is usable now, or was removed: say why
+        body = (
+            Msg(
+                "{name} approved it: {reason}. You can use it now.",
+                name=by_name,
+                reason=r.decision_note[:300],
+            )
+            if r.status == "approved"
+            else Msg(
+                "{name} declined it: {reason}. The account was removed.",
+                name=by_name,
+                reason=r.decision_note[:300],
+            )
+        )
+    await _notify(db, r, [r.requested_by], title, body)
 
 
 def clean_reason(text: str | None) -> str:
@@ -229,6 +262,10 @@ async def decide(
     why = clean_reason(reason)
     if approve:
         r.result_id = await _carry_out(db, principal, r)
+    elif r.kind == WORK_MAIL:  # P124: refused: the account and its token or password go
+        from . import work_mail
+
+        await work_mail.remove(db, principal.actor, r, "declined")
     r.status = "approved" if approve else "declined"
     r.decided_by, r.decided_at, r.decision_note = principal.user.id, datetime.now(UTC), why
     await audit.record(
@@ -243,14 +280,25 @@ async def decide(
     return r
 
 
-async def cancel(db: AsyncSession, principal: Any, r: PersonRequest) -> PersonRequest:
+async def cancel(
+    db: AsyncSession, principal: Any, r: PersonRequest, *, remove_account: bool = True
+) -> PersonRequest:
     if r.requested_by != principal.user.id:
         raise RequestError(403, "not_yours", "Only the person who asked can cancel it.")
     if r.status != "pending":
         raise RequestError(409, "already_decided", "This request was decided already.")
+    if r.kind == WORK_MAIL and remove_account:  # P124: the waiting account goes with it
+        from . import work_mail
+
+        await work_mail.remove(db, principal.actor, r, "cancelled")
     r.status, r.decided_at = "cancelled", datetime.now(UTC)
     await audit.record(
-        db, principal.workspace_id, principal.actor, "request.cancelled", target=r.id
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "request.cancelled",
+        target=r.id,
+        after={"kind": r.kind, "title": r.title},
     )
     await db.flush()
     return r
@@ -259,6 +307,10 @@ async def cancel(db: AsyncSession, principal: Any, r: PersonRequest) -> PersonRe
 async def _carry_out(db: AsyncSession, principal: Any, r: PersonRequest) -> str | None:
     if r.kind == LIBRARY_LINK:
         return await _connect_folder(db, principal, r)
+    if r.kind == WORK_MAIL:
+        from . import work_mail
+
+        return await work_mail.release(db, r)
     return None
 
 

@@ -15,7 +15,7 @@ export type RequestStatus = "pending" | "approved" | "declined" | "cancelled";
 
 export interface PersonRequest {
   id: string;
-  kind: "library_link" | (string & {});
+  kind: "library_link" | "work_mail" | (string & {});
   title: string;
   note: string;
   status: RequestStatus;
@@ -28,7 +28,19 @@ export interface PersonRequest {
   decided_at: string | null;
   decided_by_name: string | null;
   decision_note: string;
-  detail: { url?: string; web_url?: string; name?: string; is_folder?: boolean; provider?: string };
+  detail: {
+    url?: string;
+    web_url?: string;
+    name?: string;
+    is_folder?: boolean;
+    provider?: string;
+    /** P124 work_mail: the address, its domain, how it connects and the account's id. */
+    email?: string;
+    domain?: string;
+    source?: "microsoft" | "imap";
+    account_id?: string;
+    display_name?: string;
+  };
   result_id: string | null;
   can_decide: boolean;
   can_cancel: boolean;
@@ -58,6 +70,7 @@ export const askForFolder = (url: string, branchId: string | null, note: string)
 /** What a kind of request is, for its card (English keys: render with t()). */
 export const KIND_LABEL: Record<string, string> = {
   library_link: msg("SharePoint or OneDrive folder for the Library"),
+  work_mail: msg("Work email account to connect"),
 };
 
 export const STATUS_LABEL: Record<RequestStatus, { label: string; tone: "warn" | "ok" | "danger" | "neutral" }> = {

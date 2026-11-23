@@ -9,6 +9,7 @@
 import { queryOptions } from "@tanstack/react-query";
 
 import { api, m365AccountId } from "./api";
+import type { WorkMailApproval } from "./microsoft";
 
 // ------------------------------------------------------------------------------------- mail
 
@@ -413,12 +414,15 @@ export interface MailAccount {
   security: "ssl" | "starttls";
   username: string;
   password_set: boolean;
-  status: "untested" | "ok" | "error";
+  /** P124: "pending": a work address someone below HOD added waits for approval (unused). */
+  status: "untested" | "ok" | "error" | "pending";
   last_error: string | null;
   last_checked_at: string | null;
   backup_done_at: string | null;
   created_at: string;
   backup: BackupJob | null;
+  pending?: boolean;
+  approval?: WorkMailApproval | null;
 }
 
 export interface MailAccounts {

@@ -145,6 +145,9 @@ export function useMsReturn(search: Record<string, unknown>, clear: () => void, 
     if (param === "ms_admin") {
       if (back.ok) toast.success(t("Company-wide access granted. The office can now read the shared mailboxes you add."));
       else toast.error(back.message || t("Company-wide access was not granted."), { duration: 10_000 });
+    } else if (back.pending) {
+      // P124: a work account of someone below HOD waits for the person above them.
+      toast.info(t("{email} is a work account, so it waits for approval. It shows on the Work tab and you can use it once it is approved.", { email: back.message ?? "" }), { duration: 10_000 });
     } else if (back.ok) {
       toast.success(back.message ? t("Outlook connected: {detail}.", { detail: back.message }) : t("Outlook connected."));
     } else {
@@ -330,8 +333,16 @@ export function OutlookConnection({ bare, className }: { bare?: boolean; classNa
     );
   } else if (account.error) body = isMissingApi(account.error) ? <MissingServer /> : <p role="alert" className="text-[13px] text-danger">{errorMessage(account.error)}</p>;
   else if (!acct) {
+    const waiting = account.data?.pending ? account.data : null; // P124: not their own identity
     body = (
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {waiting ? (
+          <p className="min-w-0 basis-full text-[13px] text-warn">
+            {waiting.approval?.approver_name
+              ? t("{email} waits for approval by {name}. Cancel it on the Microsoft 365 page, or connect your own account instead.", { email: waiting.email ?? "", name: waiting.approval.approver_name })
+              : t("{email} waits for approval by your managers. Cancel it on the Microsoft 365 page, or connect your own account instead.", { email: waiting.email ?? "" })}
+          </p>
+        ) : null}
         <p className="min-w-0 flex-1 basis-64 text-[13px] text-muted">{t("Microsoft asks you to sign in with your work account and allow access, then brings you back here.")}</p>
         <Button className="max-sm:w-full" loading={connect.isPending} onClick={() => connect.mutate()}>
           <MicrosoftOutlookLogoIcon size={16} weight="bold" /> {t("Connect Outlook")}

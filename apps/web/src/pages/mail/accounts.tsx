@@ -212,6 +212,7 @@ const STATUS: Record<MailAccount["status"], { label: string; tone: "ok" | "warn"
   ok: { label: msg("Working"), tone: "ok" },
   error: { label: msg("Needs attention"), tone: "warn" },
   untested: { label: msg("Not tested"), tone: "neutral" },
+  pending: { label: msg("Waiting for approval"), tone: "warn" }, // P124
 };
 
 function AccountCard({ a }: { a: MailAccount }) {
@@ -237,6 +238,7 @@ function AccountCard({ a }: { a: MailAccount }) {
   });
   const st = STATUS[a.status];
   const running = backupActive(a.backup);
+  const waiting = a.status === "pending"; // P124: unused until approved
   return (
     <li className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-3 sm:p-4">
       <div className="flex flex-wrap items-start gap-3">
@@ -248,6 +250,12 @@ function AccountCard({ a }: { a: MailAccount }) {
         <Pill tone={st.tone}>{t(st.label)}</Pill>
       </div>
       {a.status === "error" && a.last_error ? <p className="text-[12.5px] break-words text-danger">{a.last_error}</p> : null}
+      {waiting ? (
+        <p className="text-[12.5px] break-words text-muted">
+          {a.approval?.approver_name ? t("Waiting for approval by {name}", { name: a.approval.approver_name }) : t("Waiting for approval by your managers")}
+          {" · "}{t("It is not read or backed up until it is approved. Disconnect it to cancel the request.")}
+        </p>
+      ) : null}
       {a.backup_done_at ? (
         <div className="grid gap-2 rounded-[var(--radius-md)] border border-ok/30 bg-ok/8 p-3">
           <p className="flex items-start gap-2 text-[13px]"><CheckCircleIcon size={17} weight="fill" className="mt-0.5 shrink-0 text-ok" />
@@ -264,8 +272,8 @@ function AccountCard({ a }: { a: MailAccount }) {
         <Button size="sm" disabled={a.status !== "ok" || running} loading={backup.isPending} onClick={() => backup.mutate()}>
           <CloudArrowUpIcon size={15} /> {a.backup_done_at ? t("Back up again") : t("Back up attachments to my Files")}
         </Button>
-        <Button size="sm" variant="outline" loading={test.isPending} onClick={() => test.mutate()}><ArrowClockwiseIcon size={15} /> {t("Test")}</Button>
-        <Button size="sm" variant="ghost" onClick={() => setEditing(true)}><PencilSimpleIcon size={15} /> {t("Change")}</Button>
+        {!waiting ? <Button size="sm" variant="outline" loading={test.isPending} onClick={() => test.mutate()}><ArrowClockwiseIcon size={15} /> {t("Test")}</Button> : null}
+        {!waiting ? <Button size="sm" variant="ghost" onClick={() => setEditing(true)}><PencilSimpleIcon size={15} /> {t("Change")}</Button> : null}
         {!a.backup_done_at ? <Button size="sm" variant="ghost" className="hover:text-danger" onClick={() => setRemoving(true)}><TrashIcon size={15} /> {t("Disconnect")}</Button> : null}
       </div>
       {editing ? <AccountDialog account={a} onClose={() => setEditing(false)} /> : null}
@@ -344,7 +352,8 @@ function AccountDialog({ account, presets, onClose }: { account?: MailAccount; p
     },
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: m365Keys.accounts });
-      if (r.status === "ok") toast.success(t("Connected and signed in fine."));
+      if (r.status === "pending") toast.info(t("{email} is a work account, so it waits for approval. It shows on the Work tab and you can use it once it is approved.", { email: r.email }), { duration: 10_000 });
+      else if (r.status === "ok") toast.success(t("Connected and signed in fine."));
       else toast.error(r.last_error ?? t("Saved, but the office could not sign in yet."));
       onClose();
     },

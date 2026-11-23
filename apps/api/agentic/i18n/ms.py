@@ -2064,3 +2064,8 @@ MS.update({k: v for k, v in MS_NOTIFY.items() if k not in MS})
 from .ms_mail_connect import MS_MAIL_CONNECT  # noqa: E402
 
 MS.update({k: v for k, v in MS_MAIL_CONNECT.items() if k not in MS})
+
+# P124: an extra work email account waits for approval.
+from .ms_work_mail import MS_WORK_MAIL  # noqa: E402
+
+MS.update({k: v for k, v in MS_WORK_MAIL.items() if k not in MS})

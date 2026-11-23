@@ -4,7 +4,7 @@
  * decline, always with a reason), what I decided lately, and what I asked for myself. The server
  * decides who sees and decides each one (lib/requests.ts).
  */
-import { ArrowSquareOutIcon, CheckCircleIcon, FolderSimpleIcon, HandshakeIcon, XCircleIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, CheckCircleIcon, EnvelopeSimpleIcon, FolderSimpleIcon, HandshakeIcon, XCircleIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { locale, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { linkedKeys } from "@/lib/linked-sources";
+import { m365Keys } from "@/lib/m365";
 import { cancelRequest, decideRequest, KIND_LABEL, MIN_REASON, reasonOk, requestKeys, requestsQuery, STATUS_LABEL, type PersonRequest } from "@/lib/requests";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,8 @@ function useRefresh() {
     void qc.invalidateQueries({ queryKey: requestKeys.all });
     void qc.invalidateQueries({ queryKey: linkedKeys.all });
     void qc.invalidateQueries({ queryKey: ["me", "needs"] });
+    void qc.invalidateQueries({ queryKey: ["microsoft"] }); // P124: a waiting work email account
+    void qc.invalidateQueries({ queryKey: m365Keys.accounts });
   };
 }
 
@@ -60,7 +63,7 @@ export function RequestCard({ r, highlight }: { r: PersonRequest; highlight?: bo
     <Card id={`request-${r.id}`} className={cn("grid min-w-0 gap-3 p-4", highlight && "ring-2 ring-accent/40")}>
       <div className="flex min-w-0 items-start gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
-          {r.kind === "library_link" ? <FolderSimpleIcon size={18} weight="duotone" /> : <HandshakeIcon size={18} weight="duotone" />}
+          {r.kind === "library_link" ? <FolderSimpleIcon size={18} weight="duotone" /> : r.kind === "work_mail" ? <EnvelopeSimpleIcon size={18} weight="duotone" /> : <HandshakeIcon size={18} weight="duotone" />}
         </span>
         <div className="grid min-w-0 flex-1 gap-0.5">
           <span className="text-[12px] text-muted">{t(KIND_LABEL[r.kind] ?? r.kind)}</span>
@@ -72,6 +75,12 @@ export function RequestCard({ r, highlight }: { r: PersonRequest; highlight?: bo
         </div>
         <Pill tone={status.tone} className="shrink-0">{t(status.label)}</Pill>
       </div>
+      {r.kind === "work_mail" ? (
+        <p className="text-[12.5px] break-words text-muted">
+          {r.detail.source === "microsoft" ? t("Microsoft account on {domain}", { domain: r.detail.domain ?? "" }) : t("Email account (IMAP) on {domain}", { domain: r.detail.domain ?? "" })}
+          {r.status === "pending" ? ` · ${t("It is not used until it is approved. Declining removes it and its sign-in.")}` : ""}
+        </p>
+      ) : null}
       {r.note ? <p className="rounded-[var(--radius-sm)] bg-surface-2 px-3 py-2 text-[13px] break-words">{r.note}</p> : null}
       {link ? (
         <a href={link} target="_blank" rel="noreferrer noopener" className="inline-flex w-fit max-w-full min-w-0 items-center gap-1.5 text-[12.5px] font-medium text-accent hover:underline">
@@ -136,7 +145,7 @@ export function PeopleRequests({ open }: { open?: string }) {
   if (!data.to_decide.length && !data.decided.length && !data.mine.length) {
     return (
       <EmptyState icon={HandshakeIcon} title={t("No requests from people")}
-        body={t("When someone asks for something that needs approval (such as a SharePoint folder for the Library), the person above them decides it here.")} />
+        body={t("When someone asks for something that needs approval (such as a SharePoint folder for the Library or a work email account), the person above them decides it here.")} />
     );
   }
   return (

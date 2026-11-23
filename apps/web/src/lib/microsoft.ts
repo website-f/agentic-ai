@@ -57,6 +57,10 @@ export type WebhookMode = "live" | "polling" | "off";
 
 export interface MicrosoftAccount {
   connected: boolean;
+  /** P124: a main account that is not the person's own Microsoft identity waits for approval
+   * (connected: false; email: its address). */
+  pending?: boolean;
+  approval?: WorkMailApproval | null;
   email: string | null;
   display_name: string | null;
   /** "disconnected" comes with connected: false; "error" with last_error. */
@@ -210,6 +214,15 @@ export interface MsAccount {
   is_sign_in: boolean;
   /** P122: on a company domain or in the company's Microsoft tenant (the main one always). */
   kind?: "work" | "personal";
+  /** P124: a work account someone below HOD added waits for approval; nothing reads it yet. */
+  pending?: boolean;
+  approval?: WorkMailApproval | null;
+}
+
+/** P124: who was asked to approve a waiting work email account (null: the office's managers). */
+export interface WorkMailApproval {
+  request_id: string;
+  approver_name: string | null;
 }
 
 export const msAccountsQuery = queryOptions({
@@ -463,11 +476,12 @@ export const WEBHOOK_TONE: Record<WebhookMode, "ok" | "info" | "neutral"> = { li
 export const needsReconnect = (a: MicrosoftAccount | null | undefined) => !!a?.connected && a.status === "reconnect_needed";
 
 /** Back from Microsoft sign-in: ?ms=connected|error&msg=… (or ?ms_admin=ok|error on Channels). */
-export function readMsReturn(search: Record<string, unknown>, param: "ms" | "ms_admin" = "ms"): { ok: boolean; message: string | null } | null {
+export function readMsReturn(search: Record<string, unknown>, param: "ms" | "ms_admin" = "ms"): { ok: boolean; pending?: true; message: string | null } | null {
   const v = search[param];
   if (typeof v !== "string" || !v) return null;
   const m = search.msg;
-  return { ok: v === "connected" || v === "ok", message: typeof m === "string" && m ? m.slice(0, 300) : null };
+  // P124: "pending": a work account that waits for approval (message: its address).
+  return { ok: v === "connected" || v === "ok", ...(v === "pending" ? { pending: true as const } : {}), message: typeof m === "string" && m ? m.slice(0, 300) : null };
 }
 
 /** Where an action chip on the Mail page leads. Drafts open where the person approves them. */

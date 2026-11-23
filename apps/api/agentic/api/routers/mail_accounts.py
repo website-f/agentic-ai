@@ -16,6 +16,11 @@ POST   /api/mail-accounts/{id}/backup          back up all attachments into my F
 POST   /api/mail-accounts/gmail/backup         the same for Gmail connected with Google sign-in
 POST   /api/mail-accounts/backups/{id}/resume | /cancel
 POST   /api/mail-accounts/ask                  "Ask AI", e.g. "back up my Gmail attachments"
+
+P124: an account on a company domain added by someone below HOD waits for approval
+(org/work_mail.py): it is kept only when the sign-in test passes, then marked pending and asked
+of the person above them. While it waits it is not tested, changed or backed up; removing it
+cancels the request; declining it deletes it.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -34,6 +39,8 @@ from ...i18n import render, tr
 from ...mailbox import autoconfig, backup, imap
 from ...mailbox.models import ExternalMailAccount, MailBackupJob
 from ...models import GoogleAccount
+from ...org import requests as asks
+from ...org import work_mail
 from ...services import audit
 from ..deps import Principal, api_error, ensure_allowance, require
 
@@ -75,7 +82,9 @@ def job_out(j: MailBackupJob | None) -> dict[str, Any] | None:
     }
 
 
-def account_out(a: ExternalMailAccount, job: MailBackupJob | None) -> dict[str, Any]:
+def account_out(
+    a: ExternalMailAccount, job: MailBackupJob | None, approval: dict[str, Any] | None = None
+) -> dict[str, Any]:
     return {
         "id": a.id,
         "email": a.email,
@@ -91,6 +100,9 @@ def account_out(a: ExternalMailAccount, job: MailBackupJob | None) -> dict[str, 
         "backup_done_at": a.backup_done_at,
         "created_at": a.created_at,
         "backup": job_out(job),
+        # P124: waits for approval (who was asked), unused meanwhile.
+        "pending": a.status == work_mail.PENDING,
+        "approval": approval if a.status == work_mail.PENDING else None,
     }
 
 
@@ -109,6 +121,16 @@ async def _mine(db: AsyncSession, principal: Principal, account_id: str) -> Exte
     if a is None or a.workspace_id != principal.workspace_id or a.user_id != principal.user.id:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "That email account is not here.")
     return a
+
+
+def _not_waiting(a: ExternalMailAccount) -> None:
+    """P124: an account waiting for approval is not used at all."""
+    if a.status == work_mail.PENDING:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "waiting_approval",
+            "This email account is waiting for approval. You can use it once it is approved.",
+        )
 
 
 async def _google(db: AsyncSession, principal: Principal) -> dict[str, Any]:
@@ -145,8 +167,12 @@ async def list_accounts(
             .order_by(ExternalMailAccount.created_at)
         )
     ).all()
+    waiting = await work_mail.waiting_for(db, principal.workspace_id, principal.user.id)
     return {
-        "accounts": [account_out(a, await _latest(db, principal, account_id=a.id)) for a in rows],
+        "accounts": [
+            account_out(a, await _latest(db, principal, account_id=a.id), waiting.get(a.id))
+            for a in rows
+        ],
         "google": await _google(db, principal),
         "presets": imap.PRESETS,
     }
@@ -263,6 +289,10 @@ async def add_account(
         if provider == "other" and found["provider"] in imap.PRESETS:
             provider = found["provider"]
     host = _host(body.host or str(preset.get("host") or ""))
+    # P124: a work address added by someone below HOD waits for approval once it signs in.
+    gated = work_mail.needs_approval(principal.role) and await work_mail.email_is_work(
+        db, principal, email
+    )
     a = ExternalMailAccount(
         workspace_id=principal.workspace_id,
         user_id=principal.user.id,
@@ -286,7 +316,49 @@ async def add_account(
     )
     await db.commit()
     await _test(db, a, body.password)
+    if gated:
+        return await _ask_approval(db, principal, a)
     return account_out(a, None)
+
+
+async def _ask_approval(
+    db: AsyncSession, principal: Principal, a: ExternalMailAccount
+) -> dict[str, Any]:
+    """P124: kept only when the sign-in worked; then it waits and the approver is asked."""
+    if a.status != "ok":
+        why = render(a.last_error) if a.last_error else tr("The sign-in did not work.")
+        email = a.email
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "mail_account.removed",
+            target=a.id,
+            before={"email": a.email},
+            after={"why": "sign-in failed before approval"},
+        )
+        await db.delete(a)
+        await db.commit()
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "sign_in_failed",
+            "The office could not sign in to {email}: {why} Nothing was saved. Check the "
+            "password and try again.",
+            email=email,
+            why=why,
+        )
+    try:
+        r, new = await work_mail.ask(db, principal, work_mail.IMAP, a)
+    except asks.RequestError as e:
+        await work_mail.drop_unasked(db, a)
+        raise api_error(
+            e.status, e.code, e.message, **{k: str(v) for k, v in e.vars.items()}
+        ) from e
+    await db.commit()
+    if new:
+        await asks.tell_asked(db, r, principal.user.name or principal.user.email)
+    waiting = await work_mail.waiting_for(db, principal.workspace_id, principal.user.id)
+    return account_out(a, None, waiting.get(a.id))
 
 
 @router.patch("/{account_id}")
@@ -297,6 +369,7 @@ async def change_account(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     a = await _mine(db, principal, account_id)
+    _not_waiting(a)
     if body.host is not None:
         a.host = _host(body.host)
     if body.port is not None:
@@ -327,6 +400,7 @@ async def test_account(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     a = await _mine(db, principal, account_id)
+    _not_waiting(a)
     if not a.secret_enc:
         raise api_error(status.HTTP_409_CONFLICT, "no_password", "Type the password again.")
     await _test(db, a)
@@ -342,6 +416,8 @@ async def remove_account(
     """Disconnect: the account and its stored password are deleted (running backups stop;
     files already saved stay in the person's Files)."""
     a = await _mine(db, principal, account_id)
+    if a.status == work_mail.PENDING:  # P124: its request is cancelled with it
+        await work_mail.cancel_for_account(db, principal, a.id)
     for j in (
         await db.scalars(
             select(MailBackupJob).where(
@@ -423,6 +499,7 @@ async def start_backup(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     a = await _mine(db, principal, account_id)
+    _not_waiting(a)
     if a.status != "ok":
         raise api_error(
             status.HTTP_409_CONFLICT,
@@ -509,6 +586,7 @@ async def ask(
     choices: dict[str, dict[str, Any]] = {
         a["id"]: {"email": a["email"], "provider": a["provider"], "working": a["status"] == "ok"}
         for a in listing["accounts"]
+        if not a["pending"]  # P124: a waiting account is not used, not even listed to the AI
     }
     if listing["google"]["account"]:
         choices["gmail"] = {
