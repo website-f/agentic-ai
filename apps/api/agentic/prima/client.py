@@ -32,6 +32,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -49,6 +50,8 @@ from ..i18n.labels import role_label
 from ..models import Branch, Membership, PrimaLink, Workspace
 from ..services import audit
 from . import modules
+
+log = logging.getLogger(__name__)
 
 transport: httpx.AsyncBaseTransport | None = None
 TIMEOUT = httpx.Timeout(30.0, connect=5.0)
@@ -848,6 +851,40 @@ async def check_chosen(
     )
 
 
+TOP_ASKER_TTL = 180  # seconds: an Arisha question and its model turns
+
+
+def _top_asker_key(prima_user: str) -> str:
+    return f"prima:top-asker:{prima_user}"
+
+
+async def note_top_asker(prima_user: str, workspace_id: str, user_id: str) -> None:
+    """P123: who is asking Arisha through the shared top record right now."""
+    from ..core.valkey import valkey
+
+    try:
+        await valkey().set(
+            _top_asker_key(prima_user), f"{workspace_id} {user_id}", ex=TOP_ASKER_TTL
+        )
+    except Exception:  # noqa: BLE001 - no note: the record's own link pays, as before
+        log.warning("could not note who asks Arisha through the top record")
+
+
+async def top_asker(prima_user: str) -> tuple[str, str] | None:
+    """(workspace_id, user_id) of the person who last asked through this top record, if recent."""
+    from ..core.valkey import valkey
+
+    try:
+        raw = await valkey().get(_top_asker_key(prima_user))
+    except Exception:  # noqa: BLE001
+        return None
+    if not raw:
+        return None
+    text = raw.decode() if isinstance(raw, bytes) else str(raw)
+    ws_id, _, uid = text.partition(" ")
+    return (ws_id, uid) if ws_id and uid else None
+
+
 def via_agent(name: str) -> str:
     """'agent:<name>' in plain ASCII (a header), at most 80 characters of name."""
     plain = re.sub(r"[^A-Za-z0-9 _.\-]", "", name).strip() or "AI"
@@ -929,6 +966,10 @@ async def call(
     url = clean_path(path, query)
     await check_chosen(db, workspace_id, user_id, method, url)
     link = await link_for(db, workspace_id, user_id)
+    if link.linked_by == TOP_LINK and url.startswith("/api/arisha"):
+        # P123: several people open Prima as its top record; Arisha's model turns that follow are
+        # charged to the one asking (prima/model.person_of), not to whoever the record belongs to.
+        await note_top_asker(link.prima_user_id, workspace_id, user_id)
     if link.linked_by == TOP_LINK and method == "POST":
         await _check_not_own_work(
             db, workspace_id, user_id, url, body, link.prima_user_id, client_ip

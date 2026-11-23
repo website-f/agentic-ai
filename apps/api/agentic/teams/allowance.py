@@ -35,7 +35,21 @@ from .budget import periods
 log = logging.getLogger(__name__)
 
 DEFAULT_DAILY_TOKENS = 300_000  # Fitri, 18 Nov 2026: 50k was only 2 or 3 tasks a day
-DEFAULT_ROLES = ("staff",)
+# P123 (Fitri, 23 Nov 2026: "each staff has their limit; owners, developer, admins unlimited"):
+# every role has the daily allowance by default except owners (the developer is one) and admins.
+# The owner can still change the roles on AI use and limits; a person's own setting always wins.
+DEFAULT_ROLES = (
+    "branch_manager",
+    "hod",
+    "group_hod",
+    "supervisor",
+    "staff",
+    "operator",
+    "approver",
+    "viewer",
+    "management",
+    "hr",
+)
 DEFAULT_OFFICE_DAILY = 2_000_000
 OFFICE = "office"  # the pool's id in approvals and grants
 MAX_DAILY_TOKENS = 50_000_000

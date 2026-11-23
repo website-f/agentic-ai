@@ -214,6 +214,9 @@ export function AccessFields({ value, onChange, member, ownerTarget, noDepartmen
                 {t("Always included: {names}.", { names: alwaysNames.join(", ") })}{" "}
                 {t("A module not picked is hidden in Prima, and Prima refuses it with a plain message.")}
               </p>
+              <p className="rounded-sm border border-warn/30 bg-warn/6 px-2.5 py-1.5 text-[12.5px]">
+                {t("Picking modules only narrows what their Prima role allows: it never adds a screen their Prima role does not have. Their Prima role follows their office role; give a higher office role for more of Prima.")}
+              </p>
               {cat.data.mine !== null ? <p className="text-[12.5px] text-muted">{t("You can give only the Prima modules you have yourself.")}</p> : null}
             </>
           ) : <FormError message={cat.error ? errorMessage(cat.error) : null} />

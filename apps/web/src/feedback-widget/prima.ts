@@ -130,11 +130,14 @@ export function readPrimaPage(doc: Document = document, win: Window = window): P
 }
 
 /** Places the button stays away from: the no-sign-in preview, and Prima shown inside another
- * page (the office shows its own button around it). */
+ * site's page. P123: Prima inside the office's own page is the whole screen now (the office shows
+ * no button on /prima), so there the feedback is Prima's, from its launcher, and its screenshot is
+ * of the Prima screen the person is on. */
 export function widgetUnwelcome(win: Window = window): boolean {
   if (win.location.pathname.startsWith("/prima/demo")) return true;
   try {
-    return win.top !== win.self;
+    if (win.top === win.self) return false;
+    return win.top?.location.origin !== win.location.origin;
   } catch {
     return true; // framed by another site
   }

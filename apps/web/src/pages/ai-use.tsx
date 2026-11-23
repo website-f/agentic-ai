@@ -164,6 +164,9 @@ function LimitSheet({ p, policy, meId, canOwnerRows, onClose }: {
   const [choice, setChoice] = useState(p.own === null ? OWN_DEFAULT : p.own === 0 ? OWN_NONE : OWN_CUSTOM);
   const [value, setValue] = useState(String(p.own && p.own > 0 ? p.own : 300_000));
   const locked = lockedFor(p, meId, canOwnerRows);
+  // P123: "No limit" is for owners and admins to give (the server refuses anyone else).
+  const { data: me } = useSuspenseQuery(meQuery);
+  const canUnlimited = me.permissions.includes("members.manage");
   const save = useMutation({
     mutationFn: (daily: number | null) => api<PersonAllowance>(`/api/allowances/${p.user_id}`, "PUT", { daily_tokens: daily }),
     onSuccess: () => {
@@ -180,7 +183,7 @@ function LimitSheet({ p, policy, meId, canOwnerRows, onClose }: {
   const choices = [
     { value: OWN_DEFAULT, label: t("Default for their role"), hint: roleDefault },
     { value: OWN_CUSTOM, label: t("Their own amount"), hint: t("Tokens per day, from 1,000") },
-    { value: OWN_NONE, label: t("No limit"), hint: t("Their AI is never stopped for use") },
+    { value: OWN_NONE, label: t("No limit"), hint: canUnlimited ? t("Their AI is never stopped for use") : t("Only owners and admins can give no limit."), disabled: !canUnlimited && choice !== OWN_NONE },
   ];
   return (
     <SideSheet open onOpenChange={(o) => { if (!o) onClose(); }} size="sm"
@@ -205,7 +208,7 @@ function LimitSheet({ p, policy, meId, canOwnerRows, onClose }: {
           {choices.map((c) => (
             <label key={c.value} className={cn("flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2.5",
               choice === c.value ? "border-accent bg-accent-soft/50" : "border-border hover:bg-surface-2")}>
-              <input type="radio" name="own" value={c.value} checked={choice === c.value} onChange={() => setChoice(c.value)}
+              <input type="radio" name="own" value={c.value} checked={choice === c.value} onChange={() => setChoice(c.value)} disabled={"disabled" in c ? c.disabled : false}
                 className="mt-0.5 size-4 accent-[var(--accent)]" />
               <span className="grid min-w-0 gap-0.5">
                 <span className="text-[13.5px] font-medium">{c.label}</span>

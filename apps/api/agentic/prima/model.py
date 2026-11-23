@@ -120,9 +120,32 @@ class Person:
     membership: Membership
 
 
+def _developer(user: User, role: str) -> bool:
+    from ..api.deps import is_developer  # late: the api builds on this module
+
+    return is_developer(user, role)
+
+
 async def person_of(db: AsyncSession, prima_user: str) -> Person:
     """The office person linked to this Prima record (models.PrimaLink), still a member and
-    active. Their workspace pays, within their own allowance."""
+    active. Their workspace pays, within their own allowance. P123: when the record is the top
+    record that owners, the developer and admins open Prima as, the one who is asking right now
+    (noted by the office proxy, prima/client.py) pays, and is logged."""
+    hint = await client.top_asker(prima_user)
+    if hint is not None:
+        ws_id, uid = hint
+        m = await db.get(Membership, (ws_id, uid))
+        user = await db.get(User, uid)
+        ws = await db.get(Workspace, ws_id)
+        if (
+            m is not None
+            and user is not None
+            and user.is_active
+            and ws is not None
+            and client.enabled(ws.id)
+            and (m.role in client.TOP_ROLES or _developer(user, m.role))
+        ):
+            return Person(ws, m)
     q = select(PrimaLink).where(PrimaLink.prima_user_id == prima_user)
     if settings.prima_workspace:
         q = q.where(PrimaLink.workspace_id == settings.prima_workspace)

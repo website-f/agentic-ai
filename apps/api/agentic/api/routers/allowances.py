@@ -377,6 +377,14 @@ async def set_own(
         raise api_error(
             status.HTTP_403_FORBIDDEN, "owner_only", "Only an owner can change owner access."
         )
+    if body.daily_tokens == 0 and not can(principal.role, "members.manage"):
+        # P123: no limit at all is for owners and admins to give, to the people they manage.
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "unlimited_admin_only",
+            "Only owners and admins can give unlimited AI. Give more for today or this week, "
+            "or set a higher daily limit.",
+        )
     before = m.ai_daily_tokens
     m.ai_daily_tokens = body.daily_tokens
     await audit.record(
