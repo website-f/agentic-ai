@@ -137,9 +137,9 @@ export const RULES = {
   ),
   staffMovement: rule(
     'HR-STAFF-MOVE',
-    { outOfStationMin: 15, maxAccuracyM: 100, maxSpeedKmh: 200, farClockInM: 1000, movingPingMin: 2, movedM: 100 },
+    { outOfStationMin: 15, maxAccuracyM: 150, maxSpeedKmh: 200, farClockInM: 1000, movingPingMin: 2, movedM: 100 },
     'Policy',
-    'Fitri, 9 Nov 2026 (P93): movements while clocked in are recorded well enough to see when staff go out of their place, to prevent violations and fraud. Proposed: outside the assigned place (check-in place, company office, field area or base) for more than 15 minutes is an out-of-station period for the manager to review; readings rougher than 100 m are not used for distance or place; faster than 200 km/h between two readings is a jump; a clock-in more than 1 km outside the place is a review item. While moving (100 m or more) the phone sends a reading about every 2 minutes; when still, at the HR-STAFF-PING interval.',
+    'Fitri, 9 Nov 2026 (P93): movements while clocked in are recorded well enough to see when staff go out of their place, to prevent violations and fraud. Proposed: outside the assigned place (check-in place, company office, field area or base) for more than 15 minutes is an out-of-station period for the manager to review; readings rougher than 150 m are not used for distance or place (Fitri, 23 Nov 2026: indoor Wi-Fi readings are about 100 to 130 m; 100 m dropped most of them); faster than 200 km/h between two readings is a jump; a clock-in more than 1 km outside the place is a review item. While moving (100 m or more) the phone sends a reading about every 2 minutes; when still, at the HR-STAFF-PING interval.',
   ),
   staffClockSnap: rule(
     'HR-STAFF-SNAP',

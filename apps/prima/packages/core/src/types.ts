@@ -1442,7 +1442,9 @@ export type StaffClockFlag =
   /** Clocked in at sign-in; the face check has not been done yet (Fauzan, 2 Nov 2026). */
   | 'FACE_PENDING'
   /** P81: checked in or out outside the allowed area, with a reason, for the manager or HR to review (checkin.ts). */
-  | 'OUT_OF_AREA';
+  | 'OUT_OF_AREA'
+  /** P123: checked in or out on a reading rougher than 100 m (up to 300 m); its accuracy is on the check-in (checkin.ts). */
+  | 'ROUGH_GPS';
 
 /**
  * One office door reading from the access-control system, monitored by CMS (Fauzan, 27 Oct 2026). Used to check the

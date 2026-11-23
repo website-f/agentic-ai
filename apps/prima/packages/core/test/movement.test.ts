@@ -205,7 +205,7 @@ describe('When the phone sends a reading (P93)', () => {
     expect(pingDue(base, { atMs: 11 * 60_000, ...north(HQ, 300), accuracyM: 400 }, opts)).toBe(true);
   });
   it('uses the rule defaults', () => {
-    expect(MOVEMENT_DEFAULTS).toMatchObject({ outOfStationMin: 15, maxAccuracyM: 100, maxSpeedKmh: 200 });
+    expect(MOVEMENT_DEFAULTS).toMatchObject({ outOfStationMin: 15, maxAccuracyM: 150, maxSpeedKmh: 200 });
     expect(haversineM(HQ, north(HQ, 1000))).toBeCloseTo(1000, 3);
   });
 });

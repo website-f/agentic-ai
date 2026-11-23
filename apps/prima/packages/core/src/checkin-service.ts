@@ -4,7 +4,8 @@
 import { AccessDenied, CENTRAL_EMPLOYER_IDS, accessClosed, centralStaffName } from './access';
 import {
   CHECKIN_DEFAULT_RADIUS_M,
-  CHECKIN_MAX_ACCURACY_M,
+  CHECKIN_ROUGH_MAX_M,
+  roughLocation,
   CHECKIN_MAX_OUTSTATION,
   CHECKIN_MAX_PLACES,
   CHECKIN_MAX_ZONES,
@@ -196,7 +197,7 @@ export class CheckinService {
   async mine(user: User) {
     const allowed = this.deps.allowed(user);
     const notice = CHECKIN_NOTICE;
-    if (!allowed) return { allowed, notice, maxAccuracyM: CHECKIN_MAX_ACCURACY_M, reasonMin: CHECKIN_REASON_MIN, state: 'none' as const, today: [] as CheckinEvent[], mine: null };
+    if (!allowed) return { allowed, notice, maxAccuracyM: CHECKIN_ROUGH_MAX_M, reasonMin: CHECKIN_REASON_MIN, state: 'none' as const, today: [] as CheckinEvent[], mine: null };
     const ctx = await this.context(user);
     const today = this.today();
     const now = await this.stateNow(user);
@@ -207,7 +208,7 @@ export class CheckinService {
     return {
       allowed,
       notice,
-      maxAccuracyM: CHECKIN_MAX_ACCURACY_M,
+      maxAccuracyM: CHECKIN_ROUGH_MAX_M,
       reasonMin: CHECKIN_REASON_MIN,
       state: now.state,
       today: events,
@@ -324,6 +325,9 @@ export class CheckinService {
       await tx.insert('checkinEvents', event);
       if (clock && d.outcome === 'flagged' && !clock.flags.includes('OUT_OF_AREA'))
         clock = await tx.update('staffClocks', clock.id, { flags: [...clock.flags, 'OUT_OF_AREA' as const] });
+      // P123: a check-in or out on a reading rougher than 100 m is marked for the manager (its accuracy is kept).
+      if (clock && roughLocation(event.accuracyM) && !clock.flags.includes('ROUGH_GPS'))
+        clock = await tx.update('staffClocks', clock.id, { flags: [...clock.flags, 'ROUGH_GPS' as const] });
       await tx.audit({
         at,
         actor: user.name,

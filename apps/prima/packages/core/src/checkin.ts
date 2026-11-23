@@ -18,6 +18,18 @@ export const CHECKIN_PLACE_RADIUS = { min: 25, max: 5_000 } as const;
 export const CHECKIN_ZONE_RADIUS = { min: 100, max: 300_000 } as const;
 /** A reading rougher than this is refused and the phone asked to try again; it is never accepted quietly. */
 export const CHECKIN_MAX_ACCURACY_M = 100;
+/**
+ * P123 (Fitri, 23 Nov 2026: "check-in must go smoothly when the shift starts"): indoors a phone or computer usually
+ * finds itself by Wi-Fi, accurate to about 100 to 130 m (the live readings: median 109 m), so a 100 m limit refused most
+ * of them. A reading up to this rough is used for the check-in; rougher than CHECKIN_MAX_ACCURACY_M it marks the day
+ * ROUGH_GPS, with its accuracy kept, for the manager to see. Rougher than this it is refused, as before.
+ */
+export const CHECKIN_ROUGH_MAX_M = 300;
+
+/** P123: precise enough to need no mark (CHECKIN_MAX_ACCURACY_M or better). */
+export function roughLocation(accuracyM: number): boolean {
+  return accuracyM > CHECKIN_MAX_ACCURACY_M;
+}
 /** The shortest reason accepted for an out-of-area check-in. */
 export const CHECKIN_REASON_MIN = 5;
 export const CHECKIN_MAX_PLACES = 50;
@@ -175,8 +187,8 @@ export function validLatLng(lat: unknown, lng: unknown): boolean {
 export function accuracyProblem(accuracyM: number | null | undefined): string | null {
   if (typeof accuracyM !== 'number' || !Number.isFinite(accuracyM) || accuracyM < 0)
     return 'Your phone did not say how accurate the location is. Turn on precise location and try again.';
-  if (accuracyM > CHECKIN_MAX_ACCURACY_M)
-    return `Your location is only accurate to about ${Math.round(accuracyM)} m (it must be within ${CHECKIN_MAX_ACCURACY_M} m). Move near a window or outside, turn on precise location, and try again.`;
+  if (accuracyM > CHECKIN_ROUGH_MAX_M)
+    return `Your location is only accurate to about ${Math.round(accuracyM)} m (it must be within ${CHECKIN_ROUGH_MAX_M} m). Turn on precise location and Wi-Fi, or use your phone, and try again.`;
   return null;
 }
 

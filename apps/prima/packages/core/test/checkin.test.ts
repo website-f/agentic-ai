@@ -88,10 +88,13 @@ describe('Geofence maths', () => {
     expect(evaluateCheckin({ ...exact, date: TODAY, rule: null, places: [place({ radiusM: d })] }).verdict).toBe('in_area');
   });
 
-  it('refuses a rough or unknown accuracy and accepts 100 m', () => {
+  // P123: indoor Wi-Fi readings (about 100 to 130 m) are used up to 300 m, marked ROUGH_GPS above 100 m.
+  it('refuses a reading rougher than 300 m or of unknown accuracy, and accepts up to 300 m', () => {
     expect(accuracyProblem(100)).toBeNull();
     expect(accuracyProblem(8)).toBeNull();
-    expect(accuracyProblem(101)).toMatch(/accurate to about 101 m/);
+    expect(accuracyProblem(140)).toBeNull();
+    expect(accuracyProblem(300)).toBeNull();
+    expect(accuracyProblem(301)).toMatch(/accurate to about 301 m/);
     expect(accuracyProblem(null)).toMatch(/did not say/);
     expect(accuracyProblem(Number.NaN)).toMatch(/did not say/);
   });
@@ -233,12 +236,22 @@ describe('Check-in and check-out', () => {
   it('asks to retry a rough reading and saves nothing', async () => {
     const { svc, u, ds } = fresh();
     const staff = await u('u-t-staff');
-    await expect(svc.checkIn(staff, 'in', at(HQ, 140))).rejects.toThrow(/accurate to about 140 m/);
+    await expect(svc.checkIn(staff, 'in', at(HQ, 450))).rejects.toThrow(/accurate to about 450 m/);
     await expect(svc.checkIn(staff, 'in', at(HQ, null))).rejects.toBeInstanceOf(BadRequest);
     await expect(svc.checkIn(staff, 'in', { lat: 200, lng: 0, accuracyM: 5 })).rejects.toThrow(/No location/);
     expect(ds.checkinEvents).toHaveLength(0);
-    const preview = await svc.checkinPreview(staff, at(HQ, 140));
+    const preview = await svc.checkinPreview(staff, at(HQ, 450));
     expect(preview).toMatchObject({ accuracyOk: false, kind: 'in' });
+  });
+
+  it('P123: takes an indoor Wi-Fi reading (140 m) and marks the day ROUGH_GPS', async () => {
+    const { svc, u, ds } = fresh();
+    const staff = await u('u-t-staff');
+    expect(await svc.checkinPreview(staff, at(HQ, 140))).toMatchObject({ accuracyOk: true, kind: 'in' });
+    const r = await svc.checkIn(staff, 'in', at(HQ, 140));
+    expect(r.blocked).toBe(false);
+    expect(ds.checkinEvents).toHaveLength(1);
+    expect(r.clock?.flags).toContain('ROUGH_GPS');
   });
 
   it('takes an out-of-area check-in only with a reason, flags it and sends it for review', async () => {

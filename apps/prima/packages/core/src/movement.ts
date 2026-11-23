@@ -34,7 +34,7 @@ export interface MovementRules {
 
 export const MOVEMENT_DEFAULTS: MovementRules = {
   outOfStationMin: 15,
-  maxAccuracyM: 100,
+  maxAccuracyM: 150, // P123: was 100 (indoor Wi-Fi readings are about 100 to 130 m; rules.ts HR-STAFF-MOVE)
   maxSpeedKmh: 200,
   farClockInM: 1_000,
   minStepM: 20,

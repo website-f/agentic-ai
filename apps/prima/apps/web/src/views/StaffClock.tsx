@@ -52,8 +52,9 @@ const FLAG_LABEL: Record<StaffClockFlag, string> = {
   LEFT_BEFORE_SIGN_OUT: 'Left the office before signing out',
   FACE_PENDING: 'Face check not done',
   OUT_OF_AREA: 'Checked in or out outside the area',
+  ROUGH_GPS: 'Location only approximate (100 to 300 m)',
 };
-const FLAG_TONE: Partial<Record<StaffClockFlag, Tone>> = { PHOTO_ONLY: 'neutral', NO_GPS: 'warn', AWAY_FROM_BASE: 'warn', OUT_OF_AREA: 'warn' };
+const FLAG_TONE: Partial<Record<StaffClockFlag, Tone>> = { PHOTO_ONLY: 'neutral', NO_GPS: 'warn', AWAY_FROM_BASE: 'warn', OUT_OF_AREA: 'warn', ROUGH_GPS: 'neutral' };
 const LOCATION: Record<'tracked' | 'away' | 'unknown' | 'off' | 'desk' | 'remote', { label: string; tone: Tone }> = {
   remote: { label: 'Working from home', tone: 'info' },
   desk: { label: 'Signed in, location not followed', tone: 'neutral' },
