@@ -309,7 +309,7 @@ export function HomeLaunchpad({
         {mine.length > 0 && (
           <div className="sp-quick" role="group" aria-label="My day">
             {mine.map((m) => (
-              <button key={m.view} type="button" className="sp-quick-btn" onClick={() => onView(m.view)}>
+              <button key={m.view} type="button" className="sp-quick-btn" title={m.label} onClick={() => onView(m.view)}>
                 <ViewIcon view={m.view} fallback={m.icon} size={18} />
                 <span>{m.label}</span>
               </button>

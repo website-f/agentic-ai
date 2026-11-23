@@ -3,12 +3,18 @@ import { useState } from 'react';
 import {
   ArrowRightIcon,
   BankIcon,
+  CalendarCheckIcon,
   CaretRightIcon,
+  ChartPieSliceIcon,
   FilesIcon,
+  GearIcon,
   PlusIcon,
   QuestionIcon,
+  WalletIcon,
   WarningOctagonIcon,
 } from '@phosphor-icons/react';
+import type { ReactNode } from 'react';
+import { FoldNotice } from '../fold';
 import type { FinCheckSection, FinPackStatus } from '@prima/core';
 import { api, type FinBoard, type FinDesk } from '../api';
 import { useApp, useRouteTab } from '../App';
@@ -63,6 +69,35 @@ const ROUTE_TABS: RouteTab[] = [
   'checks-tax',
 ];
 
+/**
+ * P128 (Fitri, 24 Nov 2026: "the tabs and the UI are not organized"): the twelve tabs sit in four areas. The area bar on
+ * top picks the area (its last-opened tab, else its first); the tabs of that area sit under it. Who sees which tab is
+ * unchanged (the `tabs` list below); an area with none of this person's tabs is not shown.
+ */
+type Area = 'glance' | 'daily' | 'month' | 'setup';
+const AREA_OF: Record<Tab, Area> = {
+  teams: 'glance',
+  dashboard: 'glance',
+  summary: 'glance',
+  sites: 'glance',
+  kpi: 'glance',
+  payments: 'daily',
+  checks: 'daily',
+  close: 'month',
+  banks: 'month',
+  books: 'month',
+  papers: 'month',
+  settings: 'setup',
+};
+const AREAS: [Area, string, ReactNode][] = [
+  ['glance', 'At a glance', <ChartPieSliceIcon key="i" size={18} aria-hidden="true" />],
+  ['daily', 'Payments and checks', <WalletIcon key="i" size={18} aria-hidden="true" />],
+  ['month', 'Month end', <CalendarCheckIcon key="i" size={18} aria-hidden="true" />],
+  ['setup', 'Settings', <GearIcon key="i" size={18} aria-hidden="true" />],
+];
+/** Within an area, the tabs in the order people use them. */
+const ORDER: Tab[] = ['teams', 'dashboard', 'summary', 'sites', 'kpi', 'payments', 'checks', 'close', 'banks', 'books', 'papers', 'settings'];
+
 const TONE: Record<Row['tone'], [Tone, string]> = {
   crit: ['crit', 'Act now'],
   unknown: ['unknown', 'Unknown'],
@@ -99,6 +134,8 @@ export function FinanceView() {
   const [open, setOpen] = useState<string | null>(null);
   // P78: what the person is adding from the page head (the owner, the Finance Director and the teams enter these by hand).
   const [adding, setAdding] = useState<'payment' | 'bank' | 'paper' | null>(null);
+  // P128: the tab last opened in each area, so going back to an area returns to it.
+  const [lastIn, setLastIn] = useState<Partial<Record<Area, Tab>>>({});
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="finance" />;
   const count = (t: Row['tone']) => data.rows.filter((r) => r.tone === t).length;
@@ -136,16 +173,24 @@ export function FinanceView() {
   const asked: Tab = routeSection ? 'checks' : (routeTab as Tab);
   const tab: Tab = tabs.some(([t]) => t === asked) ? asked : 'teams';
   const checksTarget = routeSection ? { section: routeSection } : target;
+  const area = AREA_OF[tab];
+  const label = new Map(tabs);
+  const inArea = (a: Area) => ORDER.filter((t) => AREA_OF[t] === a && label.has(t));
+  const areas = AREAS.filter(([a]) => inArea(a).length > 0);
+  const areaTabs = inArea(area);
+  const openTab = (t: Tab) => {
+    setLastIn((l) => ({ ...l, [AREA_OF[t]]: t }));
+    setTab(t);
+  };
+  const openArea = (a: Area) => {
+    const last = lastIn[a];
+    openTab(last && label.has(last) ? last : inArea(a)[0]);
+  };
   return (
     <div className="page fin">
       <PageHead
         title={`Finance${data.team ? `, Team ${data.team}` : ''}`}
-        sub={
-          <>
-            The books stay in SQL Account. This shows whether each company&apos;s books are complete, reconciled and closed for {dateLabel(data.lastEnd)}, and
-            the papers for the auditor and the tax agent. A company with no figures from SQL Account for {data.rule.staleHours} hours shows as unknown.
-          </>
-        }
+        sub="Every company's books, bank reconciliation, payments and papers, in one place."
         actions={
           <>
             <SopHelp id="finance" />
@@ -177,16 +222,34 @@ export function FinanceView() {
           </>
         }
       >
-        <p className="notice" data-tone="info">
-          Test data: SQL Account is not connected yet.
-        </p>
-        <div className="tabbar fin-tabs" role="tablist" aria-label="Finance">
-          {tabs.map(([t, l]) => (
-            <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-              {l}
-            </button>
-          ))}
-        </div>
+        {/* P128: the page's explanation folds under the test-data line (one line until opened). */}
+        <FoldNotice id="fin.about" tone="info" summary="Test data: SQL Account is not connected yet.">
+          <p>
+            The books stay in SQL Account. This shows whether each company&apos;s books are complete, reconciled and closed for {dateLabel(data.lastEnd)}, and
+            the papers for the auditor and the tax agent. A company with no figures from SQL Account for {data.rule.staleHours} hours shows as unknown.
+          </p>
+        </FoldNotice>
+        <nav className="fin-nav" aria-label="Finance">
+          {areas.length > 1 && (
+            <div className="fin-areas" role="group" aria-label="Finance areas" data-count={areas.length}>
+              {areas.map(([a, l, icon]) => (
+                <button key={a} type="button" aria-pressed={a === area} onClick={() => openArea(a)}>
+                  {icon}
+                  <span>{l}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {areaTabs.length > 1 && (
+            <div className="tabbar fin-subtabs" role="tablist" aria-label={AREAS.find(([a]) => a === area)?.[1]}>
+              {areaTabs.map((t) => (
+                <button key={t} role="tab" aria-selected={tab === t} onClick={() => openTab(t)}>
+                  {label.get(t)}
+                </button>
+              ))}
+            </div>
+          )}
+        </nav>
       </PageHead>
       {tab === 'teams' && (
         <div className="fin-body">

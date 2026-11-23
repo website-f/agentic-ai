@@ -2,7 +2,7 @@ import { Select } from './SearchSelect';
 import { installScrollStrips } from './scroll-strip';
 import { CleanupReceiptRecovery } from './views/ItCleanup';
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
-import { type Company, type User, RULES, archiveAllowed, assistantAllowed, dataCleanupAllowed, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch } from '@prima/core';
+import { type Company, type User, RULES, archiveAllowed, assistantAllowed, dataCleanupAllowed, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch, staffPayStepper } from '@prima/core';
 import { ApiError, api, type Me } from './api';
 import { CaretRightIcon, ChatCircleDotsIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon, XIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
@@ -70,6 +70,8 @@ const ArchiveView = lazyView(() => import('./views/Archive'), 'ArchiveView');
 const DataCleanupView = lazyView(() => import('./views/DataCleanup'), 'DataCleanupView');
 const AssistantView = lazyView(() => import('./views/Assistant'), 'AssistantView');
 const MarketingView = lazyView(() => import('./views/Marketing'), 'MarketingView');
+// P128: contribution files from an uploaded salary sheet (Payroll app).
+const ContribFilesView = lazyView(() => import('./views/ContribFiles'), 'ContribFilesView');
 const Overview = lazyView(() => import('./views/Overview'), 'Overview');
 const CompanyView = lazyView(() => import('./views/Company'), 'CompanyView');
 const Sites = lazyView(() => import('./views/Sites'), 'Sites');
@@ -190,6 +192,7 @@ const SCREEN_CODE: Partial<Record<ViewName, () => Promise<unknown>>> = {
   jaswitch: () => import('./views/JaSwitch'),
   assets: () => import('./views/Assets'),
   staffpay: () => import('./views/StaffPay'),
+  contribfiles: () => import('./views/ContribFiles'),
   guardpay: () => import('./views/GuardPay'),
   advances: () => import('./views/GuardPay'),
   loans: () => import('./views/GuardPay'),
@@ -290,7 +293,7 @@ function prefetchMenuScreens(views: ViewName[]): () => void {
 
 
 
-export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'guardroster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'accounts' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'marketing' | 'orgchart' | 'shared-logins' | 'assistant' | 'archive' | 'data-cleanup' | 'sop' | 'equiprequests';
+export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'guardroster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'contribfiles' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'accounts' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'marketing' | 'orgchart' | 'shared-logins' | 'assistant' | 'archive' | 'data-cleanup' | 'sop' | 'equiprequests';
 
 export interface Route {
   view: ViewName;
@@ -625,6 +628,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   // Group websites (Fauzan, 27 Oct 2026): IT runs the register and reviews; each company answers for its own websites.
   { view: 'websites', label: 'Websites', icon: 'device', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'staffpay', label: 'Staff payroll', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // P128 (Fitri, 24 Nov 2026): any salary sheet in, PERKESO's file (SOCSO, EIS, SKBBK) and the EPF list out. Who takes a staff payroll step.
+  { view: 'contribfiles', label: 'Contribution files', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   // Guard pay run (Fauzan, 5 Nov 2026): HR prepares, the COO approves, Finance pays.
   { view: 'guardpay', label: 'Guard pay', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   // Wage advances (Fauzan, 6 Nov 2026): the OM sets, the OD or OGM approves, Finance pays.
@@ -722,6 +727,7 @@ const VIEW_TOKENS: ViewName[] = [
   'jaswitch',
   'assets',
   'staffpay',
+  'contribfiles',
   'guardpay',
   'advances',
   'statutory',
@@ -1109,6 +1115,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         n.view === 'mine' ||
         n.view === 'claims' ||
         n.view === 'staffpay' ||
+        (n.view === 'contribfiles' && staffPayStepper(me.user)) ||
         n.view === 'memos' ||
         // P121: the SOP guide is for everyone.
         n.view === 'sop' ||
@@ -1174,6 +1181,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         (dept === 'finance' && me.user.financeTeam != null) ||
         role === 'company_manager' ||
         (!!me.user.personId && role !== 'supervisor' && me.user.opsTier !== 'patrol')) &&
+      // P128: contribution files: HR, the Chief of Staff, the COO, Finance's paying team and the owner (the server's rule).
+      (n.view !== 'contribfiles' || staffPayStepper(me.user) || isOwnerAdmin(me.user)) &&
       // Guard pay: HR, Finance teams, group leadership (the COO approves) and the company manager for their own company.
       (n.view !== 'guardpay' || leader || dept === 'hr' || dept === 'director_office' || (dept === 'finance' && me.user.financeTeam != null) || role === 'company_manager') &&
       // Advances: the OM, the Operations Director and OGM, HR, Finance teams and group leadership.
@@ -1516,6 +1525,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <AssetsView />;
       case 'staffpay':
         return <StaffPayView />;
+      case 'contribfiles':
+        return <ContribFilesView />;
       case 'guardpay':
         return <GuardPayView />;
       case 'advances':
@@ -1646,6 +1657,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     'jaswitch',
     'assets',
     'staffpay',
+    'contribfiles',
     'guardpay',
     'advances',
   'statutory',

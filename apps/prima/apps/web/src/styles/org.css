@@ -1,0 +1,207 @@
+/* P128: the org chart (views/OrgChart.tsx). Colours come from styles.css tokens only; every class starts with org-. */
+
+.org-notices {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Line view / Table switch in the page head. */
+.org-view button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+}
+
+/* ---------- The tree ---------- */
+.org-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.org-node {
+  --step: 26px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 18px 8px calc(10px + var(--depth, 0) * var(--step));
+  border-top: 1px solid var(--line);
+  min-height: 60px;
+}
+.org-node:first-child {
+  border-top: 0;
+}
+/* A faint guide down the left for each level, so a long line stays readable. */
+.org-node::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(10px + 21px + (var(--depth, 0) - 1) * var(--step));
+  width: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--muted) 35%, transparent);
+}
+.org-node[data-depth='0']::before {
+  display: none;
+}
+.org-node[data-me] {
+  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+}
+.org-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 44px;
+  min-height: 36px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+.org-toggle:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+.org-toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.org-toggle svg {
+  transition: transform 0.15s ease;
+}
+.org-toggle[aria-expanded='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+.org-toggle[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+.org-toggle-space {
+  width: 44px;
+}
+.org-node-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.org-node-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.org-node-name strong {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org-node-title,
+.org-node-sub {
+  color: var(--muted);
+  font-size: 0.84rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org-node-sub {
+  font-size: 0.8rem;
+}
+.org-node-tags,
+.org-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  justify-content: flex-end;
+}
+.org-chips {
+  justify-content: flex-start;
+}
+.org-node-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.org-heads {
+  font-size: 0.86rem;
+}
+
+/* ---------- Forms ---------- */
+.org-bring {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+.org-bring > .notice {
+  grid-column: 1 / -1;
+}
+.org-form {
+  display: grid;
+  gap: 14px;
+}
+.org-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 860px) {
+  .org-bring {
+    grid-template-columns: 1fr;
+  }
+  .org-node {
+    --step: 14px;
+    grid-template-columns: 44px auto minmax(0, 1fr);
+    padding-right: 12px;
+  }
+  .org-node-tags {
+    grid-column: 3 / -1;
+    justify-content: flex-start;
+  }
+  .org-node-act {
+    grid-column: 3 / -1;
+    justify-self: start;
+    min-height: 40px;
+  }
+  .org-node::before {
+    left: calc(10px + 21px + (var(--depth, 0) - 1) * var(--step));
+  }
+}
+@media (max-width: 720px) {
+  .org .k-card-actions,
+  .org .k-card-actions .k-search {
+    width: 100%;
+  }
+  .org-view {
+    width: 100%;
+  }
+  .org-view button {
+    flex: 1 1 0;
+    justify-content: center;
+    min-height: 44px;
+  }
+  .org-node-act {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .org-toggle,
+  .org-toggle svg {
+    transition: none;
+  }
+}

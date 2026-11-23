@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react';
+import { Suspense, lazy, useState, type RefObject } from 'react';
 import {
   EXPORT_RULE,
   EXPORT_SENSITIVITY_LABELS,
@@ -15,13 +15,17 @@ import { api } from './api';
 import { useApp } from './App';
 import { useLang } from './i18n';
 import { Drawer, ErrorNotice, useToast } from './ui';
-import { ArchiveUpload } from './views/Archive';
 import { RecordButton, useRecordKinds } from './views/RecordForm';
+
+// Upload reads files and runs the import (views/ScreenUpload.tsx); it loads only when someone presses Upload.
+const ScreenUpload = lazy(() => import('./views/ScreenUpload'));
 
 /**
  * Upload, Key in and Download on every screen and tab (Fauzan, 23 Nov 2026: "After we check upload button for all tab
  * or all deparment. Dont have upload, key in , download"). One toolbar above every screen; it adds no authority:
- * - Upload files into "Old files and data" for the person's own unit (the archive's walls decide who sees them).
+ * - Upload works like Import (Fitri, 24 Nov 2026): a list is read on the device, matched to this screen's records, its
+ *   columns and rows checked, sorted and saved through the screen's own import (views/ScreenUpload.tsx). Any other file
+ *   is kept in "Old files and data" where the file manager is installed; where it is not, the person is told plainly.
  * - Key in opens the plain record forms this screen holds (keepers only; the server checks again) and points to the
  *   open tab's own forms.
  * - Download gives the open tab as the person sees it, as Excel, CSV or PDF, logged first; sensitive data needs a reason.
@@ -125,9 +129,19 @@ export function ScreenTools({ screen, label, contentRef }: { screen: string; lab
           {tr(L[t])}
         </button>
       ))}
-      {open && (
+      {open?.tool === 'upload' && (
+        <Suspense fallback={null}>
+          <ScreenUpload
+            screen={screen}
+            title={`${tr(L.upload)}: ${label}${open.tab ? ` · ${open.tab}` : ''}`}
+            contentRef={contentRef}
+            onKeyIn={() => setOpen({ tool: 'keyin', tab: open.tab })}
+            onClose={() => setOpen(null)}
+          />
+        </Suspense>
+      )}
+      {open && open.tool !== 'upload' && (
         <Drawer title={`${tr(L[open.tool])}: ${label}${open.tab ? ` · ${open.tab}` : ''}`} onClose={() => setOpen(null)}>
-          {open.tool === 'upload' && <UploadPanel screen={screen} tr={tr} />}
           {open.tool === 'keyin' && <KeyInPanel screen={screen} tr={tr} contentRef={contentRef} onClose={() => setOpen(null)} />}
           {open.tool === 'download' && <DownloadPanel screen={screen} label={label} tab={open.tab} tr={tr} contentRef={contentRef} />}
         </Drawer>
@@ -137,20 +151,6 @@ export function ScreenTools({ screen, label, contentRef }: { screen: string; lab
 }
 
 type Tr = (x: { ms: string; en: string }) => string;
-
-function UploadPanel({ screen, tr }: { screen: string; tr: Tr }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <p className="muted small">
-        {tr({
-          ms: 'Fail disimpan dalam "Fail & data lama" untuk unit anda. Hanya unit anda, anda dan pemimpin kumpulan boleh membukanya; fail staf dan gaji lebih terhad. Gambar atau kertas untuk satu rekod (contohnya resit tuntutan) dilampirkan pada borang rekod itu sendiri.',
-          en: 'Files are kept in "Old files and data" for your unit. Only your unit, you and the group leaders can open them; staff and pay files are more restricted. A photo or paper for one record (a claim receipt, say) is attached on that record’s own form.',
-        })}
-      </p>
-      <ArchiveUpload folder={SCREEN_TOOLS[screen].folder} />
-    </div>
-  );
-}
 
 function KeyInPanel({ screen, tr, contentRef, onClose }: { screen: string; tr: Tr; contentRef: RefObject<HTMLDivElement>; onClose: () => void }) {
   const kinds = useRecordKinds();

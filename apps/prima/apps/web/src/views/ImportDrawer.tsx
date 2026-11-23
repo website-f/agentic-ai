@@ -10,12 +10,14 @@ import {
   extractPdfTable,
   headerSignature,
   importSpec,
+  isXlsFile,
   normHeader,
   normaliseTable,
   parseCsv,
   pickSheet,
   prepareSheet,
   readDocxTables,
+  readXls,
   readXlsx,
   smartMatch,
   toCsv,
@@ -33,6 +35,7 @@ import { api, ApiError, type OrgImportPreview, type OrgImportTemplate } from '..
 import { useApp } from '../App';
 import { Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, RefreshContext, dateTimeLabel } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { useRecordKinds } from './RecordForm';
 import '../styles/import.css';
 
@@ -58,7 +61,7 @@ function specWords(kind: ImportKind, key: string): string[] | undefined {
 const MAX_FILE = 8_000_000;
 const MAX_CSV = 1_000_000;
 const SEVERAL = '*';
-const ACCEPT = '.xlsx,.xlsm,.csv,.txt,.tsv,.docx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const ACCEPT = '.xlsx,.xlsm,.xls,.csv,.txt,.tsv,.docx,.pdf,text/csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 /** The browser's own decoders: raw deflate for the zip inside .xlsx and .docx, zlib deflate for PDF streams. */
 async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
@@ -92,7 +95,9 @@ async function inflatePdf(b: Uint8Array): Promise<Uint8Array> {
 /** Any supported file to its sheets of cell text (also the guard pay import's reader). */
 export async function sheetsOf(f: File): Promise<XlsxSheet[]> {
   const name = f.name.toLowerCase();
-  if (name.endsWith('.xls') || name.endsWith('.numbers') || name.endsWith('.ods') || name.endsWith('.doc'))
+  // Excel 97-2003 (.xls), read here too (core xls-read.ts), as the old systems save it.
+  if (name.endsWith('.xls')) return readXls(new Uint8Array(await f.arrayBuffer()));
+  if (name.endsWith('.numbers') || name.endsWith('.ods') || name.endsWith('.doc'))
     throw new Error('This is an older or other office format. Open it and save it as Excel (.xlsx), Word (.docx), PDF or CSV, then choose it again.');
   if (name.endsWith('.csv') || name.endsWith('.txt') || name.endsWith('.tsv') || f.type === 'text/csv') {
     const text = await f.text();
@@ -108,6 +113,8 @@ export async function sheetsOf(f: File): Promise<XlsxSheet[]> {
     return [{ name: f.name, rows }];
   }
   if (name.endsWith('.docx')) return readDocxTables(bytes, inflateRaw);
+  // An .xls saved under another name still opens.
+  if (isXlsFile(bytes)) return readXls(bytes);
   return readXlsx(bytes, inflateRaw);
 }
 
@@ -183,15 +190,28 @@ const errOf = (e: unknown): Err => ({ message: e instanceof ApiError || e instan
 /** What each column is matched to, and how sure: from the matcher, then the person's own choices. */
 type ColState = { field: string; level: SmartLevel | null; how: SmartColumn['how']; why: string };
 
+/** A file already read elsewhere (the toolbar's Upload): its sheets, and the sheet it fits best. */
+export interface ImportStart {
+  fileName: string;
+  sheets: XlsxSheet[];
+  sheet?: number;
+}
+
 export function ImportDrawer({
   kind,
   companyId: given,
   choices: offered,
+  initial,
+  onBack,
   onClose,
 }: {
   kind: ImportKind;
   companyId: string | null;
   choices?: [string, string][];
+  /** Upload on any screen: the file is read already, so the drawer starts at the column check. */
+  initial?: ImportStart;
+  /** Upload on any screen: back to choosing which record the file holds. */
+  onBack?: () => void;
   onClose: () => void;
 }) {
   const { me } = useApp();
@@ -217,6 +237,7 @@ export function ImportDrawer({
   const [aiOn, setAiOn] = useState(false);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [startUsed, setStartUsed] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -282,24 +303,40 @@ export function ImportDrawer({
     setStep('map');
   }
 
+  /** The sheets of a file read on this device: the best one for this record goes to the matcher. */
+  function takeSheets(name: string, read: XlsxSheet[], prefer?: number) {
+    const all = read.map((s) => ({ ...s, rows: cleanGrid(s.rows) }));
+    const usable = all.filter((s) => s.rows.length >= 2);
+    if (!usable.length) throw new Error('No list with rows was found in this file.');
+    const best = prefer !== undefined && (all[prefer]?.rows.length ?? 0) >= 2 ? prefer : pickSheet(all, fields);
+    setSheets(all);
+    setSheet(best);
+    setFileName(name);
+    matchSheet(all[best].rows);
+  }
+
   async function readFile(f: File | undefined) {
     if (!f) return;
     setError(null);
     if (f.size > MAX_FILE) return setError(errOf('The file is too big. Keep only the sheet you need, up to 500 rows.'));
     setBusy('Reading the file on this device…');
     try {
-      const all = (await sheetsOf(f)).map((s) => ({ ...s, rows: cleanGrid(s.rows) }));
-      const usable = all.filter((s) => s.rows.length >= 2);
-      if (!usable.length) throw new Error('No list with rows was found in this file.');
-      const best = pickSheet(all, fields);
-      setSheets(all);
-      setSheet(best);
-      setFileName(f.name);
-      matchSheet(all[best].rows);
+      takeSheets(f.name, await sheetsOf(f));
     } catch (e) {
       setError(errOf(e));
     } finally {
       setBusy(null);
+    }
+  }
+
+  function startFromUpload() {
+    if (!initial) return;
+    setStartUsed(true);
+    setError(null);
+    try {
+      takeSheets(initial.fileName, initial.sheets, initial.sheet);
+    } catch (e) {
+      setError(errOf(e));
     }
   }
 
@@ -405,6 +442,12 @@ export function ImportDrawer({
 
   const needCompany = !!tpl?.companyScoped && !given;
   const ready = tpl && choices !== null && (!needCompany || !!companyId);
+  // Upload: a record kept without a company (or for the person's only company) starts at the column check straight
+  // away; one kept for several companies asks which first.
+  useEffect(() => {
+    if (initial && !startUsed && ready && fields.length && (!needCompany || choices?.length === 1)) startFromUpload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the record's fields and company are known.
+  }, [tpl, choices, companyId, fields.length]);
   const unmatched = cols ? cols.filter((c, i) => !state[i]?.field && c.profile.fill > 0).length : 0;
 
   return (
@@ -449,6 +492,18 @@ export function ImportDrawer({
             </label>
           )}
           {needCompany && choices?.length === 0 && <p className="notice" data-tone="warn">You do not keep this record for any company.</p>}
+          {initial && (
+            <div className="imp-actions">
+              {onBack && (
+                <button className="btn" disabled={!!busy} onClick={onBack}>
+                  Back
+                </button>
+              )}
+              <button className="btn btn-primary" disabled={!ready || !!busy} onClick={startFromUpload}>
+                Check the columns of {initial.fileName}
+              </button>
+            </div>
+          )}
           <label
             className={`imp-drop${ready ? '' : ' imp-drop-off'}${dragging ? ' imp-drop-on' : ''}`}
             onDragOver={(e) => {
@@ -463,8 +518,8 @@ export function ImportDrawer({
             }}
           >
             <FileArrowUpIcon size={30} aria-hidden="true" />
-            <strong>{fileName || 'Drop the file here, or choose it'}</strong>
-            <span className="muted small">Excel (.xlsx), CSV, Word (.docx) or PDF, up to 500 rows</span>
+            <strong>{initial ? 'Or choose another file' : fileName || 'Drop the file here, or choose it'}</strong>
+            <span className="muted small">Excel (.xlsx or .xls), CSV, Word (.docx) or PDF, up to 500 rows</span>
             <input
               type="file"
               accept={ACCEPT}
@@ -630,6 +685,12 @@ export function ImportDrawer({
             setFixing(null);
             void check({ skip: s });
           }}
+          onSkipMany={(rows, on) => {
+            const s = on ? [...new Set([...skip, ...rows])] : skip.filter((x) => !rows.includes(x));
+            setSkip(s);
+            setFixing(null);
+            void check({ skip: s });
+          }}
           onFix={(row, cells) => {
             const g = grid.map((r) => [...r]);
             const r = g[row - 1];
@@ -784,6 +845,9 @@ function TemplateLink({ tpl }: { tpl: OrgImportTemplate }) {
   );
 }
 
+type PreviewRow = OrgImportPreview['rows'][number];
+const rowStatus = (r: PreviewRow) => (r.skipped ? 'Skipped' : r.ok ? 'Ready' : 'To fix');
+
 function CheckStep({
   preview,
   grid,
@@ -792,6 +856,7 @@ function CheckStep({
   setFixing,
   label,
   onSkip,
+  onSkipMany,
   onFix,
   onBack,
   onImport,
@@ -803,16 +868,61 @@ function CheckStep({
   setFixing: (row: number | null) => void;
   label: (key: string) => string;
   onSkip: (row: number, on: boolean) => void;
+  /** Leave out (or take back) many rows at once: one check by the server for all of them. */
+  onSkipMany: (rows: number[], on: boolean) => void;
   onFix: (row: number, cells: Record<number, string>) => void;
   onBack: () => void;
   onImport: () => void;
 }) {
   const bad = preview.rows.filter((r) => !r.ok && !r.skipped);
-  const skipped = preview.rows.filter((r) => r.skipped);
-  const good = preview.rows.filter((r) => r.ok);
   const used = preview.columns.filter((c) => c.field);
+  const [ticked, setTicked] = useState<Set<string>>(() => new Set());
+  // Upload (Fitri, 24 Nov 2026: "checks all the columns, nicely done, can sort"): every row of the file in one table that
+  // searches, filters by status, sorts by any column and pages; rows are ticked to leave them out or take them back.
+  const columns: DtColumn<PreviewRow>[] = useMemo(() => {
+    const fieldCols = used
+      .filter((c) => c.field !== COMPANY_FIELD)
+      .map((c): DtColumn<PreviewRow> => ({ id: `f:${c.field}`, label: label(c.field!), value: (r) => r.values[c.field!] ?? '', phone: 'fact' }));
+    const company: DtColumn<PreviewRow>[] = used.some((c) => c.field === COMPANY_FIELD)
+      ? [{ id: 'company', label: 'Company', value: (r) => r.company?.name ?? '', render: (r) => (r.company ? <Chip tone={r.company.guess ? 'warn' : 'neutral'}>{r.company.name}</Chip> : '–') }]
+      : [];
+    return [
+      { id: 'row', label: 'Row', value: (r) => r.row, sort: 'number', width: '4.5rem', phone: 'title', render: (r) => `Row ${r.row}` },
+      {
+        id: 'status',
+        label: 'Status',
+        value: rowStatus,
+        translate: true,
+        phone: 'sub',
+        render: (r) => <Chip tone={r.skipped ? 'neutral' : r.ok ? 'ok' : 'crit'}>{rowStatus(r)}</Chip>,
+      },
+      ...company,
+      ...fieldCols,
+      {
+        id: 'problems',
+        label: 'Problems',
+        value: (r) => r.problems.join(' · '),
+        phone: 'fact',
+        render: (r) =>
+          r.problems.length ? (
+            <ul className="imp-problems">
+              {r.problems.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+          ) : (
+            '–'
+          ),
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the columns change with the preview's matched columns.
+  }, [preview]);
+  const filters: DtFilter<PreviewRow>[] = [{ id: 'status', label: 'Status', value: rowStatus, options: ['To fix', 'Ready', 'Skipped'].map((v) => ({ value: v, label: v })) }];
+  const tickedRows = preview.rows.filter((r) => ticked.has(String(r.row)));
+  const tickedTaken = tickedRows.filter((r) => !r.skipped).map((r) => r.row);
+  const tickedLeft = tickedRows.filter((r) => r.skipped).map((r) => r.row);
   return (
-    <div className="imp-step">
+    <div className="imp-step imp-check">
       <div className="imp-tally">
         <span data-tone="ok">
           <strong>{preview.okRows}</strong> ready
@@ -834,83 +944,77 @@ function CheckStep({
           Columns needed: {preview.missingColumns.join(', ')}. Go back and match them.
         </p>
       )}
-      {bad.length > 0 && (
-        <section>
-          <h3 className="imp-h">Rows to fix or skip</h3>
-          <ul className="imp-rows">
-            {bad.slice(0, 100).map((r) => (
-              <li key={r.row} className="imp-row" data-tone="crit">
-                <div className="imp-row-head">
-                  <strong>Row {r.row}</strong>
-                  {r.company && <Chip tone={r.company.guess ? 'warn' : 'neutral'}>{r.company.name}</Chip>}
-                  <span className="imp-row-btns">
-                    <button className="btn btn-sm" disabled={busy} onClick={() => setFixing(fixing === r.row ? null : r.row)}>
-                      {fixing === r.row ? 'Cancel' : 'Fix'}
-                    </button>
-                    <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => onSkip(r.row, true)}>
-                      Skip
-                    </button>
-                  </span>
-                </div>
-                <ul className="imp-problems">
-                  {r.problems.map((p, i) => (
-                    <li key={i}>{p}</li>
-                  ))}
-                </ul>
-                {fixing === r.row && (
-                  <RowFix
-                    cells={grid[r.row - 1] ?? []}
-                    columns={used.map((c) => ({ index: c.index, label: c.field === COMPANY_FIELD ? 'Company' : label(c.field!) }))}
-                    busy={busy}
-                    onSave={(cells) => onFix(r.row, cells)}
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
-          {bad.length > 100 && <p className="muted small">And {bad.length - 100} more. Fix the file and choose it again for that many.</p>}
-          {bad.length > 1 && (
-            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => bad.forEach((r) => onSkip(r.row, true))}>
-              Skip all {bad.length} rows to fix
+      <p className="muted small">
+        Every row was checked by the same save as the Add form; nothing is kept yet. Sort by any column, search, or show only the rows to fix. Tick rows to leave
+        them out or take them back. Fix changes a row and checks it again.
+      </p>
+      <DataTable
+        label="Rows in the file"
+        rows={preview.rows}
+        rowKey={(r) => String(r.row)}
+        columns={columns}
+        filters={filters}
+        defaults={bad.length ? { f: { status: 'To fix' } } : undefined}
+        searchPlaceholder="Search the rows"
+        exportable={false}
+        rowTone={(r) => (!r.ok && !r.skipped ? 'crit' : undefined)}
+        rowClass={(r) => (r.skipped ? 'imp-row-skipped' : undefined)}
+        selection={{ selected: ticked, onChange: setTicked }}
+        bulk={
+          <div className="imp-bulk">
+            {tickedTaken.length > 0 && (
+              <button
+                className="btn btn-sm"
+                disabled={busy}
+                onClick={() => {
+                  onSkipMany(tickedTaken, true);
+                  setTicked(new Set());
+                }}
+              >
+                Leave out {tickedTaken.length} ticked
+              </button>
+            )}
+            {tickedLeft.length > 0 && (
+              <button
+                className="btn btn-sm"
+                disabled={busy}
+                onClick={() => {
+                  onSkipMany(tickedLeft, false);
+                  setTicked(new Set());
+                }}
+              >
+                Take back {tickedLeft.length} ticked
+              </button>
+            )}
+          </div>
+        }
+        rowEnd={(r) => (
+          <span className="imp-row-btns">
+            {!r.ok && !r.skipped && (
+              <button className="btn btn-sm" disabled={busy} onClick={() => setFixing(fixing === r.row ? null : r.row)}>
+                {fixing === r.row ? 'Cancel' : 'Fix'}
+              </button>
+            )}
+            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => onSkip(r.row, !r.skipped)} title={r.skipped ? 'Include this row again' : 'Leave this row out'}>
+              {r.skipped ? 'Include' : 'Skip'}
             </button>
-          )}
-        </section>
-      )}
-      {skipped.length > 0 && (
-        <section>
-          <h3 className="imp-h">Skipped</h3>
-          <ul className="imp-chips">
-            {skipped.map((r) => (
-              <li key={r.row}>
-                <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => onSkip(r.row, false)} title="Include this row again">
-                  Row {r.row} · include again
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {good.length > 0 && (
-        <section>
-          <h3 className="imp-h">Ready ({good.length})</h3>
-          <ul className="imp-rows">
-            {good.slice(0, 8).map((r) => (
-              <li key={r.row} className="imp-row" data-tone="ok">
-                <div className="imp-row-head">
-                  <strong>Row {r.row}</strong>
-                  {r.company && <Chip tone={r.company.guess ? 'warn' : 'neutral'}>{r.company.name}</Chip>}
-                </div>
-                <span className="imp-row-values">
-                  {Object.entries(r.values)
-                    .slice(0, 4)
-                    .map(([k, v]) => `${label(k)}: ${v}`)
-                    .join(' · ')}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {good.length > 8 && <p className="muted small">And {good.length - 8} more ready.</p>}
-        </section>
+          </span>
+        )}
+        rowDetail={(r) =>
+          fixing === r.row ? (
+            <RowFix
+              cells={grid[r.row - 1] ?? []}
+              columns={used.map((c) => ({ index: c.index, label: c.field === COMPANY_FIELD ? 'Company' : label(c.field!) }))}
+              busy={busy}
+              onSave={(cells) => onFix(r.row, cells)}
+            />
+          ) : null
+        }
+      />
+      {bad.length > 1 && (
+        <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => onSkipMany(bad.map((r) => r.row), true)}>
+          Skip all {bad.length} rows to fix
+        </button>
       )}
       <div className="imp-actions imp-sticky">
         <button className="btn" disabled={busy} onClick={onBack}>

@@ -225,6 +225,20 @@ function linesOf(pieces: Piece[]): Piece[][] {
  * which the importer then skips as a title or ignores.
  */
 export async function extractPdfTable(bytes: Uint8Array, inflate: Inflate): Promise<string[][]> {
+  const pieces = await extractPdfPieces(bytes, inflate);
+  if (!pieces.length) return [];
+  return tableOfLines(linesOf(pieces));
+}
+
+/** One piece of text on a PDF page: where it starts, its estimated right edge, its height and size (P128). */
+export type PdfTextPiece = Readonly<Piece>;
+
+/**
+ * P128: every string drawn in a PDF with its place, as drawn (not joined into cells), for a reader that needs the columns
+ * by position: a salary sheet printed from Excel has its numbers right-aligned under headings wrapped over several lines,
+ * and neighbouring headings touch. `page` counts from 0; `y` grows up the page.
+ */
+export async function extractPdfPieces(bytes: Uint8Array, inflate: Inflate): Promise<PdfTextPiece[]> {
   const head = new TextDecoder('latin1').decode(bytes.subarray(0, 1024));
   if (head.indexOf('%PDF') < 0) return [];
   const objs = await pdfObjectsOf(bytes, inflate);
@@ -239,7 +253,10 @@ export async function extractPdfTable(bytes: Uint8Array, inflate: Inflate): Prom
     if (body.length < 4_000_000) pieces.push(...piecesOf(body, fonts, pageNo));
   });
   if (pieces.length > 200_000) throw new Error('The PDF is too big. Print only the pages with the list.');
-  const lines = linesOf(pieces);
+  return pieces;
+}
+
+function tableOfLines(lines: Piece[][]): string[][] {
   const multi = lines.filter((l) => l.length >= 2);
   if (!multi.length) return lines.map((l) => l.map((p) => p.text.trim()));
   // Column edges: cluster the left edges of cells on the fullest lines (the records; a centred heading or a wrapped

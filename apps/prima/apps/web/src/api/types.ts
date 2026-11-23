@@ -367,6 +367,7 @@ export type GuardPayFile = Parameters<PrimaService['guardPayExport']>[2];
 export type GuardPayLinePatch = Parameters<PrimaService['setGuardPayLine']>[3];
 /** Guard pay Add and Import (Fitri, 23 Nov 2026): the rows checked (dry run) or saved. */
 export type GuardPayImportResult = R<'importGuardPayLines'>;
+export type ContribBoard = R<'contributionFiles'>;
 export type GuardPayImportBody = { rows: GuardPayImportRow[]; note: string; dryRun: boolean; source?: string };
 export type GuardAdvanceBoard = R<'guardAdvances'>;
 export type GuardAdvanceInput = Parameters<PrimaService['setGuardAdvances']>[1];
@@ -803,6 +804,11 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   loadStatTable(input: { id: string; from: string; source: string; doc: string; rows: string; above?: { erPct: number; eePct: number } }): Promise<Awaited<ReturnType<PrimaService['loadStatTable']>>>;
   checkStatTable(input: { id: string; version: string; decision: 'check' | 'reject'; comment: string }): Promise<unknown>;
   setEmployerNos(companyId: string, input: { epf: string | null; socso: string | null; lhdnE: string | null; hrd: string | null }): Promise<unknown>;
+  /** P128: contribution files from an uploaded salary sheet. */
+  contributionFiles(): Promise<ContribBoard>;
+  saveContributionFile(input: { companyId: string; period: string; fileName: string; employerCode: string; mycoid: string; rows: unknown[] }): Promise<R<'saveContributionFile'>>;
+  contributionFile(companyId: string, id: string): Promise<R<'contributionFile'>>;
+  contributionFileDownloaded(companyId: string, id: string, kind: 'perkeso_txt' | 'perkeso_xlsm' | 'check_csv' | 'epf_csv'): Promise<unknown>;
   finBoard(): Promise<FinBoard>;
   contracts(): Promise<ContractBoard>;
   branchBoard(): Promise<BranchBoard>;

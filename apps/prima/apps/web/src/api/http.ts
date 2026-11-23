@@ -2100,6 +2100,18 @@ export class HttpApi implements Api {
   setEmployerNos(companyId: string, input: Parameters<Api['setEmployerNos']>[1]) {
     return this.call<unknown>('POST', `/staff-pay/employer-nos/${encodeURIComponent(companyId)}`, input);
   }
+  contributionFiles() {
+    return this.call<Awaited<ReturnType<Api['contributionFiles']>>>('GET', '/staff-pay/contribution-files');
+  }
+  saveContributionFile(input: Parameters<Api['saveContributionFile']>[0]) {
+    return this.call<Awaited<ReturnType<Api['saveContributionFile']>>>('POST', '/staff-pay/contribution-files', input);
+  }
+  contributionFile(companyId: string, id: string) {
+    return this.call<Awaited<ReturnType<Api['contributionFile']>>>('GET', `/staff-pay/contribution-files/${encodeURIComponent(companyId)}/${encodeURIComponent(id)}`);
+  }
+  contributionFileDownloaded(companyId: string, id: string, kind: Parameters<Api['contributionFileDownloaded']>[2]) {
+    return this.call<unknown>('POST', `/staff-pay/contribution-files/${encodeURIComponent(companyId)}/${encodeURIComponent(id)}/downloaded`, { kind });
+  }
   setStaffPayLine(runId: string, personId: string, patch: Parameters<Api['setStaffPayLine']>[2]) {
     return this.call<unknown>('POST', `/staff-pay/${encodeURIComponent(runId)}/lines/${encodeURIComponent(personId)}`, patch);
   }

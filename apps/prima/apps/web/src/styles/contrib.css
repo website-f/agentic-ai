@@ -1,0 +1,64 @@
+/* P128: contribution files (ContribFiles.tsx). Phone first: the fields stack, the files list stacks, tables scroll. */
+.cf-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.cf-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.cf-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cf-files {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+.cf-file {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.cf-file .btn {
+  justify-content: center;
+}
+.cf-edit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+.cf-why {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+.cf-why .cf-bad {
+  color: var(--crit, #b42318);
+}
+.cf-again {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cf-flow td.num,
+.cf-flow th.num {
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .cf-files,
+  .cf-fields,
+  .cf-edit {
+    grid-template-columns: 1fr;
+  }
+}

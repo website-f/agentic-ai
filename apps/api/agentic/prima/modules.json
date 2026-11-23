@@ -9,8 +9,6 @@
   "sop"
  ],
  "common": [
-  "GET archive",
-  "GET archive/files/:/content",
   "GET arisha",
   "GET arisha/draft-form",
   "GET arisha/drafts",
@@ -29,12 +27,6 @@
   "GET org/processes",
   "GET records/:/form",
   "GET records/kinds",
-  "POST archive/files",
-  "POST archive/files/:/content/:",
-  "POST archive/files/:/details",
-  "POST archive/files/:/finish",
-  "POST archive/files/:/parts/:",
-  "POST archive/files/:/set-aside",
   "POST arisha",
   "POST arisha/drafts",
   "POST arisha/drafts/:/commit",
@@ -720,6 +712,17 @@
        "blurb": {
         "en": "The guards' monthly pay run.",
         "ms": "Proses gaji bulanan pengawal."
+       }
+      },
+      {
+       "id": "contribfiles",
+       "title": {
+        "en": "Contribution files",
+        "ms": "Fail caruman"
+       },
+       "blurb": {
+        "en": "Salary sheet in, SOCSO, EIS and EPF files out, ready to submit.",
+        "ms": "Senarai gaji masuk, fail PERKESO, SIP dan KWSP keluar, sedia dihantar."
        }
       }
      ]
@@ -1492,7 +1495,16 @@
    "POST guard-pay/preparers/:",
    "POST statutory"
   ],
-  "archive": [],
+  "archive": [
+   "GET archive",
+   "GET archive/files/:/content",
+   "POST archive/files",
+   "POST archive/files/:/content/:",
+   "POST archive/files/:/details",
+   "POST archive/files/:/finish",
+   "POST archive/files/:/parts/:",
+   "POST archive/files/:/set-aside"
+  ],
   "arms": [
    "GET arms",
    "GET arms/control",
@@ -2003,6 +2015,12 @@
    "POST contracts/read-paper",
    "POST crm/clients/:/diligence/:",
    "POST sites/:/instructions/:"
+  ],
+  "contribfiles": [
+   "GET staff-pay/contribution-files",
+   "GET staff-pay/contribution-files/:/:",
+   "POST staff-pay/contribution-files",
+   "POST staff-pay/contribution-files/:/:/downloaded"
   ],
   "corporate": [
    "GET corporate",

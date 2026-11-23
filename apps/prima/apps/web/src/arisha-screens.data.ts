@@ -5458,6 +5458,59 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "notes": "\"No payslips yet\" means Finance has not paid a month for you. Unpaid payslips are drafts. Whoever prepares or submits a month cannot approve it, and a submitted month changes only if returned to HR. Prima only drafts files; Finance uploads them, and only Finance gets \"Bank upload\". Zakat changes apply from the next payroll. HR, Finance and leadership also see \"Pay and salary account changes to verify\"."
   },
   {
+    "view": "contribfiles",
+    "title": "Contribution files",
+    "what": "Upload any salary sheet (Excel, CSV, Word, PDF or pasted rows). Prima works out SOCSO, EIS, SKBBK and EPF for each person with its own statutory tables, and gives PERKESO's file for ASSIST, PERKESO's Excel converter, a check sheet and the EPF list, ready to submit.",
+    "who": "HR, the Chief of Staff, the COO and Finance's paying team, for the employers in their company access. Pay data: every download is kept in the audit log.",
+    "tabs": [
+      {
+        "name": "New file",
+        "what": "Three steps: Upload, Check, Download."
+      },
+      {
+        "name": "Saved files",
+        "what": "Each file made, by month and employer, to download again."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to make the PERKESO file from a salary sheet",
+        "steps": [
+          "Open \"New file\", choose \"Employer\" and \"Wage month\".",
+          "Press \"Choose the salary sheet\" and pick the file, or paste the rows and press \"Read the pasted rows\".",
+          "Check the people. Press \"Change\" on a row to fix an IC, the age, nationality or the SKBBK opt-out.",
+          "Press \"Next: download\", type the \"PERKESO employer code\" and press \"PERKESO file for ASSIST (.txt)\".",
+          "Upload the .txt file in the PERKESO ASSIST portal."
+        ]
+      },
+      {
+        "task": "How to fix a column Prima read wrongly",
+        "steps": [
+          "On the Check step press \"Columns read from the file\".",
+          "Choose the right \"Meaning\" for the column, and tick or untick \"Counts for EPF\" and \"Counts for SOCSO\"."
+        ]
+      },
+      {
+        "task": "How to download a file again",
+        "steps": [
+          "Open \"Saved files\".",
+          "Press \".txt\", \".xlsm\", \"Check\" or \"EPF\" on the month."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "SKBBK",
+        "means": "LINDUNG 24 Jam, PERKESO's cover for accidents outside work: the employee pays 0.75% of wages up to RM6,000 from June 2026."
+      },
+      {
+        "term": "Differ from the file",
+        "means": "The salary sheet's own SOCSO, EIS or EPF figure is not what the law's tables give."
+      }
+    ],
+    "notes": "The law decides the wages counted: EPF leaves out overtime, travel allowance and directors' fees; SOCSO leaves out travel allowance, bonus and directors' fees. When the file counted differently, Prima shows it and you choose. Foreign workers go in the PERKESO file with their SOCSO foreign worker number, not the passport."
+  },
+  {
     "view": "guardpay",
     "title": "Guard pay",
     "what": "Monthly pay for guards and officers, worked out from locked attendance and the ACT pay formula for each site.",

@@ -2817,9 +2817,11 @@ describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
     expect(epfShare(3000, 61, 'MY')).toMatchObject({ ee: 0, er: 120 });
     expect(epfShare(3000, 35, 'NP')).toMatchObject({ ee: 60, er: 60 });
     // Month-effective CEO settings remain authoritative. This tests configured preview behavior, not statutory-table certification.
-    expect(socsoShare(3000, 35)).toMatchObject({ ee: 15, er: 52.5 });
-    expect(socsoShare(8000, 35)).toMatchObject({ ee: 30, er: 105 });
-    expect(eisShare(3000, 35, 'MY')).toEqual({ ee: 6, er: 6 });
+    // P128 (24 Nov 2026): SOCSO and EIS by PERKESO's wage bands, as its published schedule (RM2,900.01-3,000: 51.65 /
+    // 14.75; above RM6,000: 104.15 / 29.75; EIS 5.90 each), no longer a straight percentage (52.50 / 15.00, 105 / 30, 6).
+    expect(socsoShare(3000, 35)).toMatchObject({ ee: 14.75, er: 51.65 });
+    expect(socsoShare(8000, 35)).toMatchObject({ ee: 29.75, er: 104.15 });
+    expect(eisShare(3000, 35, 'MY')).toEqual({ ee: 5.9, er: 5.9 });
     expect(eisShare(3000, 60, 'MY')).toEqual({ ee: 0, er: 0 });
     // Low pay: the RM400 rebate wipes the tax out, and PCB under RM10 is not deducted.
     expect(pcbEstimate(3000, 330, 21)).toBe(0);
@@ -3396,7 +3398,8 @@ describe('LINDUNG 24 Jam kept apart from SOCSO (Fauzan, 27 Oct 2026)', () => {
     expect(lindungShare(2550, '2026-10', 'NP', true)).toEqual({ ee: 19.15, rate: 0.0075, status: 'deducted' });
     expect(lindungShare(2550, '2026-10', 'MY', true)).toMatchObject({ ee: 0, status: 'opted_out' });
     expect(lindungShare(2550, '2026-05', 'MY', false)).toMatchObject({ ee: 0, status: 'not_started' });
-    expect(lindungShare(9000, '2028-06', 'MY', false)).toMatchObject({ ee: 60, rate: 0.01 });
+    // P128: by the wage bands like SOCSO (the RM5,900.01-6,000 band's middle wage): RM59.50 at 1%, until PERKESO publishes its 1% table.
+    expect(lindungShare(9000, '2028-06', 'MY', false)).toMatchObject({ ee: 59.5, rate: 0.01 });
   });
 
   it('shows LINDUNG in its own payroll column and total, outside normal SOCSO', async () => {

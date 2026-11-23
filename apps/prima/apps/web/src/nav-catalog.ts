@@ -90,7 +90,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Payroll',
     blurb: 'Pay runs, pay rules, advances and loans.',
     groups: [
-      { title: 'Pay runs', views: ['staffpay', 'guardpay'] },
+      { title: 'Pay runs', views: ['staffpay', 'guardpay', 'contribfiles'] },
       { title: 'Rules and rates', views: ['payformulas', 'salarycalc', 'statutory'] },
       { title: 'Advances and loans', views: ['advances', 'loans'] },
     ],
@@ -207,6 +207,7 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   handovers: { blurb: 'Hand over your work before leave or a move.', words: 'hand-over handover serah tugas serahan leave cuti resign letak jawatan transfer pindah' },
   staffpay: { blurb: 'Office staff payroll and payslips.', words: 'salary gaji payroll payslip slip gaji staff pay gaji staf pay bayaran' },
   guardpay: { blurb: "The guards' monthly pay run.", words: 'salary gaji payroll guard pay gaji pengawal pay run wages upah' },
+  contribfiles: { blurb: 'Salary sheet in, SOCSO, EIS and EPF files out, ready to submit.', words: 'caruman contribution socso perkeso eis sip skbbk lindung epf kwsp assist text fail teks borang upload muat naik' },
   payformulas: { blurb: 'How guard salary and overtime are counted.', words: 'pay formula formula gaji overtime ot lebih masa salary gaji' },
   salarycalc: { blurb: "See how a guard's month of pay is counted.", words: 'salary gaji calculator kalkulator kira gaji overtime ot' },
   statutory: { blurb: 'EPF, SOCSO, EIS and tax rates by month.', words: 'epf kwsp socso perkeso eis sip pcb tax cukai hrdf rates kadar statutory berkanun' },

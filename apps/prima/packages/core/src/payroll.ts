@@ -16,6 +16,7 @@ import type { PayAccount } from "./types";
 import type { Person } from "./types";
 import type { StaffClaim } from "./types";
 import type { StaffPayLine } from "./types";
+import { perkesoShare } from "./statutory-tables";
 import { statShare } from "./statutory-tables";
 import { statTableFor } from "./statutory-tables";
 import type { StatTable } from "./statutory-tables";
@@ -29,8 +30,6 @@ import type { StatTableId } from "./statutory-tables";
  */
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
-/** SOCSO and EIS amounts are in 5 sen steps. */
-const r05 = (n: number) => Math.round(n * 20) / 20;
 
 /**
  * EPF (KWSP Act 1991, Third Schedule). Wages up to RM5,000 go in RM20 bands, above that in RM100 bands; the share is
@@ -41,19 +40,26 @@ export function epfShare(wage: number, age: number, nationality: Nationality, st
   const e = st.epf;
   if (wage <= 0) return { ee: 0, er: 0 };
   const up = (n: number) => (e.bands ? Math.ceil(Math.max(0, n - 1e-9)) : r2(n));
+  // Part F (non-citizens, from October 2025 wages): 2% of the whole wage, rounded up to the next ringgit, no bands.
   if (nationality !== 'MY') return { ee: up(wage * e.foreignEeRate), er: up(wage * e.foreignErRate) };
+  // P128: the Third Schedule's first row, RM0.01 to RM10, pays nothing (the RM20 band before gave RM3 each).
+  if (e.bands && wage <= 10) return { ee: 0, er: 0 };
   const band = wage <= e.erLimit ? 20 : 100;
   const top = !e.bands || wage > 20000 ? wage : Math.ceil(wage / band) * band;
   if (age >= e.olderAge) return { ee: up(top * e.olderEeRate), er: up(top * e.olderErRate) };
   return { ee: up(top * e.eeRate), er: up(top * (wage <= e.erLimit ? e.erRateLow : e.erRateHigh)) };
 }
 
-/** SOCSO (PERKESO): employer 1.75%, employee 0.5% on wages up to RM6,000; from 60 the employer pays 1.25% only. */
+/**
+ * SOCSO (PERKESO): employer 1.75%, employee 0.5% on wages up to RM6,000; from 60 the employer pays 1.25% only.
+ * P128: by the published wage bands (each band's amounts, worked on its middle wage), as PERKESO's tables and ASSIST
+ * check them, not a straight percentage of the wage (which was up to 5 sen off in about half the bands, and 85 sen off
+ * at exactly RM3,000).
+ */
 export function socsoShare(wage: number, age: number, st: StatutorySettings = DEFAULT_STATUTORY): { ee: number; er: number } {
   const s = st.socso;
-  const w = Math.min(Math.max(wage, 0), s.wageCap);
-  if (age >= s.olderAge) return { ee: 0, er: r05(w * s.olderErRate) };
-  return { ee: r05(w * s.eeRate), er: r05(w * s.erRate) };
+  const p = age >= s.olderAge ? perkesoShare(wage, s.olderErRate, 0, s.wageCap) : perkesoShare(wage, s.erRate, s.eeRate, s.wageCap);
+  return { ee: p.ee, er: p.er };
 }
 
 /**
@@ -72,15 +78,16 @@ export function lindungShare(
   const cap = st.lindung.rate != null ? st.lindung.wageCap : rule.wageCeiling;
   if (!rate) return { ee: 0, rate: 0, status: 'not_started' };
   if (nationality === 'MY' && optedOut) return { ee: 0, rate, status: 'opted_out' };
-  return { ee: r05(Math.min(Math.max(wage, 0), cap) * rate), rate, status: 'deducted' };
+  // P128: by the wage bands of PERKESO's schedule (SKBBK column), like SOCSO.
+  return { ee: perkesoShare(wage, 0, rate, cap).ee, rate, status: 'deducted' };
 }
 
-/** EIS (SIP): 0.2% each on wages up to RM6,000, Malaysians aged 18 to 59. */
+/** EIS (SIP): 0.2% each on wages up to RM6,000, Malaysians aged 18 to 59; by the published wage bands (P128). */
 export function eisShare(wage: number, age: number, nationality: Nationality, st: StatutorySettings = DEFAULT_STATUTORY): { ee: number; er: number } {
   const e = st.eis;
   if ((e.malaysiansOnly && nationality !== 'MY') || age < e.minAge || age >= e.maxAge) return { ee: 0, er: 0 };
-  const w = Math.min(Math.max(wage, 0), e.wageCap);
-  return { ee: r05(w * e.eeRate), er: r05(w * e.erRate) };
+  const p = perkesoShare(wage, e.erRate, e.eeRate, e.wageCap);
+  return { ee: p.ee, er: p.er };
 }
 
 /** HRD Corp levy: 1% of basic pay and fixed allowances, Malaysian employees, paid by the employer. */

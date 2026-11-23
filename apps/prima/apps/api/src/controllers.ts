@@ -3471,6 +3471,32 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.setEmployerNos(u, companyId.slice(0, 120), { epf: v(b.epf, 'epf'), socso: v(b.socso, 'socso'), lhdnE: v(b.lhdnE, 'lhdnE'), hrd: v(b.hrd, 'hrd') }));
   }
 
+  // P128: contribution files from an uploaded salary sheet (PERKESO text file and converter, EPF list). Before 'staff-pay/:id'.
+  @Get('staff-pay/contribution-files')
+  contributionFiles(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.contributionFiles(u));
+  }
+
+  @Post('staff-pay/contribution-files')
+  saveContributionFile(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object') throw new BadRequestException('Send the file as an object');
+    if (!Array.isArray(b.rows) || b.rows.length > 3000) throw new BadRequestException('Send the people as a list (at most 3,000)');
+    const opt = (x: unknown, k: string, n: number) => (x == null || x === '' ? '' : str(x, k, n));
+    return this.db.asUser(uid, (svc, u) =>
+      svc.saveContributionFile(u, { companyId: str(b.companyId, 'companyId', 120), period: str(b.period, 'period', 7), fileName: opt(b.fileName, 'fileName', 160), employerCode: opt(b.employerCode, 'employerCode', 20), mycoid: opt(b.mycoid, 'mycoid', 20), rows: b.rows }),
+    );
+  }
+
+  @Get('staff-pay/contribution-files/:companyId/:id')
+  contributionFile(@UserId() uid: string, @Param('companyId') companyId: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.contributionFile(u, companyId.slice(0, 120), id.slice(0, 160)));
+  }
+
+  @Post('staff-pay/contribution-files/:companyId/:id/downloaded')
+  contributionFileDownloaded(@UserId() uid: string, @Param('companyId') companyId: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.contributionFileDownloaded(u, companyId.slice(0, 120), id.slice(0, 160), str(b?.kind, 'kind', 20)));
+  }
+
   @Get('staff-pay/:id')
   staffPayRun(@UserId() uid: string, @Param('id') id: string) {
     return this.db.asUser(uid, (svc, u) => svc.staffPayRun(u, id.slice(0, 120)));

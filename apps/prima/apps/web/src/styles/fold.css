@@ -1,0 +1,204 @@
+/* P128: notices and sections that fold to one line (fold.tsx). Colours come from styles.css tokens only. */
+
+/* ---------- Fold notice ---------- */
+.fold-notice {
+  --fn-ink: var(--muted);
+  --fn-bg: var(--surface-2);
+  --fn-edge: var(--line);
+  border: 1px solid var(--fn-edge);
+  border-radius: var(--r-md, 12px);
+  background: var(--fn-bg);
+  min-width: 0;
+}
+.fold-notice[data-tone='crit'] {
+  --fn-ink: var(--crit);
+  --fn-bg: var(--crit-soft);
+  --fn-edge: color-mix(in srgb, var(--crit) 35%, var(--line));
+}
+.fold-notice[data-tone='warn'] {
+  --fn-ink: var(--warn);
+  --fn-bg: var(--warn-soft);
+  --fn-edge: color-mix(in srgb, var(--warn) 35%, var(--line));
+}
+.fold-notice[data-tone='ok'] {
+  --fn-ink: var(--ok);
+  --fn-bg: var(--ok-soft);
+  --fn-edge: color-mix(in srgb, var(--ok) 30%, var(--line));
+}
+.fold-notice[data-tone='unknown'] {
+  --fn-ink: var(--unknown);
+  --fn-bg: var(--unknown-soft);
+  --fn-edge: color-mix(in srgb, var(--unknown) 30%, var(--line));
+}
+.fold-notice-head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  text-align: left;
+  border-radius: inherit;
+}
+button.fold-notice-head {
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+button.fold-notice-head:hover {
+  background: color-mix(in srgb, var(--fn-ink) 6%, transparent);
+}
+button.fold-notice-head:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.fold-notice-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  color: var(--fn-ink);
+}
+.fold-notice[data-tone='info'] .fold-notice-icon,
+.fold-notice:not([data-tone]) .fold-notice-icon {
+  color: var(--accent);
+}
+.fold-notice-summary {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+/* Closed: one line, cut with an ellipsis; the whole text shows once opened. */
+.fold-notice:not([data-open]) button .fold-notice-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fold-notice-more {
+  flex: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.fold-caret {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.18s ease;
+}
+[data-open] > .fold-notice-head .fold-caret {
+  transform: rotate(180deg);
+}
+.fold-notice-body {
+  padding: 0 14px 12px 42px;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--ink);
+  display: grid;
+  gap: 8px;
+}
+.fold-notice-body > p {
+  max-width: 78ch;
+  margin: 0;
+}
+.fold-notice-body ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+/* ---------- Fold section ---------- */
+.fold-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.fold-sec:not([data-open]) {
+  gap: 0;
+}
+.fold-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 6px 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.fold-sec-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.fold-sec-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-left: -8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--r, 8px);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.fold-sec-toggle:hover {
+  background: var(--surface-2);
+}
+.fold-sec-toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.fold-sec:not([data-open]) > .fold-sec-head .fold-caret {
+  transform: rotate(-90deg);
+}
+.fold-sec-summary {
+  flex: 1 1 14rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fold-sec-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fold-sec-body {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .fold-notice-more {
+    display: none;
+  }
+  .fold-notice-body {
+    padding-left: 14px;
+  }
+  .fold-sec-summary {
+    flex-basis: 100%;
+    padding-left: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fold-caret,
+  button.fold-notice-head,
+  .fold-sec-toggle {
+    transition: none;
+  }
+}

@@ -58,9 +58,10 @@ describe('recharge sums', () => {
     expect(placementDaysIn({ from: '2026-09-11', to: null }, '2026-09')).toBe(20);
     expect(placementDaysIn({ from: '2026-08-01', to: '2026-09-10' }, '2026-09')).toBe(10);
     expect(placementDaysIn({ from: '2026-10-01', to: null }, '2026-09')).toBe(0);
-    const paid = { epfEr: 34, epfEe: 34, socsoEr: 29.75, socsoEe: 8.5, lindungEe: 12.75 };
-    expect(chargedShare(paid, 15, 30)).toEqual({ epfEr: 17, epfEe: 17, socsoEr: 14.88, socsoEe: 4.25, lindungEe: 6.38 });
-    // Foreign workers: EPF 2% + 2%, SOCSO 1.75% + 0.5%, LINDUNG 24 Jam 0.75% from June 2026 wages.
+    const paid = { epfEr: 34, epfEe: 34, socsoEr: 28.85, socsoEe: 8.25, lindungEe: 12.35 };
+    expect(chargedShare(paid, 15, 30)).toEqual({ epfEr: 17, epfEe: 17, socsoEr: 14.43, socsoEe: 4.13, lindungEe: 6.18 });
+    // Foreign workers: EPF 2% + 2%, SOCSO 1.75% + 0.5%, LINDUNG 24 Jam 0.75% from June 2026 wages; SOCSO and LINDUNG by
+    // PERKESO's wage band (RM1,600.01-1,700: 28.85 / 8.25 / 12.35), P128.
     expect(expectedContribution(1_700, 30, '2026-09')).toEqual(paid);
   });
 });

@@ -1,6 +1,7 @@
 import { AccessDenied, isActHead, isGroupLeader } from './access';
 import type { ArchiveFolder } from './archive';
 import { zipFiles } from './am-bq-xlsx';
+import type { ImportKind } from './org-import';
 import type { RecordKind } from './records';
 import { BadRequest } from './service';
 import { simplePdf } from './simple-pdf';
@@ -40,6 +41,11 @@ export interface ScreenTools {
   folder: ArchiveFolder;
   /** Plain record kinds keyed in from this screen (shown only to their keepers). */
   records?: RecordKind[];
+  /**
+   * Other records this screen loads from a file with its own Import (P81/P90/P91 import kinds that are not plain record
+   * forms). Upload offers these and the importable `records` (screen-upload.ts); the server checks every row again.
+   */
+  imports?: ImportKind[];
   /** When nothing is keyed in on this screen by design, why (shown instead of forms). */
   readOnly?: string;
   /** Sensitive data on every tab of this screen. Tabs may add more (see exportSensitivity). */
@@ -54,27 +60,27 @@ const s = (folder: ArchiveFolder, more: Omit<ScreenTools, 'folder'> = {}): Scree
 export const SCREEN_TOOLS: Record<string, ScreenTools> = {
   home: s('other', { readOnly: 'Home lists your work from every screen. Key in on the screen the work belongs to.' }),
   overview: s('company', { records: ['company'] }),
-  company: s('company', { records: ['company'] }),
+  company: s('company', { records: ['company'], imports: ['licence'] }),
   office: s('company'),
   sites: s('operations', { records: ['site', 'post', 'checkpoint'] }),
   roster: s('operations'),
   guardroster: s('operations'),
   duty: s('operations'),
   cleaning: s('operations'),
-  sitestock: s('operations'),
-  people: s('staff', { records: ['officeStaff'], sensitive: 'personal' }),
+  sitestock: s('operations', { imports: ['siteKitItem'] }),
+  people: s('staff', { records: ['officeStaff'], imports: ['guardPaper'], sensitive: 'personal' }),
   attendance: s('operations', { readOnly: 'Attendance comes from the clock and the JA Group app feed. It is corrected through the screen’s own steps, never typed over.' }),
   cases: s('operations'),
   compliance: s('licences', { records: ['licence'] }),
   selfaudit: s('operations'),
   rba: s('company'),
-  commercial: s('tenders'),
-  ops: s('operations'),
-  hr: s('staff', { sensitive: 'personal' }),
+  commercial: s('tenders', { imports: ['tender'] }),
+  ops: s('operations', { imports: ['site'] }),
+  hr: s('staff', { imports: ['leaveEntitlement', 'publicHoliday', 'staffTraining', 'guardPaper'], sensitive: 'personal' }),
   insurance: s('insurance', { records: ['insurancePolicy', 'insuranceClaim', 'insuranceGuarantee'] }),
   arms: s('operations', { records: ['vault', 'firearm', 'dealerLicence', 'armsAgreement', 'armsSupplier', 'supplierItem'], sensitive: 'firearms' }),
   cms: s('operations', { records: ['phoneExtension', 'siteSystem', 'cmsStaff'] }),
-  cmsready: s('operations', { records: ['siteSystem'] }),
+  cmsready: s('operations', { records: ['siteSystem'], imports: ['cmsDevice'] }),
   audit: s('other', { readOnly: 'The audit trail is written by Prima itself and is never typed in or changed.' }),
   device: s('operations', { none: true }),
   doa: s('letters'),
@@ -87,34 +93,36 @@ export const SCREEN_TOOLS: Record<string, ScreenTools> = {
   staffclock: s('staff', { sensitive: 'personal' }),
   work: s('operations'),
   branchwork: s('operations'),
-  fwm: s('staff', { sensitive: 'personal' }),
+  fwm: s('staff', { imports: ['fwWorker', 'fwPaper'], sensitive: 'personal' }),
   socso: s('staff', { sensitive: 'medical' }),
   fwcost: s('finance'),
   fwstat: s('pay', { sensitive: 'pay' }),
   hostels: s('assets', { records: ['hostel'] }),
   claims: s('finance', { sensitive: 'medical' }),
   memos: s('letters'),
-  pdpa: s('company', { sensitive: 'personal' }),
-  fleet: s('assets', { records: ['vehicle'] }),
-  clients: s('clients'),
+  pdpa: s('company', { imports: ['pdpaRegisterItem', 'pdpaProduct'], sensitive: 'personal' }),
+  fleet: s('assets', { records: ['vehicle'], imports: ['fuelCard'] }),
+  clients: s('clients', { imports: ['client'] }),
   requests: s('finance'),
   payreq: s('finance', { sensitive: 'bank' }),
   ja: s('operations', { readOnly: 'JA app data is read from the JA Group app. Change it in the JA Group app.' }),
   jaswitch: s('operations'),
   assets: s('assets', { records: ['amUnit', 'amTenancy', 'amWorkOrder', 'amAsset'] }),
   staffpay: s('pay', { sensitive: 'pay' }),
+  // P128: the salary sheet is uploaded on the screen itself (read on the device); its own downloads are audited.
+  contribfiles: s('pay', { sensitive: 'pay', readOnly: 'Upload the salary sheet in New file: Prima reads it and works out the contributions. Nothing is keyed in by hand here.' }),
   guardpay: s('pay', { sensitive: 'pay' }),
   advances: s('pay', { sensitive: 'pay' }),
   statutory: s('pay'),
   arrivalcash: s('pay', { sensitive: 'pay' }),
   loans: s('pay', { sensitive: 'pay' }),
-  finance: s('finance', { sensitive: 'bank' }),
-  contracts: s('clients'),
-  branches: s('company'),
-  it: s('assets', { records: ['itDomain'] }),
+  finance: s('finance', { imports: ['finBankAccount'], sensitive: 'bank' }),
+  contracts: s('clients', { imports: ['contract'] }),
+  branches: s('company', { imports: ['branch'] }),
+  it: s('assets', { records: ['itDomain'], imports: ['itAsset'] }),
   'it-metrics': s('operations', { readOnly: 'Times and quality are measured by Prima from each job’s own steps.' }),
   'work-kpi': s('operations', { readOnly: 'KPIs are measured by Prima from each job’s own steps.' }),
-  'it-procurement': s('assets'),
+  'it-procurement': s('assets', { imports: ['itAsset'] }),
   'hr-it-intake': s('staff'),
   'staff-directory': s('staff', { sensitive: 'personal' }),
   orgchart: s('staff'),
@@ -124,20 +132,20 @@ export const SCREEN_TOOLS: Record<string, ScreenTools> = {
   assistant: s('other'),
   'shared-logins': s('other'),
   websites: s('other', { records: ['itDomain'] }),
-  corporate: s('company'),
-  renewals: s('licences'),
+  corporate: s('company', { imports: ['corpFiling', 'corpAudit', 'legalMatter'] }),
+  renewals: s('licences', { imports: ['licence'] }),
   credit: s('finance', { sensitive: 'bank' }),
-  purchasing: s('finance', { records: ['stockItem'] }),
-  items: s('assets'),
+  purchasing: s('finance', { records: ['stockItem'], imports: ['purSupplier'] }),
+  items: s('assets', { imports: ['itemType', 'itemUnit', 'itemStock'] }),
   governance: s('company'),
   quality: s('operations'),
-  grc: s('other'),
-  registers: s('company'),
+  grc: s('other', { imports: ['grcObligation'] }),
+  registers: s('company', { imports: ['regRisk'] }),
   act: s('operations'),
   payformulas: s('pay'),
   sitehours: s('operations'),
   salarycalc: s('pay', { sensitive: 'pay', readOnly: 'The calculator works a month out from the records; nothing is saved from it.' }),
-  continuity: s('other'),
+  continuity: s('other', { imports: ['bcmSystem'] }),
   connections: s('other', { readOnly: 'Your own Microsoft 365 links. Nothing is keyed in here.' }),
   'it-extraction': s('other'),
   handovers: s('letters'),

@@ -104,6 +104,9 @@ import { hrKeeps } from "./hr";
 import { isHrAdmin } from "./hr";
 import { staffClockUser } from "./hr";
 import { staffPayRole } from "./hr";
+import { staffPayStepper } from "./hr";
+import { CONTRIB_RULE, contribPersonOf, contribRow, contribTotals, employerCodeProblem, trimContribRecords } from "./contribution-files";
+import type { ContribFileRecord, ContribPerson } from "./contribution-files";
 import { vcConsents } from "./hr";
 import { FILING_LABEL } from "./hr-joining";
 import { eaFigures } from "./hr-joining";
@@ -40464,6 +40467,134 @@ export class PrimaService {
       await tx.update('finStatus', rowId, { employerNos: nos });
       await tx.audit({ at: this.now(), actor: user.name, companyId: companyId === GROUP_EMPLOYER_ID ? null : companyId, action: 'payroll.employer_nos', entity: 'fin_status', entityId: rowId, summary: `Employer numbers set: EPF ${nos.epf ?? '-'}, PERKESO ${nos.socso ?? '-'}, LHDN ${nos.lhdnE ?? '-'}, HRD Corp ${nos.hrd ?? '-'}.` });
       return nos;
+    });
+  }
+
+  // ---------- P128: contribution files from an uploaded salary sheet (Fitri, 24 Nov 2026) ----------
+
+  /** Who makes contribution files: the people who take a staff payroll step (HR, the Chief of Staff, the COO, Finance), and the owner. */
+  private contribMaker(user: User): boolean {
+    return staffPayStepper(user) || isOwnerAdmin(user);
+  }
+
+  /** The employers this person may make files for, with their PERKESO and EPF numbers, and the records kept (no people rows). */
+  async contributionFiles(user: User) {
+    if (!this.contribMaker(user)) throw new AccessDenied('hr.pay', '(HR, the Chief of Staff, the COO or Finance make contribution files)');
+    const ids = await this.staffPayEmployers(user);
+    const [fins, companies] = await Promise.all([this.store.list('finStatus', { companyId: ids }), this.store.list('companies', { id: ids })]);
+    const employers = fins
+      .filter((f) => ids.includes(f.companyId))
+      .map((f) => ({
+        companyId: f.companyId,
+        companyName: f.companyId === GROUP_EMPLOYER_ID ? 'PWVSB (central staff)' : (companies.find((c) => c.id === f.companyId)?.name ?? f.companyId),
+        socso: f.employerNos?.socso ?? null,
+        epf: f.employerNos?.epf ?? null,
+      }))
+      .sort((a, b) => (a.companyId === GROUP_EMPLOYER_ID ? -1 : b.companyId === GROUP_EMPLOYER_ID ? 1 : a.companyName.localeCompare(b.companyName)));
+    const records = fins
+      .filter((f) => ids.includes(f.companyId))
+      .flatMap((f) => (f.contributionFiles ?? []).map(({ rows, ...r }) => ({ ...r, companyName: employers.find((e) => e.companyId === f.companyId)?.companyName ?? f.companyId, rowsKept: rows != null })))
+      .sort((a, b) => b.at.localeCompare(a.at));
+    return { employers, records, period: this.today().slice(0, 7), rule: CONTRIB_RULE };
+  }
+
+  /**
+   * Keep a contribution file record: the people as read and corrected on the device (name, IC, wages, age, nationality,
+   * SKBBK opt-out, the file's own figures). Every share is worked again here with the statutory settings in force for the
+   * month; nothing the device counted is kept. Status "checked" until someone downloads a file from it.
+   */
+  async saveContributionFile(user: User, input: { companyId?: unknown; period?: unknown; fileName?: unknown; employerCode?: unknown; mycoid?: unknown; rows?: unknown }) {
+    if (!this.contribMaker(user)) throw new AccessDenied('hr.pay', '(HR, the Chief of Staff, the COO or Finance make contribution files)');
+    const companyId = String(input.companyId ?? '');
+    if (!(await this.staffPayEmployers(user)).includes(companyId)) throw new NotFound('Employer');
+    const period = String(input.period ?? '');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new BadRequest('Give the wage month as YYYY-MM.');
+    const [ty, tm] = this.today().slice(0, 7).split('-').map(Number);
+    if (period > (tm === 12 ? `${ty + 1}-01` : `${ty}-${String(tm + 1).padStart(2, '0')}`)) throw new BadRequest('The wage month cannot be later than next month.');
+    const employerCode = String(input.employerCode ?? '').trim().toUpperCase();
+    const codeProblem = employerCode ? employerCodeProblem(employerCode) : null;
+    if (codeProblem) throw new BadRequest(codeProblem);
+    const mycoid = String(input.mycoid ?? '').trim().toUpperCase().slice(0, 20);
+    if (mycoid && !/^[A-Z0-9-]{3,20}$/.test(mycoid)) throw new BadRequest('MyCoID / SSM number: letters, digits and dashes only (up to 20).');
+    if (!Array.isArray(input.rows) || !input.rows.length) throw new BadRequest('No people to keep. Upload the salary sheet first.');
+    if (input.rows.length > CONTRIB_RULE.maxRows) throw new BadRequest(`At most ${CONTRIB_RULE.maxRows} people in one file.`);
+    let people: ContribPerson[];
+    try {
+      people = input.rows.map((r, i) => contribPersonOf(r, i));
+    } catch (e) {
+      throw new BadRequest((e as Error).message);
+    }
+    const st = await this.statutorySettingsFor(period);
+    const rows = people.map((p) => contribRow(p, period, st));
+    const fileName = String(input.fileName ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 160) || 'Pasted list';
+    const record: ContribFileRecord = {
+      id: `cf-${companyId}-${period}-${toMs(this.now()).toString(36)}-${globalThis.crypto.randomUUID().slice(0, 6)}`,
+      companyId,
+      period,
+      fileName,
+      employerCode,
+      mycoid,
+      by: user.name,
+      byId: user.id,
+      at: this.now(),
+      totals: contribTotals(rows),
+      status: 'checked',
+      downloads: [],
+      rows,
+    };
+    return this.store.transaction(async (tx) => {
+      const rowId = `fin-${companyId}`;
+      await tx.lock?.('finStatus', rowId);
+      const row = await tx.get('finStatus', rowId);
+      if (!row) throw new NotFound('Employer');
+      await tx.update('finStatus', rowId, { contributionFiles: trimContribRecords([record, ...(row.contributionFiles ?? [])]) });
+      const t = record.totals;
+      await tx.audit({
+        at: this.now(),
+        actor: user.name,
+        companyId: companyId === GROUP_EMPLOYER_ID ? null : companyId,
+        action: 'payroll.contrib_file.checked',
+        entity: 'fin_status',
+        entityId: rowId,
+        summary: `Contribution file for ${period} from "${fileName}": ${t.people} people, ${t.inPerkeso} in the PERKESO file, ${t.problems} to fix, ${t.differences} differ from the file's own figures.`,
+      });
+      return record;
+    });
+  }
+
+  /** One record with its people rows (to download its files again). */
+  async contributionFile(user: User, companyId: Id, id: Id) {
+    if (!this.contribMaker(user)) throw new AccessDenied('hr.pay', '(HR, the Chief of Staff, the COO or Finance make contribution files)');
+    if (!(await this.staffPayEmployers(user)).includes(companyId)) throw new NotFound('Employer');
+    const row = await this.store.get('finStatus', `fin-${companyId}`);
+    const rec = row?.contributionFiles?.find((r) => r.id === id);
+    if (!rec) throw new NotFound('Contribution file');
+    return rec;
+  }
+
+  /** A file was downloaded from a record: kept on the record and in the audit log (pay data leaving Prima). */
+  async contributionFileDownloaded(user: User, companyId: Id, id: Id, kind: unknown) {
+    if (!this.contribMaker(user)) throw new AccessDenied('hr.pay', '(HR, the Chief of Staff, the COO or Finance make contribution files)');
+    if (!(await this.staffPayEmployers(user)).includes(companyId)) throw new NotFound('Employer');
+    const k = (['perkeso_txt', 'perkeso_xlsm', 'check_csv', 'epf_csv'] as const).find((x) => x === kind);
+    if (!k) throw new BadRequest('Say which file was downloaded.');
+    return this.store.transaction(async (tx) => {
+      const rowId = `fin-${companyId}`;
+      await tx.lock?.('finStatus', rowId);
+      const row = await tx.get('finStatus', rowId);
+      const list = row?.contributionFiles ?? [];
+      const rec = list.find((r) => r.id === id);
+      if (!row || !rec) throw new NotFound('Contribution file');
+      if (k === 'perkeso_txt' || k === 'perkeso_xlsm') {
+        const p = employerCodeProblem(rec.employerCode);
+        if (p) throw new BadRequest(p);
+      }
+      const at = this.now();
+      const next: ContribFileRecord = { ...rec, status: 'downloaded', downloads: [{ kind: k, by: user.name, byId: user.id, at }, ...rec.downloads].slice(0, CONTRIB_RULE.keepDownloads) };
+      await tx.update('finStatus', rowId, { contributionFiles: list.map((r) => (r.id === id ? next : r)) });
+      const label = { perkeso_txt: 'PERKESO text file', perkeso_xlsm: 'PERKESO converter workbook', check_csv: 'check sheet', epf_csv: 'EPF list' }[k];
+      await tx.audit({ at, actor: user.name, companyId: companyId === GROUP_EMPLOYER_ID ? null : companyId, action: 'payroll.contrib_file.download', entity: 'fin_status', entityId: rowId, summary: `${label} downloaded for ${rec.period} (${rec.totals.people} people, from "${rec.fileName}").` });
+      return { status: next.status, downloads: next.downloads.length };
     });
   }
 

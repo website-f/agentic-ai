@@ -93,34 +93,58 @@
   max-width: 68ch;
   text-wrap: pretty;
 }
+/* P128 (Fitri, 24 Nov 2026): the shortcuts are one even grid: every pill the same height, the icon the same size in a
+   soft square, the label on one line (cut with an ellipsis, the full name on hover via the button's text). */
 .sp-quick {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 8px;
 }
 .sp-quick-btn {
   appearance: none;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 8px 14px;
-  border-radius: 999px;
+  gap: 10px;
+  min-width: 0;
+  height: 48px;
+  padding: 0 14px 0 8px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
   font: inherit;
   font-size: 14px;
   font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, transform 0.1s;
 }
-.sp-quick-btn svg {
+.sp-quick-btn > svg,
+.sp-quick-btn > .view-icon-line {
+  flex: none;
+  box-sizing: content-box;
+  width: 18px;
+  height: 18px;
+  padding: 7px;
+  border-radius: 9px;
+  background: var(--accent-soft);
   color: var(--accent);
+}
+.sp-quick-btn > span:not(.view-icon-line) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sp-quick-btn:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+.sp-quick-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 .sp-quick-btn:active {
   transform: translateY(1px);
@@ -886,6 +910,7 @@
     gap: 12px;
   }
   .sp-quick {
+    display: flex;
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
@@ -897,6 +922,7 @@
   }
   .sp-quick-btn {
     flex: none;
+    max-width: 200px;
   }
   /* The home's apps become the super-app grid: icon over name, four across. */
   .sp-apps .sp-grid {

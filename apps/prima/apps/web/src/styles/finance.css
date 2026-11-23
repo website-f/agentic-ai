@@ -27,6 +27,134 @@
   gap: 6px;
   white-space: nowrap;
 }
+/* P128: the head runs title, line and buttons top to bottom, so the line under the title is never squeezed into a
+   narrow column beside five buttons. */
+.fin > .k-head {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+.fin > .k-head .k-head-actions {
+  justify-content: flex-start;
+}
+
+/* P128: the area bar (four areas as one segmented control) and the area's own tabs under it, underlined. */
+.fin-nav {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.fin-areas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.fin-areas[data-count='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.fin-areas[data-count='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.fin-areas button {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.fin-areas button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fin-areas button svg {
+  flex: none;
+}
+.fin-areas button:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+.fin-areas button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px hsl(152 30% 18% / 0.08), 0 0 0 1px var(--line);
+}
+.fin-areas button[aria-pressed='true'] svg {
+  color: var(--accent);
+}
+.fin-areas button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.tabbar.fin-subtabs {
+  gap: 2px;
+  width: auto;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+}
+.tabbar.fin-subtabs button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 500;
+  box-shadow: inset 0 -2px 0 transparent;
+  white-space: nowrap;
+}
+.tabbar.fin-subtabs button:hover {
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--line);
+}
+.tabbar.fin-subtabs button[aria-selected='true'] {
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+@media (max-width: 640px) {
+  .fin-areas button {
+    flex-direction: column;
+    gap: 3px;
+    min-height: 56px;
+    padding: 6px 4px;
+    font-size: 0.72rem;
+  }
+  .fin-areas button span {
+    white-space: normal;
+    text-align: center;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fin-areas button {
+    transition: none;
+  }
+}
+
 .fin-count {
   display: inline-grid;
   place-items: center;
@@ -610,6 +738,19 @@ td[data-neg='yes'] {
 }
 .fin-checks-bar .fin-tabs {
   justify-self: start;
+}
+/* P128: the company picker, then the sections on one row of their own (they wrapped into two lines beside it). */
+@media (min-width: 861px) {
+  .fin-checks-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fin-checks-bar .fin-checks-co {
+    max-width: 420px;
+  }
+  .fin-checks-bar .fin-tabs {
+    flex-wrap: nowrap;
+    border-radius: 999px;
+  }
 }
 .fin-section-note {
   margin-top: -12px;

@@ -5203,6 +5203,8 @@ export interface FinStatus {
   statutoryTables?: import('./statutory-tables').StatTable[];
   /** The employer's own registration numbers for the contribution files (EPF, PERKESO, LHDN E number, HRD Corp). */
   employerNos?: { epf: string | null; socso: string | null; lhdnE: string | null; hrd: string | null; set: { by: string; byId: Id; at: IsoDateTime } } | null;
+  /** P128: contribution files made from an uploaded salary sheet (PERKESO text file and converter, EPF list), newest first. */
+  contributionFiles?: import('./contribution-files').ContribFileRecord[];
   /** Insurance guarantees (IG) and bank guarantees (BG) with their cash collateral (Fauzan, 2 Nov 2026). */
   guarantees?: FinGuarantee[];
   /** Deposits and retention sums held by clients (Fauzan, 2 Nov 2026: suggestion 3). */

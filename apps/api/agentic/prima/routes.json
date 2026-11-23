@@ -7155,6 +7155,36 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "GET",
+  "path": "api/staff-pay/contribution-files",
+  "name": "contributionFiles"
+ },
+ {
+  "method": "POST",
+  "path": "api/staff-pay/contribution-files",
+  "name": "saveContributionFile",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/staff-pay/contribution-files/:companyId/:id",
+  "name": "contributionFile",
+  "params": [
+   "companyId",
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/staff-pay/contribution-files/:companyId/:id/downloaded",
+  "name": "contributionFileDownloaded",
+  "params": [
+   "companyId",
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/staff-pay/employer-nos/:companyId",
   "name": "setEmployerNos",

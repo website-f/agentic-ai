@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ARCHIVE_FOLDERS,
   ARCHIVE_FOLDER_LABELS,
@@ -183,7 +183,7 @@ type Tr = (k: keyof typeof T) => string;
  * Upload from any screen (Fauzan, 23 Nov 2026: Upload, Key in and Download on every tab). The same Add files panel as
  * this screen, filed for the person's own unit; the screen suggests the folder when the rules cannot tell.
  */
-export function ArchiveUpload({ folder, onSaved }: { folder: ArchiveFolder; onSaved?: () => void }) {
+export function ArchiveUpload({ folder, onSaved, files }: { folder: ArchiveFolder; onSaved?: () => void; /** Files the person already chose (the toolbar's Upload). */ files?: File[] }) {
   const { lang } = useLang();
   const t = (k: keyof typeof T) => (lang === 'en' ? T[k].en : lang === 'ms' ? T[k].ms : `${T[k].ms} / ${T[k].en}`);
   const folderName = (f: ArchiveFolder) => (lang === 'en' ? ARCHIVE_FOLDER_LABELS[f].en : ARCHIVE_FOLDER_LABELS[f].bm);
@@ -193,17 +193,17 @@ export function ArchiveUpload({ folder, onSaved }: { folder: ArchiveFolder; onSa
   if (!data.installed) return <p className="small" role="status">{t('notInstalled')}</p>;
   if (!data.storage) return <p className="small" role="status">{t('noStorage')}</p>;
   if (!data.owners.length) return <p className="small muted" role="status">{lang === 'en' ? 'You have no unit to keep files for.' : 'Anda tiada unit untuk menyimpan fail.'}</p>;
-  return <AddFiles owners={data.owners} t={t} folderName={folderName} onSaved={onSaved ?? (() => undefined)} screenFolder={folder} />;
+  return <AddFiles owners={data.owners} t={t} folderName={folderName} onSaved={onSaved ?? (() => undefined)} screenFolder={folder} files={files} />;
 }
 
-function AddFiles({ owners, t, folderName, onSaved, screenFolder }: { owners: string[]; t: Tr; folderName: (f: ArchiveFolder) => string; onSaved: () => void; screenFolder?: ArchiveFolder }) {
+function AddFiles({ owners, t, folderName, onSaved, screenFolder, files: chosen }: { owners: string[]; t: Tr; folderName: (f: ArchiveFolder) => string; onSaved: () => void; screenFolder?: ArchiveFolder; files?: File[] }) {
   const [owner, setOwner] = useState(owners[0]);
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const patch = (n: number, x: Partial<Row>) => setRows((rs) => rs.map((r) => (r.n === n ? { ...r, ...x } : r)));
 
-  const pick = async (list: FileList | null) => {
+  const pick = async (list: FileList | File[] | null | undefined) => {
     if (!list?.length) return;
     const files = [...list].slice(0, MAX_BATCH);
     setNote(list.length > MAX_BATCH ? `${MAX_BATCH} / ${list.length}` : '');
@@ -230,6 +230,11 @@ function AddFiles({ owners, t, folderName, onSaved, screenFolder }: { owners: st
       setBusy(false);
     }
   };
+  // The toolbar's Upload hands over the file the person already chose: read it once, as if picked here.
+  useEffect(() => {
+    if (chosen?.length) void pick(chosen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the files handed over.
+  }, []);
 
   const saveAll = async () => {
     setBusy(true);

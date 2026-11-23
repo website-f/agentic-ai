@@ -17,6 +17,7 @@ import {
 } from '@phosphor-icons/react';
 import { Chip, Drawer, ErrorNotice, dateLabel, dateTimeLabel, useAction, type Tone } from '../ui';
 import { Card, Empty, Stat, Stats, Steps, type StepState } from '../kit';
+import { FoldNotice } from '../fold';
 import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/finance.css';
 
@@ -124,11 +125,14 @@ export function PaymentsTab({ desk }: { desk: FinDesk }) {
       <Card title="Other payments" sub="Open, and closed in the last 60 days" flush>
         <PayTable stateKey="fin.pay.others" rows={others} onOpen={openPay} byMonth empty={<Empty title="None." />} />
       </Card>
-      <p className="notice" data-tone="info">
-        Prima approves; the bank portal pays. One person never approves and releases the same payment. Approval is by subject (Fauzan, 1 Nov 2026: only the FD,
-        the CEO and the COO approve anything): Finance payments by the Finance Director or the CEO; payments for the departments the COO monitors by the COO or
-        the CEO. Team leaders and deputies review; Finance releases. The CEO is also reminded of payments of {rm(desk.rule.ceoNoticeFrom)} or more.
-      </p>
+      {/* P128: the rule folds to one line until opened. */}
+      <FoldNotice id="fin.pay.rule" tone="info" summary="Prima approves; the bank portal pays.">
+        <p>
+          One person never approves and releases the same payment. Approval is by subject (Fauzan, 1 Nov 2026: only the FD, the CEO and the COO approve
+          anything): Finance payments by the Finance Director or the CEO; payments for the departments the COO monitors by the COO or the CEO. Team leaders and
+          deputies review; Finance releases. The CEO is also reminded of payments of {rm(desk.rule.ceoNoticeFrom)} or more.
+        </p>
+      </FoldNotice>
       {sel && <PaymentDrawer key={`${sel.p.id}-${editing}`} c={sel.c} p={sel.p} startEdit={editing} onClose={() => setOpen(null)} />}
       {adding && <NewPayment desk={desk} onClose={() => setAdding(false)} />}
     </>
@@ -999,10 +1003,12 @@ export function CloseTab({ desk }: { desk: FinDesk }) {
         <Stat label="Waiting for approval" value={by('reviewed')} tone={by('reviewed') ? 'info' : 'ok'} note="Finance Director or the CEO" icon={<SealCheckIcon size={18} />} />
         <Stat label="Approved financials" value={by('approved')} tone="ok" note={`of ${desk.companies.length}`} icon={<CheckCircleIcon size={18} />} />
       </Stats>
-      <p className="notice" data-tone="info">
-        Closing {desk.period}: SQL Account closed, every bank account reconciled with its report attached, FS-01, FS-02 and FS-06 at RM0.00 and every other
-        exception explained. The team prepares, the deputy or leader reviews, and the Finance Director or the CEO approves the financials.
-      </p>
+      <FoldNotice id="fin.close.rule" tone="info" summary="What a closed month needs">
+        <p>
+          Closing {desk.period}: SQL Account closed, every bank account reconciled with its report attached, FS-01, FS-02 and FS-06 at RM0.00 and every other
+          exception explained. The team prepares, the deputy or leader reviews, and the Finance Director or the CEO approves the financials.
+        </p>
+      </FoldNotice>
       <Card title={`Close ${desk.period}`} sub="Press a company for its checklist" flush>
         <DataTable
           label="Month-end close"

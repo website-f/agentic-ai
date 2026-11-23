@@ -65,20 +65,80 @@ function epfRows(er: (top: number) => number, ee: number): StatRow[] {
 const PERKESO_BANDS = [30, 50, 70, 100, 140, 200, 300, 400, ...Array.from({ length: 56 }, (_, i) => 500 + i * 100)];
 
 /**
- * PERKESO works each band on its middle wage: the employee's share to the nearest 5 sen, the total to the nearest 10 sen,
- * and the employer pays the rest. This reproduces the published rows checked below. The two lowest bands are taken as
- * published.
+ * P128: the published rows the middle-wage method does not give (the lowest bands), by the scheme's employer/employee
+ * rates. Checked against PERKESO's "New contribution rate including SKBBK" (Appendix 1 of the text-file FAQ, June 2026)
+ * for Act 4 First and Second Category and SKBBK, and the EIS rows of PERKESO's own Excel converter. A changed rate has
+ * no published rows yet, so it is worked by the method alone.
  */
-function perkesoRows(erPct: number, eePct: number, low: Record<number, [number, number]>): StatRow[] {
+const PERKESO_LOW: Record<string, Record<number, [number, number]>> = {
+  '0.0175/0.005': { 30: [0.4, 0.1], 100: [1.5, 0.4] },
+  '0.0125/0': { 30: [0.3, 0] },
+  '0.002/0.002': { 30: [0.05, 0.05], 70: [0.15, 0.15], 100: [0.2, 0.2] },
+  '0/0.0075': { 30: [0, 0.2], 70: [0, 0.5] },
+};
+
+/** The bands to a wage ceiling: the published ones to RM6,000, then RM100 bands if the ceiling is raised. */
+function perkesoBands(cap: number): number[] {
+  const top = Math.max(30, cap);
+  const out = PERKESO_BANDS.filter((b) => b < top);
+  const last = out[out.length - 1] ?? 0;
+  for (let b = Math.floor(last / 100) * 100 + 100; b < top; b += 100) if (b > last) out.push(b);
+  out.push(top);
+  return out;
+}
+const ROWS_CACHE = new Map<string, StatRow[]>();
+/** RM amount as 1,234.56 (what toLocaleString('en-MY') gives, without its cost on every share worked out). */
+const fmt = (n: number) => {
+  const [i, d] = Math.abs(n).toFixed(2).split('.');
+  return `${n < 0 ? '-' : ''}${i.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${d}`;
+};
+const fiveSenTiesToFive = (n: number) => {
+  const q = Math.round(n * 100 * 1e6) / 1e6 / 5;
+  const f = Math.floor(q);
+  const steps = Math.abs(q - f - 0.5) < 1e-9 ? (f % 2 === 1 ? f : f + 1) : Math.round(q);
+  return (steps * 5) / 100;
+};
+
+/**
+ * PERKESO works each band on its middle wage: the employee's share to the nearest 5 sen, the total to the nearest 10 sen,
+ * and the employer pays the rest (an employee-only scheme such as SKBBK: the employee's share alone). This reproduces
+ * the published rows checked below; the lowest bands are taken as published.
+ */
+export function perkesoRows(erPct: number, eePct: number, cap = 6000): StatRow[] {
+  const key = `${erPct}/${eePct}/${cap}`;
+  const hit = ROWS_CACHE.get(key);
+  if (hit) return hit;
+  const low = PERKESO_LOW[`${erPct}/${eePct}`] ?? {};
   let from = 0;
-  return PERKESO_BANDS.map((upTo) => {
+  const rows = perkesoBands(cap).map((upTo) => {
     const mid = (from + upTo) / 2;
     from = upTo;
     if (low[upTo]) return { upTo, er: low[upTo][0], ee: low[upTo][1] };
+    // An employee-only scheme (SKBBK) is to the nearest 5 sen, and a share exactly between two (RM1.275) goes to the one
+    // ending in 5 sen (RM1.25; RM44.625 to RM44.65), as PERKESO's published SKBBK column does.
+    if (!erPct) return { upTo, er: 0, ee: fiveSenTiesToFive(mid * eePct) };
     const ee = toStep(mid * eePct, 5);
     const total = toStep(mid * (erPct + eePct), 10);
     return { upTo, er: r2(total - ee), ee };
   });
+  ROWS_CACHE.set(key, rows);
+  return rows;
+}
+
+/**
+ * P128: a PERKESO share (SOCSO, EIS or SKBBK) by the wage band, as the published tables give it: the band the wage falls
+ * in, never a straight percentage of the wage. Wages above the ceiling pay the last band.
+ */
+export function perkesoShare(wage: number, erPct: number, eePct: number, cap = 6000): { er: number; ee: number; band: string } {
+  if (!(wage > 0)) return { er: 0, ee: 0, band: 'No wages' };
+  const rows = perkesoRows(erPct, eePct, cap);
+  const i = rows.findIndex((r) => wage <= r.upTo + 1e-9);
+  if (i < 0) {
+    const last = rows[rows.length - 1];
+    return { er: last.er, ee: last.ee, band: `Above RM${fmt(last.upTo)} (ceiling)` };
+  }
+  const from = i === 0 ? 0.01 : rows[i - 1].upTo + 0.01;
+  return { er: rows[i].er, ee: rows[i].ee, band: `RM${fmt(from)}-${fmt(rows[i].upTo)}` };
 }
 
 const BUILT_IN_SIGN = null;
@@ -131,8 +191,8 @@ export function builtInStatTables(): StatTable[] {
       appliesTo: 'Employees under 60, Malaysian and foreign',
       from: '2024-10',
       source: "PERKESO, Employees' Social Security Act 1969 (Act 4), Third Schedule, First Category: employer 1.75%, employee 0.5%, wage ceiling RM6,000 from October 2024",
-      checkedRows: 'Up to RM30 (0.40/0.10), RM500.01-600 (9.65/2.75), RM1,000.01-1,100 (18.35/5.25), RM2,500.01-2,600 (44.65/12.75), RM4,000.01-4,100 (70.85/20.25), RM5,900.01-6,000 and above (104.15/29.75)',
-      rows: perkesoRows(0.0175, 0.005, { 30: [0.4, 0.1] }),
+      checkedRows: 'All 65 rows against PERKESO Appendix 1, New contribution rate including SKBBK (June 2026), on 24 Nov 2026 (P128); RM70.01-100 corrected to 1.50/0.40',
+      rows: perkesoRows(0.0175, 0.005).map((r) => ({ ...r })),
       above: 'last_row',
     },
     {
@@ -143,8 +203,8 @@ export function builtInStatTables(): StatTable[] {
       appliesTo: 'Employees aged 60 and over: employer only',
       from: '2024-10',
       source: 'PERKESO Act 4 Third Schedule, Second Category: employer 1.25%, employee nothing, wage ceiling RM6,000',
-      checkedRows: 'Not yet checked row by row against the published Second Category: load it from PERKESO before go-live',
-      rows: perkesoRows(0.0125, 0, {}),
+      checkedRows: 'All 65 rows against PERKESO Appendix 1 (June 2026), Second Category employer share, on 24 Nov 2026 (P128); up to RM30 corrected to 0.30',
+      rows: perkesoRows(0.0125, 0).map((r) => ({ ...r })),
       above: 'last_row',
     },
     {
@@ -155,8 +215,8 @@ export function builtInStatTables(): StatTable[] {
       appliesTo: 'Malaysian employees aged 18 to 59',
       from: '2024-10',
       source: 'PERKESO, Employment Insurance System Act 2017 (Act 800), Second Schedule: 0.2% each, wage ceiling RM6,000 from October 2024',
-      checkedRows: 'Up to RM30 (0.05/0.05), RM5,900.01-6,000 and above (11.90/11.90); other rows by the same method, check against the published table before go-live',
-      rows: perkesoRows(0.002, 0.002, { 30: [0.05, 0.05] }),
+      checkedRows: 'All 65 rows against the EIS columns of the PERKESO Excel-to-text converter (2026) on 24 Nov 2026 (P128); RM50.01-70 and RM70.01-100 corrected to 0.15 and 0.20 each. Check against the gazetted Act 800 schedule before go-live',
+      rows: perkesoRows(0.002, 0.002).map((r) => ({ ...r })),
       above: 'last_row',
     },
   ];
@@ -174,7 +234,6 @@ export function statTableFor(id: StatTableId, period: string, stored: StatTable[
 export function statShare(table: StatTable, wage: number): { er: number; ee: number; band: string } {
   if (!(wage > 0)) return { er: 0, ee: 0, band: 'No wages' };
   const i = table.rows.findIndex((r) => wage <= r.upTo + 1e-9);
-  const fmt = (n: number) => n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (i >= 0) {
     const r = table.rows[i];
     const from = i === 0 ? 0.01 : table.rows[i - 1].upTo + 0.01;

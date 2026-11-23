@@ -440,3 +440,69 @@
 .imp-page-bar .imp-inline {
   margin: 0;
 }
+
+/* Upload on every screen works like Import (24 Nov 2026): the row check is one sortable table, so the drawer is wider
+   on a computer while it shows; a phone keeps the full width and the table's own cards. */
+.drawer:has(.imp-check) {
+  width: min(1080px, 100%);
+}
+.imp-check .imp-problems {
+  margin: 0;
+  padding-left: 16px;
+}
+.imp-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.imp-row-skipped {
+  opacity: 0.6;
+}
+
+/* Upload: which of this screen's records the file holds. */
+.up-kinds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.up-kinds legend {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.up-kind {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  cursor: pointer;
+}
+.up-kind[data-on] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+.up-kind input {
+  margin-top: 3px;
+}
+.up-kind-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.up-kind-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.up-flow textarea.input {
+  width: 100%;
+  font-family: inherit;
+}
