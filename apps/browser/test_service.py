@@ -221,6 +221,30 @@ async def test_click_scrolls_then_hovers_then_clicks():
     assert page.mouse.moves  # a Bezier cursor path was walked to the target
 
 
+async def test_a_click_that_cannot_land_is_tried_from_its_menu_then_by_script():
+    """P123: ePerolehan's "Log Masuk" is a menu item that only opens on hover: three timed-out
+    clicks ended a task. Now a timed-out click hovers and tries again, then clicks by script."""
+
+    class Unreachable(FakeLocator):
+        async def click(self, **_):
+            self.ops.append("click-timeout")
+            raise TimeoutError("Locator.click: Timeout 10000ms exceeded.")
+
+        async def dispatch_event(self, kind, **_):
+            self.ops.append(f"dispatch:{kind}")
+
+    loc = Unreachable(editable=False)
+    await service._click(FakePage(), loc)
+    assert loc.ops[-1] == "dispatch:click" and loc.ops.count("click-timeout") == 2
+
+    class Broken(FakeLocator):
+        async def click(self, **_):
+            raise RuntimeError("Target closed")
+
+    with pytest.raises(RuntimeError):  # anything but a timeout is not retried
+        await service._click(FakePage(), Broken(editable=False))
+
+
 async def test_submit_gate_blocks_until_approved():
     page = FakePage()
     loc = FakeLocator(editable=False, submit=True, transaction=True)

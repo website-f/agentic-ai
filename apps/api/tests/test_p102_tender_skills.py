@@ -15,6 +15,7 @@
 Synthetic content only.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -308,7 +309,7 @@ async def test_an_older_office_gets_the_new_skill_text_and_playbook_once(client,
     builtin = site_playbook.BUILTIN[site_playbook.EPEROLEHAN]
     jobs_at = builtin.index("### Check the inbox")
     old = builtin[:jobs_at] + builtin[builtin.index("### Tender documents") :]
-    old = old.replace("rev: 2\n", "").replace(
+    old = re.sub(r"rev: \d+\n", "", old, count=1).replace(
         "- Search by the number", "- My own pitfall line.\n- Search by the number"
     )
     old = site_playbook.merge_path(old, "Semak <ref>", ['click link "Papan Kenyataan"', "x"], "d")
@@ -321,7 +322,7 @@ async def test_an_older_office_gets_the_new_skill_text_and_playbook_once(client,
     assert "### Check the inbox for a quotation number or title" in new
     assert new.index("### Check the inbox") < new.index("## Pitfalls")
     assert "- Search by the number" in new and "My own pitfall line." in new
-    assert "### Semak <ref>" in new and "rev: 2" in new
+    assert "### Semak <ref>" in new and f"rev: {site_playbook._rev(builtin)}" in new
     assert site_playbook.upgraded(new, builtin) == new
     async with SessionLocal() as db:
         ws = await _ws(db, ag["id"])

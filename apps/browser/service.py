@@ -1194,7 +1194,27 @@ async def _click(page: Any, loc: Any, *, hover: bool = True) -> None:
                 lo, hi = (0.3, 0.8) if pc else (0.5, 1.5)
                 dwell = random.uniform(CLICK_DWELL_MS * lo, CLICK_DWELL_MS * hi)
                 await asyncio.sleep(dwell / 1000)
-        await loc.click(timeout=10_000)
+        try:
+            await loc.click(timeout=10_000)
+        except Exception as e:  # noqa: BLE001 - only a click that could not land is retried
+            if "timeout" not in f"{type(e).__name__} {e}".lower():
+                raise
+            await _click_anyway(loc)
+
+
+async def _click_anyway(loc: Any) -> None:
+    """P123 (ePerolehan's "Log Masuk", 23 Nov 2026: three timed-out clicks ended a tender task):
+    an element the snapshot lists but a real click cannot reach (a menu item that only opens on
+    hover, a link under a banner or a cookie bar): hover its menu open and click once more, else
+    click it the way the page's own script would (the same element, its own click handler or
+    link, nothing else). Sends and sign-ins are guarded before this, as always."""
+    try:
+        await loc.hover(timeout=2000)
+        await loc.click(timeout=3000)
+        return
+    except Exception:  # noqa: BLE001 - still out of reach: the script click below
+        pass
+    await loc.dispatch_event("click", timeout=3000)
 
 
 async def _hand_to(page: Any, loc: Any) -> None:

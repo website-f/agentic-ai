@@ -73,12 +73,26 @@ def path_for(host: str) -> str:
 
 # ---------------------------------------------------------------- the built-in playbook
 
+OLD_EP_START = """\
+- Home https://www.eperolehan.gov.my/ ; the header link "Log Masuk" goes to
+  https://www.eperolehan.gov.my/web/epapp/dashboard (then the sign-in page).
+- Sign-in: textbox "ID Log Masuk", textbox "Kata Laluan", button "Log Masuk" (browser_login
+  with the saved login)."""
+NEW_EP_START = """\
+- Start at https://www.eperolehan.gov.my/web/epapp/dashboard (browser_open): the dashboard
+  when the browser is already signed in, else the sign-in page. Do not click the home page's
+  "Log Masuk": it is a menu that opens on hover and a click on it times out.
+- Sign-in: textbox "ID Log Masuk", textbox "Kata Laluan", button "Log Masuk" (browser_login
+  with the saved login). No saved login for this site: ask the person to sign in in the
+  browser window on their computer (never type a password yourself), then open the
+  dashboard address again."""
+
 BUILTIN: dict[str, str] = {
     EPEROLEHAN: """---
 host: eperolehan.gov.my
 kind: site-playbook
 source: public ePerolehan supplier manuals (eperolehan.gov.my/download-supplier), then runs
-rev: 2
+rev: 3
 ---
 # Site playbook: eperolehan.gov.my
 
@@ -86,10 +100,13 @@ How to find the way on ePerolehan (supplier side). From the public supplier manu
 office's own runs. Labels may change: confirm on the page.
 
 ## Start
-- Home https://www.eperolehan.gov.my/ ; the header link "Log Masuk" goes to
-  https://www.eperolehan.gov.my/web/epapp/dashboard (then the sign-in page).
+- Start at https://www.eperolehan.gov.my/web/epapp/dashboard (browser_open): the dashboard
+  when the browser is already signed in, else the sign-in page. Do not click the home page's
+  "Log Masuk": it is a menu that opens on hover and a click on it times out.
 - Sign-in: textbox "ID Log Masuk", textbox "Kata Laluan", button "Log Masuk" (browser_login
-  with the saved login).
+  with the saved login). No saved login for this site: ask the person to sign in in the
+  browser window on their computer (never type a password yourself), then open the
+  dashboard address again.
 - Public notices, no sign-in: https://www.eperolehan.gov.my/quotation-tender-notice (fields
   "No. Sebut Harga / Tender", "Tajuk Perolehan", "Kementerian"; buttons "Carian", "Set
   Semula"; tabs DIIKLANKAN, DITUTUP, SELESAI). Rows open by script: no address per notice.
@@ -116,6 +133,10 @@ Signed in. Labels differ between releases: confirm on the page.
 3. read the matching rows: number, title, type, status, date received; a row opens by its
    number or title link, "<< Kembali" goes back to the list
 No search panel: browser_find with the number or the title words. Never scroll page by page.
+### Open a quotation from the inbox by its QT number
+1. browser_open https://www.eperolehan.gov.my/web/epapp/notifications
+2. search field "Subjek", type the QT number, click "Cari"
+3. the row's subject link, then link "Click here to prepare the proposal"
 ### Tender documents
 In the proposal ("Penyediaan Kertas Cadangan") the side menu "Dokumen Sebut Harga / Tender"
 shows SENARAI DOKUMEN: a download icon per row, or "Muat Turun Semua". eP charges no fee.
@@ -133,6 +154,8 @@ Aplikasi Saya > Pengurusan Pembekal: "Profil Pembekal", "Paparan Sijil Maya", "S
 Saya".
 
 ## Pitfalls
+- A click that timed out once will time out again: do not repeat it; open the page's address,
+  or browser_find another element with the same job.
 - Closing time is usually 12:00 PM on the closing date: read it from the notice.
 - Search by the number, or by a short distinctive part of the title spelled exactly as
   printed (the search is strict about spelling and punctuation), not the whole title.
@@ -210,6 +233,11 @@ def _bullets(text: str) -> list[str]:
     return out
 
 
+# P123 (a tender task, 23 Nov 2026: three timed-out clicks on the home page's "Log Masuk"): what
+# an older built-in said that sent the agent the wrong way, and what it says now.
+REPLACED: tuple[tuple[str, str], ...] = ((OLD_EP_START, NEW_EP_START),)
+
+
 def upgraded(body: str, builtin: str) -> str:
     """P102: a playbook laid in from an older built-in, with the jobs and pitfalls the
     built-in gained since (matched by heading or first line), everything else in it kept (a
@@ -219,6 +247,8 @@ def upgraded(body: str, builtin: str) -> str:
     if _rev(body) >= new:
         return body
     out = body
+    for old, fixed in REPLACED:  # P123: lines the built-in got wrong, put right where unchanged
+        out = out.replace(old, fixed)
     have = {h.strip().casefold() for h in _JOB.findall(out)}
     jobs = _part(builtin, "Jobs")
     for m in _JOB.finditer(jobs):
