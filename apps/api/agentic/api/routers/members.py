@@ -32,7 +32,7 @@ from ...models import (
 )
 from ...org import heads as dept_heads
 from ...org import hierarchy as org_chart
-from ...prima import autolink, modules, org_sync
+from ...prima import autolink, modules, org_sync, screen_access
 from ...prima import client as prima_client
 from ...prima.client import PrimaError
 from ...services import audit, identity
@@ -900,6 +900,10 @@ async def update_member(
     if body.name is not None or body.email is not None:
         await change_identity(db, principal, user_id, body.name, body.email)
     await db.commit()
+    if body.role is not None or prima_change:
+        # P128: their own Prima account follows their new office role and Prima department
+        # now, after the answer, not only on their next Prima open (the same path: ensure).
+        autolink.later(background, principal.workspace_id, [user_id])
     return await _one_out(db, principal, user_id)
 
 
@@ -1822,11 +1826,12 @@ async def set_prima_access(
 async def put_prima_access(
     user_id: str,
     body: PrimaAccessIn,
+    background: BackgroundTasks,
     principal: Principal = Depends(require("members.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
     """P99: what one member reaches (the office and Prima, or Prima only) and their screens;
-    P106: and their Prima department."""
+    P106: and their Prima department (P128: given to their own Prima account at once)."""
     fields = body.model_fields_set
     if body.access is None and not {"prima_modules", "prima_department"} & fields:
         raise api_error(
@@ -1843,6 +1848,7 @@ async def put_prima_access(
         "prima_department" in fields,
     )
     await db.commit()
+    autolink.later(background, principal.workspace_id, [user_id])  # P128
     return await _one_out(db, principal, user_id)
 
 
@@ -1904,22 +1910,103 @@ def _prima_role(role: str) -> str:
     return label.render() if label is not None else role
 
 
+def _screen_names(ids: list[str]) -> list[dict[str, str]]:
+    names = modules.titles()
+    lang = current_lang()
+    return [{"id": v, "title": names[v].get(lang) or names[v]["en"]} for v in ids if v in names]
+
+
+def _effective_out(e: screen_access.Effective) -> dict[str, object]:
+    """P128: what Members > Access shows of what they really get in Prima."""
+    names = {x["id"]: x["title"] for x in _screen_names([n.screen for n in e.needs])}
+    lang = current_lang()
+    tip = e.suggestion
+    return {
+        "role": e.role,
+        "role_label": _prima_role(e.role),
+        "department": e.department,
+        "how": e.how,
+        "screens": _screen_names(e.screens),
+        "needs": [
+            {
+                "id": n.screen,
+                "title": names.get(n.screen, n.screen),
+                "kind": n.kind,
+                "departments": n.departments,
+                "jobs": [j.get(lang) or j["en"] for j in n.jobs],
+            }
+            for n in e.needs
+        ],
+        "company_access": _screen_names(e.company_access),
+        "suggestion": (
+            {
+                "department": tip.department,
+                "adds": _screen_names(tip.adds),
+                "sensitive": tip.sensitive,
+            }
+            if tip
+            else None
+        ),
+    }
+
+
+def _preview(
+    m: Membership, modules_q: str | None, department_q: str | None
+) -> tuple[list[str] | None, str | None]:
+    """P128: the modules and department to explain: the saved ones, or (Members > Access before
+    Save) the ones on the form. `modules` "all" is everything their role allows."""
+    chosen = m.prima_modules
+    if modules_q is not None:
+        if modules_q == "all":
+            chosen = None
+        else:
+            want = [x for x in modules_q.split(",") if x]
+            if any(x not in set(modules.ids()) for x in want):
+                raise api_error(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "bad_module",
+                    "Pick Prima screens from the list.",
+                )
+            chosen = modules.clean(want)
+    dept = m.prima_department if m.prima_department in prima_client.PRIMA_DEPARTMENTS else None
+    if department_q is not None:
+        if department_q in ("", "none"):
+            dept = None
+        elif department_q in prima_client.PRIMA_DEPARTMENTS:
+            dept = department_q
+        else:
+            raise api_error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "bad_prima_department",
+                "Pick a Prima department from the list.",
+            )
+    return chosen, dept
+
+
 @router.get("/{user_id}/prima")
 async def member_prima(
     user_id: str,
+    modules_q: str | None = Query(default=None, alias="modules", max_length=4000),
+    department_q: str | None = Query(default=None, alias="department", max_length=40),
     principal: Principal = Depends(require("members.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
-    """P99: the Prima role this member has and where it is set, for the Access section."""
+    """P99: the Prima role this member has and where it is set, for the Access section.
+    P128: and what they really get there (`effective`: their Prima role and department, the
+    screens that open, and what each picked screen that does not open needs), by Prima's own
+    menu rule (prima/screen_access.py). `modules` and `department` explain the form before it
+    is saved."""
     m = await _membership(db, principal.workspace_id, user_id)
     if not _member_in_scope(principal, m):
         raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    chosen, dept = _preview(m, modules_q, department_q)
     out: dict[str, object] = {
         "enabled": prima_client.enabled(principal.workspace_id),
         "role": None,
         "role_label": None,
         "where": "",
         "record": None,
+        "effective": None,
     }
     if not out["enabled"]:
         out["where"] = render(Msg("Prima is not set up on this server."))
@@ -1930,6 +2017,7 @@ async def member_prima(
         out["where"] = render(
             Msg("The developer opens Prima as their own account (set on the Prima page).")
         )
+        out["effective"] = _effective_out(screen_access.explain("pwvsb_officer", dept, None))
         return out
     if prima_client.opens_as_top(m):
         out["role"], out["role_label"] = "director", _prima_role("director")
@@ -1938,9 +2026,28 @@ async def member_prima(
             if m.role == "admin"
             else Msg("Owners open Prima as its top record (the CEO).")
         )
+        top = None if prima_client.all_of_prima(m) else chosen
+        out["effective"] = {
+            "role": "director",
+            "role_label": _prima_role("director"),
+            "department": None,
+            "how": "top",
+            "screens": _screen_names(screen_access.leaders(top)),
+            "needs": [],
+            "company_access": [],
+            "suggestion": None,
+        }
         return out
     link = await db.get(PrimaLink, (principal.workspace_id, user_id))
     auto = prima_client.prima_role(m.role)
+    own = link is None or link.how == "auto"
+    if own:
+        # Their own Prima account (made on their first open when they have no staff record of
+        # their own): Prima opens what its menu gives this role and department.
+        refused = link.department_refused if link is not None else None
+        out["effective"] = _effective_out(
+            screen_access.explain(auto, dept, chosen, refused=refused)
+        )
     if link is None:
         out["role"], out["role_label"] = auto, _prima_role(auto)
         out["where"] = render(

@@ -318,19 +318,37 @@ async def create_account(
     raise PrimaError(503, Msg("Prima is not answering right now. Try again in a minute."))
 
 
+async def _create_in_department(
+    department: str | None, **account: object
+) -> tuple[str, str | None]:
+    """create_account in this department: (the account's Prima id, the department Prima refused
+    or None). P128: Prima refuses a central-only department (HR, Finance...) to someone whose
+    own staff record makes them a licensed company's office staff. Before, that refusal closed
+    Prima to them on every call; now their account is kept with no department and the refusal
+    is remembered (prima_links.department_refused) and shown on Members > Access."""
+    try:
+        return await create_account(department=department, **account), None  # type: ignore[arg-type]
+    except PrimaError as e:
+        if e.code != "account_refused" or not department:
+            raise
+    rid = await create_account(department=None, **account)  # type: ignore[arg-type]
+    log.warning("Prima refused a department on an office account; kept with none")
+    return rid, department
+
+
 async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = "") -> PrimaLink:
     """P75: the person's own Prima account, in the Prima company of their branch."""
     company = await _account_company(db, m)
     role = prima_role(m.role)
     department = account_department(m, role)
-    rid = await create_account(
+    rid, refused = await _create_in_department(
+        department,
         office_user_id=m.user_id,
         name=name,
         title=str(role_label(m.role)),
         role=role,
         company_ids=[company],
         email=email,
-        department=department,
     )
     link = PrimaLink(
         workspace_id=m.workspace_id,
@@ -339,7 +357,8 @@ async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = 
         prima_name=name[:200],
         how="auto",
         linked_by=account_link(role),
-        department=department,
+        department=None if refused else department,
+        department_refused=refused,
     )
     db.add(link)
     try:
@@ -357,8 +376,10 @@ async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = 
         "prima.account",
         target=m.user_id,
         after={"prima_user_id": rid, "role": role, "company": company}
-        | ({"department": department} if department else {}),
-        note=f"Own Prima account {rid} made for them ({role} in {company})",
+        | ({"department": department} if department and not refused else {})
+        | ({"department_refused": refused} if refused else {}),
+        note=f"Own Prima account {rid} made for them ({role} in {company})"
+        + (f"; Prima refused department {refused}, so they have none" if refused else ""),
     )
     await db.commit()
     return link
@@ -389,7 +410,8 @@ async def _refresh(db: AsyncSession, m: Membership, link: PrimaLink, *, relink: 
     company = await _account_company(db, m)
     role = prima_role(m.role)
     department = account_department(m, role)
-    rid = await create_account(
+    rid, refused = await _create_in_department(
+        department,
         office_user_id=m.user_id,
         name=me.name,
         title=str(role_label(m.role)),
@@ -397,7 +419,6 @@ async def _refresh(db: AsyncSession, m: Membership, link: PrimaLink, *, relink: 
         company_ids=[company],
         email=me.email,
         relink=relink,
-        department=department,
     )
     before = {"prima_user_id": link.prima_user_id, "department": link.department}
     level_before = link.linked_by
@@ -405,9 +426,15 @@ async def _refresh(db: AsyncSession, m: Membership, link: PrimaLink, *, relink: 
     link.prima_name = me.name[:200]
     if relink:
         link.relink_needed = False
-    link.department = department
+    link.department = None if refused else department
+    link.department_refused = refused
     link.linked_by = account_link(role)
-    after = {"prima_user_id": rid, "role": role, "company": company, "department": department}
+    after = {
+        "prima_user_id": rid,
+        "role": role,
+        "company": company,
+        "department": link.department,
+    } | ({"department_refused": refused} if refused else {})
     if relink:
         await audit.record(
             db,
@@ -439,7 +466,11 @@ async def _refresh(db: AsyncSession, m: Membership, link: PrimaLink, *, relink: 
             target=m.user_id,
             before=before,
             after=after,
-            note=f"Own Prima account {rid} now in department {department or 'none'}",
+            note=(
+                f"Prima refused department {refused} on own Prima account {rid}: kept with none"
+                if refused
+                else f"Own Prima account {rid} now in department {department or 'none'}"
+            ),
         )
     await db.commit()
     return link
@@ -451,9 +482,10 @@ def _account_due(m: Membership, link: PrimaLink) -> bool:
     if not link.prima_user_id.startswith(OFFICE_ACCOUNT_PREFIX):
         return False
     role = prima_role(m.role)
-    return (link.department or None) != account_department(
-        m, role
-    ) or link.linked_by != account_link(role)
+    # P128: a department Prima refused counts as given (it is not asked again on every call)
+    # until the office's choice changes.
+    given = link.department or link.department_refused or None
+    return given != account_department(m, role) or link.linked_by != account_link(role)
 
 
 async def _account_company(db: AsyncSession, m: Membership) -> str:

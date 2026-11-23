@@ -7,6 +7,10 @@
  * an owner, and never beyond what they have themselves (api/routers/members.py).
  * P106: and their Prima department (transport, procurement, hr) for their own Prima account; and
  * the developer's own choice of how they open Prima (PrimaOpensAsCard, on the Members page).
+ * P128 (Fitri, 24 Nov 2026: what is set here did not show in Prima): the section shows what the
+ * person will really get in Prima with what is on the form (their Prima role and department, the
+ * screens that open), and for each picked module Prima will not open, what it still needs; a
+ * department that opens more of them is offered by name, never given silently.
  */
 import { ShieldCheckIcon, SquaresFourIcon, WarningIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -116,7 +120,7 @@ export function PrimaDepartmentField({ value, onChange, label }: {
       <span className="text-[13px] font-medium">{name}</span>
       <Select value={value ?? NO_DEPARTMENT} options={options} label={name} className="w-full sm:w-72"
         onValueChange={(v) => onChange(v === NO_DEPARTMENT ? null : (v as PrimaDepartment))} />
-      <p className="text-[12.5px] text-muted">{t("For their own Prima account: Prima opens the screens of their department (Finance: finance, credit, buying; Chief of Staff office: requests, insurance). A Prima staff record keeps the department set in Prima.")}</p>
+      <p className="text-[12.5px] text-muted">{t("For their own Prima account: Prima opens the screens of their department, and the department's work comes with it. It reaches their Prima on their next reload. A Prima staff record keeps the department set in Prima.")}</p>
       {value === "hr" ? (
         <p role="note" className="flex items-start gap-1.5 rounded-sm border border-warn/30 bg-warn/8 px-2.5 py-2 text-[12.5px]">
           <WarningIcon size={14} weight="fill" className="mt-0.5 shrink-0 text-warn" />
@@ -237,7 +241,7 @@ export function AccessFields({ value, onChange, member, ownerTarget, noDepartmen
                 {t("A module not picked is hidden in Prima, and Prima refuses it with a plain message.")}
               </p>
               <p className="rounded-sm border border-warn/30 bg-warn/6 px-2.5 py-1.5 text-[12.5px]">
-                {t("Picking modules only narrows what their Prima role allows: it never adds a screen their Prima role does not have. Their Prima role follows their office role; give a higher office role for more of Prima.")}
+                {t("Prima opens a screen only for the role, department or job that works it. What they will really get, and what each picked module still needs, is shown below.")}
               </p>
               {cat.data.mine !== null ? <p className="text-[12.5px] text-muted">{t("You can give only the Prima modules you have yourself.")}</p> : null}
             </>
@@ -250,23 +254,149 @@ export function AccessFields({ value, onChange, member, ownerTarget, noDepartmen
       {noDepartment ? null : (
         <PrimaDepartmentField value={value.department ?? null} onChange={(d) => onChange({ ...value, department: d })} />
       )}
-      {member ? <PrimaRoleLine member={member} /> : null}
+      {member ? (
+        <PrimaRoleLine member={member} value={value}
+          onDepartment={noDepartment ? undefined : (d) => onChange({ ...value, department: d })} />
+      ) : null}
     </fieldset>
   );
 }
 
-interface PrimaRole { enabled: boolean; role: string | null; role_label: string | null; where: string; record: string | null }
+interface Screen { id: string; title: string }
+/** P128: what a picked screen that Prima will not open for them needs (api: screen_access.py). */
+export interface PrimaNeed extends Screen {
+  kind: "department" | "branch_manager" | "central_staff" | "job" | "leadership" | "none";
+  departments: PrimaDepartment[];
+  jobs: string[];
+}
+/** P128: what they really get in Prima, by Prima's own menu rule. */
+export interface PrimaEffective {
+  role: string;
+  role_label: string;
+  department: PrimaDepartment | null;
+  how: "chosen" | "none" | "refused" | "top";
+  screens: Screen[];
+  needs: PrimaNeed[];
+  company_access: Screen[];
+  suggestion: { department: PrimaDepartment; adds: Screen[]; sensitive: boolean } | null;
+}
+interface PrimaRole { enabled: boolean; role: string | null; role_label: string | null; where: string; record: string | null; effective: PrimaEffective | null }
 
-/** The Prima role this person has and where it is set (their Prima staff record, their office role, or owner). */
-function PrimaRoleLine({ member }: { member: Member }) {
+/** P128: the address that explains what someone gets in Prima with the form's modules and
+ * department (not saved yet). */
+export function primaPreviewPath(userId: string, value: AccessValue): string {
+  const q = new URLSearchParams();
+  q.set("modules", value.modules === null ? "all" : value.modules.join(","));
+  if (value.department !== undefined) q.set("department", value.department ?? "none");
+  return `/api/members/${userId}/prima?${q.toString()}`;
+}
+
+const listNames = (xs: { title: string }[]) => xs.map((x) => x.title).join(", ");
+
+/** P128: what a picked module still needs, in plain words. */
+export function needLine(n: PrimaNeed, t: ReturnType<typeof useT>): string {
+  switch (n.kind) {
+    case "department": {
+      const names = n.departments.map((d) => t(DEPARTMENT_LABELS[d]));
+      return names.length === 1
+        ? t("Needs Prima department {department}.", { department: names[0] ?? "" })
+        : t("Needs one of these Prima departments: {departments}.", { departments: names.join(", ") });
+    }
+    case "branch_manager":
+      return t("Only for a company's office staff (office role Branch manager).");
+    case "central_staff":
+      return t("Only for central staff, not a branch manager.");
+    case "job":
+      return t("Needs a Prima job ({jobs}). It is given in Prima (Accounts and access), not from the office.", { jobs: n.jobs.slice(0, 3).join(", ") });
+    case "leadership":
+      return t("Only for group leadership in Prima.");
+    default:
+      return t("Not opened to office accounts.");
+  }
+}
+
+/** The Prima role this person has and where it is set (their Prima staff record, their office
+ * role, or owner); P128: and what they will really get there with the access on the form. */
+function PrimaRoleLine({ member, value, onDepartment }: {
+  member: Member;
+  value: AccessValue;
+  onDepartment?: (d: PrimaDepartment) => void;
+}) {
   const t = useT();
-  const q = useQuery({ queryKey: ["members", member.user_id, "prima"], queryFn: () => api<PrimaRole>(`/api/members/${member.user_id}/prima`), staleTime: 60_000 });
+  const path = primaPreviewPath(member.user_id, value);
+  const q = useQuery({
+    queryKey: ["members", member.user_id, "prima", path],
+    queryFn: () => api<PrimaRole>(path),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
   if (q.isLoading) return <Skeleton className="h-9 rounded-sm" />;
-  if (!q.data) return null;
+  if (!q.data) return <FormError message={q.error ? errorMessage(q.error) : null} />;
+  const e = q.data.effective;
   return (
-    <div className="grid gap-0.5 rounded-sm bg-surface-2/70 px-3 py-2 text-[12.5px]" data-testid="prima-role">
-      <span className="font-medium">{q.data.role_label ? t("Prima role: {role}", { role: q.data.role_label }) : t("Prima role")}</span>
-      <span className="text-muted">{q.data.where}</span>
+    <div className="grid gap-2 rounded-sm bg-surface-2/70 px-3 py-2 text-[12.5px]" data-testid="prima-role">
+      <div className="grid gap-0.5">
+        <span className="font-medium">{q.data.role_label ? t("Prima role: {role}", { role: q.data.role_label }) : t("Prima role")}</span>
+        <span className="text-muted">{q.data.where}</span>
+      </div>
+      {e ? <PrimaEffectiveView e={e} onDepartment={onDepartment} /> : null}
+    </div>
+  );
+}
+
+function PrimaEffectiveView({ e, onDepartment }: { e: PrimaEffective; onDepartment?: (d: PrimaDepartment) => void }) {
+  const t = useT();
+  const tip = e.suggestion;
+  return (
+    <div className="grid gap-2 border-t border-border pt-2" data-testid="prima-effective">
+      <span className="font-medium">{t("In Prima they will get")}</span>
+      {e.how !== "top" ? (
+        <span>
+          {e.department
+            ? t("Prima department: {department}", { department: t(DEPARTMENT_LABELS[e.department]) })
+            : t("Prima department: none")}
+        </span>
+      ) : null}
+      {e.how === "refused" ? (
+        <p role="note" className="flex items-start gap-1.5 rounded-sm border border-warn/30 bg-warn/8 px-2.5 py-2">
+          <WarningIcon size={14} weight="fill" className="mt-0.5 shrink-0 text-warn" />
+          <span>{t("Prima refused this department for them: their own staff record is in a company's office, so they are that company's office staff. Their Prima opens with no department.")}</span>
+        </p>
+      ) : null}
+      <div className="grid gap-0.5">
+        <span className="text-muted">{t("Screens that open")}</span>
+        <span data-testid="prima-opens">{e.screens.length ? listNames(e.screens) : t("None")}</span>
+      </div>
+      {e.needs.length ? (
+        <div className="grid gap-1" data-testid="prima-needs">
+          <span className="text-muted">{t("Picked, but Prima will not open them yet")}</span>
+          <ul className="grid gap-1">
+            {e.needs.map((n) => (
+              <li key={n.id} className="flex items-start gap-1.5">
+                <WarningIcon size={13} className="mt-0.5 shrink-0 text-warn" />
+                <span><span className="font-medium">{n.title}</span>: {needLine(n, t)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {tip && onDepartment ? (
+        <div className="grid gap-1.5 rounded-sm border border-border bg-surface px-2.5 py-2" data-testid="prima-suggestion">
+          <span>
+            {t("Prima department {department} would also open: {screens}.", { department: t(DEPARTMENT_LABELS[tip.department]), screens: listNames(tip.adds) })}{" "}
+            {t("A department is a job in Prima: they get all of that department's work, not only these screens.")}
+          </span>
+          {tip.sensitive ? <span className="text-warn">{t("This department sees money, pay, staff records or other protected data in Prima.")}</span> : null}
+          <div>
+            <Button size="sm" variant="outline" onClick={() => onDepartment(tip.department)}>
+              {t("Use {department}", { department: t(DEPARTMENT_LABELS[tip.department]) })}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {e.company_access.length ? (
+        <p className="text-muted">{t("{screens}: shows a company's records only for the companies Prima gives them (Accounts and access in Prima).", { screens: listNames(e.company_access) })}</p>
+      ) : null}
     </div>
   );
 }

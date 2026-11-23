@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Member } from "@/lib/types";
 
-import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, DEFAULT_ACCESS, moduleOptions, PrimaOpensAsCard, type AccessValue, type PrimaCatalog } from "./members-access";
+import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, DEFAULT_ACCESS, moduleOptions, PrimaOpensAsCard, primaPreviewPath, type AccessValue, type PrimaCatalog, type PrimaEffective } from "./members-access";
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => () => {}, Link: ({ children }: { children: ReactNode }) => <a>{children}</a> }));
 
@@ -31,10 +31,14 @@ const MEMBER: Member = {
 };
 
 let posts: { path: string; body: unknown }[] = [];
+let prima: string[] = [];
+let effective: PrimaEffective | null = null;
 let catalog: PrimaCatalog = CAT;
 let status: object = { enabled: true, running: true, linked: true, problem: "", needs_microsoft: false };
 beforeEach(() => {
   posts = [];
+  prima = [];
+  effective = null;
   catalog = CAT;
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   Element.prototype.scrollIntoView = () => {};
@@ -47,7 +51,10 @@ beforeEach(() => {
       return json({ results: [{ user_id: "us_1", ok: true, message: null }], done: 1, skipped: 0 });
     }
     if (path.startsWith("/api/members/prima-modules")) return json(catalog);
-    if (path.endsWith("/prima")) return json({ enabled: true, role: "pwvsb_officer", role_label: "PWVSB staff", where: "Their own Prima account.", record: "Siti" });
+    if (/\/api\/members\/[^/]+\/prima(\?|$)/.test(path)) {
+      prima.push(path);
+      return json({ enabled: true, role: "pwvsb_officer", role_label: "PWVSB staff", where: "Their own Prima account.", record: "Siti", effective });
+    }
     if (path.startsWith("/api/prima/status")) return json(status);
     if (path.startsWith("/api/auth/me")) return json({ user: { id: "us_1", email: "siti@example.com", name: "Siti", must_change_password: false }, workspace: { id: "w", name: "W", slug: "w", timezone: "UTC" }, role: "staff", permissions: ["read"], access: "prima_only" });
     return json({});
@@ -166,6 +173,61 @@ describe("P106 Prima department and how the developer opens Prima", { timeout: 3
     const { container } = wrap(<PrimaOpensAsCard />);
     await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
     expect(container.textContent).toBe("");
+  });
+});
+
+describe("P128: what they really get in Prima", { timeout: 30_000 }, () => {
+  it("asks with the form's modules and department, not only what was saved", () => {
+    expect(primaPreviewPath("us_1", { access: "agentic", modules: null })).toBe("/api/members/us_1/prima?modules=all");
+    expect(primaPreviewPath("us_1", { access: "agentic", modules: ["finance", "credit"], department: null })).toBe(
+      "/api/members/us_1/prima?modules=finance%2Ccredit&department=none",
+    );
+    expect(primaPreviewPath("us_1", { access: "agentic", modules: [], department: "legal" })).toBe("/api/members/us_1/prima?modules=&department=legal");
+  });
+
+  it("shows the screens that open, what each picked one needs, and offers a department by name", async () => {
+    effective = {
+      role: "pwvsb_officer",
+      role_label: "PWVSB staff",
+      department: null,
+      how: "none",
+      screens: [{ id: "mine", title: "My details" }, { id: "clock", title: "Clock" }],
+      needs: [
+        { id: "finance", title: "Finance", kind: "job", departments: [], jobs: ["Finance team leader", "Finance data entry"] },
+        { id: "credit", title: "PWVSB credit", kind: "department", departments: ["legal"], jobs: [] },
+        { id: "purchasing", title: "Procurement", kind: "department", departments: ["procurement", "finance"], jobs: [] },
+        { id: "branches", title: "Branches", kind: "branch_manager", departments: [], jobs: [] },
+      ],
+      company_access: [],
+      suggestion: { department: "legal", adds: [{ id: "credit", title: "PWVSB credit" }], sensitive: true },
+    };
+    const seen: AccessValue[] = [];
+    wrap(<Fields member={{ ...MEMBER, prima_modules: ["finance", "credit", "purchasing", "branches"] }}
+      start={{ access: "agentic", modules: ["finance", "credit", "purchasing", "branches"] }} onValue={(v) => seen.push(v)} />);
+    expect(await screen.findByTestId("prima-opens")).toHaveTextContent("My details, Clock");
+    const needs = screen.getByTestId("prima-needs");
+    expect(needs).toHaveTextContent("Finance: Needs a Prima job (Finance team leader, Finance data entry). It is given in Prima (Accounts and access), not from the office.");
+    expect(needs).toHaveTextContent("PWVSB credit: Needs Prima department Legal.");
+    expect(needs).toHaveTextContent("Procurement: Needs one of these Prima departments: Procurement and stores, Finance.");
+    expect(needs).toHaveTextContent("Branches: Only for a company's office staff (office role Branch manager).");
+    const tip = screen.getByTestId("prima-suggestion");
+    expect(tip).toHaveTextContent("Prima department Legal would also open: PWVSB credit.");
+    expect(tip).toHaveTextContent("protected data");
+    // Never given silently: the department is set only when they press Use.
+    expect(seen).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Use Legal" }));
+    expect(seen.at(-1)).toMatchObject({ department: "legal" });
+    await waitFor(() => expect(prima.at(-1)).toContain("department=legal"));
+  });
+
+  it("says when Prima refused the department", async () => {
+    effective = {
+      role: "pwvsb_officer", role_label: "PWVSB staff", department: null, how: "refused",
+      screens: [], needs: [], company_access: [], suggestion: null,
+    };
+    wrap(<Fields member={{ ...MEMBER, prima_department: "hr" }} start={{ access: "agentic", modules: null, department: "hr" }} onValue={() => {}} />);
+    expect(await screen.findByText(/Prima refused this department for them/)).toBeInTheDocument();
+    expect(screen.getByTestId("prima-opens")).toHaveTextContent("None");
   });
 });
 

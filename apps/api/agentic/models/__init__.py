@@ -2350,6 +2350,12 @@ class PrimaLink(Timestamps, Base):
     # P106: the Prima department last given to their own Prima account (how="auto"); when the
     # member's prima_department differs, link_for brings the account up to date.
     department: Mapped[str | None] = mapped_column(String(20))
+    # P128: the department chosen for them that Prima refused on their own account (their own
+    # staff record is in a licensed company, so they are its office staff and never in a
+    # central-only department). Their account is then kept with no department (`department`
+    # None) instead of not opening at all; Members > Access says so. Cleared once the choice
+    # changes and Prima takes it.
+    department_refused: Mapped[str | None] = mapped_column(String(20))
 
 
 # P57: export and erase a workspace (agentic/erasure/models.py).

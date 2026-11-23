@@ -297,6 +297,12 @@ STAFF_OK = {
     "/api/integrations/microsoft/adminconsent",
     "/api/requests",  # P120: their own requests (and their people's, to decide)
     "/api/held-changes",  # P125: IT support's own held changes (none for staff: empty lists)
+    # P127: their own approvals (role scope widens it: test_p127_approvals) and their own prepared
+    # answers; the org chart as they already see it (limited people: name, title, company, dept)
+    "/api/m365/approvals/all",
+    "/api/m365/approvals/prepared",
+    "/api/org-chart/export.pdf",
+    "/api/org-chart/export.xlsx",
     "/api/mail-accounts",  # P109: their own other email accounts only (test_p109_mail_accounts)
     "/api/m365/summary",  # P109b: their own Microsoft 365 tile ("not connected" until they are)
     "/api/me/prefs", "/api/me/staff", "/api/me/twin", "/api/me/worker", "/api/meetings",

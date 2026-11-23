@@ -64,6 +64,7 @@ import { APPROVALS_P127 } from "./approvals-p127";
 import { MAIL_P122 } from "./mail-p122";
 import { WORK_MAIL_P124 } from "./work-mail-p124";
 import { IT_SUPPORT_P125 } from "./it-support-p125";
+import { ACCESS_P128 } from "./access-p128";
 import { TABLES } from "./tables";
 import { TEAM } from "./team";
 import { ROLES_P98 } from "./roles-p98";
@@ -181,4 +182,5 @@ export const MS: Record<string, string> = {
   ...MAIL_P122, // P122: Work and Personal email, connecting another account by address
   ...WORK_MAIL_P124, // P124: extra work email accounts wait for approval
   ...IT_SUPPORT_P125, // P125: the IT support role and its changes that wait for approval
+  ...ACCESS_P128, // P128: Members > Access shows what someone really gets in Prima
 };
