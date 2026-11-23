@@ -29,6 +29,7 @@ COPY db/modules db/modules
 COPY db/release-manifest.json db/release-manifest.json
 # Agentic Office (P105): the 24 approved modules off the release list, run by the office prima-setup.
 COPY db/office-non-release.json db/office-non-release.json
+COPY db/office-pending.json db/office-pending.json
 COPY apps/api/src/connections-mail/job-email-v2.sql apps/api/src/connections-mail/job-email-v2.sql
 COPY ops/base-transition ops/base-transition
 COPY ops/existing-admin ops/existing-admin

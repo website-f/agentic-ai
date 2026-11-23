@@ -394,15 +394,25 @@ export function lineManagerOf(u: User, users: User[]): { manager: User | null; a
     return { manager: cos(), assumed: true };
   };
   if (u.opsTier === 'ceo' || u.leadership === 'chairman' || u.leadership === 'vice_chairman') return { manager: null, assumed: false };
+  // The org chart first (Fauzan, 23 Nov 2026): the line a head, the HR Director or the CEO set (org-structure.ts).
+  if (u.reportsToId) {
+    const set = find((x) => x.id === u.reportsToId);
+    if (set) return { manager: set, assumed: false };
+  }
+  // A unit head named in the org chart (headOf), never a closed account.
+  const named = (key: string) => find((x) => !x.accessClosedFrom && (x.headOf ?? []).includes(key));
   if (u.opsTier === 'coo' || u.leadership === 'cos' || u.leadership === 'finance_director') return pick(ceo);
   if (u.leadership === 'deputy_cos') return pick(cos);
   if (u.opsTier === 'patrol') {
     // The officer's state is in their title, e.g. "Patrolling Officer, Sasa (Selangor)": the OM for that state, else the Regional OM.
     const state = (/\(([^)]+)\)\s*$/.exec(u.title)?.[1] ?? '').split(',')[0].trim();
     const region = regionOfState(state)?.id;
+    // A state with no OM or Regional OM (for example Perak): the OGM, until the OGM delegates an OM in the org chart
+    // (Fauzan, 23 Nov 2026: "Any om delegated by ogm").
     return pick(
       () => find((x) => x.opsTier === 'om' && (x.areaStates ?? []).includes(state)),
       () => find((x) => x.opsTier === 'regional' && !!region && (x.regionIds ?? []).includes(region)),
+      () => find((x) => x.opsTier === 'ogm'),
     );
   }
   // A site officer reports to the patrolling officer for their sites (case escalation, 25 Oct 2026).
@@ -432,18 +442,41 @@ export function lineManagerOf(u: User, users: User[]): { manager: User | null; a
   if (u.fwmRole === 'deputy') return pick(() => find((x) => x.fwmRole === 'manager'));
   if (u.fwmRole === 'manager') return pick(cos);
   if (u.procRole === 'storekeeper') return pick(() => find((x) => x.procRole === 'executive'));
-  if (u.procRole === 'executive') return pick(() => find((x) => x.opsTier === 'ogm'));
+  // Procurement and Inventory sits under the OGM; the Inventory Manager, where there is one, leads it (org review, 23 Nov 2026).
+  if (u.procRole === 'executive') return pick(() => find((x) => x.procRole === 'manager'), () => find((x) => x.opsTier === 'ogm'));
+  if (u.procRole === 'manager') return pick(() => find((x) => x.opsTier === 'ogm'));
   if (u.actRole === 'auditor' || u.actRole === 'enforcement') return pick(() => find((x) => x.actRole === 'lead'));
+  // The ACT Manager (C6, 11 Nov 2026) reports to the ACT Director (org review, 23 Nov 2026).
+  if (u.actRole === 'manager') return pick(() => find((x) => x.actRole === 'lead'));
   if (u.actRole === 'lead') return pick(ceo);
   if (u.opsTier === 'om') return pick(() => find((x) => x.opsTier === 'regional' && (x.regionIds ?? []).some((r) => (u.regionIds ?? []).includes(r))));
   if (u.opsTier === 'regional') return pick(() => find((x) => x.opsTier === 'ops_director'));
   if (u.opsTier === 'ogm' || u.opsTier === 'ops_director') return pick(coo);
+  // A department member with a named head reports to that head; the head follows the department's own rule below.
+  if (u.department && !(u.headOf ?? []).includes(`d_${u.department}`)) {
+    const h = named(`d_${u.department}`);
+    if (h) return { manager: h, assumed: false };
+  }
+  // Staff of a central company (PGL, Goodwill, Sasa Team, Merdeka, PWVSB) without a department line: its named head.
+  const central = (u.companyIds ?? []).find((c) => ['pwvsb', 'merdeka', 'goodwill', 'sasateam', 'pgl'].includes(c));
+  if (!u.department && central && !(u.headOf ?? []).includes(`c_${central}`)) {
+    const h = named(`c_${central}`);
+    if (h) return { manager: h, assumed: false };
+  }
+  // Central Marketing sits under the COO (Fauzan, 22 Nov 2026): its named head reports to the COO; its staff follow the
+  // named head above, else the COO.
+  if ((u.headOf ?? []).includes('d_marketing') || (u.department as string | undefined) === 'marketing') return pick(coo);
   if (u.department === 'pdpa') return pick(() => find((x) => x.opsTier === 'ops_director'));
-  if (u.department === 'cms') return pick(() => find((x) => x.department === 'arms_control' && x.title.includes('Manager')));
+  if (u.department === 'cms') return pick(() => named('d_arms_control'), () => find((x) => x.department === 'arms_control' && x.title.includes('Manager')));
   if (u.department === 'arms_control')
-    return u.title.includes('Manager') ? pick(coo) : pick(() => find((x) => x.department === 'arms_control' && x.title.includes('Manager')));
+    return u.title.includes('Manager') || (u.headOf ?? []).includes('d_arms_control')
+      ? pick(coo)
+      : pick(() => find((x) => x.department === 'arms_control' && x.title.includes('Manager')));
   if (u.department === 'asset') return u.assetRole === 'director' ? pick(ceo) : pick(() => find((x) => x.assetRole === 'director'));
-  if (u.department === 'transport' || u.department === 'operations') return pick(coo);
+  // Transport runs under the OGM and the COO oversees (Fauzan, 23 Nov 2026: "Ogm but coo oversears"). Its staff follow
+  // the named Head of Transport above; the head, or staff with no head named, report to the OGM.
+  if (u.department === 'transport') return pick(() => find((x) => x.opsTier === 'ogm'), coo);
+  if (u.department === 'operations') return pick(coo);
   if (u.department === 'hr' || u.department === 'director_office' || u.department === 'legal' || u.department === 'chief_of_staff') return pick(cos);
   return { manager: cos(), assumed: true };
 }

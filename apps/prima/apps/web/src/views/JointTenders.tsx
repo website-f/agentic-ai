@@ -121,7 +121,7 @@ function EntryRow({ e, canSeeAll }: { e: Entry; canSeeAll: boolean }) {
             <>
               <div>
                 Guide steps: {p.stepsDone} of {p.stepsTotal} done{p.naSteps ? ` (${p.naSteps} not applicable, confirmed)` : ''} · checks:{' '}
-                {p.checks.map((c) => ({ PREPARER: 'preparer', MANAGER: 'manager' })[c]).join(', ') || 'none'}
+                {p.checks.map((c) => ({ PREPARER: 'preparer', CHECK: 'Marketing check', MANAGER: 'manager' })[c]).join(', ') || 'none'}
               </div>
               <div>
                 Slip: {p.slip ? `${p.slip.name}, uploaded by ${p.slip.by} ${dateTimeLabel(p.slip.at)}` : 'none'}

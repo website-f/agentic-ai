@@ -786,6 +786,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     timeSlipSettings: [],
     staffOtClaims: [],
     warrantyClaims: [],
+    companyPapers: [],
     siteCoverage: [],
     rosterVersions: [],
     rosterDays: [],
@@ -903,7 +904,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     itRentalRates: [],
     itAssetInspections: [],
     itOperationalReceipts: [],
-    itCleanupNominations: [], itCleanupArchives: [], itCleanupReceipts: [], itCleanupPlanBindings: [], orgEvents: [], orgTasks: [], orgNotices: [], orgImports: [], attendanceImports: [], attendanceDays: [], attendanceMatches: [], orgImportOks: [], problemReports: [], accountRequests: [], hrLists: [], consentGates: [], fwMoves: [], hostelNeeds: [], hostelRecs: [], stayRequests: [], ssRecs: [], itPolicyRecs: [], armsPolicyRecs: [], officeAmRecs: [], kdnRecs: [], toolboxRecs: [], inventoryRecs: [], amRentalRecs: [], groupMonthRecs: [], dutyRegisterRecs: [],
+    itCleanupNominations: [], itCleanupArchives: [], itCleanupReceipts: [], itCleanupPlanBindings: [], orgEvents: [], orgTasks: [], orgNotices: [], orgImports: [], orgImportOks: [], problemReports: [], archiveFiles: [], assistantMemory: [], accountRequests: [], hrLists: [], consentGates: [], fwMoves: [], hostelNeeds: [], hostelRecs: [], stayRequests: [], ssRecs: [], itPolicyRecs: [], armsPolicyRecs: [], officeAmRecs: [], kdnRecs: [], toolboxRecs: [], inventoryRecs: [], amRentalRecs: [], groupMonthRecs: [], dutyRegisterRecs: [], orgLines: [], sharedLogins: [], sharedLoginKinds: [], attendanceImports: [], attendanceDays: [], attendanceMatches: [],
     itMetricStreams: [], itMetricReceipts: [], itMetricTargets: [], itMetricCalendars: [],
     cleaningSites: [], cleaningDays: [], cleaningStock: [], siteKits: [], dutyPlans: [], guardTerms: [],
     itPurchaseFinanceAuthorities: [], itProcurementPackets: [], itProcurementReceipts: [],
@@ -3123,6 +3124,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       department: 'transport',
       companyIds: [],
       siteIds: [],
+      // Head of the department, as the CEO or Chief of Staff names it in the organisation chart (demo only).
+      headOf: ['d_transport', 'c_pgl'],
     },
     // PDPA officer (Fauzan, 26 Oct 2026): every personal data matter, monitored by the Operations Director. Mock name.
     {
@@ -3133,6 +3136,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       department: 'pdpa',
       companyIds: [],
       siteIds: [],
+      // Head of the department, as the CEO or Chief of Staff names it in the organisation chart (demo only).
+      headOf: ['d_pdpa'],
     },
     // Asset Management department (Fauzan, 26 Oct 2026): runs the group's rental units, assets, resorts and orchards.
     // Mock names. Watched by the Chairman and Vice Chairman, overseen by the CEO, finances by the Finance Director.
@@ -3265,6 +3270,40 @@ export function generateDataset(opts: SeedOptions): Dataset {
         siteIds: [],
       }),
     ),
+    // Marketing (Fauzan, 22-23 Nov 2026): 1 Manager, 1 Deputy, 7 Tender Executives, group staff under the COO. They
+    // prepare and lodge every tender and proposal in each company's name. Mock names.
+    {
+      id: 'u-mkt-mgr',
+      name: 'Marketing Manager (mock)',
+      title: 'Marketing Manager, PWVSB (every company)',
+      role: 'pwvsb_officer',
+      department: 'marketing',
+      marketingRole: 'manager',
+      companyIds: [],
+      siteIds: [],
+    },
+    {
+      id: 'u-mkt-dep',
+      name: 'Deputy Marketing Manager (mock)',
+      title: 'Deputy Marketing Manager, PWVSB (every company)',
+      role: 'pwvsb_officer',
+      department: 'marketing',
+      marketingRole: 'deputy',
+      companyIds: [],
+      siteIds: [],
+    },
+    ...[1, 2, 3, 4, 5, 6, 7].map(
+      (k): User => ({
+        id: `u-mkt-ex${k}`,
+        name: `Tender Executive ${k} (mock)`,
+        title: 'Tender Executive, Marketing',
+        role: 'pwvsb_officer',
+        department: 'marketing',
+        marketingRole: 'executive',
+        companyIds: [],
+        siteIds: [],
+      }),
+    ),
     // PWVSB credit (V8, V10): a credit officer in Finance and PWVSB's in-house legal counsel. Mock names.
     {
       id: 'u-credit',
@@ -3284,6 +3323,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       department: 'legal',
       companyIds: [],
       siteIds: [],
+      // Head of the department, as the CEO or Chief of Staff names it in the organisation chart (demo only).
+      headOf: ['d_legal'],
     },
     // Internal audit (V15): checks the proof behind each obligation and handles speak-up reports. Mock names.
     // ACT, Audit, Compliance and Transformation (Fauzan, 2 Nov 2026): 1 Director and 2 teams, each with 1 Auditor and
@@ -3295,6 +3336,18 @@ export function generateDataset(opts: SeedOptions): Dataset {
       role: 'pwvsb_officer',
       department: 'audit',
       actRole: 'lead',
+      companyIds: [],
+      siteIds: [],
+    },
+    // ACT Manager (C6, Fauzan 11 Nov 2026): reports to the ACT Director (Fauzan, 23 Nov 2026: "Act manager report to act
+    // director") and second-checks an Auditor's check of a fix. Mock name.
+    {
+      id: 'u-act-mgr',
+      name: 'ACT Manager (mock)',
+      title: 'Manager, Audit, Compliance and Transformation (ACT), PWVSB',
+      role: 'pwvsb_officer',
+      department: 'audit',
+      actRole: 'manager',
       companyIds: [],
       siteIds: [],
     },
@@ -3323,6 +3376,17 @@ export function generateDataset(opts: SeedOptions): Dataset {
       },
     ]),
     // Procurement and Inventory (Fauzan, 27 Oct 2026): under the OGM, monitored by the COO and CEO. Mock names.
+    // The Inventory Manager keeps the store list and its sets and parts (23 Nov 2026).
+    {
+      id: 'u-proc-manager',
+      name: 'Inventory Manager (mock)',
+      title: 'Inventory Manager, Procurement and Inventory, PWVSB',
+      role: 'pwvsb_officer',
+      department: 'procurement',
+      procRole: 'manager',
+      companyIds: [],
+      siteIds: [],
+    },
     {
       id: 'u-proc-exec',
       name: 'Procurement Executive (mock)',
@@ -3421,6 +3485,16 @@ export function generateDataset(opts: SeedOptions): Dataset {
       companyIds: [],
       siteIds: [],
     },
+    // The tender watcher (Marketing item AH11, Fauzan 23 Nov 2026): reads public tender pages Marketing allowed.
+    {
+      id: 'u-tender-watcher',
+      name: 'Tender watcher',
+      title: 'System: reads the public pages of the tender sites Marketing allowed and lists guarding notices',
+      role: 'pwvsb_officer',
+      integration: 'tender_watcher',
+      companyIds: [],
+      siteIds: [],
+    },
     // The JA Group app's feed (Fauzan, 26 Oct 2026): a system sign-in, never a person and never on the sign-in screen.
     {
       id: 'u-ja-sync',
@@ -3439,6 +3513,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       department: 'director_office',
       companyIds: [],
       siteIds: [],
+      // Head of the department, as the CEO or Chief of Staff names it in the organisation chart (demo only).
+      headOf: ['d_director_office'],
     },
     // Group leadership who see group data (Fauzan, 26 Oct 2026): mock names.
     { id: 'u-chair', name: "Dato' Ismail bin Kassim", title: 'Chairman', role: 'pwvsb_officer', leadership: 'chairman', companyIds: [], siteIds: [] },
@@ -3549,6 +3625,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       department: 'arms_control',
       companyIds: [],
       siteIds: [],
+      // Head of the department, as the CEO or Chief of Staff names it in the organisation chart (demo only).
+      headOf: ['d_arms_control', 'd_cms'],
     },
     {
       id: 'u-pwvsb-arms-asst',
@@ -3696,6 +3774,18 @@ export function generateDataset(opts: SeedOptions): Dataset {
       validFrom: grantFrom,
       validTo: grantTo,
     });
+    // Marketing: the Manager and Deputy cover every company; each executive covers the companies shared out to them.
+    for (const userId of ['u-mkt-mgr', 'u-mkt-dep', `u-mkt-ex${(allCompanyIds.indexOf(cid) % 7) + 1}`]) {
+      ds.grants.push({
+        id: `gr-${userId.slice(2)}-${cid}`,
+        userId,
+        companyId: cid,
+        scope: 'monitor',
+        basis: 'Management agreement with PWVSB (to be verified)',
+        validFrom: grantFrom,
+        validTo: grantTo,
+      });
+    }
     for (const dept of ['hr', 'arms', 'arms-asst', 'doa']) {
       ds.grants.push({
         id: `gr-pwvsb-${dept}-${cid}`,
@@ -3716,6 +3806,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
       'u-credit',
       'u-legal',
       'u-audit',
+      'u-act-mgr',
       'u-act-aud1',
       'u-act-enf1',
       'u-act-aud2',
@@ -4932,10 +5023,13 @@ export function generateDataset(opts: SeedOptions): Dataset {
       }
     }
     // The Nepali test guard's own verbal warning (IWAY finding, Fauzan 6 Nov 2026), so the guard can try the appeal on
-    // their own sign-in. Mock: recorded by the Sasa officer two days ago, inside the appeal window.
+    // their own sign-in. Mock: recorded by the Sasa officer two days ago, inside the appeal window. When that day was
+    // the guard's rest day, the nearest worked day is used, so the warning is there on every date.
     {
       const npUser = ds.users.find((u) => u.id === 'u-guard-sasa-2');
-      const x = ds.shifts.find((sh) => sh.personId === npUser?.personId && sh.date === addDays(today, -2));
+      const x = [-2, -3, -1, -4, -5]
+        .map((d) => ds.shifts.find((sh) => sh.personId === npUser?.personId && sh.date === addDays(today, d)))
+        .find(Boolean);
       if (x)
         ds.attendanceFollowUps.push({
           id: `fu-${x.id}-early_leave-${ds.attendanceFollowUps.length + 1}`,
@@ -6273,8 +6367,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       counts: { new: rows.length, same: 0, changed: 0 },
       unknownStaff: [],
       rows: approved ? [] : rows,
-      staged: { by: 'ACT Assistant to the Lead (mock)', byId: 'u-act-la', at: at(h) },
-      decision: approved ? { decision: 'approved', by: 'ACT Deputy (mock)', byId: 'u-act-dep', at: at(h - 1), note: 'Totals checked against the JA screen.' } : null,
+      staged: { by: 'ACT Auditor, Team 1 (mock)', byId: 'u-act-aud1', at: at(h) },
+      decision: approved ? { decision: 'approved', by: 'ACT Director (mock)', byId: 'u-audit', at: at(h - 1), note: 'Totals checked against the JA screen.' } : null,
       written: approved ? rows.length : 0,
       ...extra,
     });
@@ -8338,6 +8432,41 @@ export function generateDataset(opts: SeedOptions): Dataset {
         salePrice: null,
       })),
     );
+    // A uniform set and its parts (Fauzan, 23 Nov 2026: epaulettes, badges, trousers, shoes, belt). Each part is its own
+    // store item, so a guard who needs only trousers is asked for that part alone. Synthetic counts; the set holds none.
+    // Everything a guard wears counts toward the uniform allowance, item by item (Fauzan, 23 Nov 2026).
+    const part = (k: number, name: string, size: string | null, onHand: number): StockItem => ({
+      id: `stk-${GOV_OPS_COMPANY_ID}-part-${k}`,
+      companyId: GOV_OPS_COMPANY_ID,
+      sku: `GW-PRT-${String(k).padStart(3, '0')}`,
+      name,
+      kind: 'UNIFORM',
+      size,
+      onHand,
+      reorderAt: 10,
+      charge: 'sale',
+      salePrice: null,
+    });
+    ds.stockItems.push(part(1, 'Epaulette (pair)', null, 40), part(2, 'Badge', null, 60), part(3, 'Belt', null, 25), part(4, 'Safety shoes', '8', 12), part(5, 'Cap', 'M', 30));
+    ds.stockItems.push({
+      id: `stk-${GOV_OPS_COMPANY_ID}-set-1`,
+      companyId: GOV_OPS_COMPANY_ID,
+      sku: 'GW-SET-001',
+      name: 'Full uniform suit, guard (shoes to cap; M / 32 / 8)',
+      kind: 'UNIFORM',
+      size: null,
+      onHand: 0,
+      reorderAt: 0,
+      kitParts: [
+        { stockItemId: `stk-${GOV_OPS_COMPANY_ID}-uni-1`, qty: 1 },
+        { stockItemId: `stk-${GOV_OPS_COMPANY_ID}-uni-3`, qty: 1 },
+        { stockItemId: `stk-${GOV_OPS_COMPANY_ID}-part-1`, qty: 1 },
+        { stockItemId: `stk-${GOV_OPS_COMPANY_ID}-part-2`, qty: 2 },
+        { stockItemId: `stk-${GOV_OPS_COMPANY_ID}-part-3`, qty: 1 },
+        { stockItemId: `stk-${GOV_OPS_COMPANY_ID}-part-4`, qty: 1 },
+        { stockItemId: `stk-${GOV_OPS_COMPANY_ID}-part-5`, qty: 1 },
+      ],
+    });
     for (const [companyId, who] of Object.entries(COS) as [keyof typeof COS, (typeof COS)[keyof typeof COS]][]) {
       const items: StockItem[] = STOCK.map(([name, kind, size, onHand, reorderAt], k) => ({
         id: `stk-${companyId}-${k + 1}`,
@@ -10479,6 +10608,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
   // Cleaning at two government schools (Fauzan, 4 Nov 2026), synthetic only.
   seedCleaning(ds, today, now);
   seedGroupHistory(ds, opts.now ?? myt(opts.today, '10:30'));
+  seedCompanyPapers(ds, today, opts.now ?? myt(opts.today, '10:30'));
 
   seedQuality(ds, today);
 
@@ -10583,6 +10713,7 @@ export const DEPARTMENT_MONTHLY_REPORTS: ReportDef[] = (
     ['legal', 'Legal'],
     ['audit', 'ACT'],
     ['procurement', 'Procurement and Inventory'],
+    ['marketing', 'Marketing'],
   ] as [NonNullable<User['department']>, string][]
 ).map(([department, label]) => ({
   id: `dept-${department}-monthly`,
@@ -10603,6 +10734,55 @@ export const DEPARTMENT_MONTHLY_REPORTS: ReportDef[] = (
  * as in production; the mock data holds no full numbers). Lets testers open the history as HR, the OM and the company
  * heads, and try the check before hiring with 900515-14-5051. Nothing here is a real person or number.
  */
+/**
+ * Company paper library (Marketing item AH7, 23 Nov 2026), made-up papers for the three pilot companies so testers can
+ * see each state: Sasa has everything except the newest bank statement and a PPKKM membership ending in 20 days; Arrow
+ * Shield has no audited accounts; Inas has only its company profile. The files are tiny synthetic PDFs.
+ */
+function seedCompanyPapers(ds: Dataset, today: IsoDate, now: IsoDateTime): void {
+  const month = (n: number) => {
+    const [y, m] = today.slice(0, 7).split('-').map(Number);
+    const t = y * 12 + (m - 1) - n;
+    return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`;
+  };
+  const year = Number(today.slice(0, 4));
+  const latestAccounts = Number(today.slice(5, 7)) >= 7 ? year - 1 : year - 2;
+  const add = (companyId: string, kind: import('./company-papers').CompanyPaperKind, title: string, period: string | null, issuedOn: IsoDate | null, expiresOn: IsoDate | null) => {
+    const id = `pap-${companyId.slice(3)}-${kind.toLowerCase()}${period ? `-${period}` : ''}`;
+    const data = `data:application/pdf;base64,${btoa(`%PDF-1.4 synthetic ${id}`)}`;
+    const sha256 = sha256Hex(data);
+    const doc = {
+      id: `doc-${sha256.slice(0, 16)}`,
+      companyId,
+      caseId: null,
+      followUpId: null,
+      paperId: id,
+      name: `${title} (mock).pdf`,
+      mime: 'application/pdf' as const,
+      bytes: data.length,
+      sha256,
+      data,
+      caption: title,
+      uploadedBy: 'Admin Executive (mock)',
+      receivedAt: now,
+    };
+    ds.evidenceDocs.push(doc as (typeof ds.evidenceDocs)[number]);
+    ds.companyPapers.push({ id, companyId, kind, title, period, issuedOn, expiresOn, docIds: [doc.id], note: 'Made-up paper for testing.', by: 'Admin Executive (mock)', byId: 'u-system', at: now, replacedBy: null });
+  };
+  for (const c of ['co-sasa', 'co-arsh']) {
+    add(c, 'SSM_FORMS', 'SSM Section 14, 58 and 78', null, '2019-03-04', null);
+    add(c, 'SSM_PROFILE', 'SSM company search', null, addDays(today, -20), null);
+    add(c, 'COMPANY_PROFILE', 'Company profile 2026', null, '2026-01-15', null);
+    add(c, 'EPF_REGISTRATION', 'EPF employer registration', null, '2015-06-01', null);
+    add(c, 'SOCSO_REGISTRATION', 'SOCSO employer registration', null, '2015-06-01', null);
+    add(c, 'EXPERIENCE_LETTER', 'Letter of good service, Test Hospital (mock)', null, '2025-09-01', null);
+    for (const n of c === 'co-sasa' ? [2, 3] : [1, 2, 3]) add(c, 'BANK_STATEMENT', `Bank statement ${month(n)}`, month(n), null, null);
+  }
+  for (const y of [latestAccounts, latestAccounts - 1]) add('co-sasa', 'AUDITED_ACCOUNTS', `Audited accounts ${y}`, String(y), null, null);
+  add('co-sasa', 'PPKKM_MEMBERSHIP', 'PPKKM membership', null, addDays(today, -345), addDays(today, 20));
+  add('co-inas', 'COMPANY_PROFILE', 'Company profile', null, '2025-02-01', null);
+}
+
 function seedGroupHistory(ds: Dataset, now: IsoDateTime): void {
   const selangor = new Set(ds.branches.filter((b) => b.companyId === 'co-sasa' && b.state === 'Selangor').map((b) => b.id));
   // A guard with no CSG on this record, so the earlier certificate is worth carrying over.

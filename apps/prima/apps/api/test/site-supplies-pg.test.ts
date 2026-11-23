@@ -75,7 +75,9 @@ describe('site supplies requests on PostgreSQL', () => {
     assert.match(r.ref, /^KBK-\d{8}-001$/);
     assert.equal(r.status, 'kelulusan');
     // Nobody confirms their own request; the OGM confirms.
-    await assert.rejects(db.asUser('u-om-klang', (svc, u) => svc.siteSuppliesAct(u, 'confirm', { id: r.id })), /OGM/);
+    await assert.rejects(db.asUser('u-om-klang', (svc, u) => svc.siteSuppliesAct(u, 'confirm', { id: r.id })), /Nobody confirms their own request/);
+    // Someone who is not the confirmer is told who confirms.
+    await assert.rejects(db.asUser('u-proc-store1', (svc, u) => svc.siteSuppliesAct(u, 'confirm', { id: r.id })), /OGM/);
     await db.asUser('u-ogm', (svc, u) => svc.siteSuppliesAct(u, 'confirm', { id: r.id }));
     await db.asUser('u-proc-store1', (svc, u) => svc.siteSuppliesAct(u, 'stockCheck', { id: r.id }));
     const dec = (await db.asUser('u-proc-exec', (svc, u) => svc.siteSuppliesAct(u, 'decide', { id: r.id, lines: [{ n: 1, decision: 'issue' }] }))) as { lines: { confirmedQty: number }[] };

@@ -18,6 +18,11 @@ type Board = {
   examples: Record<'MINOR' | 'MEDIUM' | 'CRITICAL', readonly string[]>;
   visitLines: string[];
   canSend: boolean;
+  /** May ask to buy new furniture, fittings or renovation for the office (Fauzan, 23 Nov 2026). */
+  canBuy?: boolean;
+  buyTypes?: readonly string[];
+  /** Office jobs whose next approval step is this person's. */
+  canApprove?: string[];
   records: Rec[];
   mine: Rec[];
   alerts: { id: string; ref: string; kind: string; late: string }[];
@@ -27,6 +32,7 @@ type Board = {
 
 const KIND_BM: Record<string, string> = {
   repair: 'Penyelenggaraan pejabat',
+  buy: 'Beli baru / renovasi',
   jmb: 'Laporan JMB',
   invItem: 'Inventori pejabat',
   invUpdate: 'Kemaskini inventori',
@@ -56,6 +62,8 @@ const send = (input: Record<string, unknown>) => {
   if (op === 'repairQuotes') {
     out.quotes = [1, 2, 3].filter((n) => out[`q${n}`]).map((n) => ({ contractor: out[`q${n}`], price: out[`p${n}`] }));
     for (const n of [1, 2, 3]) delete out[`q${n}`], delete out[`p${n}`];
+    out.online = [1, 2].filter((n) => out[`o${n}`]).map((n) => ({ where: out[`o${n}`], price: out[`op${n}`] }));
+    for (const n of [1, 2]) delete out[`o${n}`], delete out[`op${n}`];
   }
   if (op === 'invSubmit') {
     const line = Object.fromEntries(ITEM_KEYS.filter((k) => out[k] !== undefined && out[k] !== '').map((k) => [k, out[k]]));
@@ -73,6 +81,12 @@ const REASON: Field = { k: 'reason', l: 'Sebab (reason)' };
 const DOCS: Field = { k: 'docs', l: 'Dokumen', t: 'proof' };
 const PHOTOS: Field = { k: 'photos', l: 'Gambar', t: 'photos' };
 const ON: Field = { k: 'on', l: 'Tarikh', t: 'date' };
+const ONLINE: Field[] = [
+  { k: 'o1', l: 'Online shop / link 1' },
+  { k: 'op1', l: 'Online price 1', t: 'number' },
+  { k: 'o2', l: 'Online shop / link 2' },
+  { k: 'op2', l: 'Online price 2', t: 'number' },
+];
 const DAMAGE_TYPES = ['furniture', 'fitting', 'aircond', 'lights', 'wiring', 'plumbing', 'door', 'roof', 'safety_equipment', 'other', 'computer', 'laptop', 'phone', 'printer', 'network', 'it_device'] as const;
 const AREAS = ['own_unit', 'lobby', 'lift', 'stairs', 'common_pipes', 'common_lights', 'fire_system', 'roof', 'car_park', 'outside'] as const;
 const CRITERIA = ['damaged_not_worth_repair', 'repair_above_value', 'obsolete', 'not_used', 'unsafe', 'no_function', 'no_spare_parts'] as const;
@@ -104,21 +118,62 @@ function RepairForm({ b }: { b: Board }) {
   );
 }
 
+const HOD_BM: Record<string, string> = {
+  ops_director: 'Pengarah Operasi (swasta)',
+  ogm: 'OGM (kerajaan)',
+  cos: 'Ketua Staf (ibu pejabat)',
+};
+
+/** Buy new furniture, fittings, air-cond or renovation: Asset Management supervises, the operations head approves. */
+function BuyForm({ b }: { b: Board }) {
+  if (!b.canBuy) return null;
+  return (
+    <F
+      title="Beli baru / renovasi (buy new or renovate)"
+      op="buyRequest"
+      fields={[
+        { k: 'buyType', l: 'Jenis (what)', t: 'select', o: b.buyTypes ?? ['furniture', 'fitting', 'aircond', 'renovation', 'signage', 'other'] },
+        { k: 'item', l: 'Barang / kerja (item or work)' },
+        { k: 'qty', l: 'Kuantiti', t: 'number' },
+        { k: 'estimate', l: 'Anggaran harga seunit RM (rough, 0 if unknown)', t: 'number' },
+        { k: 'description', l: 'Kenapa perlu (why needed; more items here)', t: 'area' },
+        { k: 'address', l: 'Pejabat / alamat' },
+        { k: 'neededBy', l: 'Perlu sebelum', t: 'date' },
+        { k: 'contact', l: 'No. telefon' },
+        PHOTOS,
+      ]}
+    />
+  );
+}
+
+function BuyLine({ r }: { r: Rec }) {
+  if (r.d.purpose !== 'buy') return null;
+  const lines = (r.d.lines as { item: string; qty: number }[] | undefined) ?? [];
+  const ap = (r.d.approvals ?? {}) as Record<string, unknown>;
+  return (
+    <span className="small muted">
+      {String(r.d.buyType)}: {lines.map((l) => `${l.item} x${l.qty}`).join(', ')} · Asset Director {ap.ad ? '✓' : '…'} · {HOD_BM[String(r.d.hod)] ?? String(r.d.hod)} {ap.hod ? '✓' : '…'}
+    </span>
+  );
+}
+
 function RecordActions({ r, b }: { r: Rec; b: Board }) {
   const id = { id: r.id };
   const unit = b.role === 'unit';
   const ad = b.role === 'director';
   const fin = b.role === 'finance';
   const lead = b.role === 'leader';
+  const buy = r.d.purpose === 'buy';
   switch (r.kind) {
     case 'repair':
       return (
         <>
-          {unit && r.status === 'submitted' && <F title="Semak" op="repairCheck" fixed={id} fields={[{ k: 'outcome', l: 'Keputusan', t: 'select', o: ['accept', 'return', 'minor'] }, { k: 'unitId', l: 'Building id (link)' }, REASON]} />}
+          {unit && r.status === 'submitted' && <F title="Semak" op="repairCheck" fixed={id} fields={[{ k: 'outcome', l: 'Keputusan', t: 'select', o: buy ? ['accept', 'return', 'spare'] : ['accept', 'return', 'minor'] }, { k: 'unitId', l: 'Building id (link)' }, ...(buy ? [{ k: 'itemId', l: 'Spare item id (if moved in)' }] : []), REASON]} />}
           {unit && (r.status === 'checked' || r.status === 'visit_set') && <F title="Lawatan tapak" op="repairVisit" fixed={id} fields={[ON, { k: 'contractor', l: 'Kontraktor dijemput' }, { k: 'found', l: 'Penemuan' }, { k: 'cause', l: 'Punca' }, DOCS]} />}
-          {unit && ['visited', 'quoted', 'turned_down', 'checked'].includes(r.status) && <F title="Sebut harga (3)" op="repairQuotes" fixed={id} fields={[{ k: 'q1', l: 'Contractor 1' }, { k: 'p1', l: 'Price 1', t: 'number' }, { k: 'q2', l: 'Contractor 2' }, { k: 'p2', l: 'Price 2', t: 'number' }, { k: 'q3', l: 'Contractor 3' }, { k: 'p3', l: 'Price 3', t: 'number' }, DOCS]} />}
-          {(unit || ad) && r.status === 'quoted' && <F title="Pilih sebut harga" op="repairPick" fixed={id} fields={[{ k: 'contractor', l: 'Kontraktor' }, REASON]} />}
-          {(ad || lead) && r.status === 'for_approval' && <F title="Lulus / tolak" op="repairApprove" fixed={id} fields={[{ k: 'decision', l: 'Keputusan', t: 'select', o: ['approve', 'turn_down'] }, REASON]} />}
+          {unit && ['visited', 'quoted', 'turned_down', 'checked'].includes(r.status) && <F title={buy ? 'Sebut harga (3) + harga online (2)' : 'Sebut harga (3)'} op="repairQuotes" fixed={id} fields={[{ k: 'q1', l: 'Contractor 1' }, { k: 'p1', l: 'Price 1', t: 'number' }, { k: 'q2', l: 'Contractor 2' }, { k: 'p2', l: 'Price 2', t: 'number' }, { k: 'q3', l: 'Contractor 3' }, { k: 'p3', l: 'Price 3', t: 'number' }, ...(buy ? ONLINE : []), DOCS]} />}
+          {(unit || ad) && r.status === 'quoted' && <F title="Pilih sebut harga" op="repairPick" fixed={id} fields={[{ k: 'contractor', l: 'Kontraktor' }, REASON, ...(buy ? [{ k: 'onlineReason', l: 'Why above the online price (if more than 5%)' }] : [])]} />}
+          {(ad || lead || b.canApprove?.includes(r.id)) && r.status === 'for_approval' && <F title="Lulus / tolak" op="repairApprove" fixed={id} fields={[{ k: 'decision', l: 'Keputusan', t: 'select', o: ['approve', 'turn_down'] }, REASON]} />}
+          <BuyLine r={r} />
           {ad && r.d.level === 'CRITICAL' && !r.d.makeSafe && <F title="Kerja selamat segera" op="repairEmergency" fixed={id} fields={[{ k: 'contractor', l: 'Kontraktor' }, { k: 'price', l: 'Harga', t: 'number' }, REASON]} />}
           {unit && r.status === 'approved' && <F title="Mula kerja" op="repairStart" fixed={id} fields={[]} />}
           {unit && ['in_progress', 'approved'].includes(r.status) && <F title="Tarikh baharu" op="repairDue" fixed={id} fields={[ON, REASON]} />}
@@ -231,7 +286,7 @@ function RecordList({ b, recs }: { b: Board; recs: Rec[] }) {
         <div key={r.id} className="panel">
           <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             <strong>{r.ref}</strong>
-            <span className="small">{KIND_BM[r.kind] ?? r.kind}</span>
+            <span className="small">{KIND_BM[r.d.purpose === 'buy' ? 'buy' : r.kind] ?? r.kind}</span>
             <Chip tone={r.status === 'closed' || r.status === 'paid' || r.status === 'filed' ? 'ok' : 'info'}>{r.status}</Chip>
             {r.d.level ? <Chip tone={r.d.level === 'CRITICAL' ? 'crit' : r.d.level === 'MEDIUM' ? 'warn' : 'neutral'}>{String(r.d.level)}</Chip> : null}
             {late.get(r.id) ? <Chip tone="warn">{late.get(r.id)}</Chip> : null}
@@ -286,6 +341,7 @@ export function OfficeAmPanel() {
       <Steps b={b} />
       <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
         <RepairForm b={b} />
+        <BuyForm b={b} />
         {(unit || ad) && <F title="Tetapan (settings)" op="setSettings" fields={[{ k: 'repair.quotesNeeded', l: 'Quotes needed', t: 'number' }, REASON]} />}
         {unit && <F title="Kemaskini inventori" op="invSubmit" fields={[{ k: 'companyId', l: 'Company' }, { k: 'name', l: 'Item' }, { k: 'location', l: 'Lokasi' }, { k: 'serial', l: 'No. siri' }, { k: 'brandModel', l: 'Jenama / model' }, { k: 'price', l: 'Harga', t: 'number' }, { k: 'boughtOn', l: 'Tarikh beli', t: 'date' }, { k: 'firstLoad', l: 'First load (by 31 Dec 2026)', t: 'check' }, DOCS]} />}
         {unit && <F title="Hak kemaskini (on/off)" op="invAccess" fields={[{ k: 'userId', l: 'User id' }, { k: 'on', l: 'On', t: 'check' }, REASON]} />}
@@ -325,13 +381,16 @@ export function OfficeRequestPanel() {
   const { data: b, error } = useLoad(() => api.officeAmAct('board', {}) as Promise<Board>, []);
   if (error || !b) return null;
   if (['unit', 'director', 'finance', 'leader'].includes(b.role)) return null;
-  const office = b.records.filter((r) => r.requesterId !== undefined && !b.mine.some((m) => m.id === r.id));
+  const waiting = b.records.filter((r) => b.canApprove?.includes(r.id));
+  const office = b.records.filter((r) => r.requesterId !== undefined && !b.mine.some((m) => m.id === r.id) && !waiting.includes(r));
   return (
     <section className="panel" style={{ marginBottom: 12 }}>
-      <h2>Penyelenggaraan pejabat (office repair)</h2>
+      <h2>Pejabat: baiki dan beli baru (office repair, buy new, renovation)</h2>
+      <p className="muted small">Repairs and new furniture, fittings, air-cond or renovation go to Asset Management. A new buy: Asset Management checks for a spare, gets 3 quotes and 2 online prices, the Asset Director recommends, the Operations Director (private) or OGM (government) approves, the CEO also above RM50,000. Computers and phones go to IT.</p>
       <Steps b={b} />
       <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
         <RepairForm b={b} />
+        <BuyForm b={b} />
         {b.canSend && <F title="Kemaskini inventori pejabat" op="invSubmit" fields={[{ k: 'name', l: 'Item' }, { k: 'location', l: 'Lokasi' }, { k: 'serial', l: 'No. siri' }, { k: 'brandModel', l: 'Jenama / model' }, { k: 'quantity', l: 'Kuantiti', t: 'number' }, { k: 'condition', l: 'Keadaan', t: 'select', o: ['new', 'good', 'worn', 'damaged'] }, { k: 'boughtOn', l: 'Tarikh beli', t: 'date' }, { k: 'responsible', l: 'Pemegang' }, { k: 'firstLoad', l: 'First load (by 31 Dec 2026)', t: 'check' }, DOCS]} />}
       </div>
       <h3>Permohonan saya</h3>
@@ -339,7 +398,7 @@ export function OfficeRequestPanel() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {b.mine.map((r) => (
             <div key={r.id} className="panel">
-              <strong>{r.ref}</strong> <span className="small">{KIND_BM[r.kind] ?? r.kind}</span> <Chip tone="info">{r.status}</Chip>
+              <strong>{r.ref}</strong> <span className="small">{KIND_BM[r.d.purpose === 'buy' ? 'buy' : r.kind] ?? r.kind}</span> <Chip tone="info">{r.status}</Chip> <BuyLine r={r} />
               <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                 {r.kind === 'repair' && r.status === 'on_hold' && <F title="Lengkapkan" op="repairResubmit" fixed={{ id: r.id }} fields={[{ k: 'description', l: 'Butiran' }, { k: 'note', l: 'Apa ditambah' }, PHOTOS]} />}
                 {r.kind === 'repair' && r.status === 'work_done' && <F title="Sahkan siap / belum" op="repairConfirm" fixed={{ id: r.id }} fields={[{ k: 'notFixed', l: 'Belum baik (not fixed)', t: 'check' }, { k: 'reason', l: 'Catatan' }]} />}
@@ -350,6 +409,12 @@ export function OfficeRequestPanel() {
         </div>
       ) : (
         <p className="muted small">Tiada permohonan.</p>
+      )}
+      {waiting.length > 0 && (
+        <>
+          <h3>Untuk kelulusan anda (to approve)</h3>
+          <RecordList b={b} recs={waiting} />
+        </>
       )}
       {office.length > 0 && (
         <>

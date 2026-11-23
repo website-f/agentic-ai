@@ -13,7 +13,7 @@ import {
   UploadSimpleIcon,
   WalletIcon,
 } from '@phosphor-icons/react';
-import type { ClaimVehicle, ProofInput, StaffClaimKind } from '@prima/core';
+import { parseReceiptText, type ClaimVehicle, type ProofInput, type StaffClaimKind } from '@prima/core';
 import { api, type MyReceipts, type StaffClaims, type StaffClaimInput } from '../api';
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { Card, Empty, Facts, PageHead, Person, Stat, Stats, Steps, type StepState } from '../kit';
@@ -22,6 +22,7 @@ import { ProofPicker, readAsDataUrl, shrinkImage } from './Proof';
 import { useRouteTab } from '../App';
 import { SopHelp } from '../sop/SopHelp';
 import { readReceiptOnPhone } from '../ocr';
+import { readPaperWords } from '../paper-words';
 import '../styles/leave.css';
 
 /**
@@ -1041,10 +1042,17 @@ function Wallet({ onClaim }: { onClaim: (w: FromWallet) => void }) {
       } else if (f.size > 700_000 || type !== 'image/jpeg') body = await shrinkImage(body);
       const name = f.name && f.name !== 'image.jpg' ? f.name : `Receipt ${new Date().toISOString().slice(0, 16).replace('T', ' ')}.jpg`;
       let read = null;
-      if (api.mode !== 'demo' && type !== 'application/pdf') {
+      if (api.mode !== 'demo') {
         setReading(true);
         try {
-          read = await readReceiptOnPhone(body, new Date().toISOString());
+          if (type !== 'application/pdf') read = await readReceiptOnPhone(body, new Date().toISOString());
+          else {
+            // A PDF receipt (an e-receipt or a scan) is read on the device too (Fauzan, 23 Nov 2026: "Make it read
+            // all type of document"); the same rules turn its words into the date, total, shop and kind.
+            const words = (await readPaperWords(f).catch(() => null))?.words;
+            const got = words ? parseReceiptText(words, new Date().toISOString(), 'phone') : null;
+            read = got && (got.amount != null || got.date != null) ? got : null;
+          }
         } finally {
           setReading(false);
         }

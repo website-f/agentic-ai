@@ -15,7 +15,7 @@ import {
   SirenIcon,
   UsersThreeIcon,
 } from '@phosphor-icons/react';
-import { api, type ActBoard, type ActFindingInput } from '../api';
+import { api, type ActBoard, type ActFindingInput, type ActMonthSummary } from '../api';
 import { Card, Empty, PageHead, Person, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { actGuide, type ActGuideCtx, type ActGuideKind } from '../act-guide/guide';
@@ -61,9 +61,9 @@ function GuideCard({ kind, ctx }: { kind: ActGuideKind | null; ctx: ActGuideCtx 
  * are shown to the next level, never punished.
  */
 
-type Tab = 'monitor' | 'work' | 'reports' | 'findings' | 'plan' | 'timing' | 'improvements' | 'fraud';
+type Tab = 'monitor' | 'work' | 'reports' | 'findings' | 'plan' | 'timing' | 'improvements' | 'fraud' | 'summary';
 /** P121: every ACT tab a link may ask for (#act/findings); the screen still opens only the tabs this person has. */
-const ACT_TABS: readonly (Tab | '')[] = ['monitor', 'work', 'reports', 'findings', 'plan', 'timing', 'improvements', 'fraud'];
+const ACT_TABS: readonly (Tab | '')[] = ['monitor', 'work', 'reports', 'findings', 'plan', 'timing', 'improvements', 'fraud', 'summary'];
 type FindingRow = ActBoard['findings'][number];
 type Prefill = Partial<ActFindingInput> | null;
 
@@ -159,6 +159,7 @@ export function ActView() {
         ['timing', 'Workflow timing'],
         ['improvements', 'Improvements'],
         ...(act && data.job ? ([['fraud', 'Patterns and investigations']] as [Tab, string][]) : []),
+        ['summary', 'Month summary'],
       ]
     : [
         ['findings', 'My findings'],
@@ -299,6 +300,7 @@ export function ActView() {
       {current === 'timing' && <Timing data={data} />}
       {current === 'improvements' && <Improvements data={data} />}
       {current === 'fraud' && <Fraud data={data} />}
+      {current === 'summary' && <MonthSummary />}
       {data.structure && <Structure data={data} />}
       {drawer === 'finding' && (
         <Drawer title="Raise a finding" sub="ACT gives it to a team, the owner fixes it, and ACT checks the fix." onClose={() => setDrawer('')}>
@@ -311,6 +313,94 @@ export function ActView() {
         </Drawer>
       )}
     </div>
+  );
+}
+
+const ESCALATED_TONE = { 'Chief of Staff': 'warn', COO: 'crit', CEO: 'crit' } as const;
+const SOURCE_SHORT = { monitor: 'compliance monitor', workflow_audit: 'workflow audits', speak_up: 'speak up', manual: 'other' } as const;
+
+/** The ACT Director's one page a month for the CEO. Worked out from ACT's records when opened; nothing is typed. */
+function MonthSummary() {
+  const [month, setMonth] = useState('');
+  const { data, error } = useLoad<ActMonthSummary>(() => api.actMonthSummary(month || undefined), [month]);
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="the month summary" />;
+  const r = data.reports;
+  const f = data.findings;
+  const line = (label: string, value: string | number, note?: string) => (
+    <div className="list-item" style={{ justifyContent: 'space-between', gap: 8 }}>
+      <span>{label}</span>
+      <span style={{ fontWeight: 600, textAlign: 'right' }}>
+        {value}
+        {note ? <span className="muted small"> {note}</span> : null}
+      </span>
+    </div>
+  );
+  return (
+    <Card
+      title={`ACT month summary for the CEO: ${data.month}`}
+      sub={`One page, worked out from ACT's own records on ${dateLabel(data.madeOn)}. Nobody types it. Investigations are ACT's own work and are not on this page. Figures marked "now" are as of today.`}
+      actions={
+        <label className="field" style={{ margin: 0 }}>
+          <span className="label">Month</span>
+          <input className="input" type="month" value={month || data.month} max={data.madeOn.slice(0, 7)} onChange={(e) => setMonth(e.target.value)} />
+        </label>
+      }
+    >
+      <h4>Monthly reports{r.period ? ` (${r.period}, the last month due)` : ''}</h4>
+      <div className="list">
+        {line('Reports expected', r.total)}
+        {line('On time', r.onTime)}
+        {line('Late', r.late)}
+        {line('Missing', r.missing)}
+        {line('Incomplete', r.incomplete)}
+        {line('No monthly report set', r.noReport)}
+        {line('Not due yet or no date', r.notDue)}
+        {line('Reviewed by ACT', r.reviewed)}
+      </div>
+      <h4>ACT work done in {data.month}</h4>
+      <div className="list">
+        {line('Workflow audits', data.work.workflowAudits)}
+        {line('Report reviews', data.work.reportReviews)}
+        {line('Field checks', data.work.fieldChecks)}
+        {line('Workflow timings set', data.work.timingsSet)}
+      </div>
+      <h4>Findings</h4>
+      <div className="list">
+        {line(`Opened in ${data.month}`, f.opened, f.openedHigh ? `(${f.openedHigh} high)` : undefined)}
+        {line(`Closed in ${data.month}`, f.closed)}
+        {line('Open now', f.openNow, f.highOpenNow ? `(${f.highOpenNow} high)` : undefined)}
+        {line('Overdue now', f.overdueNow)}
+      </div>
+      <p className="small muted">
+        Opened from: {f.bySource.filter((x) => x.opened).map((x) => `${SOURCE_SHORT[x.source]} ${x.opened}`).join(', ') || 'none'}.
+      </p>
+      <h4>Escalated now</h4>
+      <div className="list">
+        {!data.escalated.length && <div className="empty">Nothing escalated.</div>}
+        {data.escalated.map((e) => (
+          <div key={e.id} className="list-item" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600 }}>
+                {e.ref}: {e.title}
+              </div>
+              <div className="muted small">
+                {e.companyName} · owner {e.ownerName} · {e.severity} · {e.overdueDays} days overdue
+              </div>
+            </div>
+            <Chip tone={ESCALATED_TONE[e.escalatedTo]}>{e.escalatedTo}</Chip>
+          </div>
+        ))}
+      </div>
+      <h4>Improvements and signals</h4>
+      <div className="list">
+        {line(`Improvements approved in ${data.month}`, data.improvements.approved)}
+        {line(`Improvements completed in ${data.month}`, data.improvements.completed)}
+        {line('Improvements past their target now', data.improvements.lateNow)}
+        {line('Compliance signals breaking a rule now', `${data.signals.breaking} of ${data.signals.total}`)}
+        {line('Of those, with no finding yet', data.signals.uncovered)}
+      </div>
+    </Card>
   );
 }
 
@@ -327,7 +417,7 @@ function Structure({ data }: { data: ActBoard }) {
         <div className="gv-team-card">
           <h3>ACT Manager</h3>
           {s.manager ? <Person name={s.manager.name} /> : <span className="muted small">not assigned</span>}
-          <p>Leads both teams' work and second-checks each fix the Auditor checked (never their own).</p>
+          <p>Reports to the ACT Director. Leads both teams' work and second-checks each fix the Auditor checked (never their own).</p>
         </div>
         {s.teams.map((t) => (
           <div key={t.id} className="gv-team-card">

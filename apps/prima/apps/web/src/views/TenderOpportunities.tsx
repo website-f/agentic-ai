@@ -443,13 +443,22 @@ export function TenderSourcesPanel() {
         )}
       </div>
       <p className="muted small" style={{ margin: "0 0 8px" }}>
-        Staff check each site and record what they saw. Prima does not visit,
-        register or log in to these sites. A page that could be read does not
+        Staff check each site and record what they saw. Where the Marketing
+        Manager or Deputy has read a site's terms and allowed it, the tender
+        watcher also reads its public pages once a day and lists the guarding
+        notices it finds (fixed rules, no AI). Prima never registers, fills
+        forms or logs in to these sites. A page that could be read does not
         prove every tender or vendor invitation was seen; a failed or partly
         read page is checked again on the next sweep.
       </p>
       <div className="kpis">
         <Kpi label="Sites watched" value={data.summary.watched} />
+        <Kpi label="Read by the watcher" value={data.summary.byWatcher} />
+        <Kpi
+          label="New from the watcher"
+          value={data.summary.newFinds}
+          tone={data.summary.newFinds ? "warn" : "ok"}
+        />
         <Kpi
           label="Due for checking"
           value={data.summary.due}
@@ -479,6 +488,7 @@ export function TenderSourcesPanel() {
             key={r.id}
             r={r}
             canEdit={data.canEdit}
+            canAllowWatch={data.canAllowWatch}
             labels={data.statusLabels}
           />
         ))}
@@ -500,10 +510,12 @@ export function TenderSourcesPanel() {
 function SourceRow({
   r,
   canEdit,
+  canAllowWatch,
   labels,
 }: {
   r: TenderSources["rows"][number];
   canEdit: boolean;
+  canAllowWatch: boolean;
   labels: TenderSources["statusLabels"];
 }) {
   const [checking, setChecking] = useState(false);
@@ -527,6 +539,7 @@ function SourceRow({
         <Chip tone={tone}>{r.statusLabel}</Chip>
         {r.due && <Chip tone="warn">{r.why}</Chip>}
         {!r.active && <Chip tone="neutral">Not watched</Chip>}
+        {r.watchAllowed && <Chip tone="info">Read by the watcher daily</Chip>}
       </div>
       <div
         className="small"
@@ -601,6 +614,290 @@ function SourceRow({
           labels={labels}
           onDone={() => setChecking(false)}
         />
+      )}
+      <WatchPanel r={r} canEdit={canEdit} canAllowWatch={canAllowWatch} />
+    </div>
+  );
+}
+
+/**
+ * The tender watcher on one site (Marketing item AH11): whether it may read the site, its last run, and the guarding
+ * notices it found, each recorded as an opportunity or dropped with the reason.
+ */
+function WatchPanel({
+  r,
+  canEdit,
+  canAllowWatch,
+}: {
+  r: TenderSources["rows"][number];
+  canEdit: boolean;
+  canAllowWatch: boolean;
+}) {
+  const act = useAction();
+  const [allowing, setAllowing] = useState(false);
+  const [note, setNote] = useState("");
+  const [showDone, setShowDone] = useState(false);
+  const finds = r.watchFinds ?? [];
+  const open = finds.filter((f) => f.state === "NEW");
+  const done = finds.filter((f) => f.state !== "NEW");
+  const run = r.watchRuns?.[0];
+  return (
+    <div style={{ display: "grid", gap: 4, width: "100%" }}>
+      {r.watchAllowed && (
+        <div className="muted small">
+          Watcher allowed by {r.watchAllowed.by},{" "}
+          {dateLabel(r.watchAllowed.at.slice(0, 10))}: {r.watchAllowed.note}
+          {run
+            ? ` · Last run ${dateTimeLabel(run.at)}: ${run.pages.filter((p) => p.outcome === "READ").length} of ${run.pages.length} page(s) read, ${run.fresh} new`
+            : " · Not run yet"}
+        </div>
+      )}
+      {open.map((f) => (
+        <FindRow key={f.key} sourceId={r.id} f={f} canEdit={canEdit} />
+      ))}
+      {done.length > 0 && (
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ justifySelf: "start" }}
+          onClick={() => setShowDone(!showDone)}
+        >
+          {showDone ? "Hide answered finds" : `Answered finds (${done.length})`}
+        </button>
+      )}
+      {showDone &&
+        done.map((f) => (
+          <div key={f.key} className="muted small">
+            {f.state === "RECORDED" ? "Recorded" : "Not for us"}: {f.title}
+            {f.answer
+              ? ` · ${f.answer.by}${f.answer.note ? `: ${f.answer.note}` : ""}`
+              : ""}
+          </div>
+        ))}
+      <ErrorNotice error={act.error} />
+      {canAllowWatch && r.active && !r.watchAllowed && !allowing && (
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ justifySelf: "start" }}
+          onClick={() => setAllowing(true)}
+        >
+          Let the watcher read this site
+        </button>
+      )}
+      {allowing && (
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <label className="field" style={{ flex: "1 1 260px" }}>
+            <span className="label">
+              Which of the site's terms did you read, and do they allow
+              automatic reading of public pages?
+            </span>
+            <input
+              className="input"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Terms of use page, 23 Nov: no ban on reading public notices"
+            />
+          </label>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={act.busy}
+            onClick={async () => {
+              if (
+                await act.run(
+                  () => api.setTenderSourceWatch(r.id, { allowed: true, note }),
+                  "The watcher will read this site once a day.",
+                )
+              )
+                setAllowing(false);
+            }}
+          >
+            Allow
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setAllowing(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {canAllowWatch && r.watchAllowed && (
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ justifySelf: "start" }}
+          disabled={act.busy}
+          onClick={() =>
+            act.run(
+              () => api.setTenderSourceWatch(r.id, { allowed: false }),
+              "The watcher no longer reads this site.",
+            )
+          }
+        >
+          Stop the watcher here
+        </button>
+      )}
+    </div>
+  );
+}
+
+function FindRow({
+  sourceId,
+  f,
+  canEdit,
+}: {
+  sourceId: string;
+  f: NonNullable<TenderSources["rows"][number]["watchFinds"]>[number];
+  canEdit: boolean;
+}) {
+  const act = useAction();
+  const [mode, setMode] = useState<"" | "record" | "drop">("");
+  const [closesOn, setClosesOn] = useState(f.closesOn ?? "");
+  const [channel, setChannel] = useState<"GOVERNMENT" | "PRIVATE">(
+    "GOVERNMENT",
+  );
+  const [kind, setKind] = useState<"TENDER" | "QUOTATION">("TENDER");
+  const [note, setNote] = useState("");
+  return (
+    <div
+      className="small"
+      style={{
+        borderLeft: "3px solid var(--warn, #c80)",
+        paddingLeft: 8,
+        display: "grid",
+        gap: 4,
+      }}
+    >
+      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        <Chip tone="warn">Found by the watcher</Chip>
+        <span style={{ overflowWrap: "anywhere" }}>{f.title}</span>
+      </div>
+      <div className="muted">
+        {f.ref ? `${f.ref} · ` : ""}
+        {f.closesOn
+          ? `closes ${dateLabel(f.closesOn)}`
+          : "closing date not found"}
+        {" · "}found {dateTimeLabel(f.foundAt)} ("{f.word}")
+        {f.link && (
+          <>
+            {" · "}
+            <a href={f.link} target="_blank" rel="noopener noreferrer">
+              Open
+            </a>
+          </>
+        )}
+      </div>
+      <ErrorNotice error={act.error} />
+      {canEdit && !mode && (
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn btn-sm" onClick={() => setMode("record")}>
+            Record as opportunity
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setMode("drop")}
+          >
+            Not for us
+          </button>
+        </div>
+      )}
+      {mode === "record" && (
+        <div
+          className="row"
+          style={{ gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}
+        >
+          <label className="field">
+            <span className="label">Kind</span>
+            <select
+              className="select"
+              value={kind}
+              onChange={(e) => setKind(e.target.value as typeof kind)}
+            >
+              <option value="TENDER">Tender</option>
+              <option value="QUOTATION">Quotation</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="label">Government or private</span>
+            <select
+              className="select"
+              value={channel}
+              onChange={(e) => setChannel(e.target.value as typeof channel)}
+            >
+              <option value="GOVERNMENT">Government</option>
+              <option value="PRIVATE">Private</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="label">Closes on (check it on the notice)</span>
+            <input
+              className="input"
+              type="date"
+              value={closesOn}
+              onChange={(e) => setClosesOn(e.target.value)}
+            />
+          </label>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={act.busy}
+            onClick={async () => {
+              if (
+                await act.run(
+                  () =>
+                    api.answerTenderWatchFind(sourceId, f.key, {
+                      action: "RECORD",
+                      kind,
+                      channel,
+                      closesOn,
+                    }),
+                  "Recorded on the opportunities list.",
+                )
+              )
+                setMode("");
+            }}
+          >
+            Record
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setMode("")}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {mode === "drop" && (
+        <div
+          className="row"
+          style={{ gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}
+        >
+          <label className="field" style={{ flex: "1 1 240px" }}>
+            <span className="label">Reason</span>
+            <input
+              className="input"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. cleaning only, outside our areas, closed"
+            />
+          </label>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={act.busy}
+            onClick={async () => {
+              if (
+                await act.run(
+                  () =>
+                    api.answerTenderWatchFind(sourceId, f.key, {
+                      action: "NOT_FOR_US",
+                      note,
+                    }),
+                  "Dropped.",
+                )
+              )
+                setMode("");
+            }}
+          >
+            Drop it
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setMode("")}>
+            Cancel
+          </button>
+        </div>
       )}
     </div>
   );

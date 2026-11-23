@@ -43,6 +43,10 @@ What it does **not** do:
 - It does not give browsers direct links to storage. Every file goes through the API, which has already checked the
   person's access.
 
+The data and file manager for old records (`docs/DATA_FILE_MANAGER.md`, 23 Nov 2026) uses the same container under
+`archive/`. Its files arrive in pieces (Put Block, then Put Block List, write-once) and may be up to 200 MB;
+they are read back in stretches (`x-ms-range`), never whole.
+
 ## 2. Safety rules in the code (`apps/api/src/file-store.ts`)
 
 | Rule | How |

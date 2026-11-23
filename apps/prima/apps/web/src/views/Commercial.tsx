@@ -4,12 +4,13 @@ import { TenderCounterPanel } from './TenderCounter';
 import { TenderOpportunitiesPanel } from './TenderOpportunities';
 import { LeadsPanel } from './Leads';
 import { ImportButton } from './ImportDrawer';
+import { CompanyPapersPanel } from './CompanyPapers';
 import { useEffect, useState } from 'react';
 import type { Quotation, QuotationStatus, TenderStatus } from '@prima/core';
 import { api, type Commercial, type QuotationAction } from '../api';
 import { useApp, useRouteTab } from '../App';
 import { ProtocolPanel, TenderSteps, stepsMissing } from './TenderProtocol';
-import { PriorityChip, TenderBidFiles, TenderChecklist, TenderChecks, TenderDecisionPanel, TenderPapers, TenderQueries, TenderRecordPanel } from './TenderFlow';
+import { PriorityChip, TenderBidFiles, TenderChecklist, TenderChecks, TenderDecisionPanel, TenderPapers, TenderQueries, TenderRecordPanel, TenderAttendancePanel, TenderItPart } from './TenderFlow';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Card, Empty, Facts, PageHead, Stat, Stats } from '../kit';
 import { SopHelp } from '../sop/SopHelp';
@@ -281,6 +282,10 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
         <TenderCounterPanel companyId={companyId} />
       </div>
 
+      <div id="cm-papers">
+        <CompanyPapersPanel companyId={companyId} />
+      </div>
+
       <div id="cm-leads">
         <LeadsPanel companyId={companyId} />
       </div>
@@ -405,7 +410,7 @@ function TenderDrawer({
       <div className="bz-facts">
         <Facts
           items={[
-            ['Closes', <strong key="c">{dateLabel(t.closesOn)}{(t.status === 'open' || t.status === 'preparing') && row.daysLeft >= 0 ? ` · ${row.daysLeft} days left` : ''}</strong>],
+            [t.proposal ? 'Send by' : 'Closes', <strong key="c">{dateLabel(t.closesOn)}{(t.status === 'open' || t.status === 'preparing') && row.daysLeft >= 0 ? ` · ${row.daysLeft} days left` : ''}</strong>],
             ['Estimated value', t.estMonthly ? `${rm(t.estMonthly)} a month` : 'Not known'],
             ['Size', `${t.guards} guards, ${t.sites} site${t.sites === 1 ? '' : 's'}`],
             ['Type', t.channel === 'GOVERNMENT' ? 'Government' : 'Private'],
@@ -426,14 +431,41 @@ function TenderDrawer({
           <Findings items={row.findings} />
         )}
       </section>
-      <TenderRecordPanel row={row} canEdit={can.prepare || row.canConfirmNa} />
+      {t.proposal && (
+        <div className="notice" data-tone="info">
+          Proposal: our own offer to {t.buyer}, prepared by Marketing in the company's name, with no tender papers. What we offer: {t.proposal.scope.replace(/[.\s]*$/, '.')}
+          {t.proposal.contact ? ` Client contact: ${t.proposal.contact}.` : ''} Send by {t.closesOn}.
+        </div>
+      )}
+      {t.desk === 'MARKETING' && !t.proposal && (
+        <div className="notice" data-tone="info">
+          Marketing prepares and lodges this bid in the company's name. The company manager approves the price and the bid once, with a comment.
+          {t.bidNotice && !t.decision && (t.status === 'open' || t.status === 'preparing')
+            ? ` The company manager may say "do not bid" (Tidak bida, below) until ${dateTimeLabel(t.bidNotice.until)}; no answer means go ahead.`
+            : ''}
+        </div>
+      )}
+      {row.paperGaps && row.paperGaps.length > 0 && (
+        <div className="notice" data-tone="warn">
+          <strong>Company papers not ready for this bid</strong> (from the paper library; the tender papers decide what is needed):
+          <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+            {row.paperGaps.map((g) => (
+              <li key={g}>{g}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <TenderRecordPanel row={row} canEdit={row.canWork || row.canConfirmNa} />
+      {/* A proposal (AH8) has no tender papers, buyer's briefing, IT part, protocol or tender file list. */}
+      {!t.proposal && <TenderAttendancePanel row={row} canEdit={row.canWork || row.canConfirmNa || can.prepare} />}
+      {!t.proposal && <TenderItPart row={row} />}
       <TenderDecisionPanel row={row} />
-      <TenderPapers row={row} canUpload={can.prepare || doa} />
-      <TenderQueries row={row} canEdit={can.prepare || row.canConfirmNa} />
-      <TenderSteps row={row} canPrepare={can.prepare} isManager={can.approve && role === 'company_manager'} />
-      <TenderChecklist row={row} canPrepare={can.prepare} doa={doa} reader={reader} />
-      <TenderBidFiles row={row} canPrepare={can.prepare} doa={doa} />
-      <TenderChecks row={row} canPrepare={can.prepare} missing={[...stepsMissing(row, 'submitted'), ...row.bidFileGaps]} />
+      {!t.proposal && <TenderPapers row={row} canUpload={row.canWork || row.central} />}
+      {!t.proposal && <TenderQueries row={row} canEdit={row.canWork || row.canConfirmNa} />}
+      {!t.proposal && <TenderSteps row={row} canPrepare={row.canWork} isManager={can.approve && role === 'company_manager'} />}
+      <TenderChecklist row={row} canPrepare={row.canWork} doa={row.central} reader={reader} />
+      {!t.proposal && <TenderBidFiles row={row} canPrepare={row.canWork} doa={row.central} />}
+      <TenderChecks row={row} canPrepare={row.canWork} missing={[...stepsMissing(row, 'submitted'), ...row.bidFileGaps]} />
       <section className="bz-sec">
         <h3>Quotations for this tender</h3>
         {quotations.length === 0 ? (
@@ -486,7 +518,7 @@ function TenderDrawer({
         <p className="muted small">Follow the protocol first. Still to do: {stepsMissing(row, 'preparing').join(', ')}.</p>
       )}
       {!can.prepare && <p className="muted small">You can view this tender. The company's admin team and manager update it.</p>}
-      <p className="muted small">The bid itself is lodged by an authorised person on the portal. The app records it and keeps the evidence.</p>
+      {!t.proposal && <p className="muted small">The bid itself is lodged by an authorised person on the portal. The app records it and keeps the evidence.</p>}
     </Drawer>
   );
 }

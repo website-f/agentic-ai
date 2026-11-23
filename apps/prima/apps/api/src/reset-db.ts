@@ -187,7 +187,7 @@ export async function resetDb(url: string, now = nowMyt()): Promise<Dataset> {
 export { migrationSha, migrationSql } from './schema';
 
 /** Every department wall, opened only inside the load transaction below. */
-const LOAD_WALLS: DataWall[] = ['asset_read', 'asset_write', 'act', 'pdpa', 'bcm', 'arms', 'cms'];
+const LOAD_WALLS: DataWall[] = ['asset_read', 'asset_write', 'act', 'act_staff', 'pdpa', 'bcm', 'arms', 'cms'];
 
 /** Writes a whole dataset into an empty schema in one transaction. */
 export async function insertDataset(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {

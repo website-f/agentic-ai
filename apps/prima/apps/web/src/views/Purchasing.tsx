@@ -1,5 +1,6 @@
 import { SiteSuppliesPanel } from './SiteSupplies';
 import { InventoryPanel } from './Inventory';
+import { KitsPanel } from './ItemKits';
 import { WarrantyClaimsSection } from './Warranty';
 import { Select } from '../SearchSelect';
 import { useState, type ReactNode } from 'react';
@@ -1469,10 +1470,12 @@ function Store({ data }: { data: PurBoard }) {
           empty={<Empty title="No store items yet." action={<RecordButton kind="stockItem" label="Add store item" primary />} />}
         />
       </Card>
+      {companiesOf(data).some((c) => c.id === 'goodwill') && <KitsPanel />}
       {company && companiesOf(data).some((c) => c.id === 'goodwill') && <UniformRequestQueue data={data} />}
       {/* P105: also for the OGM, who confirms supplies requests and decides the big adjustments and disposals, and for the
-          readers (Finance, ACT, the COO, the CEO); each panel shows only what the server gives this person, nothing otherwise. */}
-      {companiesOf(data).some((c) => c.id === 'goodwill') && <SiteSuppliesPanel />}
+          readers (Finance, ACT, the COO, the CEO); each panel shows only what the server gives this person, nothing otherwise.
+          The OGM and the Operations Director monitor the store but may start and confirm site supplies requests (23 Nov 2026). */}
+      {companiesOf(data).some((c) => c.id === 'goodwill') && <SiteSuppliesPanel hideIfNothing={!company} />}
       {companiesOf(data).some((c) => c.id === 'goodwill') && (
         <InventoryPanel items={data.stock.filter((s) => s.item.companyId === 'goodwill').map((s) => ({ id: s.item.id, label: s.item.name }))} />
       )}

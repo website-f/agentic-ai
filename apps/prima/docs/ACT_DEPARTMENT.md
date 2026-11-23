@@ -92,9 +92,10 @@ sends the report, they tick the sections it covers, and ACT sees any section lef
   is shown against its timing. A workflow that has never been checked, or whose check is overdue, is not green.
 - **Other screens.** `PrimaService.workStandardHours(): Promise<Record<string, number>>` returns the hours in force for
   each work key (an optional key on a step, such as the playbook item id `it-ex-queue`, or `assigned`). A key with no
-  timing set is absent from the result; unset never means zero. Days count as 9-hour working days. Caveat: the timing
-  rows live in `prima.act_audits`, behind the ACT wall. On PostgreSQL, a non-ACT session reads `{}` until a published
-  read-only copy exists. That copy needs a schema change on the release path and is not part of this PR.
+  timing set is absent from the result; unset never means zero. Days count as 9-hour working days. The timing
+  rows live in `prima.act_audits`, behind the ACT wall. On PostgreSQL every other session reads them through the
+  published read-only copy `prima.act_work_timings()` (module `db/modules/act-timings-published-v1.sql`, gap B3, 23 Nov
+  2026). Until that module is installed, a non-ACT session reads `{}`.
 
 ## Review fixes (Arisha main, 2 Nov 2026)
 
@@ -155,7 +156,7 @@ Fauzan said "build all not build" (3 Nov 2026). Rule ACT-FRAUD. All numbers belo
   - Still not done: the face score is still the one the phone sends. Scoring it on the server needs a face provider that is not configured. Microsoft sign-in with MFA (PR #11) and the work-from-home check-ins already cover shared passwords and idle laptops.
 - **Limits (explicit gaps).**
   - Server-side face verification is not done: the face score is still the one the phone sends (see item 13 above).
-  - Investigations live in `prima.act_audits`, behind the ACT wall. At the database level, that wall also lets group leaders read the rows, while the service refuses them. A separate wall would need a schema change.
+  - Investigations live in `prima.act_audits`. Module `db/modules/act-investigation-wall-v1.sql` (gap B2, 23 Nov 2026) adds the `act_staff` wall: an investigation row is read or written only by ACT department staff, never group leadership. Until it is installed, the shared ACT wall also lets group leaders read the rows at database level, while the service refuses them.
   - On PostgreSQL, a staff member's own reuse check only sees the clocks their wall lets them read. The cross-staff check is the ACT anomaly.
 
 ## What is automated
@@ -212,3 +213,24 @@ Owners see ACT's findings about their own work. They do not see ACT's internal f
   - This is local evidence, not a deployed database; no migration is needed (no schema change).
 - Other unbuilt masterplan modules (HR 3G/3D, Special Ops 4B–4H, Central Admin 5B–5G, JA and SQL Account feeds) are
   separate work.
+
+## ACT Director gaps closed (Fauzan, 23 Nov 2026: "Act director is the leader of act department. Act manager report to act director. Do the gap")
+
+- **Reporting line.** The ACT Director leads the department and reports to the CEO. The ACT Manager reports to the ACT
+  Director; Auditors and Enforcement officers report to the Director. The demo data now has a mock ACT Manager
+  (`u-act-mgr`), so the second check (C6) shows on screen.
+- **B1. Month summary for the CEO.** A "Month summary" tab on the ACT screen (`PrimaService.actMonthSummary`, route
+  `GET /act/month-summary?month=YYYY-MM`). It is worked out from ACT's records when it is opened, so nobody types it:
+  monthly reports in, on time, late, missing and reviewed; workflow audits, report reviews, field checks and timings
+  done in the month; findings opened (and how many high) and closed; open and overdue now; everything escalated now
+  and to whom; improvements approved, completed and late; compliance signals breaking a rule and those with no finding.
+  Investigations are never on it. ACT staff and group leadership read it; everyone else is refused.
+- **B2. Investigation wall.** Module `db/modules/act-investigation-wall-v1.sql` (not on the release list).
+- **B3. Published step timings.** Module `db/modules/act-timings-published-v1.sql` (not on the release list).
+- **B4.** The JA switch-over and pay-formula wording now names the ACT Director (there is no ACT Deputy since the
+  2 Nov 2026 structure), and the demo JA import is staged by an ACT Auditor and approved by the Director.
+
+Decided (Fauzan, 23 Nov 2026): a live pay-formula change by the ACT Director does **not** need the CEO's consent; the
+Director keeps setting formulas live, as built. Still waiting for Fauzan: whether the ACT Manager may
+also check JA reports and imports, the 5-day plan and 7-day follow-up timings, whether Enforcement may check low
+findings, and the fraud-pattern numbers (rule ACT-FRAUD).

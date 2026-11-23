@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryStore, PrimaService, generateDataset, myt } from '../src';
+import { MemoryStore, PrimaService, generateDataset, lineManagerOf, myt } from '../src';
 
 // C6 (Fauzan, 11 Nov 2026): ACT Director, ACT Manager (leads the work, second checker), Team A and Team B each with an
 // Auditor and an Enforcement officer. Synthetic data only.
@@ -7,7 +7,7 @@ const TODAY = '2026-11-05';
 const NOW = myt(TODAY, '10:00');
 const fresh = () => {
   const ds = generateDataset({ today: TODAY, now: NOW });
-  ds.users.push({ id: 'u-test-act-mgr', name: 'ACT Manager (synthetic)', title: 'ACT Manager', role: 'pwvsb_officer', department: 'audit', actRole: 'manager', companyIds: [], siteIds: [] } as never);
+  // The demo data now carries the ACT Manager (u-act-mgr), under the ACT Director (Fauzan, 23 Nov 2026).
   const store = new MemoryStore(ds);
   return { ds, store, svc: new PrimaService(store, () => NOW) };
 };
@@ -25,7 +25,7 @@ describe('C6: the ACT Manager second-checks', () => {
   it("closes a finding only after the Auditor's check and the ACT Manager's second check", async () => {
     const { svc } = fresh();
     const aud = await svc.user('u-act-aud1');
-    const mgr = await svc.user('u-test-act-mgr');
+    const mgr = await svc.user('u-act-mgr');
     const f = await fixedFinding(svc, 'medium');
     const first = await svc.actFindingStep(aud, f.id, 'check', { ok: true, note: 'Seen the log' });
     expect(first.status).toBe('fixed');
@@ -44,7 +44,7 @@ describe('C6: the ACT Manager second-checks', () => {
 
   it('never lets the ACT Manager second-check their own check, and a failed check clears the first check', async () => {
     const { svc } = fresh();
-    const mgr = await svc.user('u-test-act-mgr');
+    const mgr = await svc.user('u-act-mgr');
     const f = await fixedFinding(svc, 'medium');
     const first = await svc.actFindingStep(mgr, f.id, 'check', { ok: true, note: 'Seen' });
     expect(first.status).toBe('fixed');
@@ -58,7 +58,17 @@ describe('C6: the ACT Manager second-checks', () => {
     const { svc } = fresh();
     const f = await fixedFinding(svc, 'high');
     await svc.actFindingStep(await svc.user('u-act-aud1'), f.id, 'check', { ok: true, note: 'Seen' });
-    await expect(svc.actFindingStep(await svc.user('u-test-act-mgr'), f.id, 'check', { ok: true, note: 'x' })).rejects.toThrow(/Director/);
+    await expect(svc.actFindingStep(await svc.user('u-act-mgr'), f.id, 'check', { ok: true, note: 'x' })).rejects.toThrow(/Director/);
     expect((await svc.actFindingStep(await svc.user('u-audit'), f.id, 'check', { ok: true, note: 'Closed by the Director' })).status).toBe('closed');
+  });
+});
+
+describe('ACT reporting line (Fauzan, 23 Nov 2026)', () => {
+  it('has the ACT Director lead the department and the ACT Manager report to the ACT Director', async () => {
+    const { ds } = fresh();
+    const mgr = ds.users.find((u) => u.id === 'u-act-mgr')!;
+    const dir = ds.users.find((u) => u.id === 'u-audit')!;
+    expect(lineManagerOf(mgr, ds.users).manager?.id).toBe('u-audit');
+    expect(lineManagerOf(dir, ds.users).manager?.opsTier).toBe('ceo');
   });
 });

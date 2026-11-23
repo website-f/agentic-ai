@@ -37,6 +37,8 @@ _SHELL_FILES = (
     "Confidential.tsx",
     "DraftHelp.tsx",
     "Launcher.tsx",
+    # P126: the Upload / Key in / Download bar above every screen (Fauzan #155).
+    "ScreenTools.tsx",
     "NavMenu.tsx",
     "Spaces.tsx",
 )

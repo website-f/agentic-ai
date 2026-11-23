@@ -107,6 +107,8 @@ try {
       }
     };
     const tab = (name) => page.getByRole('tab', { name, exact: true }).click();
+    // Dates near today: the access end date must be from today and within the delegation, so fixed dates go stale.
+    const dayFromToday = (n) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
     const toast = (text) => page.getByRole('status').filter({ hasText: text }).first().waitFor({ timeout: 10000 });
     const sasaFile = () =>
       page
@@ -358,8 +360,8 @@ try {
       await page.getByLabel('Post holder', { exact: true }).selectOption('u-cm-sasa');
       await page.getByLabel('Person who acts').selectOption('u-gm-sasa');
       await page.getByLabel('May act on').fill('Day-to-day company decisions (mock)');
-      await page.getByLabel('From', { exact: true }).fill('2026-11-01');
-      await page.getByLabel('To', { exact: true }).fill('2026-11-30');
+      await page.getByLabel('From', { exact: true }).fill(dayFromToday(-14));
+      await page.getByLabel('To', { exact: true }).fill(dayFromToday(14));
       await page.getByLabel('Why', { exact: true }).fill('Manager on medical leave (mock)');
       await page.getByRole('button', { name: 'Record delegation' }).click();
       await toast('Delegation recorded; add the evidence, then a leader approves.');
@@ -393,7 +395,7 @@ try {
       const row = page.locator('.item').filter({ hasText: 'Company Manager: Hamdan bin Yusof acts for' }).first();
       await row.getByText('In force').waitFor();
       await row.getByLabel('Systems for Company Manager').fill('Company shared mailbox, read only (mock)');
-      await row.getByLabel('Access until for Company Manager').fill('2026-11-20');
+      await row.getByLabel('Access until for Company Manager').fill(dayFromToday(7));
       await row.getByLabel('Note for Company Manager').fill('Needs the client letters while covering (mock)');
       await row.getByRole('button', { name: 'Ask IT for access' }).click();
       await toast('Access asked of IT; nothing was granted by Prima.');

@@ -21,6 +21,7 @@ import { SopHelp } from '../sop/SopHelp';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { CooNoticesPanel } from './CooNotices';
 import { DocList, ProofPicker } from './Proof';
+import { KeyIn } from '../KeyIn';
 import { FwmWelfarePanel } from './FwmWelfare';
 import { FwmRecruitmentPanel } from './FwmRecruitment';
 import { FwAddMenu, NoAddNote } from './FwmAdd';
@@ -613,9 +614,15 @@ function PaperForm({
   const [reason, setReason] = useState('');
   const [proof, setProof] = useState<ProofInput[]>([]);
   const act = useAction();
+  // "Isi automatik" (rule KEY-IN): the dates are read from the paper and wait for the person's check. Permits and
+  // KDN letters may use the online reader for a date the device could not find; insurance papers too; a passport or
+  // a FOMEMA (medical) paper is read on the device only.
+  const [checked, setChecked] = useState(true);
+  const [issuedTouched, setIssuedTouched] = useState(mode === 'correct');
+  const keyInPaper = paper === 'PLKS_PERMIT' || paper === 'KDN_LETTER' ? 'permit' : paper === 'FW_INSURANCE' || paper === 'SPIKPA' ? 'insurance' : 'other';
   // A correction that moves the expiry later needs the copy too (the server refuses it otherwise).
   const needsCopy = mode === 'new' || (!!current?.expiresOn && !!expiresOn && expiresOn > current.expiresOn);
-  const ready = number.trim().length >= 3 && !!issuedOn && !!expiresOn && (!needsCopy || proof.length > 0) && (mode === 'new' || reason.trim().length >= 5);
+  const ready = checked && number.trim().length >= 3 && !!issuedOn && !!expiresOn && (!needsCopy || proof.length > 0) && (mode === 'new' || reason.trim().length >= 5);
   return (
     <div className="hx-form">
       <h3 className="hx-form-title">{mode === 'new' ? 'Record the paper from its copy' : 'Correct a mistake'}</h3>
@@ -626,7 +633,7 @@ function PaperForm({
         </label>
         <label className="field">
           <span className="label">Issued on</span>
-          <input className="input" type="date" aria-label="Issued on" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} />
+          <input className="input" type="date" aria-label="Issued on" value={issuedOn} onChange={(e) => (setIssuedTouched(true), setIssuedOn(e.target.value))} />
         </label>
         <label className="field">
           <span className="label">Expires on</span>
@@ -639,6 +646,18 @@ function PaperForm({
           </label>
         )}
       </div>
+      <KeyIn
+        paper={keyInPaper}
+        typed={{ expiresOn, [keyInPaper === 'insurance' ? 'startsOn' : 'issuedOn']: issuedTouched ? issuedOn : '' }}
+        onFields={(read, ok) => {
+          setChecked(ok);
+          for (const f of read) {
+            if (typeof f.value !== 'string' || !f.value) continue;
+            if (f.name === 'expiresOn') setExpiresOn(f.value);
+            if (f.name === 'issuedOn' || f.name === 'startsOn') (setIssuedTouched(true), setIssuedOn(f.value));
+          }
+        }}
+      />
       <ProofPicker site={null} refText="FWM" items={proof} onChange={setProof} documentsOnly required={needsCopy} />
       <ErrorNotice error={act.error} />
       <div className="hx-form-actions">

@@ -1,6 +1,7 @@
 import { Select } from '../SearchSelect';
+import type { KeyInAnyPaper, KeyInField, ProofInput } from '@prima/core';
+import { KeyIn } from '../KeyIn';
 import { createContext, useContext, useState } from 'react';
-import type { ProofInput } from '@prima/core';
 import { api } from '../api';
 import { Drawer, ErrorNotice, Loading, humanize, useAction, useLoad } from '../ui';
 import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
@@ -187,13 +188,30 @@ function answerText(r: unknown): string | null {
 }
 
 /** One small form that sends one policy action (the IT door by default; the arms policy panel passes its own). */
-export function OpForm({ title, op, fields, fixed = {}, done = 'Saved.', send: sendTo }: { title: string; op: string; fields: Field[]; fixed?: Record<string, unknown>; done?: string; send?: (input: Record<string, unknown>) => Promise<unknown> }) {
+/** "Isi automatik" on a form: the kind of paper, and which form field takes which value read from it. */
+export type FormKeyIn = { paper: KeyInAnyPaper; map: Record<string, string> };
+
+export function OpForm({ title, op, fields, fixed = {}, done = 'Saved.', send: sendTo, keyIn }: { title: string; op: string; fields: Field[]; fixed?: Record<string, unknown>; done?: string; send?: (input: Record<string, unknown>) => Promise<unknown>; keyIn?: FormKeyIn }) {
   const act = useAction();
   const { me } = useApp();
   const [open, setOpen] = useState(false);
   const [v, setV] = useState<Record<string, unknown>>({});
   const set = (k: string, x: unknown) => setV((p) => ({ ...p, [k]: x }));
   const companies = me?.companies ?? [];
+  // Values read from a paper wait for the person's check before the form can be sent (rule KEY-IN).
+  const [checked, setChecked] = useState(true);
+  const fromPaper = (read: KeyInField[], ready: boolean) => {
+    setChecked(ready);
+    if (!keyIn) return;
+    setV((p) => {
+      const next = { ...p };
+      for (const [formKey, name] of Object.entries(keyIn.map)) {
+        const f = read.find((x) => x.name === name);
+        if (f && f.origin !== 'prima') next[formKey] = f.value ?? '';
+      }
+      return next;
+    });
+  };
   const send = () => {
     const out: Record<string, unknown> = { op, ...fixed };
     for (const f of fields) {
@@ -214,6 +232,7 @@ export function OpForm({ title, op, fields, fixed = {}, done = 'Saved.', send: s
   return (
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
       <strong>{title}</strong>
+      {keyIn && <KeyIn paper={keyIn.paper} only={Object.values(keyIn.map)} typed={Object.fromEntries(Object.entries(keyIn.map).map(([formKey, name]) => [name, v[formKey]]))} onFields={fromPaper} />}
       {fields.map((f) =>
         f.t === 'select' || f.t === 'yn' ? (
           <label key={f.k} className="small">
@@ -265,7 +284,7 @@ export function OpForm({ title, op, fields, fixed = {}, done = 'Saved.', send: s
         ),
       )}
       <div className="row" style={{ gap: 6 }}>
-        <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={send}>
+        <button className="btn btn-sm btn-primary" disabled={act.busy || !checked} onClick={send}>
           Send
         </button>
         <button className="btn btn-sm" onClick={() => setOpen(false)}>
@@ -592,6 +611,11 @@ function QuotesForm({ purchaseId }: { purchaseId: string }) {
   const blank = (): QuoteRow => ({ supplier: '', type: 'physical', quoteNo: '', quoteDate: '', price: '', warrantyMonths: '', leadDays: '', expiresOn: '', technicalFit: '', capability: '', link: '', payFirst: false, payFirstTerms: '' });
   const [rows, setRows] = useState<QuoteRow[]>([blank(), blank(), blank(), { ...blank(), type: 'online' }]);
   const set = (i: number, k: string, x: string | boolean) => setRows((p) => p.map((r, j) => (j === i ? { ...r, [k]: x } : r)));
+  // "Isi automatik" (rule KEY-IN) per quote: the quote number, date, price and validity are read from the supplier's
+  // quote and wait for the person's check; the quotes cannot be saved while one is unchecked.
+  const [paperOf, setPaperOf] = useState<number | null>(null);
+  const [unchecked, setUnchecked] = useState<Record<number, boolean>>({});
+  const QUOTE_MAP: Record<string, string> = { quoteNo: 'ref', quoteDate: 'paperDate', price: 'amount', expiresOn: 'validUntil' };
   if (!open)
     return (
       <button className="btn btn-sm" onClick={() => setOpen(true)}>
@@ -615,6 +639,21 @@ function QuotesForm({ purchaseId }: { purchaseId: string }) {
             <input type="checkbox" checked={r.payFirst === true} onChange={(e) => set(i, 'payFirst', e.target.checked)} /> pay first
           </label>
           {r.payFirst === true && <input className="input" aria-label="Payment terms" placeholder="Supplier's payment terms" value={String(r.payFirstTerms)} onChange={(e) => set(i, 'payFirstTerms', e.target.value)} />}
+          <button className="btn btn-sm" aria-expanded={paperOf === i} aria-label={`Auto-fill quote ${i + 1}`} onClick={() => setPaperOf(paperOf === i ? null : i)}>
+            Isi automatik{unchecked[i] ? ' •' : ''}
+          </button>
+          {paperOf === i && (
+            <div style={{ flexBasis: '100%' }}>
+              <KeyIn
+                paper="quote"
+                typed={Object.fromEntries(Object.entries(QUOTE_MAP).map(([formKey, name]) => [name, r[formKey]]))}
+                onFields={(read, ok) => {
+                  setUnchecked((u) => ({ ...u, [i]: !ok }));
+                  setRows((p) => p.map((row, j) => (j === i ? { ...row, ...Object.fromEntries(Object.entries(QUOTE_MAP).map(([formKey, name]) => [formKey, String(read.find((x) => x.name === name)?.value ?? '')])) } : row)));
+                }}
+              />
+            </div>
+          )}
         </div>
       ))}
       <div className="row" style={{ gap: 6, marginTop: 6 }}>
@@ -623,7 +662,7 @@ function QuotesForm({ purchaseId }: { purchaseId: string }) {
         </button>
         <button
           className="btn btn-sm btn-primary"
-          disabled={act.busy}
+          disabled={act.busy || Object.values(unchecked).some(Boolean)}
           onClick={() =>
             void act
               .run(() => api.itAct('policyAct', { op: 'quoteInfo', purchaseId, quotes: rows.filter((r) => String(r.supplier).trim()).map((r) => ({ ...r, price: Number(r.price), warrantyMonths: Number(r.warrantyMonths), leadDays: Number(r.leadDays) })) }), 'Quotes saved.')

@@ -2,7 +2,7 @@ import { Select } from './SearchSelect';
 import { installScrollStrips } from './scroll-strip';
 import { CleanupReceiptRecovery } from './views/ItCleanup';
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
-import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch } from '@prima/core';
+import { type Company, type User, RULES, archiveAllowed, assistantAllowed, dataCleanupAllowed, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch } from '@prima/core';
 import { ApiError, api, type Me } from './api';
 import { CaretRightIcon, ChatCircleDotsIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon, XIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
@@ -19,6 +19,7 @@ import { HomeView } from './views/Home';
 import { ReportProblemButton } from './views/ReportProblem';
 import { GuardPhoneApp } from './views/GuardPhone';
 import { MyClockView, StaffClockBoardView, StaffTracker } from './views/StaffClock';
+import { ScreenTools } from './ScreenTools';
 import { SurveysView } from './views/Surveys';
 import { forgetOwner, lastOwner, rememberSetup, syncSurveys } from './survey/offline';
 import { NavMenu } from './NavMenu';
@@ -63,6 +64,12 @@ const HrItIntake = lazyView(() => import('./views/HrItIntake'), 'HrItIntake');
 const StaffDirectory = lazyView(() => import('./views/StaffDirectory'), 'StaffDirectory');
 const AccountsAccess = lazyView(() => import('./views/AccountsAccess'), 'AccountsAccess');
 const ItExtractionWorkspace = lazyView(() => import('./views/ItExtractionWorkspace'), 'ItExtractionWorkspace');
+const OrgChart = lazyView(() => import('./views/OrgChart'), 'OrgChart');
+const SharedLogins = lazyView(() => import('./views/SharedLogins'), 'SharedLogins');
+const ArchiveView = lazyView(() => import('./views/Archive'), 'ArchiveView');
+const DataCleanupView = lazyView(() => import('./views/DataCleanup'), 'DataCleanupView');
+const AssistantView = lazyView(() => import('./views/Assistant'), 'AssistantView');
+const MarketingView = lazyView(() => import('./views/Marketing'), 'MarketingView');
 const Overview = lazyView(() => import('./views/Overview'), 'Overview');
 const CompanyView = lazyView(() => import('./views/Company'), 'CompanyView');
 const Sites = lazyView(() => import('./views/Sites'), 'Sites');
@@ -283,7 +290,7 @@ function prefetchMenuScreens(views: ViewName[]): () => void {
 
 
 
-export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'guardroster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'accounts' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'sop' | 'equiprequests';
+export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'guardroster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'accounts' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'marketing' | 'orgchart' | 'shared-logins' | 'assistant' | 'archive' | 'data-cleanup' | 'sop' | 'equiprequests';
 
 export interface Route {
   view: ViewName;
@@ -471,6 +478,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'audit', label: 'Audit trail', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   { view: 'device', label: 'Site device', icon: 'device', roles: ['site_device'] },
   { view: 'doa', label: 'Director Office', icon: 'tender', roles: ['director', 'pwvsb_officer'] },
+  // Marketing desk (Fauzan, 22-23 Nov 2026): Marketing staff, the COO and the CEO; the server checks again.
+  { view: 'marketing', label: 'Marketing', icon: 'tender', roles: ['director', 'pwvsb_officer'] },
   { view: 'reports', label: 'Reports', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Offline site survey (Fauzan, 4 Nov 2026): sales, managers, site officers and operations; works with no signal.
   { view: 'surveys', label: 'Site survey', icon: 'sites', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
@@ -601,9 +610,18 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'it-metrics', label: 'Workflow time & quality', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec'] },
   // Staff directory (Fauzan, 4 Nov 2026): HR, the HR Director, the CEO and IT only; never a sign-in.
   { view: 'staff-directory', label: 'Staff directory', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
+  // Org chart (Fauzan, 23 Nov 2026): every head puts staff under them; group leaders and HR see the whole chart.
+  { view: 'orgchart', label: 'Org chart', icon: 'people', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Accounts and Access (Fauzan, 15 Nov 2026): IT or HR prepares sign-ins and company access; the HR Director or the CEO approves.
   { view: 'accounts', label: 'Accounts and access', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
-  { view: 'hr-it-intake', label: 'HR / IT coordination', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor'] },
+  // Data and file manager for old records (Fauzan, 23 Nov 2026): every office staff member, for their own unit.
+  { view: 'archive', label: 'Old files and data', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
+  { view: 'data-cleanup', label: 'Data clean-up', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // Prima helper (Fauzan, 23 Nov 2026): fills the forms of the jobs the person may do; the person checks and sends.
+  { view: 'assistant', label: 'Helper', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
+  // Shared login list (Fauzan, 23 Nov 2026): the list only, never a password. The server shows each person only their own rows.
+  { view: 'shared-logins', label: 'Shared logins', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  { view: 'hr-it-intake', label: 'HR / IT coordination', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor','guard'] },
   // Group websites (Fauzan, 27 Oct 2026): IT runs the register and reviews; each company answers for its own websites.
   { view: 'websites', label: 'Websites', icon: 'device', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'staffpay', label: 'Staff payroll', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
@@ -634,6 +652,7 @@ const ROLE_FIRST: Record<string, ViewName[]> = {
   'pwvsb_officer:arms_control': ['arms', 'cms', 'cases', 'audit'],
   'pwvsb_officer:cms': ['cms'],
   'pwvsb_officer:director_office': ['doa', 'meetings', 'reports', 'commercial'],
+  'pwvsb_officer:marketing': ['marketing', 'commercial', 'reports', 'meetings'],
   'pwvsb_officer:chief_of_staff': ['insurance', 'reports', 'meetings'],
   'pwvsb_officer:fwm': ['fwm', 'ja', 'people', 'reports', 'meetings'],
   'pwvsb_officer:pdpa': ['pdpa'],
@@ -687,6 +706,7 @@ const VIEW_TOKENS: ViewName[] = [
   'socso',
   'fwm',
   'doa',
+  'marketing',
   'reports',
   'meetings',
   'hostels',
@@ -715,8 +735,13 @@ const VIEW_TOKENS: ViewName[] = [
   'work-kpi',
   'it-procurement',
   'hr-it-intake',
+  'archive',
+  'data-cleanup',
+  'assistant',
   'staff-directory',
+  'orgchart',
   'accounts',
+  'shared-logins',
   'websites',
   'corporate',
   'renewals',
@@ -1062,6 +1087,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     arms_control: ['arms', 'cms', 'cases', 'audit', 'reports', 'meetings', 'clock', 'cmsready'],
     cms: ['cms', 'ja', 'arms', 'fleet', 'clock', 'cmsready'],
     director_office: ['doa', 'commercial', 'guardpay', 'reports', 'meetings', 'clock'],
+    marketing: ['marketing', 'commercial', 'reports', 'meetings', 'clock'],
     chief_of_staff: ['requests', 'claims', 'staffpay', 'insurance', 'reports', 'meetings', 'clock'],
     // FWM: foreign workers, their movements and hostels only, no tenders or other modules (Fauzan, 26 Oct 2026).
     fwm: ['arrivalcash', 'fwm', 'fwcost', 'fwstat', 'ja', 'hostels', 'people', 'reports', 'meetings', 'clock'],
@@ -1093,8 +1119,13 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         n.view === 'it-metrics' ||
         n.view === 'work-kpi' ||
         n.view === 'hr-it-intake' ||
+        n.view === 'archive' ||
+        n.view === 'data-cleanup' ||
+        n.view === 'assistant' ||
         n.view === 'staff-directory' ||
+        n.view === 'orgchart' ||
         n.view === 'accounts' ||
+        n.view === 'shared-logins' ||
         n.view === 'it-procurement' ||
         n.view === 'grc' ||
         n.view === 'act' ||
@@ -1116,15 +1147,20 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       // Far branches: the branch manager, the company manager, OM and above, ACT and CMS; not other admin executives.
       (n.view !== 'it-procurement' || (!me.user.integration && (leader || ['it','finance','audit'].includes(dept??'')))) &&
       (n.view !== 'it-metrics' || !me.user.integration) &&
+      (n.view !== 'marketing' || dept === 'marketing' || role === 'director' || ['coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
       (n.view !== 'work-kpi' || !!workKpiScope(me.user, [], me.now.slice(0, 10))) &&
       // Salary calculator: the OM and above, ACT and group leadership (Fauzan, 6 Nov 2026).
       (n.view !== 'salarycalc' || leader || dept === 'audit' || ['om', 'regional', 'ogm', 'ops_director', 'coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
       (n.view !== 'hr-it-intake' || !me.user.integration) &&
+      (n.view !== 'archive' || archiveAllowed(me.user, me.now.slice(0, 10))) &&
+      (n.view !== 'data-cleanup' || dataCleanupAllowed(me.user)) &&
+      (n.view !== 'assistant' || assistantAllowed(me.user)) &&
       (n.view !== 'staff-directory' ||
         (!me.user.integration && (dept === 'hr' || dept === 'it' || ['cos', 'deputy_cos'].includes(me.user.leadership ?? '') || me.user.opsTier === 'ceo'))) &&
       (n.view !== 'accounts' ||
         (!me.user.integration &&
           ((dept === 'it' && ['manager', 'lead', 'executive'].includes(me.user.itRole ?? '')) || dept === 'hr' || ['cos', 'deputy_cos'].includes(me.user.leadership ?? '') || me.user.opsTier === 'ceo'))) &&
+      (n.view !== 'shared-logins' || !me.user.integration) &&
       (n.view !== 'it-extraction' || (!me.user.integration && me.user.id === 'u-fauzan' && me.user.opsTier === 'ceo')) &&
       // Every office staff member checks their own Microsoft 365 connections; the server checks role and identity again.
       (n.view !== 'connections' || !me.user.integration) &&
@@ -1163,7 +1199,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       (n.view !== 'fleet' || me.user.opsTier !== 'patrol') &&
       // A far-branch manager runs the branch, not the company office.
       (n.view !== 'office' || !me.user.branchId) &&
-      (n.view !== 'requests' || dept !== 'operations' || leader || me.user.opsTier === 'om' || me.user.opsTier === 'ogm') &&
+      (n.view !== 'requests' || dept !== 'operations' || leader || ['om', 'ogm', 'ops_director'].includes(me.user.opsTier ?? '')) &&
       (n.view !== 'clients' || dept !== 'operations' || leader || ['om', 'regional', 'ogm', 'ops_director', 'patrol'].includes(me.user.opsTier ?? '')) &&
       // Procurement sits under the OGM, so operations sees it only as OGM or Operations Director.
       (n.view !== 'purchasing' || dept !== 'operations' || leader || ['ogm', 'ops_director'].includes(me.user.opsTier ?? '')) &&
@@ -1240,6 +1276,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   useEffect(() => {
     if (!menuProbe) rememberView(me.user.id, route.view);
   }, [me.user.id, route.view]);
+  const contentRef = useRef<HTMLDivElement>(null);
   // Phones show four tabs; the rest and Switch person live under More.
   const tabNav = nav.length > 5 ? nav.slice(0, 4) : nav;
   const moreNav = nav.length > 5 ? nav.slice(4) : [];
@@ -1503,8 +1540,18 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <ItProcurement />;
       case 'staff-directory':
         return <StaffDirectory />;
+      case 'orgchart':
+        return <OrgChart />;
       case 'accounts':
         return <AccountsAccess />;
+      case 'archive':
+        return <ArchiveView />;
+      case 'data-cleanup':
+        return <DataCleanupView />;
+      case 'assistant':
+        return <AssistantView />;
+      case 'shared-logins':
+        return <SharedLogins />;
       case 'hr-it-intake':
         return <HrItIntake />;
       case 'it':
@@ -1548,6 +1595,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <FwmView />;
       case 'doa':
         return <DirectorOfficeView />;
+      case 'marketing':
+        return <MarketingView />;
       case 'reports':
         return <ReportsView />;
       case 'meetings':
@@ -1751,7 +1800,9 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
           </header>
           {/* P90: every screen sits in one page frame (padding, width, rhythm), even one that draws no .page of its own. */}
           {apps && space && <SpacePhoneBar id={space} menu={menu} current={route.view === 'home' ? null : route.view} onHome={() => openSpace(null)} onSpace={openSpace} onView={(v) => go({ view: v })} />}
-          <div className="view-host">
+          {/* Upload, Key in and Download on every screen and tab (Fauzan, 23 Nov 2026). */}
+          <ScreenTools key={`${me.user.id}:${route.view}`} screen={route.view} label={nav.find((n) => n.view === route.view)?.label ?? route.view} contentRef={contentRef} />
+          <div className="view-host" ref={contentRef} data-screen-content="">
             {/* P103: a screen's code arrives the first time it opens (lazyView); this shows meanwhile. */}
             <Suspense fallback={<Loading what="the screen" />}>{view}</Suspense>
           </div>

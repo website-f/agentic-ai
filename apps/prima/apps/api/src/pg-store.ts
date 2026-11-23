@@ -1,6 +1,6 @@
 import {workflowMetricProblems} from './it-workflow-metrics-readiness';
 import {cleanupSchemaProblems} from './it-cleanup-readiness';
-import type {CleanupKind} from '@prima/core';
+import type {CleanupKind, ActAudit} from '@prima/core';
 import {procurementProblems} from './procurement-readiness';
 import {rentalCorrectionProblems} from './rental-correction-readiness';
 import { randomUUID } from 'node:crypto';
@@ -38,7 +38,12 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   selfAudits: 'Client requirements and the yearly self-audit are not installed in this database yet (module client-codes-v1).',
   guardPayPreparers: 'Naming who prepares the guard pay run is not installed in this database yet (module guard-pay-preparers-v1, run by the CEO).',
   problemReports: 'Report a problem is not installed in this database yet (module problem-reports-v1, run by the CEO).',
+  sharedLogins: 'The shared login list is not installed in this database yet (module shared-logins-v1).',
+  sharedLoginKinds: 'The kinds of portal are not installed in this database yet (module shared-logins-v1).',
+  orgLines: 'The org chart settings are not installed in this database yet (module org-lines-v1, run by the CEO).',
   accountRequests: 'Accounts and Access is not installed in this database yet (module accounts-access-v1).',
+  archiveFiles: 'The data and file manager is not installed in this database yet (module archive-v1).',
+  assistantMemory: 'The agent\'s skill library is not installed in this database yet (module assistant-v1).',
   fwMoves: 'Hostel moves are not installed in this database yet (module fw-moves-v1, run by the CEO).',
   hostelNeeds: 'Hostel needs are not installed in this database yet (module fw-moves-v1, run by the CEO).',
   hostelRecs: 'Hostel inventory and checks are not installed in this database yet (module fw-moves-v1, run by the CEO).',
@@ -58,6 +63,7 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   orgImportOks: 'The bulk load OK is not installed in this database yet (module bulk-load-ok-v1, run by the CEO).',
   staffOtClaims: 'Office overtime claims are not installed in this database yet (module staff-ot-claims-v1, run by the CEO).',
   warrantyClaims: 'Equipment warranty claims are not installed in this database yet (module warranty-claims-v1, run by the CEO).',
+  companyPapers: 'The company paper library is not installed in this database yet (module company-papers-v1).',
   sqlPostings: 'The SQL Account posting link is not installed in this database yet (module sql-posting-v1, run by the CEO).',
   sqlPostingExceptions: 'The SQL Account posting link is not installed in this database yet (module sql-posting-v1, run by the CEO).',
   rbaTraceReviews: 'RBA readiness is not installed in this database yet (module rba-readiness-v1).',
@@ -343,7 +349,11 @@ orgNotices:'prima.org_notices',
 orgImports:'prima.org_imports',
 orgImportOks:'prima.org_import_oks',
 problemReports:'prima.problem_reports',
+orgLines:'prima.org_lines',
 accountRequests:'prima.account_requests',
+archiveFiles:'prima.archive_files',assistantMemory:'prima.assistant_memory',
+sharedLogins:'prima.shared_logins',
+sharedLoginKinds:'prima.shared_login_kinds',
 hrLists:'prima.hr_lists',
 consentGates:'prima.consent_gates',
 fwMoves:'prima.fw_moves',
@@ -362,6 +372,7 @@ fwCostCharges: 'prima.fw_cost_charges',
 timeSlips: 'prima.time_slips',
 staffOtClaims: 'prima.staff_ot_claims',
 warrantyClaims: 'prima.warranty_claims',
+companyPapers: 'prima.company_papers',
 timeSlipSettings: 'prima.time_slip_settings',
 siteCoverage: 'prima.site_coverage',
 rosterVersions: 'prima.roster_versions',
@@ -568,6 +579,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'timeSlipSettings',
 'staffOtClaims',
 'warrantyClaims',
+'companyPapers',
 'siteCoverage',
 'rosterVersions',
 'rosterDays',
@@ -668,6 +680,15 @@ export class PgStore implements Store {
       };
       return wall;
     })());
+  }
+
+  private actTimingsFn: Promise<boolean> | null = null;
+  /** The ACT step timings, published read-only (db/modules/act-timings-published-v1.sql), or null before it is installed. */
+  async publishedActTimings(): Promise<ActAudit[] | null> {
+    const ok = await (this.actTimingsFn ??= (async () =>
+      (await this.client.query("SELECT to_regprocedure('prima.act_work_timings()') IS NOT NULL AS ok")).rows[0].ok === true)());
+    if (!ok) return null;
+    return (await this.client.query('SELECT r FROM prima.act_work_timings() AS r')).rows.map((x) => x.r as ActAudit);
   }
 
   private runLinksReady: boolean | null = null;
@@ -930,6 +951,13 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
       if (!(await this.cleaningOpsReady())) throw new Error('Cleaning and duty plans are not installed in this database yet.');
       // Serialize per record even before the first row exists.
       await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`cleaning-ops:${table}:${id}`]);
+      return;
+    }
+    // Org chart (Fauzan's retest, 23 Nov 2026): one lock for every line and named head, held until the request ends, so
+    // two changes made at the same time go one after the other and the loop check sees the first change.
+    if (table === 'orgLines') {
+      await this.needModule(table);
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['org-lines']);
       return;
     }
     // A survey made offline is sent with its own number: two resends at once go one after the other.

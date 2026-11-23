@@ -10,6 +10,7 @@ import { SharePointRequest } from '../connections/sharepoint/request';
 import { sharePointAdapter } from '../connections/sharepoint/adapter';
 import { m365Client } from '../connections/m365/client';
 import { M365ConnectionsPanel } from '../connections/m365/panel';
+import { UsagePanel } from '../connections/m365/usage-panel';
 
 
 
@@ -58,12 +59,20 @@ export function ConnectionsView({ userId }: { userId: string }) {
   const registry = useMemo(() => createRegistry([sharePointAdapter(api)]), [userId]);
   const selectedMail = useMemo(()=>jobEmailClient((method,path,body,signal)=>api.m365Call(userId,method,path,body,signal)),[userId]);
   const m365 = useMemo(()=>m365Client((method,path,body,signal)=>api.m365Call(userId,method,path,body,signal)),[userId]);
+  // Microsoft use board (rule M365-USE): the stored day only, scoped by the server.
+  const usageLoad = useMemo(()=>(signal: AbortSignal)=>api.m365Call(userId,'GET','/connections/m365/usage',undefined,signal),[userId]);
+  // "Ask IT to help" on a Microsoft use item raises an ordinary IT help request (Microsoft 365, low urgency) as the person.
+  const usageAskIt = useMemo(()=>async (id: string, title: string)=>{
+    const t = await api.raiseItTicket({ category: 'M365', priority: 'P4', title: `Bantuan Microsoft / Microsoft help: ${title}`.slice(0, 120), detail: `Dari papan Penggunaan Microsoft (${id}). From the Microsoft use board: please help me set this up or show me how.`, contactPhone: null, photos: [] }) as { ref?: unknown } | null;
+    return typeof t?.ref === 'string' ? t.ref : null;
+  },[api]);
   // Server app only: sign in to Microsoft again (with any claims challenge). The demo has no Microsoft sign-in.
   const reauthenticate = useMemo(()=>{const r=(api as { m365Reauthenticate?: (claims?: string) => Promise<void> }).m365Reauthenticate;return r?(claims?: string)=>r.call(api,claims):undefined;},[]);
   return <div className="page ix-page" data-no-translate>
     <header className="k-head"><div className="k-head-text"><h1>Connections</h1><p className="k-head-sub">Use your existing Microsoft sign-in to check approved access. These controls do not register accounts, grant consent or connect the whole organization.</p></div></header>
     <p className="notice" data-tone="info">Opening this page reads Prima setup status only. Provider reads require explicit actions. Names may be sensitive: no document body, download, import, email reply or AI transfer. Never paste passwords, tokens or client secrets here.</p>
     <M365ConnectionsPanel key={`${userId}:m365`} userId={userId} client={m365} reauthenticate={reauthenticate} />
+    <UsagePanel key={`${userId}:usage`} load={usageLoad} askIt={usageAskIt} />
     <section className="ix-section" aria-labelledby="connections-details-title">
     <div className="ix-section-head"><h2 id="connections-details-title">Details and setup requests</h2><p className="ix-meta">Selected Outlook email on IT jobs, SharePoint metadata and Power BI, each checked separately.</p></div>
     <div className="ix-conn-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 16 }}>

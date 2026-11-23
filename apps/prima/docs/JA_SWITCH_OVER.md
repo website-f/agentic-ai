@@ -28,7 +28,7 @@ Screen **Switch from JA** (`jaswitch`), API under `/api/ja/switch`, `/api/ja/imp
 3. **Explain or fix.** Each difference is explained or fixed, with a note, by the people who run the area: Operations
    (OM and above) for incidents, attendance and patrol, HR for guard pay, FWM for hostels, the company manager, the COO
    or the CEO.
-4. **ACT check.** After the run ends, the ACT Lead or Deputy checks the report. They cannot check a report they explained
+4. **ACT check.** After the run ends, the ACT Director checks the report. They cannot check a report they explained
    a difference in. The check is bound to a fingerprint of the exact report; if any data changes afterwards, the check
    no longer holds and ACT checks again.
 5. **CEO switch.** Only the CEO switches the area for that company, with a reason. The switch records that JA stays
@@ -43,7 +43,7 @@ patrol scans, incidents or hostels, with the first and last day the file covers.
 - lists staff numbers that are not on Prima's people list (HR adds people; the import never creates them);
 - shows what is new, the same, or will change what Prima already holds.
 
-Nothing is written until the ACT Lead or Deputy, who is not the person who staged it, approves the exact file by its
+Nothing is written until the ACT Director, who is not the person who staged it, approves the exact file by its
 fingerprint. An approved file is also the JA side of a side-by-side run.
 
 ## What it does not do yet
@@ -80,9 +80,9 @@ The ACT Director role holding these is an assumption from Fauzan's message; the 
 | Value | Proposed |
 | --- | --- |
 | Who starts a run | CEO or COO |
-| Who checks the report | ACT Lead or Deputy |
+| Who checks the report | ACT Director |
 | Who switches and undoes | CEO only |
-| Who stages and approves JA files | ACT stages, ACT Lead or Deputy approves |
+| Who stages and approves JA files | ACT stages, ACT Director approves |
 | Rows per file | 2,000 |
 
 ## Storage

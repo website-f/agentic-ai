@@ -109,6 +109,15 @@
   ]
  },
  {
+  "method": "GET",
+  "path": "api/act/month-summary",
+  "name": "actMonthSummary",
+  "doc": "The ACT Director's one page a month for the CEO (read-only).",
+  "query": [
+   "month"
+  ]
+ },
+ {
   "method": "POST",
   "path": "api/act/report-form",
   "name": "setActReportForm",
@@ -244,6 +253,72 @@
   "method": "POST",
   "path": "api/approval-limits",
   "name": "setApprovalLimits",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/archive",
+  "name": "archive"
+ },
+ {
+  "method": "POST",
+  "path": "api/archive/files",
+  "name": "archiveStart",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/archive/files/:id/content",
+  "name": "archiveOpen",
+  "params": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/archive/files/:id/content/:n",
+  "name": "archiveOpenPart",
+  "params": [
+   "id",
+   "n"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/archive/files/:id/details",
+  "name": "archiveDetails",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/archive/files/:id/finish",
+  "name": "archiveFinish",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/archive/files/:id/parts/:n",
+  "name": "archivePart",
+  "params": [
+   "id",
+   "n"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/archive/files/:id/set-aside",
+  "name": "archiveSetAside",
+  "params": [
+   "id"
+  ],
   "body": "Record<string, unknown>"
  },
  {
@@ -838,6 +913,20 @@
    "voId"
   ],
   "body": "{ reason?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/assistant",
+  "name": "assistantHome"
+ },
+ {
+  "method": "POST",
+  "path": "api/assistant/:op",
+  "name": "assistantAct",
+  "params": [
+   "op"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -1715,6 +1804,23 @@
    "companyId"
   ],
   "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/companies/:companyId/papers",
+  "name": "companyPapers",
+  "params": [
+   "companyId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/companies/:companyId/papers",
+  "name": "addCompanyPaper",
+  "params": [
+   "companyId"
+  ],
+  "body": "{ kind?: unknown; title?: unknown; period?: unknown; issuedOn?: unknown; expiresOn?: unknown; note?: unknown; proof?: unknown },"
  },
  {
   "method": "GET",
@@ -2741,6 +2847,11 @@
  },
  {
   "method": "GET",
+  "path": "api/data-cleanup",
+  "name": "dataCleanup"
+ },
+ {
+  "method": "GET",
   "path": "api/delegations",
   "name": "delegationBoard",
   "doc": "Masterplan §243: the emergency delegation and succession register. A register only; it grants nothing."
@@ -2954,6 +3065,12 @@
   "method": "POST",
   "path": "api/expenses/prefill",
   "name": "prefillOfficeRequest",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/exports/log",
+  "name": "exportLog",
   "body": "Record<string, unknown>"
  },
  {
@@ -5024,6 +5141,20 @@
  },
  {
   "method": "GET",
+  "path": "api/key-in",
+  "name": "status"
+ },
+ {
+  "method": "POST",
+  "path": "api/key-in/:paper",
+  "name": "read",
+  "params": [
+   "paper"
+  ],
+  "body": "unknown"
+ },
+ {
+  "method": "GET",
   "path": "api/kpi/work",
   "name": "workKpi",
   "doc": "Workflow KPIs across departments (speed from arrival, quality), for the KPI keepers only. Read-only.",
@@ -5104,6 +5235,23 @@
   "path": "api/login-handovers",
   "name": "loginHandovers",
   "doc": "Login handovers after a transfer: no pay or reasons (IT, HR, the HR Director and the CEO)."
+ },
+ {
+  "method": "GET",
+  "path": "api/marketing-board",
+  "name": "marketingBoard"
+ },
+ {
+  "method": "POST",
+  "path": "api/marketing-desk/no-entry-reason",
+  "name": "setNoEntryReason",
+  "body": "{ companyId?: unknown; reason?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/marketing-desk/start",
+  "name": "startMarketingDesk",
+  "body": "{ from?: unknown; note?: unknown }"
  },
  {
   "method": "GET",
@@ -5547,9 +5695,20 @@
  },
  {
   "method": "GET",
+  "path": "api/org/chart",
+  "name": "orgChart"
+ },
+ {
+  "method": "GET",
   "path": "api/org/guide",
   "name": "guide",
   "doc": "Guide cards for me: what to enter, from where, whom to ask, what is reused (read-only help)."
+ },
+ {
+  "method": "POST",
+  "path": "api/org/head",
+  "name": "orgSetHead",
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -5632,6 +5791,12 @@
   "params": [
    "id"
   ]
+ },
+ {
+  "method": "POST",
+  "path": "api/org/line",
+  "name": "orgSetLine",
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -6028,6 +6193,12 @@
   "body": "{ productIds?: unknown }"
  },
  {
+  "method": "POST",
+  "path": "api/proposals",
+  "name": "startProposal",
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/public-holidays",
   "name": "publicHolidayBoard",
@@ -6418,6 +6589,28 @@
    "id"
   ],
   "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/shared-logins",
+  "name": "sharedLoginsBoard"
+ },
+ {
+  "method": "POST",
+  "path": "api/shared-logins/:action",
+  "name": "sharedLoginsAct",
+  "params": [
+   "action"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/shared-logins/leaver/:personId",
+  "name": "sharedLoginsLeaver",
+  "params": [
+   "personId"
+  ]
  },
  {
   "method": "POST",
@@ -7095,8 +7288,55 @@
  },
  {
   "method": "POST",
+  "path": "api/tender-sources/:id/finds/:key",
+  "name": "answerTenderWatchFind",
+  "params": [
+   "id",
+   "key"
+  ],
+  "body": "{ action?: unknown; note?: unknown; kind?: unknown; channel?: unknown; closesOn?: unknown; guards?: unknown; title?: unknown; ref?: unknown; companyIds?: unknown },"
+ },
+ {
+  "method": "POST",
+  "path": "api/tender-sources/:id/watch",
+  "name": "setTenderSourceWatch",
+  "params": [
+   "id"
+  ],
+  "body": "{ allowed?: unknown; note?: unknown }"
+ },
+ {
+  "method": "POST",
   "path": "api/tender-sources/starter",
   "name": "loadTenderSourceStarter"
+ },
+ {
+  "method": "POST",
+  "path": "api/tenders/:id/ai-flags/:flagId",
+  "name": "answerTenderAiFlag",
+  "params": [
+   "id",
+   "flagId"
+  ],
+  "body": "{ status?: unknown; note?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/tenders/:id/attendance",
+  "name": "recordTenderAttendance",
+  "params": [
+   "id"
+  ],
+  "body": "{ kind?: unknown; attended?: unknown; note?: unknown; proof?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/tenders/:id/attendee",
+  "name": "nameTenderAttendee",
+  "params": [
+   "id"
+  ],
+  "body": "{ kind?: unknown; attendee?: unknown; mofNamed?: unknown }"
  },
  {
   "method": "POST",
@@ -7154,12 +7394,29 @@
  },
  {
   "method": "POST",
+  "path": "api/tenders/:id/hours",
+  "name": "recordTenderHours",
+  "params": [
+   "id"
+  ],
+  "body": "{ hours?: unknown; note?: unknown }"
+ },
+ {
+  "method": "POST",
   "path": "api/tenders/:id/papers",
   "name": "tenderPapers",
   "params": [
    "id"
   ],
   "body": "{ kind?: unknown; proof?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/tenders/:id/portal-logins",
+  "name": "tenderPortalLogins",
+  "params": [
+   "id"
+  ]
  },
  {
   "method": "POST",
@@ -7245,6 +7502,15 @@
    "id"
   ],
   "body": "{ note?: unknown; proof?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/tenders/:id/to-it",
+  "name": "sendTenderToIt",
+  "params": [
+   "id"
+  ],
+  "body": "{ kind?: unknown; codes?: unknown; items?: unknown }"
  },
  {
   "method": "POST",

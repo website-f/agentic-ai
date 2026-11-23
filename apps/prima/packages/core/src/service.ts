@@ -5,6 +5,7 @@ import { withLeavePersonLock } from './leave-lock';
 import { staffZakatReleaseProblem, staffSqlOtherSharesProblem } from './staff-zakat-guards';
 import { medicalSickDays, medicalLeaveUsage } from './medical-leave';
 import type { DutyOfflineContext } from "./types";
+import type { TenderAttendance, TenderAttendanceKind } from "./types";
 import { WorkflowMetricsService } from "./it-workflow-metrics";
 import { metricCohorts } from "./it-workflow-metrics";
 import { MetricInputError } from "./it-workflow-metrics";
@@ -46,7 +47,15 @@ import { seesCompanyOverview } from "./access";
 import { AccessDenied } from "./access";
 import { holdsCompanyAdd } from "./company-add";
 import { ProblemReportService } from "./problem-reports";
+import { ArchiveService, type ArchiveBytes } from "./archive";
+import { DataCleanupService } from "./data-cleanup";
+import { ExportService } from "./screen-tools";
+import { AssistantService } from "./assistant-service";
+import { OrgStructureService } from "./org-structure";
+import { withOrgChart } from "./org-structure";
 import { AccountsAccessService } from "./accounts-access";
+import { SharedLoginService } from "./shared-logins";
+import { SHARED_LOGIN_PLACE_LABEL, TENDER_LOGIN_KINDS, mayBeOnSharedLogin } from "./shared-logins";
 import { HrListService } from "./hr-lists";
 import { PaperConsentService } from "./paper-consent";
 import { FwMoveService } from "./fw-moves";
@@ -59,6 +68,7 @@ import { isCentralEmployer } from "./access";
 import { centralStaffName } from "./access";
 import { PWVSB_HQ_BRANCH } from "./access";
 import { assertCan } from "./access";
+import { isMarketing, isMarketingLead } from "./access";
 import { can } from "./access";
 import { canSeePerson } from "./access";
 import { hasOwnStaffRecord } from "./access";
@@ -152,6 +162,7 @@ import type { CheckinPolicy } from "./checkin";
 import { staffPayGaps } from "./real-data";
 import { AttendanceReportService } from "./attendance-reports";
 import { OwnerTestCheckinService } from "./owner-test-checkin";
+import { PAPER_EXPIRES, PAPER_KINDS, PAPER_LABEL, accountYears, paperGaps, paperNeeds, statementMonths, type CompanyPaper } from "./company-papers";
 import { checkAssignment } from "./checks";
 import { checkRequirement } from "./checks";
 import { csgDeadline } from "./checks";
@@ -267,9 +278,12 @@ import { companyNameForms } from "./tender";
 import { hasCompanyName } from "./tender";
 import { itemPart } from "./tender";
 import { sampleTenderReader } from "./tender";
-import { scanBidFile } from "./tender";
+import { pdfText, scanBidFile } from "./tender";
+import { ruleTenderReader, tenderAiFlags, tenderAiPapers, type TenderAiChecker } from "./tender-reader";
+import type { TenderAiCheck, TenderAiFlag } from "./types";
 import { tenderHourly } from "./tender";
-import { tenderPriority } from "./tender";
+import { PROPOSAL_CHECKLIST, tenderPriority } from "./tender";
+import { ATTENDANCE_LABEL, attendanceGaps, attendanceUrgent, tenderAttendance } from "./tender-attendance";
 import type { TenderReader } from "./tender";
 import type { Store } from "./store";
 import { addDays } from "./time";
@@ -393,6 +407,7 @@ import type { PurSupplier } from "./types";
 import type { PurCategory } from "./types";
 import type { StockIssue } from "./types";
 import type { StockRequest } from "./types";
+import { ItemKitService, isKit, perSuit, wearKey, wornItemIds } from "./item-kits";
 import { UNIFORM_RULE } from "./items";
 import type { WitnessInput } from "./types";
 import type { StockItem } from "./types";
@@ -924,6 +939,8 @@ import { lastMonths } from "./tender-counter";
 import type { TenderOpportunity } from "./types";
 import type { TenderSource } from "./types";
 import type { TenderSourceCheck } from "./types";
+import type { TenderWatchFind, TenderWatchOutcome, TenderWatchRun } from "./types";
+import type { WatchCandidate } from "./tender-watcher";
 import type { TenderOpportunityEntry } from "./types";
 import type { TenderOpportunityKind } from "./types";
 import { alertItem } from "./alerts";
@@ -1491,6 +1508,8 @@ export type HomeTone = 'ok' | 'warn' | 'crit' | 'neutral' | 'info';
 
 export type HomeView =
   | 'home'
+  | 'archive'
+  | 'data-cleanup'
   | 'payreq'
   | 'act'
   | 'staffclock'
@@ -1532,7 +1551,7 @@ export type HomeView =
   | 'payformulas'
   | 'sitehours'
   | 'guardpay' | 'renewals' | 'work' | 'memos' | 'mine' | 'office' | 'registers' | 'meetings' | 'quality'
-  | 'selfaudit' | 'rba' | 'handovers';
+  | 'selfaudit' | 'rba' | 'handovers' | 'marketing' | 'shared-logins';
 
 
 
@@ -1590,8 +1609,55 @@ export const GUARANTEE_LABEL: Record<InsuranceGuarantee['kind'], string> = {
 const GUARANTEE_RANK = { lapsed: 0, extend: 1, release: 2, short: 3, ok: 4, released: 5 } as const;
 
 /** The Director Office Administrator sets the tender protocol; the Director may too (Fauzan, 25 Oct 2026). */
-function canSetTenderProtocol(user: User): boolean {
+function isDoa(user: User): boolean {
   return user.role === 'director' || (user.role === 'pwvsb_officer' && user.department === 'director_office');
+}
+
+/** The Marketing desk has started (Fauzan, 23 Nov 2026: "Marketing does all"), switched on by the CEO or the COO. */
+/** AH14: the items in a Marketing check's send-back note, one per line (bullets and numbering removed), at most 30. */
+export function checkCaughtItems(note: string): string[] {
+  const items = (note ?? '')
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+    .filter((l) => l.length >= 3)
+    .slice(0, 30);
+  return items.length ? items : [(note ?? '').trim()].filter(Boolean);
+}
+
+function marketingDeskOn(protocol: TenderProtocol, today: IsoDate): boolean {
+  return !!protocol.marketingDesk && protocol.marketingDesk.from <= today;
+}
+
+/**
+ * Who runs tenders centrally: Marketing once its desk has started, the Director Office before that. The Director
+ * Office keeps reports, meetings and minutes either way.
+ */
+function isTenderDesk(user: User, deskOn: boolean): boolean {
+  return user.role === 'director' || (deskOn ? isMarketing(user) : isDoa(user));
+}
+
+/** Who sets the tender guide: the Marketing Manager or Deputy once the desk has started, the Director Office before. */
+function isTenderDeskLead(user: User, deskOn: boolean): boolean {
+  return user.role === 'director' || (deskOn ? isMarketingLead(user) : isDoa(user));
+}
+
+/**
+ * The central helper on one tender: the Marketing Manager or Deputy, or the Director Office on a bid the company
+ * prepares itself (bids started before the Marketing desk are finished the old way).
+ */
+function tenderCentral(user: User, t: Tender): boolean {
+  return user.role === 'director' || isMarketingLead(user) || (!t.desk && isDoa(user));
+}
+
+/**
+ * The protocol steps as they apply to this tender. On a Marketing desk bid the company manager's own steps (price
+ * approval) are given by the manager's approval signature, so the company touches the bid once.
+ */
+function stepsFor(protocol: TenderProtocol, t: Tender): TenderProtocolStep[] {
+  // A proposal (AH8) has no tender papers, so the tender protocol does not apply; its fixed checklist does.
+  if (t.proposal) return [];
+  if (t.desk !== 'MARKETING') return protocol.steps;
+  return protocol.steps.map((s) => (s.managerOnly && !s.auto ? { ...s, auto: 'MANAGER' as const } : s));
 }
 
 const DEPARTMENT_LABEL: Record<string, string> = {
@@ -1610,12 +1676,8 @@ const DEPARTMENT_LABEL: Record<string, string> = {
   legal: 'Legal',
   audit: 'ACT (Audit, Compliance and Transformation)',
   procurement: 'Procurement and Inventory',
+  marketing: 'Marketing',
 };
-
-/** The Director Office Administrator, or the Director (Fauzan, 25 Oct 2026). */
-function isDoa(user: User): boolean {
-  return canSetTenderProtocol(user);
-}
 
 /**
  * The next signature a bid needs (Fauzan, 26 Oct 2026): the person who prepared it, then the company manager that all is
@@ -1623,7 +1685,9 @@ function isDoa(user: User): boolean {
  */
 function tenderNextCheck(t: Tender): TenderCheckLevel | null {
   const have = new Set((t.verifications ?? []).map((v) => v.level));
-  return (['PREPARER', 'MANAGER'] as const).find((l) => !have.has(l)) ?? null;
+  // Marketing desk (Fauzan, 22 Nov 2026): Marketing preparer, Marketing check, then the company manager's approval.
+  const order: TenderCheckLevel[] = t.desk === 'MARKETING' ? ['PREPARER', 'CHECK', 'MANAGER'] : ['PREPARER', 'MANAGER'];
+  return order.find((l) => !have.has(l)) ?? null;
 }
 
 /** A step counts once it is Selesai, or T/B confirmed by a supervisor (guide V1.0). */
@@ -1638,10 +1702,10 @@ function stepFinished(d: TenderStepDone | undefined): boolean {
 function tenderProgress(t: Tender, protocol: TenderProtocol): { done: number; total: number; left: number } {
   const finished = (id: string) => stepFinished((t.protocolDone ?? []).find((d) => d.stepId === id));
   return {
-    left: protocol.steps.filter((s) => !s.auto && !finished(s.id)).length + (t.checklist ?? []).filter((c) => !finished(c.id)).length,
-    total: protocol.steps.length + (t.checklist ?? []).length,
+    left: stepsFor(protocol, t).filter((s) => !s.auto && !finished(s.id)).length + (t.checklist ?? []).filter((c) => !finished(c.id)).length,
+    total: stepsFor(protocol, t).length + (t.checklist ?? []).length,
     done:
-      protocol.steps.filter((s) => autoStepDone(s, t, protocol.version) || finished(s.id)).length + (t.checklist ?? []).filter((c) => finished(c.id)).length,
+      stepsFor(protocol, t).filter((s) => autoStepDone(s, t, protocol.version) || finished(s.id)).length + (t.checklist ?? []).filter((c) => finished(c.id)).length,
   };
 }
 
@@ -1679,13 +1743,26 @@ const DECISION_LABEL = { TERUSKAN: 'Teruskan', TANGGUH: 'Tangguh / perlu penjela
 function tenderStage(t: Tender): string {
   if (t.status === 'submitted') return t.submission ? 'Submitted, slip on file' : 'Submitted';
   if (t.leadOnly) return 'Lead only: confirm the tender';
+  if (t.proposal) {
+    if (t.status === 'open') return 'Marketing to start preparing the proposal';
+    const left = (t.checklist ?? []).some((c) => !stepFinished((t.protocolDone ?? []).find((d) => d.stepId === c.id)));
+    const n = tenderNextCheck(t);
+    if (left) return 'Work the proposal checklist';
+    if (n === 'PREPARER') return 'Preparer to sign';
+    if (n === 'CHECK') return 'Marketing Manager or Deputy to check';
+    if (n === 'MANAGER') return 'Company manager to approve the price';
+    return 'Send it to the client and keep a copy';
+  }
   if (!(t.papers ?? []).some((p) => p.kind === 'ARAHAN')) return 'Upload papers and arahan petender';
   if (!(t.checklist ?? []).length) return 'Draft the checklist';
-  if (!t.checklistReview) return 'Director Office to check the checklist';
-  if (t.status === 'open') return t.decision?.choice === 'TERUSKAN' ? 'Section 02, then start preparing' : 'Decision: teruskan, tangguh or tidak bida';
+  const desk = t.desk === 'MARKETING';
+  if (!desk && !t.checklistReview) return 'Director Office to check the checklist';
+  if (t.status === 'open')
+    return desk ? 'Marketing to start preparing' : t.decision?.choice === 'TERUSKAN' ? 'Section 02, then start preparing' : 'Decision: teruskan, tangguh or tidak bida';
   const next = tenderNextCheck(t);
   if ((t.checklist ?? []).some((c) => !stepFinished((t.protocolDone ?? []).find((d) => d.stepId === c.id)))) return 'Work the checklist';
   if (next === 'PREPARER') return 'Preparer to sign';
+  if (next === 'CHECK') return 'Marketing Manager or Deputy to check';
   if (next === 'MANAGER') return 'Company manager to sign';
   return 'Lodge the bid and upload the slip';
 }
@@ -1781,11 +1858,17 @@ export class PrimaService {
   constructor(
     private store: Store,
     private clock: () => IsoDateTime,
-    /** Drafts tender checklists from the papers; production plugs in the AI agent (Fauzan, 25 Oct 2026). */
-    private tenderReader: TenderReader = sampleTenderReader,
+    /**
+     * Drafts tender checklists from the papers. AH9 (Fauzan, 23 Nov 2026 "Use system more than ai"): the app reads the
+     * text of the papers by fixed rules; an AI reader may be plugged in later only with his approval.
+     */
+    private tenderReader: TenderReader = ruleTenderReader,
     /** Summarises meeting minutes; production plugs in the AI agent. */
     private minutesReader: MinutesReader = simpleMinutesReader,
-  ) {}
+  ) {
+    // Every read of users carries the org chart: the lines heads set and the heads named (Fauzan, 23 Nov 2026).
+    this.store = withOrgChart(this.store, () => this.clock());
+  }
 
   /**
    * Checks staff PINs against their keyed hashes (pin.ts). The browser test version and local tests use the test key;
@@ -2575,7 +2658,9 @@ export class PrimaService {
       const manager =
         user.department === 'hr' ||
         isHrDirector(user) ||
-        (!!person.reportsTo && person.reportsTo.trim().toLowerCase() === user.name.trim().toLowerCase());
+        (!!person.reportsTo && person.reportsTo.trim().toLowerCase() === user.name.trim().toLowerCase()) ||
+        // Or the line manager in the org chart, by account (Fauzan, 23 Nov 2026).
+        (await this.isOrgLineManagerOfPerson(user, person.id));
       if (!manager) throw new AccessDenied('leave.request', '(only the staff member, their manager or HR asks for their leave)');
     }
     if (!ownStaffLeave) this.notArmsOnly(user);
@@ -5550,6 +5635,7 @@ export class PrimaService {
       ...(await this.finance.cooHome(user)),
       // The COO or CEO holding daily cash (Fauzan, 2 Nov 2026).
       ...(await this.financeControls.dailyCashCollectorHome(user)),
+      ...(await this.marketingHome(user)),
       ...(await this.staffPayHome(user)),
       ...(await this.flexHome(user)),
       ...(await this.joinLeaveHome(user)),
@@ -5574,6 +5660,9 @@ export class PrimaService {
       ...(await this.dutyRegisters.homeItems(user).catch(() => [])),
       ...(await this.siteSupplies.homeItems(user).catch(() => [])),
       ...(await this.problems.homeItems(user)),
+      ...(await this.archive.homeItems(user).catch(() => [])),
+      ...(await this.dataCleanup.homeItems(user).catch(() => [])),
+      ...(await this.sharedLogins.homeItems(user).catch(() => [])),
       // Part P: hostel moves and needs (FWM, OM) and short stays (Asset Management, Finance, staff applicants).
       ...(await this.fwMoves.homeItems(user).catch(() => [])),
       ...(await this.shortStays.homeItems(user).catch(() => [])),
@@ -5989,6 +6078,9 @@ export class PrimaService {
         go: { view: 'people' as const, personId: b.personId, companyId },
       })),
       ...(jaOwns('hostels') ? [] : await this.hostelReminders(companyId)),
+      ...(await this.marketingHome(user, companyId)),
+      ...(await this.paperHome(user, companyId)),
+      ...(await this.attendanceHome(user, companyId)),
       ...(await this.contractHome(user, companyId)),
       ...(await this.branchHome(user, companyId)),
       ...(await this.corpHome(user, companyId)),
@@ -6118,6 +6210,8 @@ export class PrimaService {
           detail: 'Not sent for approval yet',
           go: { view: 'commercial' as const, companyId },
         })),
+      ...(await this.paperHome(user, companyId)),
+      ...(await this.attendanceHome(user, companyId)),
       ...(await this.selfAuditHome(user, companyId)),
       ...(await this.purHome(user, companyId)),
       ...(await this.grcHome(user, companyId)),
@@ -8850,9 +8944,20 @@ export class PrimaService {
     const tenders = (await this.store.list('tenders', { companyId })).sort(
       (a, b) => live(a.status) - live(b.status) || (live(a.status) === 0 ? a.closesOn.localeCompare(b.closesOn) : b.closesOn.localeCompare(a.closesOn)),
     );
-    const quotations = (await this.store.list('quotations', { companyId })).sort((a, b) => b.preparedAt.localeCompare(a.preparedAt));
+    // Quotations stay with the company (Fauzan, 22 Nov 2026): Marketing staff see tenders only.
+    const quotations = isMarketing(user) ? [] : (await this.store.list('quotations', { companyId })).sort((a, b) => b.preparedAt.localeCompare(a.preparedAt));
     const protocol = await this.tenderProtocol(user);
     const tenderDocs = await this.store.list('evidenceDocs', { companyId });
+    const papers = await this.papersFor([companyId]).catch(() => null);
+    // The IT part of a desk bid (item AH12): where IT stands, without the IT documents or the IT price.
+    const itParts = new Map(
+      (await this.store.list('itTenderTasks', {}))
+        .filter((x) => x.tenderId && x.companyId === companyId)
+        .map((x) => {
+          const st = x.steps ?? [];
+          return [x.tenderId, { stage: x.stage ?? 'preparing', handedOver: x.handedOver ?? null, stepsDone: st.filter((y) => y.doneAt).length, stepsTotal: st.length, partsDone: x.items.filter((y) => y.doneAt).length, partsTotal: x.items.length }] as const;
+        }),
+    );
     const biddingPapers = (['KDN_LICENCE', 'MOF_REGISTRATION', 'INSURANCE'] as const).map((type) => {
       const l = licences.find((x) => x.type === type);
       return { type, label: LICENCE_LABEL[type], expiresOn: l?.expiresOn ?? null, ...licenceStatus(l, today) };
@@ -8866,7 +8971,7 @@ export class PrimaService {
           findings: t.status === 'open' || t.status === 'preparing' ? tenderEligibility(t.channel, licences, today, t.closesOn) : [],
           daysLeft: daysBetween(today, t.closesOn),
           quotationCount: quotations.filter((q) => q.tenderId === t.id).length,
-          protocol: protocol.protocol.steps.map((s) => {
+          protocol: stepsFor(protocol.protocol, t).map((s) => {
             const done = autoStepDone(s, t, protocol.protocol.version) ?? (t.protocolDone ?? []).find((d) => d.stepId === s.id) ?? null;
             return {
               step: s,
@@ -8897,9 +9002,18 @@ export class PrimaService {
           stage: tenderStage(t),
           nextCheck: tenderNextCheck(t),
           myCheck: await this.tenderCheckFor(user, t),
+          // Company papers the bid usually needs that are missing or out of date by the closing date; null when the library is not installed.
+          paperGaps: papers && (t.status === 'open' || t.status === 'preparing') ? paperGaps(paperNeeds(papers, licences, t.channel, today, t.closesOn)) : null,
+          attendance: tenderAttendance(t, today),
+          itPart: itParts.get(t.id) ?? null,
+          // Marketing desk bids are worked by Marketing; the company's own bids by its admin team.
+          canWork: this.tenderWork(user, t, g, today),
+          central: tenderCentral(user, t) && can(user, g, today, 'commercial.view', t.companyId),
+          canSendBack: await this.canSendBackTender(user, t),
         })),
       ),
-      doa: isDoa(user),
+      doa: isTenderDesk(user, marketingDeskOn(protocol.protocol, today)),
+      marketingDesk: protocol.protocol.marketingDesk ?? null,
       reader: { name: this.tenderReader.name, readsFiles: this.tenderReader.readsFiles },
       protocol,
       quotations,
@@ -9662,14 +9776,571 @@ export class PrimaService {
     );
   }
 
+  private async deskOn(): Promise<boolean> {
+    return marketingDeskOn(await this.tenderProtocolRow(), this.today());
+  }
+
+  /**
+   * Who works a bid (ticks, files, forms, lodging): Marketing staff holding a grant for the company on a Marketing
+   * desk bid; the company's own admin team on a bid the company prepares itself.
+   */
+  private tenderWork(user: User, t: Tender, g: AuthorityGrant[], today: IsoDate): boolean {
+    return can(user, g, today, t.desk === 'MARKETING' ? 'tender.work' : 'commercial.prepare', t.companyId);
+  }
+
+  private assertTenderWork(user: User, t: Tender, g: AuthorityGrant[], today: IsoDate): void {
+    if (!this.tenderWork(user, t, g, today)) throw new AccessDenied(t.desk === 'MARKETING' ? 'tender.work' : 'commercial.prepare', t.companyId);
+  }
+
+  /**
+   * The CEO or the COO starts the Marketing desk (Fauzan, 23 Nov 2026: "Marketing does all", "Start all"). From that
+   * date every new tender is prepared and lodged by Marketing; bids a company already started are finished by it.
+   */
+  async startMarketingDesk(user: User, from: IsoDate, note: string) {
+    if (user.role !== 'director' && user.opsTier !== 'ceo' && user.opsTier !== 'coo') throw new AccessDenied('commercial.approve', '(Marketing desk)');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from ?? '') || !realCalendarDate(from)) throw new BadRequest('Give the start date.');
+    if (from < this.today()) throw new BadRequest('The start date cannot be in the past.');
+    const text = requireApprovalReason(note, 'start the Marketing desk');
+    const before = await this.tenderProtocolRow();
+    if (before.marketingDesk && before.marketingDesk.from <= this.today()) throw new BadRequest('The Marketing desk has already started.');
+    const users = await this.store.list('users', {});
+    if (!users.some((u) => isMarketingLead(u) && !u.accessClosed)) throw new BadRequest('Marketing needs a Manager or Deputy with a sign-in before the desk can start.');
+    const at = this.now();
+    const marketingDesk = { from, by: user.name, at, note: text };
+    return this.store.transaction(async (tx) => {
+      if (await tx.get('tenderProtocols', 'tender')) await tx.update('tenderProtocols', 'tender', { marketingDesk });
+      else {
+        const { id: _id, ...rest } = before;
+        await tx.insert('tenderProtocols', { id: 'tender', ...rest, marketingDesk });
+      }
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: null,
+        action: 'tender.marketing_desk',
+        entity: 'tender_protocol',
+        entityId: 'tender',
+        summary: `Marketing desk starts ${from}: Marketing prepares and lodges every new tender. ${text}`,
+      });
+      return marketingDesk;
+    });
+  }
+
+  /**
+   * The Marketing desk (Fauzan, 22-23 Nov 2026): who covers which company, how many tenders each company entered this
+   * month (a company with none is red: "some company dont fill any tender"), bids closing with work left, approvals
+   * not given, and companies that keep saying "do not bid". Marketing staff see their own companies; the Manager,
+   * the Deputy, the COO and the CEO see every company. Counts only: no prices and no files.
+   */
+  async marketingBoard(user: User) {
+    const boss = user.role === 'director' || user.opsTier === 'ceo' || user.opsTier === 'coo';
+    if (!isMarketing(user) && !boss) throw new AccessDenied('commercial.view', '(Marketing desk)');
+    const rule = RULES.marketingDesk.value;
+    const today = this.today();
+    const now = this.now();
+    const g = await this.grants();
+    const protocol = await this.tenderProtocolRow();
+    const wide = boss || isMarketingLead(user);
+    const ids = visibleCompanyIds(user, g, today);
+    const companies = await this.store.list('companies', { id: ids });
+    const active = (x: AuthorityGrant) => x.validFrom <= today && x.validTo >= today;
+    const team = (await this.store.list('users', {})).filter((u) => isMarketing(u) && !u.accessClosed);
+    const covers = (u: User) => new Set(g.filter((x) => x.userId === u.id && active(x)).map((x) => x.companyId));
+    const execs = team.filter((u) => u.marketingRole === 'executive').map((u) => ({ u, set: covers(u) }));
+    const month = today.slice(0, 7);
+    const tenders = (await this.store.list('tenders', { companyId: ids })).filter((t) => t.desk === 'MARKETING');
+    // Working hours on bids lodged this month, as entered by the people who did the work.
+    const lodgedNow = tenders.filter((t) => t.submission && dateOf(t.submission.at).slice(0, 7) === month);
+    const round1 = (x: number) => Math.round(x * 10) / 10;
+    const hoursFor = (userId: Id) => {
+      const mine = lodgedNow.map((t) => (t.workLog ?? []).filter((w) => w.userId === userId).reduce((n, w) => n + w.hours, 0)).filter((h) => h > 0);
+      return { bids: mine.length, avgHours: mine.length ? round1(mine.reduce((a, b) => a + b, 0) / mine.length) : null };
+    };
+    const totalHours = lodgedNow.map((t) => (t.workLog ?? []).reduce((n, w) => n + w.hours, 0));
+    // AH14: what the Marketing check sent back this month, and bids lodged this month the check never sent back.
+    const caughtThisMonth = tenders.flatMap((t) => t.checkCaught ?? []).filter((c) => dateOf(c.at).slice(0, 7) === month);
+    const ORDER = { manager: 0, deputy: 1, executive: 2 } as const;
+    const staff = team
+      .filter((u) => wide || u.id === user.id)
+      .map((u) => {
+        const n = covers(u).size;
+        return {
+          id: u.id,
+          name: u.name,
+          role: u.marketingRole!,
+          companies: n,
+          over: u.marketingRole === 'executive' && n > rule.companiesPerExecutive,
+          ...hoursFor(u.id),
+          // Items the Marketing check caught this month on bids this person prepared (AH14).
+          caught: caughtThisMonth.filter((c) => c.preparerId === u.id).reduce((k, c) => k + c.items.length, 0),
+        };
+      })
+      .sort((a, b) => ORDER[a.role] - ORDER[b.role] || a.name.localeCompare(b.name));
+    const notes = (protocol.marketingNoEntry ?? []).filter((x) => x.month === month);
+    const allPapers = await this.papersFor(companies.map((c) => c.id)).catch(() => null);
+    const allLicences = allPapers ? await this.store.list('licences', { companyId: companies.map((c) => c.id) }) : [];
+    const live = tenders.filter((t) => t.status === 'open' || t.status === 'preparing');
+    const rows = companies
+      .map((c) => {
+        const mine = tenders.filter((t) => t.companyId === c.id);
+        const sentNow = mine.filter((t) => t.submission && dateOf(t.submission.at).slice(0, 7) === month);
+        // Tenders entered; proposals sent to private clients are counted apart and do not clear the red (AH8).
+        const entered = sentNow.filter((t) => !t.proposal).length;
+        const proposals = sentNow.filter((t) => t.proposal).length;
+        const noBid = mine.filter((t) => t.decision?.choice === 'TIDAK_BIDA' && dateOf(t.decision.at).slice(0, 7) === month).length;
+        const working = mine.filter((t) => t.status === 'open' || t.status === 'preparing').length;
+        return {
+          companyId: c.id,
+          companyName: c.name,
+          executives: execs.filter((e) => e.set.has(c.id)).map((e) => e.u.name),
+          entered,
+          proposals,
+          working,
+          noBid,
+          // Red: nothing entered this month and nothing being prepared. Amber: nothing entered yet but work is going on.
+          tone: (entered > 0 ? 'ok' : working > 0 ? 'warn' : 'crit') as HomeTone,
+          // Why nothing was entered this month, written by the executive who covers the company or a Marketing lead.
+          reason: entered > 0 ? null : (notes.find((x) => x.companyId === c.id) ?? null),
+          // Papers a government bid usually needs that are not ready; null when the paper library is not installed.
+          papers: allPapers
+            ? (() => {
+                const n = paperNeeds(allPapers.filter((p) => p.companyId === c.id), allLicences.filter((l) => l.companyId === c.id), 'GOVERNMENT', today);
+                return { missing: n.filter((x) => x.state === 'MISSING').length, expired: n.filter((x) => x.state === 'EXPIRED').length, due: n.filter((x) => x.state === 'DUE').length };
+              })()
+            : null,
+          canNote: entered === 0 && marketingDeskOn(protocol, today) && can(user, g, today, 'tender.work', c.id),
+          repeatNoBid: noBid >= 2,
+        };
+      })
+      .sort((a, b) => a.entered - b.entered || a.companyName.localeCompare(b.companyName));
+    const name = (id: Id) => companies.find((c) => c.id === id)?.name ?? '';
+    const hoursSince = (t: IsoDateTime) => (Date.parse(now) - Date.parse(t)) / 3_600_000;
+    const alerts: (HomeItem & { level: 'closing' | 'coo' | 'approval' | 'check' | 'objection' | 'visit' })[] = [];
+    for (const t of live) {
+      const days = daysBetween(today, t.closesOn);
+      const next = tenderNextCheck(t);
+      const go = { view: 'commercial' as const, tenderId: t.id, companyId: t.companyId };
+      const last = (t.verifications ?? []).at(-1);
+      if (t.proposal) {
+        // A proposal's date is Marketing's own plan: a reminder to the executive and the Manager, never the COO.
+        if (days <= rule.warnDaysToClose)
+          alerts.push({ level: 'closing', tone: 'warn', tag: 'Proposal', title: `${t.title}: proposal ${days < 0 ? `${-days} days late` : days === 0 ? 'due today' : `due in ${days} days`}, not sent`, detail: `${name(t.companyId)} · ${t.ref} · ${tenderStage(t)}`, go });
+      } else if (days >= 0 && days <= rule.escalateDaysToClose)
+        alerts.push({ level: 'coo', tone: 'crit', tag: 'Closing', title: `${t.title}: closes ${days === 0 ? 'today' : 'tomorrow'}, not lodged`, detail: `${name(t.companyId)} · ${t.ref} · ${tenderStage(t)}`, go });
+      else if (days >= 0 && days <= rule.warnDaysToClose)
+        alerts.push({ level: 'closing', tone: 'warn', tag: 'Closing', title: `${t.title}: closes in ${days} days, not lodged`, detail: `${name(t.companyId)} · ${t.ref} · ${tenderStage(t)}`, go });
+      if (next === 'MANAGER' && last && hoursSince(last.at) >= rule.approvalReminderHours)
+        alerts.push({ level: 'approval', tone: 'warn', tag: 'Approval', title: `${t.title}: company manager has not approved`, detail: `${name(t.companyId)} · ${t.ref} · waiting ${Math.floor(hoursSince(last.at))} hours`, go });
+      for (const a of tenderAttendance(t, today)) {
+        if (a.state === 'NAME' && a.on)
+          alerts.push({
+            level: attendanceUrgent(a) ? 'coo' : 'visit',
+            tone: attendanceUrgent(a) ? 'crit' : 'warn',
+            tag: a.label,
+            title: `${t.title}: nobody named for the ${a.label.toLowerCase()} on ${a.on}`,
+            detail: `${name(t.companyId)} · ${t.ref}${a.mandatory ? ' · mandatory' : ''}${a.mofNamedOnly ? ' · only the person on the MOF certificate' : ''}`,
+            go,
+          });
+        else if (a.state === 'RECORD')
+          alerts.push({ level: 'visit', tone: a.mandatory ? 'crit' : 'warn', tag: a.label, title: `${t.title}: record the ${a.label.toLowerCase()} attendance slip`, detail: `${name(t.companyId)} · ${t.ref} · ${a.on}${a.entry ? ` · ${a.entry.attendee}` : ''}`, go });
+      }
+      if (next === 'CHECK' && wide)
+        alerts.push({ level: 'check', tone: 'warn', tag: 'Check', title: `${t.title}: waiting for the Marketing check`, detail: `${name(t.companyId)} · ${t.ref} · prepared by ${last?.by ?? ''}`, go });
+    }
+    // New guarding notices the tender watcher found, waiting for the Marketing Manager or Deputy (AH11).
+    if (wide && (!this.store.hasTable || (await this.store.hasTable('tenderSources')))) {
+      const finds = (await this.store.list('tenderSources', {})).flatMap((s) => (s.watchFinds ?? []).filter((f) => f.state === 'NEW').map((f) => ({ s, f })));
+      if (finds.length)
+        alerts.push({
+          level: 'check',
+          tone: 'info',
+          tag: 'Watcher',
+          title: `${finds.length} new guarding notice(s) found by the tender watcher`,
+          detail: `${[...new Set(finds.map((x) => x.s.buyer))].slice(0, 4).join(', ')} · record each one or drop it with the reason (Tender sites)`,
+          go: { view: 'marketing' as const },
+        });
+    }
+    const lodged = tenders.filter((t) => t.submission && t.bidNotice);
+    const avgDays = lodged.length
+      ? Math.round((lodged.reduce((n, t) => n + (Date.parse(t.submission!.at) - Date.parse(t.bidNotice!.at)) / 86_400_000, 0) / lodged.length) * 10) / 10
+      : null;
+    return {
+      desk: protocol.marketingDesk ?? null,
+      deskOn: marketingDeskOn(protocol, today),
+      canStart: boss && !marketingDeskOn(protocol, today),
+      // Companies this person may start a proposal for (AH8): Marketing staff covering them, once the desk has started.
+      proposeFor:
+        isMarketing(user) && marketingDeskOn(protocol, today) ? rows.filter((r) => can(user, g, today, 'tender.work', r.companyId)).map((r) => ({ id: r.companyId, name: r.companyName })) : [],
+      wide,
+      month,
+      rule: { companiesPerExecutive: rule.companiesPerExecutive, noBidNoticeHours: rule.noBidNoticeHours },
+      staff,
+      uncovered: wide ? rows.filter((r) => r.executives.length === 0).map((r) => r.companyName) : [],
+      rows,
+      alerts,
+      totals: {
+        entered: rows.reduce((n, r) => n + r.entered, 0),
+        proposals: rows.reduce((n, r) => n + r.proposals, 0),
+        working: live.length,
+        zero: rows.filter((r) => r.tone === 'crit').length,
+        repeatNoBid: rows.filter((r) => r.repeatNoBid).length,
+        noReason: rows.filter((r) => r.tone === 'crit' && !r.reason).length,
+        // Calendar days from the notice to the company until the bid was lodged.
+        avgDaysToLodge: avgDays,
+        // Working hours for each bid lodged this month (target: under 1 hour before an executive takes 8 companies).
+        avgHours: totalHours.length ? round1(totalHours.reduce((a, b) => a + b, 0) / totalHours.length) : null,
+        // Items the Marketing check caught this month that the first pass missed, and how many sends-back.
+        caught: caughtThisMonth.reduce((k, c) => k + c.items.length, 0),
+        sentBack: caughtThisMonth.length,
+        // Bids lodged this month that passed the Marketing check the first time.
+        firstPassClean: lodgedNow.filter((t) => !(t.checkCaught ?? []).length).length,
+        lodged: lodgedNow.length,
+      },
+    };
+  }
+
+  /**
+   * Marketing desk items on a home board. The company manager: a new bid Marketing will prepare in the company's name
+   * (the manager may say "do not bid" until the notice ends; silence means go) and bids waiting for approval. The COO
+   * and the CEO: bids one day from closing that are not lodged, and companies that keep saying "do not bid".
+   */
+  private async marketingHome(user: User, companyId?: Id): Promise<HomeItem[]> {
+    const protocol = await this.tenderProtocolRow();
+    if (!protocol.marketingDesk) return [];
+    const today = this.today();
+    const now = this.now();
+    if (companyId) {
+      if (user.role !== 'company_manager') return [];
+      const live = (await this.store.list('tenders', { companyId: [companyId] })).filter(
+        (t) => t.desk === 'MARKETING' && (t.status === 'open' || t.status === 'preparing'),
+      );
+      const out: HomeItem[] = [];
+      for (const t of live) {
+        const go = { view: 'commercial' as const, tenderId: t.id, companyId };
+        if (t.bidNotice && !t.decision && t.bidNotice.until > now)
+          out.push({
+            tone: 'info',
+            tag: 'Tender',
+            title: `${t.proposal ? 'Marketing will send a proposal' : 'Marketing will bid'}: ${t.title}`,
+            detail: `${t.ref} · ${t.proposal ? 'to send by' : 'closes'} ${t.closesOn} · say "do not bid" before ${t.bidNotice.until.slice(0, 16).replace('T', ' ')}, or it goes ahead`,
+            go,
+          });
+        if ((await this.tenderCheckFor(user, t)) === 'MANAGER')
+          out.push({
+            tone: 'warn',
+            tag: 'Approve',
+            title: `${t.proposal ? 'Proposal' : 'Bid'} ready for your approval: ${t.title}`,
+            detail: `${t.ref} · ${t.proposal ? `to send by ${t.closesOn}` : `closes in ${daysBetween(today, t.closesOn)} days`} · prepared and checked by Marketing`,
+            go,
+          });
+      }
+      return out;
+    }
+    if (user.role !== 'director' && user.opsTier !== 'ceo' && user.opsTier !== 'coo') return [];
+    const b = await this.marketingBoard(user);
+    return [
+      ...b.alerts.filter((a) => a.level === 'coo').map(({ level: _l, ...a }) => a),
+      ...b.rows
+        .filter((r) => r.repeatNoBid)
+        .map((r) => ({
+          tone: 'warn' as const,
+          tag: 'Tender',
+          title: `${r.companyName} said "do not bid" ${r.noBid} times this month`,
+          detail: 'Marketing desk · ask the company manager why',
+          go: { view: 'marketing' as const },
+        })),
+    ];
+  }
+
+  // ---------- Company paper library (Marketing item AH7, Fauzan 23 Nov 2026 "Build") ----------
+
+  /** Whether module company-papers-v1 is installed; the memory store always has the table. */
+  private async papersInstalled(): Promise<boolean> {
+    return !this.store.hasTable || (await this.store.hasTable('companyPapers'));
+  }
+
+  /** The current papers of these companies, or null when the library is not installed (never read as all clear). */
+  private async papersFor(companyIds: Id[]): Promise<CompanyPaper[] | null> {
+    if (!companyIds.length) return [];
+    if (!(await this.papersInstalled())) return null;
+    return this.store.list('companyPapers', { companyId: companyIds });
+  }
+
+  /**
+   * One company's paper library: what a government and a private bid usually need and whether each is on file and in
+   * date, and every paper kept (newest first, older copies marked replaced). The company office, the company manager,
+   * group leaders and the Marketing staff who cover the company read it; the company office and that Marketing staff
+   * add papers. No prices; the files stay behind the company's wall.
+   */
+  async companyPapers(user: User, companyId: Id) {
+    this.notArmsOnly(user);
+    const g = await this.grants();
+    const today = this.today();
+    if (!can(user, g, today, 'commercial.view', companyId)) throw new AccessDenied('commercial.view', companyId);
+    const canAdd = can(user, g, today, 'commercial.prepare', companyId) || can(user, g, today, 'tender.work', companyId);
+    const papers = await this.papersFor([companyId]);
+    if (!papers) return { installed: false as const, canAdd: false, kinds: PAPER_KINDS.map((k) => ({ kind: k, label: PAPER_LABEL[k], expires: PAPER_EXPIRES.has(k) })), needs: null, papers: [] };
+    const licences = await this.store.list('licences', { companyId });
+    const ids = new Set(papers.flatMap((p) => p.docIds));
+    const docs = (await this.store.list('evidenceDocs', { companyId })).filter((d) => ids.has(d.id));
+    return {
+      installed: true as const,
+      canAdd,
+      kinds: PAPER_KINDS.map((k) => ({ kind: k, label: PAPER_LABEL[k], expires: PAPER_EXPIRES.has(k) })),
+      needs: { GOVERNMENT: paperNeeds(papers, licences, 'GOVERNMENT', today), PRIVATE: paperNeeds(papers, licences, 'PRIVATE', today) },
+      statementMonths: statementMonths(today),
+      accountYears: accountYears(today),
+      papers: papers
+        .slice()
+        .sort((a, b) => Number(!!a.replacedBy) - Number(!!b.replacedBy) || b.at.localeCompare(a.at))
+        .map((p) => ({ ...p, label: PAPER_LABEL[p.kind], docs: docs.filter((d) => p.docIds.includes(d.id)) })),
+    };
+  }
+
+  /**
+   * Adds a paper to the company's library, with its file. A new copy of a paper the company keeps one of (or the same
+   * month's statement, or the same year's accounts) replaces the old one, which is kept and marked replaced.
+   */
+  async addCompanyPaper(
+    user: User,
+    companyId: Id,
+    input: { kind?: unknown; title?: unknown; period?: unknown; issuedOn?: unknown; expiresOn?: unknown; note?: unknown },
+    proof: ProofInput[],
+  ) {
+    this.notArmsOnly(user);
+    const g = await this.grants();
+    const today = this.today();
+    if (!can(user, g, today, 'commercial.prepare', companyId) && !can(user, g, today, 'tender.work', companyId))
+      throw new AccessDenied('commercial.prepare', companyId);
+    if (!(await this.papersInstalled())) throw new BadRequest('The company paper library is not installed in this database yet (module company-papers-v1).');
+    const kind = PAPER_KINDS.find((k) => k === input.kind);
+    if (!kind) throw new BadRequest('Choose the kind of paper.');
+    const date = (v: unknown, what: string): IsoDate | null => {
+      if (v == null || v === '') return null;
+      if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || !realCalendarDate(v)) throw new BadRequest(`Give ${what} as a date.`);
+      return v;
+    };
+    let period: string | null = null;
+    if (kind === 'BANK_STATEMENT') {
+      period = typeof input.period === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(input.period) ? input.period : null;
+      if (!period) throw new BadRequest('Give the month of the statement.');
+      if (period >= today.slice(0, 7)) throw new BadRequest('A statement is for a month that has ended.');
+    } else if (kind === 'AUDITED_ACCOUNTS') {
+      period = typeof input.period === 'string' && /^\d{4}$/.test(input.period) ? input.period : null;
+      if (!period || period >= today.slice(0, 4)) throw new BadRequest('Give the financial year of the accounts (a year that has ended).');
+    }
+    const issuedOn = date(input.issuedOn, 'the issue date');
+    if (issuedOn && issuedOn > today) throw new BadRequest('The issue date cannot be in the future.');
+    const expiresOn = PAPER_EXPIRES.has(kind) ? date(input.expiresOn, 'the end date') : null;
+    if ((kind === 'BANK_LETTER' || kind === 'PPKKM_MEMBERSHIP') && !expiresOn) throw new BadRequest('Give the end date of this paper.');
+    if (kind === 'SSM_PROFILE' && !issuedOn) throw new BadRequest('Give the date of the company search.');
+    if (expiresOn && issuedOn && expiresOn <= issuedOn) throw new BadRequest('The end date must be after the issue date.');
+    const title = (typeof input.title === 'string' ? input.title : '').trim().slice(0, 120) || (period ? `${PAPER_LABEL[kind]} ${period}` : PAPER_LABEL[kind]);
+    const note = (typeof input.note === 'string' ? input.note : '').trim().slice(0, 300);
+    const rec = this.proofRecords(user, companyId, null, proof, {}, { documentsOnly: true });
+    if (!rec.docs.length) throw new BadRequest('Attach the paper as a PDF or a scan.');
+    const id = `pap-${globalThis.crypto.randomUUID().slice(0, 12)}`;
+    const at = this.now();
+    const many = kind === 'EXPERIENCE_LETTER' || kind === 'OTHER';
+    return this.store.transaction(async (tx) => {
+      const old = many ? [] : (await tx.list('companyPapers', { companyId: [companyId] })).filter((p) => p.kind === kind && p.period === period && !p.replacedBy);
+      await this.saveProof(tx, { photos: [], docs: rec.docs.map((d) => ({ ...d, paperId: id, caption: d.caption || title })) });
+      const paper: CompanyPaper = { id, companyId, kind, title, period, issuedOn, expiresOn, docIds: rec.docs.map((d) => d.id), note, by: user.name, byId: user.id, at, replacedBy: null };
+      await tx.insert('companyPapers', paper);
+      for (const o of old) await tx.update('companyPapers', o.id, { replacedBy: id });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'company_paper.add',
+        entity: 'company_paper',
+        entityId: id,
+        summary: `${title} added to the paper library${old.length ? ' (replaces the earlier copy)' : ''}`,
+      });
+      return paper;
+    });
+  }
+
+  /**
+   * Company manager and admin executives: a briefing or site visit on a live tender with nobody named yet (from the day
+   * the date is recorded), and one whose day has come with no attendance recorded.
+   */
+  private async attendanceHome(user: User, companyId: Id): Promise<HomeItem[]> {
+    if (user.role !== 'company_manager' && user.role !== 'admin_exec') return [];
+    const today = this.today();
+    const out: HomeItem[] = [];
+    for (const t of await this.store.list('tenders', { companyId: [companyId] })) {
+      if (t.status !== 'open' && t.status !== 'preparing') continue;
+      const go = { view: 'commercial' as const, tenderId: t.id, companyId };
+      for (const a of tenderAttendance(t, today)) {
+        if (a.state === 'NAME' && a.on)
+          out.push({
+            tone: attendanceUrgent(a) ? 'crit' : 'warn',
+            tag: a.label,
+            title: `Name who attends the ${a.label.toLowerCase()}: ${t.title}`,
+            detail: `${t.ref} · ${a.on}${a.place ? ` · ${a.place}` : ''}${a.mandatory ? ' · mandatory' : ''}${a.mofNamedOnly ? ' · only the person named on our MOF certificate may go' : ''}`,
+            go,
+          });
+        else if (a.state === 'RECORD')
+          out.push({ tone: a.mandatory ? 'crit' : 'warn', tag: a.label, title: `Record the ${a.label.toLowerCase()} attendance: ${t.title}`, detail: `${t.ref} · ${a.on}${a.entry ? ` · ${a.entry.attendee}` : ''} · keep the attendance slip`, go });
+      }
+    }
+    return out;
+  }
+
+  /** One line on the company home when a paper a bid needs is missing, expired or ending within the warning days. */
+  private async paperHome(user: User, companyId: Id): Promise<HomeItem[]> {
+    if (user.role !== 'company_manager' && user.role !== 'admin_exec') return [];
+    const papers = await this.papersFor([companyId]).catch(() => null);
+    if (!papers) return [];
+    const needs = paperNeeds(papers, await this.store.list('licences', { companyId }), 'GOVERNMENT', this.today()).filter((n) => n.source === 'paper' && n.state !== 'OK');
+    if (!needs.length) return [];
+    const bad = needs.filter((n) => n.state !== 'DUE');
+    return [
+      {
+        tone: bad.length ? 'warn' : 'info',
+        tag: 'Papers',
+        title: bad.length ? `${bad.length} paper${bad.length === 1 ? '' : 's'} for tenders missing or expired` : `${needs.length} paper${needs.length === 1 ? '' : 's'} for tenders ending soon`,
+        detail: needs.map((n) => n.label).join(', '),
+        go: { view: 'commercial', companyId },
+      },
+    ];
+  }
+
+  // ---------- Site visit and briefing tracker (Marketing item AH13, Fauzan 23 Nov 2026) ----------
+
+  /** The company's own office and manager, the Marketing staff working the bid, and the central supervisors. */
+  private async canTrackAttendance(user: User, t: Tender): Promise<boolean> {
+    const g = await this.grants();
+    const today = this.today();
+    return this.tenderWork(user, t, g, today) || can(user, g, today, 'commercial.prepare', t.companyId) || (await this.canSuperviseTender(user, t));
+  }
+
+  /**
+   * The company names who goes to the buyer's briefing or site visit. Where the tender lets only the person named on
+   * the company's MOF certificate attend, the company must say this person is that one (Marketing cannot go instead).
+   */
+  async nameTenderAttendee(user: User, tenderId: Id, kind: TenderAttendanceKind, attendee: string, mofNamed: boolean) {
+    const t = await this.store.get('tenders', tenderId);
+    if (!t) throw new NotFound('Tender');
+    if (!(await this.canTrackAttendance(user, t))) throw new AccessDenied('commercial.prepare', t.companyId);
+    if (t.status !== 'open' && t.status !== 'preparing') throw new BadRequest('This tender is no longer being worked on.');
+    const item = tenderAttendance(t, this.today()).find((a) => a.kind === kind);
+    if (!item) throw new BadRequest('Record the date of the briefing or site visit in the tender record first.');
+    if (item.entry?.result) throw new BadRequest('Attendance is already recorded.');
+    const name = String(attendee ?? '').trim().slice(0, 120);
+    if (name.length < 3) throw new BadRequest('Give the name of the person who will attend.');
+    if (item.mofNamedOnly && !mofNamed)
+      throw new BadRequest('Only the person named on the company\'s MOF certificate may attend this one. Name that person.');
+    const at = this.now();
+    const entry: TenderAttendance = { kind, attendee: name, mofNamed: !!mofNamed, namedBy: user.name, namedById: user.id, namedAt: at, result: null };
+    return this.store.transaction(async (tx) => {
+      const now = (await tx.get('tenders', t.id)) ?? t;
+      const updated = await tx.update('tenders', t.id, { attendance: [...(now.attendance ?? []).filter((a) => a.kind !== kind), entry] });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: t.companyId,
+        action: 'tender.attendee',
+        entity: 'tender',
+        entityId: t.id,
+        summary: `${t.ref}: ${name} will attend the ${ATTENDANCE_LABEL[kind].toLowerCase()}${item.on ? ` on ${item.on}` : ''}${mofNamed ? ' (named on the MOF certificate)' : ''}${item.entry ? ` (was ${item.entry.attendee})` : ''}`,
+      });
+      return updated;
+    });
+  }
+
+  /** On or after the date: the person went (with the attendance slip) or the company missed it (with the reason). */
+  async recordTenderAttendance(user: User, tenderId: Id, kind: TenderAttendanceKind, attended: boolean, note: string, proof: ProofInput[]) {
+    const t = await this.store.get('tenders', tenderId);
+    if (!t) throw new NotFound('Tender');
+    if (!(await this.canTrackAttendance(user, t))) throw new AccessDenied('commercial.prepare', t.companyId);
+    if (t.status !== 'open' && t.status !== 'preparing') throw new BadRequest('This tender is no longer being worked on.');
+    const today = this.today();
+    const item = tenderAttendance(t, today).find((a) => a.kind === kind);
+    if (!item) throw new BadRequest('Record the date of the briefing or site visit in the tender record first.');
+    if (!item.on || item.on > today) throw new BadRequest('Attendance is recorded on or after the day itself.');
+    if (item.entry?.result) throw new BadRequest('Attendance is already recorded.');
+    const text = String(note ?? '').trim().slice(0, 300);
+    const rec = this.proofRecords(user, t.companyId, null, proof ?? [], {}, { documentsOnly: true });
+    if (attended && !rec.docs.length) throw new BadRequest('Attach the attendance slip.');
+    if (!attended && text.length < 5) throw new BadRequest('Say why nobody attended.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      if (rec.docs.length) await this.saveProof(tx, { photos: [], docs: rec.docs.map((d) => ({ ...d, tenderId: t.id, caption: d.caption || `${ATTENDANCE_LABEL[kind]} attendance slip` })) });
+      const docIds = rec.docs.map((d) => d.id);
+      const now = (await tx.get('tenders', t.id)) ?? t;
+      const base: TenderAttendance = item.entry ?? { kind, attendee: '', mofNamed: false, namedBy: user.name, namedById: user.id, namedAt: at, result: null };
+      const entry: TenderAttendance = { ...base, result: { attended, note: text, docIds, by: user.name, byId: user.id, at } };
+      const updated = await tx.update('tenders', t.id, { attendance: [...(now.attendance ?? []).filter((a) => a.kind !== kind), entry] });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: t.companyId,
+        action: 'tender.attendance',
+        entity: 'tender',
+        entityId: t.id,
+        summary: `${t.ref}: ${ATTENDANCE_LABEL[kind].toLowerCase()} on ${item.on} ${attended ? `attended${base.attendee ? ` by ${base.attendee}` : ''}, slip kept` : `missed: ${text}`}`,
+      });
+      return updated;
+    });
+  }
+
+  /** Marketing staff record the working hours they spent on a desk bid; it is needed before the bid is lodged. */
+  async recordTenderHours(user: User, tenderId: Id, hours: number, note = '') {
+    const t = await this.store.get('tenders', tenderId);
+    if (!t) throw new NotFound('Tender');
+    if (t.desk !== 'MARKETING' || !this.tenderWork(user, t, await this.grants(), this.today())) throw new AccessDenied('tender.work', t.companyId);
+    if (t.status !== 'open' && t.status !== 'preparing') throw new BadRequest('This tender is no longer being worked on.');
+    const h = Number(hours);
+    if (!Number.isFinite(h) || h < 0.25 || h > 100 || Math.round(h * 4) !== h * 4) throw new BadRequest('Give the hours worked in quarter hours, from 0.25 to 100.');
+    const at = this.now();
+    const text = String(note ?? '').trim().slice(0, 200);
+    return this.store.transaction(async (tx) => {
+      const now = await tx.get('tenders', t.id);
+      const updated = await tx.update('tenders', t.id, { workLog: [...(now?.workLog ?? []), { userId: user.id, by: user.name, hours: h, at, note: text }] });
+      await tx.audit({ at, actor: user.name, companyId: t.companyId, action: 'tender.hours', entity: 'tender', entityId: t.id, summary: `${t.ref}: ${h} working hours recorded` });
+      return updated;
+    });
+  }
+
+  /**
+   * Why a company has no tender entered this month (Fauzan, 23 Nov 2026). Written by the Tender Executive who covers
+   * the company or by the Marketing Manager or Deputy; a new reason replaces this month's earlier one.
+   */
+  async setNoEntryReason(user: User, companyId: Id, reason: string) {
+    const today = this.today();
+    if (!(await this.deskOn())) throw new BadRequest('The Marketing desk has not started.');
+    if (!can(user, await this.grants(), today, 'tender.work', companyId)) throw new AccessDenied('tender.work', companyId);
+    const text = String(reason ?? '').trim().slice(0, 300);
+    if (text.length < 10) throw new BadRequest('Write the reason in a sentence.');
+    const month = today.slice(0, 7);
+    const entered = (await this.store.list('tenders', { companyId: [companyId] })).some(
+      (t) => t.desk === 'MARKETING' && t.submission && dateOf(t.submission.at).slice(0, 7) === month,
+    );
+    if (entered) throw new BadRequest('This company has entered a tender this month.');
+    const at = this.now();
+    const line = { month, companyId, reason: text, by: user.name, byId: user.id, at };
+    return this.store.transaction(async (tx) => {
+      const row = await tx.get('tenderProtocols', 'tender');
+      if (!row) throw new BadRequest('The Marketing desk has not started.');
+      const oldest = addDays(today, -730).slice(0, 7);
+      const kept = (row.marketingNoEntry ?? []).filter((x) => !(x.month === month && x.companyId === companyId) && x.month >= oldest);
+      await tx.update('tenderProtocols', 'tender', { marketingNoEntry: [...kept, line] });
+      await tx.audit({ at, actor: user.name, companyId, action: 'tender.no_entry_reason', entity: 'company', entityId: companyId, summary: `No tender entered in ${month}: ${text}` });
+      return line;
+    });
+  }
+
   /** The group tender protocol admin staff follow, and whether this user may change it. */
   async tenderProtocol(user: User) {
-    return { protocol: await this.tenderProtocolRow(), canEdit: canSetTenderProtocol(user) };
+    const protocol = await this.tenderProtocolRow();
+    return { protocol, canEdit: isTenderDeskLead(user, marketingDeskOn(protocol, this.today())) };
   }
 
   /** The Director Office Administrator (or the Director) sets the tender protocol for every company. */
   async setTenderProtocol(user: User, input: { steps: (Omit<TenderProtocolStep, 'id'> & { id?: string })[]; note: string }) {
-    if (!canSetTenderProtocol(user)) throw new AccessDenied('commercial.approve', '(tender protocol)');
+    if (!isTenderDeskLead(user, await this.deskOn())) throw new AccessDenied('commercial.approve', '(tender protocol)');
     const steps = input.steps ?? [];
     if (steps.length < 1 || steps.length > 60) throw new BadRequest('The protocol needs between 1 and 60 steps.');
     const ids = new Set<string>();
@@ -9708,7 +10379,17 @@ export class PrimaService {
       .slice(0, 300);
     if (note.length < 3) throw new BadRequest('Say what changed in the protocol.');
     const before = await this.tenderProtocolRow();
-    const next: TenderProtocol = { id: 'tender', version: before.version + 1, steps: clean, setBy: user.name, setAt: this.now(), note, placeholder: false };
+    const next: TenderProtocol = {
+      id: 'tender',
+      version: before.version + 1,
+      steps: clean,
+      setBy: user.name,
+      setAt: this.now(),
+      note,
+      placeholder: false,
+      ...(before.marketingDesk ? { marketingDesk: before.marketingDesk } : {}),
+      ...(before.marketingNoEntry ? { marketingNoEntry: before.marketingNoEntry } : {}),
+    };
     return this.store.transaction(async (tx) => {
       if (await tx.get('tenderProtocols', 'tender')) {
         const { id: _id, ...rest } = next;
@@ -9736,10 +10417,10 @@ export class PrimaService {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
     const g = await this.grants();
-    assertCan(user, g, this.today(), 'commercial.prepare', t.companyId);
+    this.assertTenderWork(user, t, g, this.today());
     if (t.status !== 'open' && t.status !== 'preparing') throw new BadRequest('This tender is no longer being worked on.');
     const protocol = await this.tenderProtocolRow();
-    const pstep = protocol.steps.find((s) => s.id === stepId);
+    const pstep = stepsFor(protocol, t).find((s) => s.id === stepId);
     const step = pstep ?? (t.checklist ?? []).find((s) => s.id === stepId);
     if (!step) throw new NotFound('Protocol step');
     if (pstep?.auto)
@@ -9754,7 +10435,7 @@ export class PrimaService {
     const text = (note ?? '').trim().slice(0, 300) || (status === 'done' ? 'Done' : '');
     const ref = (opts.ref ?? '').trim().slice(0, 60);
     if (status === 'na' && text.length < 3) throw new BadRequest('Write why it does not apply to this tender.');
-    if (status === 'na' && !ref) throw new BadRequest('T/B needs the reference in the arahan that shows it does not apply.');
+    if (status === 'na' && !ref && !t.proposal) throw new BadRequest('T/B needs the reference in the arahan that shows it does not apply.');
     if (pstep?.section?.startsWith('03') && proof.length) {
       const forms = await this.tenderNameForms(t.companyId);
       const nameOf = (p: ProofInput) => (p.kind === 'document' ? p.name : p.kind === 'link' ? (parseSharePointProofLink(p.url, this.proofLinkHosts) as { link?: { name: string } }).link?.name ?? '' : '');
@@ -9798,7 +10479,7 @@ export class PrimaService {
   async undoTenderStep(user: User, tenderId: Id, stepId: string) {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
-    assertCan(user, await this.grants(), this.today(), 'commercial.prepare', t.companyId);
+    this.assertTenderWork(user, t, await this.grants(), this.today());
     if (t.status !== 'open' && t.status !== 'preparing') throw new BadRequest('This tender is no longer being worked on.');
     if ((t.verifications ?? []).length) throw new BadRequest('The bid is already signed; the manager must send it back to change it.');
     const d = (t.protocolDone ?? []).find((x) => x.stepId === stepId);
@@ -9825,7 +10506,7 @@ export class PrimaService {
     const today = this.today();
     return (
       (user.role === 'company_manager' && can(user, g, today, 'commercial.approve', t.companyId)) ||
-      (isDoa(user) && can(user, g, today, 'commercial.view', t.companyId))
+      (tenderCentral(user, t) && can(user, g, today, 'commercial.view', t.companyId))
     );
   }
 
@@ -9868,7 +10549,7 @@ export class PrimaService {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
     const g = await this.grants();
-    if (!can(user, g, this.today(), 'commercial.prepare', t.companyId) && !(await this.canSuperviseTender(user, t)))
+    if (!this.tenderWork(user, t, g, this.today()) && !(await this.canSuperviseTender(user, t)))
       throw new AccessDenied('commercial.prepare', t.companyId);
     const protocol = await this.tenderProtocolRow();
     if (!protocol.steps.some((s) => s.id === stepId) && !(t.checklist ?? []).some((c) => c.id === stepId)) throw new NotFound('Protocol step');
@@ -9891,8 +10572,13 @@ export class PrimaService {
     if (choice === 'TERUSKAN') requireApprovalReason(text);
     if (choice === 'TERUSKAN' && t.leadOnly) throw new BadRequest('This is a lead only. Confirm the tender and its papers first.');
     const at = this.now();
+    // On a Marketing desk bid "tidak bida" is the company saying "do not bid": Marketing stops work on it.
+    const stop = t.desk === 'MARKETING' && choice === 'TIDAK_BIDA';
     return this.store.transaction(async (tx) => {
-      const updated = await tx.update('tenders', t.id, { decision: { choice, reason: text, by: user.name, at } });
+      const updated = await tx.update('tenders', t.id, {
+        decision: { choice, reason: text, by: user.name, at },
+        ...(stop ? { status: 'no_bid' as const, outcome: { status: 'no_bid' as const, userId: user.id, by: user.name, at } } : {}),
+      });
       await tx.audit({
         at,
         actor: user.name,
@@ -9911,7 +10597,7 @@ export class PrimaService {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
     const g = await this.grants();
-    if (!can(user, g, this.today(), 'commercial.prepare', t.companyId) && !(await this.canSuperviseTender(user, t)))
+    if (!this.tenderWork(user, t, g, this.today()) && !(await this.canSuperviseTender(user, t)))
       throw new AccessDenied('commercial.prepare', t.companyId);
     if (t.status !== 'open' && t.status !== 'preparing') throw new BadRequest('This tender is no longer being worked on.');
     const num = (v: unknown) => (v == null || v === '' ? null : Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : bad());
@@ -9944,7 +10630,7 @@ export class PrimaService {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
     const g = await this.grants();
-    if (!can(user, g, this.today(), 'commercial.prepare', t.companyId) && !(await this.canSuperviseTender(user, t)))
+    if (!this.tenderWork(user, t, g, this.today()) && !(await this.canSuperviseTender(user, t)))
       throw new AccessDenied('commercial.prepare', t.companyId);
     const q = (text ?? '').trim().slice(0, 500);
     if (q.length < 5) throw new BadRequest('Write the question for the buyer.');
@@ -9965,7 +10651,7 @@ export class PrimaService {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
     const g = await this.grants();
-    if (!can(user, g, this.today(), 'commercial.prepare', t.companyId) && !(await this.canSuperviseTender(user, t)))
+    if (!this.tenderWork(user, t, g, this.today()) && !(await this.canSuperviseTender(user, t)))
       throw new AccessDenied('commercial.prepare', t.companyId);
     const q = (t.queries ?? []).find((x) => x.id === queryId);
     if (!q) throw new NotFound('Query');
@@ -9987,11 +10673,19 @@ export class PrimaService {
       return d?.status === 'na' && !d.naConfirmedBy ? `${l} (T/B waiting for a supervisor)` : l;
     };
     const open = (id: string) => !stepFinished((t.protocolDone ?? []).find((d) => d.stepId === id));
-    const steps = protocol.steps
+    const steps = stepsFor(protocol, t)
       .filter((s) => !s.auto && (s.before === 'preparing' || s.before === to) && open(s.id))
       .map((s) => label(s.id, s.code ? `${s.code} ${s.label}` : s.label));
     const items = to === 'submitted' ? (t.checklist ?? []).filter((c) => open(c.id)).map((c) => label(c.id, c.label)) : [];
-    const decision = t.decision?.choice === 'TERUSKAN' ? [] : ['Decision to teruskan'];
+    // Marketing desk (Fauzan, 22 Nov 2026): no yes is asked for; only the company's "do not bid" or "tangguh" stops it.
+    const decision =
+      t.desk === 'MARKETING'
+        ? t.decision && t.decision.choice !== 'TERUSKAN'
+          ? [`The company said ${DECISION_LABEL[t.decision.choice].toLowerCase()}`]
+          : []
+        : t.decision?.choice === 'TERUSKAN'
+          ? []
+          : ['Decision to teruskan'];
     return [...decision, ...steps, ...items];
   }
 
@@ -10000,7 +10694,7 @@ export class PrimaService {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
     const g = await this.grants();
-    if (!can(user, g, this.today(), 'commercial.prepare', t.companyId) && !(isDoa(user) && can(user, g, this.today(), 'commercial.view', t.companyId)))
+    if (!this.tenderWork(user, t, g, this.today()) && !(tenderCentral(user, t) && can(user, g, this.today(), 'commercial.view', t.companyId)))
       throw new AccessDenied('commercial.prepare', t.companyId);
     if (!TENDER_PAPER_LABEL[kind]) throw new BadRequest('Unknown kind of tender paper.');
     if (t.status !== 'open' && t.status !== 'preparing') throw new BadRequest('This tender is no longer being worked on.');
@@ -10035,6 +10729,8 @@ export class PrimaService {
   /** What still stops the bid being signed or lodged: the list of file names, each file, and the technical checks. */
   private bidFileGaps(t: Tender): string[] {
     const files = t.bidFiles ?? [];
+    // A proposal has no tender asking for file names; its files are on the checklist and the copy kept when sent.
+    if (t.proposal && !files.length) return [];
     if (!files.length) return ['the list of file names the tender asks for'];
     return files.flatMap((f) =>
       !f.docId ? [`file "${f.required}"`] : f.part === 'TEKNIKAL' && !f.confirmedBy ? [`check "${f.required}" has no company name`] : [],
@@ -10049,7 +10745,7 @@ export class PrimaService {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
     const g = await this.grants();
-    if (!can(user, g, this.today(), 'commercial.prepare', t.companyId) && !(isDoa(user) && can(user, g, this.today(), 'commercial.view', t.companyId)))
+    if (!this.tenderWork(user, t, g, this.today()) && !(tenderCentral(user, t) && can(user, g, this.today(), 'commercial.view', t.companyId)))
       throw new AccessDenied('commercial.prepare', t.companyId);
     if (t.status !== 'open' && t.status !== 'preparing') throw new BadRequest('This tender is no longer being worked on.');
     if ((t.verifications ?? []).length) throw new BadRequest('The bid is already signed; the manager must send it back to change it.');
@@ -10092,7 +10788,7 @@ export class PrimaService {
   async uploadTenderBidFile(user: User, tenderId: Id, fileId: string, proof: ProofInput[]) {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
-    assertCan(user, await this.grants(), this.today(), 'commercial.prepare', t.companyId);
+    this.assertTenderWork(user, t, await this.grants(), this.today());
     if (t.status !== 'open' && t.status !== 'preparing') throw new BadRequest('This tender is no longer being worked on.');
     if ((t.verifications ?? []).length) throw new BadRequest('The bid is already signed; the manager must send it back to change it.');
     const f = (t.bidFiles ?? []).find((x) => x.id === fileId);
@@ -10130,7 +10826,7 @@ export class PrimaService {
   async confirmTenderBidFile(user: User, tenderId: Id, fileId: string) {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
-    assertCan(user, await this.grants(), this.today(), 'commercial.prepare', t.companyId);
+    this.assertTenderWork(user, t, await this.grants(), this.today());
     if ((t.verifications ?? []).length) throw new BadRequest('The bid is already signed; the manager must send it back to change it.');
     const f = (t.bidFiles ?? []).find((x) => x.id === fileId);
     if (!f) throw new NotFound('Bid file');
@@ -10159,16 +10855,24 @@ export class PrimaService {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
     const g = await this.grants();
-    if (!can(user, g, this.today(), 'commercial.prepare', t.companyId) && !(isDoa(user) && can(user, g, this.today(), 'commercial.view', t.companyId)))
+    if (!this.tenderWork(user, t, g, this.today()) && !(tenderCentral(user, t) && can(user, g, this.today(), 'commercial.view', t.companyId)))
       throw new AccessDenied('commercial.prepare', t.companyId);
+    if (t.proposal) throw new BadRequest('A proposal uses the proposal checklist; there are no tender papers to read.');
     if (!(t.papers ?? []).some((p) => p.kind === 'ARAHAN')) throw new BadRequest('Upload the arahan petender first; the checklist is drafted from it.');
     if ((t.verifications ?? []).length) throw new BadRequest('The bid is already being checked.');
     const doneIds = new Set((t.protocolDone ?? []).map((d) => d.stepId));
     const keep = (t.checklist ?? []).filter((c) => c.source === 'doa' || doneIds.has(c.id));
-    const drafted = this.tenderReader.draft(
-      t,
-      (t.papers ?? []).map((p) => ({ name: p.name, kind: p.kind })),
+    // AH9: the reader gets the text the app can read in each paper; scanned pages and pictures are listed as unread.
+    const papers = await Promise.all(
+      (t.papers ?? []).map(async (p) => {
+        const doc = this.tenderReader.readsFiles ? await this.store.get('evidenceDocs', p.docId) : null;
+        return { name: p.name, kind: p.kind, text: doc?.data ? await pdfText(doc.data) : null };
+      }),
     );
+    const drafted = await this.tenderReader.draft(t, papers);
+    const checklistRead = this.tenderReader.readsFiles
+      ? { reader: this.tenderReader.name, at: this.now(), read: papers.filter((p) => p.text).map((p) => p.name), unread: papers.filter((p) => !p.text).map((p) => p.name) }
+      : null;
     const keepLabels = new Set(keep.map((k) => k.label));
     const fresh: TenderCheckItem[] = drafted
       .filter((d) => !keepLabels.has(d.label))
@@ -10178,7 +10882,7 @@ export class PrimaService {
     const checklist = [...keep, ...fresh];
     const at = this.now();
     return this.store.transaction(async (tx) => {
-      const updated = await tx.update('tenders', t.id, { checklist, checklistReview: null });
+      const updated = await tx.update('tenders', t.id, { checklist, checklistReview: null, checklistRead });
       await tx.audit({
         at,
         actor: user.name,
@@ -10200,7 +10904,10 @@ export class PrimaService {
   ) {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
-    if (!isDoa(user) || !can(user, await this.grants(), this.today(), 'commercial.view', t.companyId)) throw new AccessDenied('commercial.view', t.companyId);
+    const g = await this.grants();
+    // Marketing desk (Fauzan, 22 Nov 2026): the executive working the bid confirms its checklist; no separate review.
+    const mayReview = t.desk === 'MARKETING' ? this.tenderWork(user, t, g, this.today()) || tenderCentral(user, t) : tenderCentral(user, t);
+    if (!mayReview || !can(user, g, this.today(), 'commercial.view', t.companyId)) throw new AccessDenied('commercial.view', t.companyId);
     if ((t.verifications ?? []).length) throw new BadRequest('The bid is already being checked.');
     const note = (input.note ?? '').trim().slice(0, 300);
     if (note.length < 3) throw new BadRequest('Write a note on the review.');
@@ -10240,7 +10947,7 @@ export class PrimaService {
         action: 'tender.checklist_review',
         entity: 'tender',
         entityId: t.id,
-        summary: `${t.ref}: checklist checked by the Director Office (${remove.size} removed, ${added.length} added). ${note}`,
+        summary: `${t.ref}: checklist checked by ${isMarketing(user) ? 'Marketing' : 'the Director Office'} (${remove.size} removed, ${added.length} added). ${note}`,
       });
       return updated;
     });
@@ -10252,7 +10959,12 @@ export class PrimaService {
     const today = this.today();
     const next = tenderNextCheck(t);
     if (!next) return null;
-    if (next === 'PREPARER') return can(user, g, today, 'commercial.prepare', t.companyId) ? 'PREPARER' : null;
+    if (next === 'PREPARER') return this.tenderWork(user, t, g, today) ? 'PREPARER' : null;
+    // Marketing desk: the Marketing Manager or Deputy checks, never the person who signed as preparer.
+    if (next === 'CHECK')
+      return isMarketingLead(user) && can(user, g, today, 'commercial.view', t.companyId) && !(t.verifications ?? []).some((v) => v.userId === user.id)
+        ? 'CHECK'
+        : null;
     // The manager signs that all is verified; never the same person who signed as preparer.
     return user.role === 'company_manager' &&
       can(user, g, today, 'commercial.approve', t.companyId) &&
@@ -10261,9 +10973,11 @@ export class PrimaService {
       : null;
   }
 
-  /** Who may send a signed or ticked bid back for changes: the company manager. */
+  /** Who may send a signed or ticked bid back for changes: the company manager, or the Marketing check on a desk bid. */
   private async canSendBackTender(user: User, t: Tender): Promise<boolean> {
-    return user.role === 'company_manager' && can(user, await this.grants(), this.today(), 'commercial.approve', t.companyId);
+    const g = await this.grants();
+    if (user.role === 'company_manager' && can(user, g, this.today(), 'commercial.approve', t.companyId)) return true;
+    return t.desk === 'MARKETING' && isMarketingLead(user) && can(user, g, this.today(), 'commercial.view', t.companyId);
   }
 
   /**
@@ -10271,26 +10985,50 @@ export class PrimaService {
    * company manager signs that all is verified by the guidelines. The manager can send it back instead; both signatures
    * are then cleared.
    */
-  async verifyTender(user: User, tenderId: Id, approve: boolean, note: string) {
+  async verifyTender(user: User, tenderId: Id, approve: boolean, note: string, aiChecker?: TenderAiChecker) {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
-    const level = approve ? await this.tenderCheckFor(user, t) : (await this.canSendBackTender(user, t)) ? 'MANAGER' : null;
+    const backAs: TenderCheckLevel = user.role === 'company_manager' ? 'MANAGER' : 'CHECK';
+    const level = approve ? await this.tenderCheckFor(user, t) : (await this.canSendBackTender(user, t)) ? backAs : null;
     if (!level) throw new AccessDenied('commercial.approve', t.companyId);
     if (t.status !== 'preparing') throw new BadRequest('Only a bid being prepared is signed.');
-    if (!t.checklistReview) throw new BadRequest('The Director Office must check the tender checklist first.');
+    if (t.desk === 'MARKETING') {
+      if (!t.checklist?.length) throw new BadRequest('Make the tender checklist from the papers first.');
+    } else if (!t.checklistReview) throw new BadRequest('The Director Office must check the tender checklist first.');
     const missing = await this.tenderMissing(t, 'submitted');
     if (missing.length) throw new BadRequest(`The checklist is not finished. Still to do: ${missing.join(', ')}.`);
     const fileGaps = approve ? this.bidFileGaps(t) : [];
     if (fileGaps.length) throw new BadRequest(`The bid files are not ready. Still to do: ${fileGaps.join(', ')}.`);
-    const text = (note ?? '').trim().slice(0, 300);
+    const caughtByCheck = !approve && level === 'CHECK' && t.desk === 'MARKETING';
+    const text = (note ?? '').trim().slice(0, caughtByCheck ? 1500 : 300);
     if (!approve && text.length < 3) throw new BadRequest('Say what must change.');
+    // AH14: each line the Marketing check writes when sending back is one item the first pass missed.
+    const caughtItems = caughtByCheck ? checkCaughtItems(text) : [];
     // The preparer's signature declares their own work done; the manager's signature approves it and needs a reason.
-    if (approve && level === 'MANAGER') requireApprovalReason(text, 'sign');
+    if (approve && (level === 'MANAGER' || level === 'CHECK')) requireApprovalReason(text, 'sign');
+    // The AI check (Fauzan, 23 Nov 2026): every point it raised is answered before the Marketing check signs.
+    const openFlags = (t.aiCheck?.flags ?? []).filter((f) => !f.answer);
+    if (approve && level === 'CHECK' && openFlags.length)
+      throw new BadRequest(`Answer every point the AI check raised first (${openFlags.length} open): fixed, or not needed with the reason.`);
+    // It runs once, when the preparer signs a desk bid (again only if it could not run before).
+    const aiCheck =
+      approve && level === 'PREPARER' && t.desk === 'MARKETING' && !t.proposal && aiChecker && (!t.aiCheck || t.aiCheck.error)
+        ? await this.runTenderAiCheck(t, user, aiChecker)
+        : undefined;
     const at = this.now();
-    const LEVEL = { PREPARER: "preparer's signature", MANAGER: "company manager's signature" } as const;
+    const LEVEL = { PREPARER: "preparer's signature", CHECK: 'Marketing check', MANAGER: "company manager's signature" } as const;
     return this.store.transaction(async (tx) => {
       const updated = await tx.update('tenders', t.id, {
         verifications: approve ? [...(t.verifications ?? []), { level, userId: user.id, by: user.name, at, note: text }] : [],
+        ...(aiCheck ? { aiCheck } : {}),
+        ...(caughtByCheck
+          ? {
+              checkCaught: [
+                ...(t.checkCaught ?? []),
+                { at, by: user.name, byId: user.id, preparerId: (t.verifications ?? []).filter((v) => v.level === 'PREPARER').at(-1)?.userId ?? null, items: caughtItems },
+              ],
+            }
+          : {}),
       });
       await tx.audit({
         at,
@@ -10299,7 +11037,78 @@ export class PrimaService {
         action: approve ? 'tender.verify' : 'tender.send_back',
         entity: 'tender',
         entityId: t.id,
-        summary: approve ? `${t.ref}: ${LEVEL[level]} given. ${text}`.trim() : `${t.ref}: sent back by the company manager. ${text}`,
+        summary: approve
+          ? `${t.ref}: ${LEVEL[level]} given. ${text}`.trim()
+          : `${t.ref}: sent back by ${level === 'CHECK' ? 'the Marketing check' : 'the company manager'}${caughtByCheck ? ` (${caughtItems.length} item${caughtItems.length === 1 ? '' : 's'} caught)` : ''}. ${text}`,
+      });
+      return updated;
+    });
+  }
+
+  /**
+   * One AI read of the tender papers against the checklist (Fauzan, 23 Nov 2026). Only the readable text of the
+   * buyer's papers and the checklist labels are sent: no staff names, prices or company files. A flag is kept only
+   * where its quoted words are really in the paper. If the AI cannot run, the bid goes on and the reason is shown.
+   */
+  private async runTenderAiCheck(t: Tender, user: User, aiChecker: TenderAiChecker): Promise<TenderAiCheck> {
+    const at = this.now();
+    const papers = await Promise.all(
+      (t.papers ?? []).map(async (p) => {
+        const doc = await this.store.get('evidenceDocs', p.docId);
+        return { name: p.name, text: doc?.data ? await pdfText(doc.data) : null };
+      }),
+    );
+    const { sent, partial, skipped } = tenderAiPapers(papers);
+    // Very long papers are cut to the limit: they are named as read in part, or as not sent.
+    const unread = [...papers.filter((p) => !p.text).map((p) => p.name), ...skipped.map((n) => `${n} (too long, not sent)`)];
+    const read = sent.map((p) => (partial.includes(p.name) ? `${p.name} (only part, at the limit)` : p.name));
+    const base = { at, by: user.name, read, unread, flags: [] as TenderAiFlag[], dropped: 0 };
+    if (!sent.length) return { ...base, error: 'No tender paper had text the app could read, so AI could not check them.' };
+    try {
+      const raw = await aiChecker({ channel: t.channel, papers: sent, checklist: (t.checklist ?? []).map((c) => c.label) });
+      // Quotes are checked against each paper's full text, not only the lines sent.
+      const full = papers.filter((p): p is { name: string; text: string } => !!p.text).map((p) => ({ name: p.name.slice(0, 200), text: p.text }));
+      const { flags, dropped } = tenderAiFlags(raw, full);
+      return {
+        ...base,
+        flags: flags.map((f, i) => ({ id: `aif-${i + 1}`, ...f, answer: null })),
+        dropped,
+        error: null,
+      };
+    } catch {
+      return { ...base, error: 'The AI check could not run. The bid goes on; the Marketing check reads the papers as usual.' };
+    }
+  }
+
+  /**
+   * The Marketing Manager or Deputy answers a point the AI check raised: fixed, or not needed with the reason. Never
+   * the person who prepared the bid, and only before the Marketing check is signed.
+   */
+  async answerTenderAiFlag(user: User, tenderId: Id, flagId: string, status: 'FIXED' | 'NOT_NEEDED', note: string) {
+    const t = await this.store.get('tenders', tenderId);
+    if (!t) throw new NotFound('Tender');
+    const g = await this.grants();
+    if (!isMarketingLead(user) || !can(user, g, this.today(), 'tender.work', t.companyId)) throw new AccessDenied('tender.work', t.companyId);
+    if (status !== 'FIXED' && status !== 'NOT_NEEDED') throw new BadRequest('Answer fixed or not needed.');
+    const flag = (t.aiCheck?.flags ?? []).find((f) => f.id === flagId);
+    if (!flag) throw new NotFound('AI check point');
+    if (t.status !== 'preparing' || (t.verifications ?? []).some((v) => v.level === 'CHECK')) throw new BadRequest('The Marketing check is already given.');
+    const preparer = (t.verifications ?? []).filter((v) => v.level === 'PREPARER').at(-1);
+    if (preparer?.userId === user.id) throw new AccessDenied('tender.work', t.companyId);
+    const text = (note ?? '').trim().slice(0, 300);
+    if (text.length < 3) throw new BadRequest(status === 'FIXED' ? 'Say what was fixed.' : 'Give the reason it is not needed.');
+    const at = this.now();
+    const flags = t.aiCheck!.flags.map((f) => (f.id === flagId ? { ...f, answer: { status, note: text, by: user.name, byId: user.id, at } } : f));
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('tenders', t.id, { aiCheck: { ...t.aiCheck!, flags } });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: t.companyId,
+        action: 'tender.ai_flag',
+        entity: 'tender',
+        entityId: t.id,
+        summary: `${t.ref}: AI check point "${flag.what.slice(0, 80)}" answered ${status === 'FIXED' ? 'fixed' : 'not needed'}. ${text}`,
       });
       return updated;
     });
@@ -10310,24 +11119,36 @@ export class PrimaService {
     const t = await this.store.get('tenders', tenderId);
     if (!t) throw new NotFound('Tender');
     const today = this.today();
-    assertCan(user, await this.grants(), today, 'commercial.prepare', t.companyId);
+    this.assertTenderWork(user, t, await this.grants(), today);
     if (t.status !== 'preparing') throw new BadRequest('Only a bid being prepared can be submitted.');
+    const itPart = (await this.store.list('itTenderTasks', {})).find((x) => x.tenderId === t.id && x.stage !== 'dropped');
+    if (itPart && !itPart.handedOver) throw new BadRequest('IT has not handed over the IT part of this bid yet.');
     const findings = tenderEligibility(t.channel, await this.store.list('licences', { companyId: t.companyId }), today, t.closesOn);
     if (isBlocked(findings)) throw new RuleBlocked(findings);
-    if (t.closesOn < today) throw new BadRequest('This tender has closed.');
+    // A proposal's date is Marketing's own plan, not a buyer's closing time, so a late proposal can still be sent.
+    if (t.closesOn < today && !t.proposal) throw new BadRequest('This tender has closed.');
     const missing = await this.tenderMissing(t, 'submitted');
     if (missing.length) throw new BadRequest(`Follow the tender protocol first. Still to do: ${missing.join(', ')}.`);
     const fileGaps = this.bidFileGaps(t);
     if (fileGaps.length) throw new BadRequest(`The bid files are not ready. Still to do: ${fileGaps.join(', ')}.`);
-    if (tenderNextCheck(t)) throw new BadRequest('The person who prepared the bid and the company manager must both sign it before it is lodged.');
+    if (tenderNextCheck(t))
+      throw new BadRequest(
+        t.desk === 'MARKETING'
+          ? 'The Marketing preparer, the Marketing check and the company manager must all sign it before it is lodged.'
+          : 'The person who prepared the bid and the company manager must both sign it before it is lodged.',
+      );
+    if (t.desk === 'MARKETING' && !(t.workLog ?? []).length) throw new BadRequest('Record the working hours spent on this bid first.');
+    const visitGaps = attendanceGaps(t, today);
+    if (visitGaps.length) throw new BadRequest(`A mandatory briefing or site visit stops this bid: ${visitGaps.join(', ')}.`);
     const rec = this.proofRecords(user, t.companyId, null, proof, {}, { documentsOnly: true });
-    if (!rec.docs.length) throw new BadRequest('Attach the tender submission slip as proof.');
+    if (!rec.docs.length) throw new BadRequest(t.proposal ? 'Attach a copy of the proposal as sent to the client.' : 'Attach the tender submission slip as proof.');
     const text = (note ?? '').trim().slice(0, 300);
     const at = this.now();
-    const docs = rec.docs.map((d) => ({ ...d, tenderId: t.id, caption: d.caption || 'Submission slip' }));
+    const docs = rec.docs.map((d) => ({ ...d, tenderId: t.id, caption: d.caption || (t.proposal ? 'Proposal as sent' : 'Submission slip') }));
     return this.store.transaction(async (tx) => {
       const proofIds = await this.saveProof(tx, { photos: [], docs });
       const updated = await tx.update('tenders', t.id, { status: 'submitted', submission: { by: user.name, at, note: text, proofIds } });
+      if (itPart) await tx.update('itTenderTasks', itPart.id, { stage: 'submitted' });
       if (t.groupId) await this.snapshotGroupEntry(tx, { ...t, submission: { by: user.name, at, note: text, proofIds } }, docs[0]);
       await tx.audit({
         at,
@@ -10336,7 +11157,7 @@ export class PrimaService {
         action: 'tender.update',
         entity: 'tender',
         entityId: t.id,
-        summary: `${t.ref} marked submitted with the submission slip. ${text}`.trim(),
+        summary: `${t.ref} ${t.proposal ? 'proposal sent to the client, copy kept' : 'marked submitted with the submission slip'}. ${text}`.trim(),
       });
       return updated;
     });
@@ -10387,13 +11208,16 @@ export class PrimaService {
    * manager's verification and the submission slip are enough; there is no check by another company (Fauzan, 26 Oct 2026).
    */
   async createTenderGroup(user: User, sourceTenderId: Id, companyIds: Id[]) {
-    if (!isDoa(user)) throw new AccessDenied('commercial.view', '(joint tender)');
+    const deskOn = await this.deskOn();
+    if (!isTenderDesk(user, deskOn)) throw new AccessDenied('commercial.view', '(joint tender)');
     const src = await this.store.get('tenders', sourceTenderId);
     if (!src) throw new NotFound('Tender');
     if (src.groupId) throw new BadRequest('This tender is already a joint entry.');
     if (src.status !== 'open' && src.status !== 'preparing') throw new BadRequest('Only an open tender can be entered by more companies.');
     // Fauzan, 26 Oct 2026: the Director Office makes the checklist, then sends it to the companies.
-    if (!src.checklist?.length || !src.checklistReview) throw new BadRequest('Make and check the tender checklist first, then send it to the companies.');
+    // Marketing desk (Fauzan, 22 Nov 2026): the checklist is made once and reused; no separate review is needed.
+    if (!src.checklist?.length || (src.desk !== 'MARKETING' && !src.checklistReview))
+      throw new BadRequest('Make and check the tender checklist first, then send it to the companies.');
     const today = this.today();
     if (src.closesOn < today) throw new BadRequest('This tender has closed.');
     const g = await this.grants();
@@ -10401,6 +11225,7 @@ export class PrimaService {
     if (others.length < 1 || others.length > 9) throw new BadRequest('Choose 1 to 9 other companies to enter with it.');
     const visible = visibleCompanyIds(user, g, today);
     if (!visible.includes(src.companyId) || others.some((c) => !visible.includes(c))) throw new AccessDenied('commercial.view', '(joint tender)');
+    const desk = deskOn || src.desk === 'MARKETING';
     const companies = await this.store.list('companies', { id: [src.companyId, ...others] });
     const existing = await this.store.list('tenders', { companyId: others });
     const dup = others.find((c) => existing.some((t) => t.companyId === c && t.ref === src.ref));
@@ -10433,8 +11258,9 @@ export class PrimaService {
             title: src.title,
             buyer: src.buyer,
             channel: src.channel,
-            source: `Joint entry set by the Director Office (${src.source})`,
-            owner: manager?.name ?? 'Company manager',
+            source: `Joint entry set by ${desk ? 'Marketing' : 'the Director Office'} (${src.source})`,
+            owner: desk ? user.name : (manager?.name ?? 'Company manager'),
+            ...(desk ? { desk: 'MARKETING' as const, bidNotice: this.bidNotice(user, at) } : {}),
             closesOn: src.closesOn,
             guards: src.guards,
             sites: src.sites,
@@ -10486,7 +11312,7 @@ export class PrimaService {
     const today = this.today();
     const ids = visibleCompanyIds(user, await this.grants(), today);
     const all = await this.store.list('tenderGroups', {});
-    const wide = isDoa(user) || isGroupLeader(user);
+    const wide = isDoa(user) || isGroupLeader(user) || isMarketingLead(user);
     const groups = all.filter((g) => g.entries.some((e) => ids.includes(e.companyId)));
     const companies = await this.store.list('companies', {});
     const name = (id: Id) => companies.find((c) => c.id === id)?.name ?? id;
@@ -10510,6 +11336,7 @@ export class PrimaService {
               status: own?.status ?? (e.proof ? 'submitted' : 'open'),
               progress,
               preparerSigned: signed.has('PREPARER'),
+              marketingChecked: signed.has('CHECK'),
               managerVerified: signed.has('MANAGER'),
               slipIn,
               // Every item ticked, the preparer and the manager signed, and the slip uploaded.
@@ -10546,7 +11373,8 @@ export class PrimaService {
    * plus quotations waiting for approval.
    */
   async tenderBoard(user: User) {
-    if (!isDoa(user) && !isGroupLeader(user) && user.opsTier !== 'ceo' && user.opsTier !== 'coo') throw new AccessDenied('commercial.view', '(tender board)');
+    if (!isDoa(user) && !isMarketing(user) && !isGroupLeader(user) && user.opsTier !== 'ceo' && user.opsTier !== 'coo')
+      throw new AccessDenied('commercial.view', '(tender board)');
     const ids = visibleCompanyIds(user, await this.grants(), this.today());
     const companies = await this.store.list('companies', { id: ids });
     const today = this.today();
@@ -10576,6 +11404,7 @@ export class PrimaService {
           hasArahan: (t.papers ?? []).some((p) => p.kind === 'ARAHAN'),
           checklistItems: (t.checklist ?? []).length,
           reviewed: !!t.checklistReview,
+          desk: t.desk ?? null,
           done,
           total,
           checks: (t.verifications ?? []).map((v) => v.level),
@@ -10586,12 +11415,15 @@ export class PrimaService {
           decision: t.decision?.choice ?? null,
           leadOnly: !!t.leadOnly,
           openQueries: (t.queries ?? []).filter((q) => q.status !== 'answered').length,
-          mine: (await this.tenderCheckFor(user, t)) !== null || (isDoa(user) && ((!!t.checklist?.length && !t.checklistReview) || naWaiting > 0)),
+          mine:
+            (await this.tenderCheckFor(user, t)) !== null ||
+            (tenderCentral(user, t) && ((!t.desk && !!t.checklist?.length && !t.checklistReview) || naWaiting > 0)),
         };
       }),
     );
     rows.sort((a, b) => Number(b.mine) - Number(a.mine) || a.tender.closesOn.localeCompare(b.tender.closesOn));
-    const quotations = (await this.store.list('quotations', { companyId: ids })).filter((q) => q.status === 'awaiting_approval');
+    // Quotations stay with the companies (Fauzan, 22 Nov 2026): Marketing staff do not see them.
+    const quotations = isMarketing(user) ? [] : (await this.store.list('quotations', { companyId: ids })).filter((q) => q.status === 'awaiting_approval');
     return {
       rows,
       quotationsWaiting: quotations.map((q) => ({
@@ -13165,6 +13997,13 @@ export class PrimaService {
   /** Microsoft Planner connection: the mock until Entra and the Graph permissions are approved (P1). */
   plannerGateway: PlannerGateway = mockPlannerGateway;
 
+  /** Whether a head put the account linked to this person record under the user in the org chart (a set line only). */
+  private async isOrgLineManagerOfPerson(user: User, personId: Id): Promise<boolean> {
+    const users = await this.store.list('users');
+    const acct = users.find((u) => u.personId === personId && !u.integration);
+    return !!acct && acct.id !== user.id && acct.reportsToId === user.id;
+  }
+
   /** The managers above a person, nearest first. */
   private managerChain(target: User, users: User[]): User[] {
     const chain: User[] = [];
@@ -14267,12 +15106,17 @@ export class PrimaService {
     const g = await this.grants();
     const today = this.today();
     const managerCall = status === 'no_bid' || status === 'won' || status === 'lost';
-    assertCan(user, g, today, managerCall ? 'commercial.approve' : 'commercial.prepare', t.companyId);
+    // Marketing desk: Marketing moves the bid along and records won or lost; "no bid" stays the company manager's call.
+    const deskResult = t.desk === 'MARKETING' && (status === 'won' || status === 'lost') && this.tenderWork(user, t, g, today);
+    if (!deskResult) {
+      if (managerCall) assertCan(user, g, today, 'commercial.approve', t.companyId);
+      else this.assertTenderWork(user, t, g, today);
+    }
     if (status === 'submitted') throw new BadRequest('Record the submission with the submission slip attached.');
     if (status === 'preparing') {
       const findings = tenderEligibility(t.channel, await this.store.list('licences', { companyId: t.companyId }), today, t.closesOn);
       if (isBlocked(findings)) throw new RuleBlocked(findings);
-      if (t.closesOn < today) throw new BadRequest('This tender has closed.');
+      if (t.closesOn < today && !t.proposal) throw new BadRequest('This tender has closed.');
     }
     // The Director Office's tender protocol: every step due before this status must be done (Fauzan, 25 Oct 2026).
     if (status === 'preparing') {
@@ -20987,6 +21831,80 @@ export class PrimaService {
     });
   }
 
+  /**
+   * Marketing sends the IT part of a desk bid to IT (Marketing item AH12; Fauzan 22 Nov 2026 D5: "Marketing lodges IT
+   * tenders, IT writes the technical part" and the IT price). IT drafts, checks and prices the IT parts on its usual
+   * timeline and hands the pack to Marketing; Marketing keeps the company papers (paper library), lodges the bid and
+   * keeps the slip. The IT task is linked to the desk bid, so IT cannot lodge it and the bid cannot go in before the
+   * hand-over.
+   */
+  async sendTenderToIt(user: User, tenderId: Id, input: { kind?: unknown; codes?: unknown; items?: unknown }) {
+    const t = await this.store.get('tenders', tenderId);
+    if (!t) throw new NotFound('Tender');
+    if (t.desk !== 'MARKETING' || !this.tenderWork(user, t, await this.grants(), this.today())) throw new AccessDenied('tender.work', t.companyId);
+    if (t.status !== 'open' && t.status !== 'preparing') throw new BadRequest('This tender is no longer being worked on.');
+    if ((await this.store.list('itTenderTasks', {})).some((x) => x.tenderId === t.id)) throw new BadRequest('The IT part of this bid is already with IT.');
+    const exec = (await this.store.get('itSettings', 'it'))?.tenderExecId ?? null;
+    if (!exec) throw new BadRequest('IT has not named its tender executive yet; ask the IT Manager.');
+    const holder = (await this.store.list('itCodeHolders', {})).find((h) => h.companyId === t.companyId);
+    if (!holder || !holder.codes.length) throw new BadRequest('This company holds no IT code on record; IT checks the codes against its MOF certificate first.');
+    if (!holder.expiresOn || holder.expiresOn < t.closesOn) throw new BadRequest('This company\'s MOF certificate for IT codes ends before the tender closes.');
+    const codes = (Array.isArray(input.codes) ? input.codes : []).map((c) => String(c).trim()).filter(Boolean).slice(0, 10);
+    const missing = codes.filter((c) => !holder.codes.some((h) => h.code === c));
+    if (missing.length) throw new BadRequest(`This company does not hold code ${missing.join(', ')}.`);
+    const kind = input.kind === 'quotation' ? 'quotation' : 'tender';
+    const labels = (Array.isArray(input.items) ? input.items : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 20);
+    // Marketing keeps the company papers and lodges the bid: IT's paper, submit and confirm steps fall away and the
+    // result follows the hand-over to Marketing.
+    const marketingSteps = new Set(['askdocs', 'gotdocs', 'submit', 'confirm']);
+    const briefingOn = t.record?.briefing?.on ?? t.record?.siteVisit?.on ?? null;
+    const steps = itTenderTimeline(kind, t.closesOn)
+      .filter((x) => !marketingSteps.has(x.key) && (x.key !== 'briefing' || !!briefingOn))
+      .map((x) => ({
+        ...x,
+        after: x.key === 'result' ? 'handover' : x.after,
+        label: x.key === 'handover' ? 'IT part handed to Marketing' : x.key === 'briefing' ? 'Briefing or site visit (the company attends; Marketing tracks it)' : x.label,
+        dueOn: x.key === 'briefing' && briefingOn ? briefingOn : x.dueOn,
+      }));
+    const draftDue = addDays(t.closesOn, -2);
+    const at = this.now();
+    const task: ItTenderTask = {
+      id: `itt-mkt-${t.id}`,
+      tenderId: t.id,
+      companyId: t.companyId,
+      title: t.title,
+      closesOn: t.closesOn,
+      buyer: t.buyer,
+      source: `Marketing desk (${t.ref})`,
+      codes,
+      items: (labels.length ? labels : ['Technical proposal', 'Hardware and software list', 'Compliance table against the specification', 'Price schedule (IT part)']).map((label) => ({
+        label,
+        part: itemPart(label),
+        fileName: null,
+        doneAt: null,
+        by: null,
+        assigneeId: exec,
+        dueOn: draftDue,
+        proof: [],
+      })),
+      kind,
+      foundOn: this.today(),
+      foundAt: at,
+      steps,
+      briefingOn,
+      companyDocs: [],
+      stage: 'preparing',
+      handedOver: null,
+      foundBy: user.name,
+      ownerStaffId: exec,
+    };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('itTenderTasks', task);
+      await tx.audit({ at, actor: user.name, companyId: t.companyId, action: 'tender.to_it', entity: 'tender', entityId: t.id, summary: `${t.ref}: IT part sent to IT (${task.items.length} parts); Marketing lodges the bid` });
+      return task;
+    });
+  }
+
   /** Run an IT tender: give a part, finish a part with proof, ask or receive a company paper, move the stage. */
   async itTenderStep(user: User, id: Id, step: string, i: Record<string, unknown>) {
     const role = this.itRoleOf(user);
@@ -21887,6 +22805,87 @@ export class PrimaService {
   }
 
   /** The ACT workspace: signals, the workflow audit plan, findings and improvements. Owners see their own findings. */
+  /**
+   * The ACT Director's one page a month for the CEO (ACT department doc, "Proposed summary"; Fauzan, 23 Nov 2026: "Do
+   * the gap"). Read-only and worked out from ACT's own records at the time it is opened, so nobody types it twice:
+   * monthly reports in and on time, reviews and audits done, findings opened and closed, improvements, and what is now
+   * escalated. Investigations stay ACT's own work and are not on it. ACT staff and group leadership read it.
+   */
+  async actMonthSummary(user: User, month?: string) {
+    const role = this.actRoleOf(user);
+    if (!role) throw new ActDenied('The ACT month summary is for ACT and group leadership.');
+    const today = this.today();
+    const prev = addMonthsIso(`${today.slice(0, 7)}-01`, -1).slice(0, 7);
+    const m = typeof month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && month <= today.slice(0, 7) ? month : prev;
+    const inMonth = (at: string | null | undefined) => !!at && at.slice(0, 7) === m;
+    const [findings, audits, improvements, companies] = await Promise.all([
+      this.store.list('actFindings', {}),
+      this.store.list('actAudits', {}),
+      this.store.list('actImprovements', {}),
+      this.store.list('companies', {}),
+    ]);
+    const cname = (id: Id | null) => (id ? (companies.find((c) => c.id === id)?.name ?? id) : 'PWVSB');
+    const reports = await this.actReportMonitor(audits);
+    const count = (st: string) => reports.filter((r) => r.status === st).length;
+    const done = (kind: string) => audits.filter((x) => (x.kind ?? 'workflow') === kind && (x.status ?? 'done') === 'done' && inMonth(x.doneOn)).length;
+    const closedAt = (f: ActFinding) => (f.status === 'closed' ? (f.checks.filter((c) => c.ok).at(-1)?.at ?? null) : null);
+    const opened = findings.filter((f) => inMonth(f.raisedAt));
+    const closed = findings.filter((f) => inMonth(closedAt(f)));
+    const openNow = findings.filter((f) => f.status !== 'closed');
+    const states = openNow.map((f) => ({ f, st: this.actFindingState(f, today) }));
+    const escalated = states
+      .filter((x) => x.st.escalatedTo)
+      .sort((a, b) => b.st.overdueDays - a.st.overdueDays)
+      .map((x) => ({
+        id: x.f.id,
+        ref: x.f.ref,
+        title: x.f.title,
+        severity: x.f.severity,
+        companyName: cname(x.f.companyId),
+        ownerName: x.f.ownerName,
+        overdueDays: x.st.overdueDays,
+        escalatedTo: x.st.escalatedTo! as 'Chief of Staff' | 'COO' | 'CEO',
+      }));
+    const signals = await this.actSignals();
+    return {
+      month: m,
+      madeOn: today,
+      reports: {
+        period: reports.find((r) => r.period)?.period ?? null,
+        total: reports.length,
+        onTime: count('on_time'),
+        late: count('late'),
+        missing: count('missing'),
+        incomplete: count('incomplete'),
+        noReport: count('no_report'),
+        notDue: count('not_due') + count('unknown'),
+        reviewed: reports.filter((r) => r.review && r.review.status === 'done').length,
+      },
+      work: {
+        workflowAudits: done('workflow'),
+        reportReviews: done('report_review'),
+        fieldChecks: done('field_check'),
+        timingsSet: audits.filter((x) => x.kind === 'timing' && inMonth(x.doneOn)).length,
+      },
+      findings: {
+        opened: opened.length,
+        openedHigh: opened.filter((f) => f.severity === 'high').length,
+        closed: closed.length,
+        openNow: openNow.length,
+        highOpenNow: openNow.filter((f) => f.severity === 'high').length,
+        overdueNow: states.filter((x) => x.st.overdueDays > 0).length,
+        bySource: (['monitor', 'workflow_audit', 'speak_up', 'manual'] as const).map((src) => ({ source: src, opened: opened.filter((f) => f.source === src).length })),
+      },
+      escalated,
+      improvements: {
+        approved: improvements.filter((i) => inMonth(i.approved?.at)).length,
+        completed: improvements.filter((i) => inMonth(i.result?.at)).length,
+        lateNow: improvements.filter((i) => !i.result && i.targetOn < today).length,
+      },
+      signals: { total: signals.length, breaking: signals.filter((x) => x.count > 0).length, uncovered: signals.filter((x) => x.count > 0 && !x.coveredBy.length).length },
+    };
+  }
+
   async actBoard(user: User) {
     const role = this.actRoleOf(user);
     const job = this.actJob(user);
@@ -24698,7 +25697,7 @@ export class PrimaService {
       item: String(l.item ?? '')
         .trim()
         .slice(0, 80),
-      stockItemId: l.stockItemId && items.some((i) => i.id === l.stockItemId) ? l.stockItemId : null,
+      stockItemId: l.stockItemId && items.some((i) => i.id === l.stockItemId && !isKit(i)) ? l.stockItemId : null,
       qty: Math.round(Number(l.qty)),
       unitPrice: Math.round(Number(l.unitPrice) * 100) / 100,
     }));
@@ -24883,7 +25882,7 @@ export class PrimaService {
         const items = await this.store.list('stockItems', { companyId: [r.companyId] });
         lines = body.lines.slice(0, 30).map((l) => ({
           item: String(l.item ?? '').trim().slice(0, 80),
-          stockItemId: l.stockItemId && items.some((i) => i.id === l.stockItemId) ? l.stockItemId : null,
+          stockItemId: l.stockItemId && items.some((i) => i.id === l.stockItemId && !isKit(i)) ? l.stockItemId : null,
           qty: Math.round(Number(l.qty)),
           unitPrice: Math.round(Number(l.unitPrice) * 100) / 100,
         }));
@@ -25123,6 +26122,7 @@ export class PrimaService {
     const item = await this.store.get('stockItems', input.itemId);
     const person = await this.store.get('people', input.personId);
     if (!item || item.companyId !== companyId) throw new BadRequest('Choose an item in the company store.');
+    if (isKit(item)) throw new BadRequest(`${item.name} is a set. Issue its parts one by one.`);
     // Goodwill's store issues to a guard or officer of any company it serves, and bills that company (Fauzan, 2 Nov 2026).
     const goodwill = companyId === GOV_OPS_COMPANY_ID;
     const personOk =
@@ -25217,18 +26217,25 @@ export class PrimaService {
   }
 
   /** Uniform pieces a person had from the Goodwill store in the last 12 months (returned pieces still count once). */
-  private async uniformHistory(personId: Id, today: IsoDate, storeId: Id = GOV_OPS_COMPANY_ID) {
+  /**
+   * A guard's worn pieces in the last 12 months. With a key (one worn item, by name across sizes; Fauzan, 23 Nov 2026:
+   * "everything guard wear on body counts") only that item counts, and free is the yearly free pieces times how many
+   * of it one full suit holds. Without a key every worn piece counts.
+   */
+  private async uniformHistory(personId: Id, today: IsoDate, storeId: Id = GOV_OPS_COMPANY_ID, key?: string) {
     const [issues, items] = await Promise.all([
       this.store.list('stockIssues', { companyId: [storeId] }),
       this.store.list('stockItems', { companyId: [storeId] }),
     ]);
-    const uniform = new Set(items.filter((i) => i.kind === 'UNIFORM').map((i) => i.id));
+    const worn = wornItemIds(items);
+    const keyOf = new Map(items.map((i) => [i.id, wearKey(i)]));
     const from = addMonthsIso(today, -12);
     // Part U-X6b: a CSG/TNG course set is outside the 3 free pieces.
-    const mine = issues.filter((i) => i.personId === personId && uniform.has(i.itemId) && dateOf(i.issuedAt) > from && !i.course);
+    const mine = issues.filter((i) => i.personId === personId && worn.has(i.itemId) && (!key || keyOf.get(i.itemId) === key) && dateOf(i.issuedAt) > from && !i.course);
     const last = mine.map((i) => dateOf(i.issuedAt)).sort().pop() ?? null;
-    return { pieces: mine.reduce((n, i) => n + i.qty, 0), last };
+    return { pieces: mine.reduce((n, i) => n + i.qty, 0), last, free: UNIFORM_REQUEST_RULE.freePerYear * (key ? perSuit(items, key) : 1), perSuit: key ? perSuit(items, key) : 1 };
   }
+
 
   /** The OM's own requests, or for the store, Procurement and the OGM every request; plus the uniforms in the store. */
   async uniformRequests(user: User) {
@@ -25247,7 +26254,7 @@ export class PrimaService {
       canDecide: decide,
       rule: UNIFORM_REQUEST_RULE,
       uniforms: items
-        .filter((i) => i.kind === 'UNIFORM')
+        .filter((i) => i.kind === 'UNIFORM' && !isKit(i))
         .map((i) => ({ id: i.id, name: `${i.name}${i.size ? ` (${i.size})` : ''}`, onHand: i.onHand }))
         .sort((a, b) => a.name.localeCompare(b.name)),
       requests: rows
@@ -25270,6 +26277,7 @@ export class PrimaService {
     if (!Number.isInteger(qty) || qty < 1 || qty > UNIFORM_REQUEST_RULE.maxPerRequest) throw new BadRequest(`Pieces: 1 to ${UNIFORM_REQUEST_RULE.maxPerRequest}.`);
     const item = await this.store.get('stockItems', String(input.stockItemId ?? ''));
     if (!item || item.companyId !== GOV_OPS_COMPANY_ID || item.kind !== 'UNIFORM') throw new BadRequest('Choose a uniform from the Goodwill store.');
+    if (isKit(item)) throw new BadRequest(`${item.name} is a set. Ask for the part the guard needs (for example the trousers only).`);
     const person = (await this.store.list('people', { staffNo })).find((p) => p.status === 'active');
     const today = this.today();
     if (
@@ -25283,10 +26291,13 @@ export class PrimaService {
     const all = await this.store.list('stockRequests', { companyId: [GOV_OPS_COMPANY_ID] });
     const open = all.filter((r) => (r.kind ?? 'uniform') === 'uniform' && r.personId === person.id && r.status === 'open');
     if (open.some((r) => r.stockItemId === item.id)) throw new BadRequest(`${person.name} already has an open request for ${item.name}. Wait for the store.`);
-    const history = await this.uniformHistory(person.id, today);
-    const waiting = open.reduce((n, r) => n + r.qty, 0);
+    // Each worn item counts on its own (Fauzan, 23 Nov 2026): this guard's pieces of this item, by name across sizes.
+    const key = wearKey(item);
+    const storeItems = await this.store.list('stockItems', { companyId: [GOV_OPS_COMPANY_ID] });
+    const history = await this.uniformHistory(person.id, today, GOV_OPS_COMPANY_ID, key);
+    const waiting = open.filter((r) => { const x = storeItems.find((i) => i.id === r.stockItemId); return !!x && wearKey(x) === key; }).reduce((n, r) => n + r.qty, 0);
     const after = history.pieces + waiting + qty;
-    const R = UNIFORM_REQUEST_RULE;
+    const R = { ...UNIFORM_REQUEST_RULE, freePerYear: history.free, paidMaxPerYear: UNIFORM_REQUEST_RULE.paidMaxPerYear === null ? null : UNIFORM_REQUEST_RULE.paidMaxPerYear * history.perSuit };
     if (R.paidMaxPerYear !== null && after > R.paidMaxPerYear)
       throw new BadRequest(`${person.name} would have ${after} pieces in 12 months. No more than ${R.paidMaxPerYear}.`);
     let guardPays: StockRequest['guardPays'] = null;
@@ -45416,7 +46427,9 @@ export class PrimaService {
     const [h2, m2] = rule.workDay.end.split(':').map(Number);
     const dayHours = (h2 * 60 + m2 - (h1 * 60 + m1)) / 60;
     const out: Record<string, number> = {};
-    for (const t of this.actTimings(await this.store.list('actAudits', {})).values())
+    // On PostgreSQL the timing rows sit behind the ACT wall; every other session reads the published copy (gap B3).
+    const rows = (await this.store.publishedActTimings?.()) ?? (await this.store.list('actAudits', {}));
+    for (const t of this.actTimings(rows).values())
       for (const s of t.timing!.segments) if (s.key) out[s.key] = s.unit === 'hours' ? s.target : s.target * dayHours;
     return out;
   }
@@ -46044,7 +47057,21 @@ export class PrimaService {
   get ownerTestCheckins(): OwnerTestCheckinService { return new OwnerTestCheckinService(this.store, () => this.now()); }
   /** Part N8: Report a problem, answered by IT support. */
   get problems(): ProblemReportService { return new ProblemReportService(this.store, () => this.now()); }
+  /** Org chart and reporting lines (Fauzan, 23 Nov 2026). */
+  get org(): OrgStructureService { return new OrgStructureService(this.store, () => this.now()); }
   get accounts(): AccountsAccessService { return new AccountsAccessService(this.store, () => this.now()); }
+  /** Where the data and file manager keeps bytes: the private file storage in the API, memory in the demo; null = off. */
+  archiveBytes: ArchiveBytes | null = null;
+  /** Data and file manager for old records (Fauzan, 23 Nov 2026). */
+  get archive(): ArchiveService { return new ArchiveService(this.store, () => this.now(), this.archiveBytes); }
+  /** Part AG, AG15: fixed rules for duplicates, gaps and clashes in staff, site and contract records. */
+  get dataCleanup(): DataCleanupService { return new DataCleanupService(this.store, () => this.now()); }
+  /** Upload, Key in and Download on every screen (Fauzan, 23 Nov 2026): every download is logged first. */
+  get exports(): ExportService { return new ExportService(this.store, () => this.now()); }
+  /** Prima agent (23 Nov 2026): fills a form from an instruction; the person sends it through the usual action. */
+  get assistant(): AssistantService { return new AssistantService(this.store, () => this.now(), this); }
+  /** Shared login list (Fauzan, 23 Nov 2026): the list only, never a password. */
+  get sharedLogins(): SharedLoginService { return new SharedLoginService(this.store, () => this.now()); }
   /** Part N17: Group HR lists the HR Administrator keys in, versioned by date. */
   get hrLists(): HrListService { return new HrListService(this.store, () => this.now()); }
   /** Part N18: paper PDPA consent for face and location, and the gate that switches them per person. */
@@ -46104,7 +47131,7 @@ export class PrimaService {
   }
   /** Part T helpers for the site supplies service (the purchasing role, uniform pieces in 12 months, proof). */
   ssPurRole(user: User, companyId: Id) { return this.purRoleOf(user, companyId); }
-  async ssUniformHistory(personId: Id, storeId: Id) { return this.uniformHistory(personId, this.today(), storeId); }
+  async ssUniformHistory(personId: Id, storeId: Id, key?: string) { return this.uniformHistory(personId, this.today(), storeId, key); }
   ssProof(user: User, companyId: Id, site: Site | null, proof: ProofInput[] | undefined, documentsOnly = false) {
     return this.proofRecords(user, companyId, site, proof, {}, { documentsOnly });
   }
@@ -46121,6 +47148,8 @@ export class PrimaService {
   }
   /** One door for the inventory control actions; each operation checks its own permission. */
   async inventoryAct(user: User, op: string, i: Record<string, unknown>) {
+    // Sets and parts (Fauzan, 23 Nov 2026) share the inventory door.
+    if (op === 'kits' || op === 'kitParts' || op === 'kitAddPart') return new ItemKitService(this.store, () => this.now(), this).act(user, op, i);
     return this.inventory.act(user, op, i);
   }
   /** One door for the toolbox actions; each operation checks its own permission. */
@@ -51323,7 +52352,7 @@ export class PrimaService {
     const quotations = ids.length ? await this.store.list('quotations', { companyId: ids }) : [];
     const months = lastMonths(today, 12);
     const halves = lastHalves(today, 4);
-    const groupView = isDoa(user) || isGroupLeader(user) || user.opsTier === 'ceo' || user.opsTier === 'coo';
+    const groupView = isDoa(user) || isMarketingLead(user) || isGroupLeader(user) || user.opsTier === 'ceo' || user.opsTier === 'coo';
     return {
       months,
       halves: halves.map((key) => ({ key, label: halfLabel(key) })),
@@ -51379,7 +52408,7 @@ export class PrimaService {
   // ---------- Tender and quotation opportunities (Fauzan, 4 Nov 2026) ----------
 
   private opportunityGroupView(user: User) {
-    return isDoa(user) || isGroupLeader(user) || user.opsTier === 'ceo' || user.opsTier === 'coo';
+    return isDoa(user) || isMarketingLead(user) || isGroupLeader(user) || user.opsTier === 'ceo' || user.opsTier === 'coo';
   }
 
   /**
@@ -51395,14 +52424,18 @@ export class PrimaService {
     if (!group && !ids.length) throw new AccessDenied('commercial.view', '(opportunities)');
     const companies = await this.store.list('companies', { id: ids });
     const name = (id: Id) => companies.find((c) => c.id === id)?.name ?? id;
-    const prepareIds = ids.filter((id) => can(user, g, today, 'commercial.prepare', id));
+    const deskOn = await this.deskOn();
+    const desk = isTenderDesk(user, deskOn);
+    // A company may always tell the desk about one it found; on the Marketing desk an executive enters its own companies.
+    const prepareIds = ids.filter((id) => can(user, g, today, 'commercial.prepare', id) || can(user, g, today, 'tender.work', id));
     const rows = (await this.store.list('tenderOpportunities', {}))
       .filter((o) => group || o.closesOn >= addDays(today, -30) || o.entries.some((e) => ids.includes(e.companyId)))
       .sort((a, b) => Number(a.closesOn < today) - Number(b.closesOn < today) || a.closesOn.localeCompare(b.closesOn));
     return {
-      canRecord: isDoa(user) || prepareIds.length > 0,
-      canAssign: isDoa(user),
-      companies: (isDoa(user) ? companies : companies.filter((c) => prepareIds.includes(c.id))).map((c) => ({ id: c.id, name: c.name })),
+      canRecord: desk || prepareIds.length > 0,
+      canAssign: desk,
+      marketingDesk: deskOn,
+      companies: (desk ? companies : companies.filter((c) => prepareIds.includes(c.id))).map((c) => ({ id: c.id, name: c.name })),
       rows: rows.map((o) => {
         const entries = (group ? o.entries : o.entries.filter((e) => ids.includes(e.companyId))).map((e) => ({ ...e, companyName: name(e.companyId) }));
         return {
@@ -51454,7 +52487,16 @@ export class PrimaService {
   }
 
   /** A company enters an opportunity: its own tender record is made (or linked if it already has one with that number). */
-  private async enterOpportunityTx(tx: Store, o: TenderOpportunity, companyId: Id, user: User, setBy: 'DOA' | 'COMPANY', note: string, at: string) {
+  private async enterOpportunityTx(
+    tx: Store,
+    o: TenderOpportunity,
+    companyId: Id,
+    user: User,
+    setBy: 'DOA' | 'COMPANY',
+    note: string,
+    at: string,
+    deskOn = false,
+  ) {
     let tenderId: Id | null = null;
     if (o.kind === 'TENDER') {
       const own = o.ref ? (await tx.list('tenders', { companyId })).find((t) => t.ref === o.ref) : undefined;
@@ -51469,8 +52511,14 @@ export class PrimaService {
           title: o.title,
           buyer: o.buyer,
           channel: o.channel,
-          source: setBy === 'DOA' ? `Set by the Director Office (${o.source})` : `Company's own entry, Director Office informed (${o.source})`,
-          owner: manager?.name ?? 'Company manager',
+          source:
+            setBy === 'DOA'
+              ? `Set by ${deskOn ? 'Marketing' : 'the Director Office'} (${o.source})`
+              : `Company's own entry, ${deskOn ? 'Marketing' : 'Director Office'} informed (${o.source})`,
+          owner: deskOn && setBy === 'DOA' ? user.name : (manager?.name ?? 'Company manager'),
+          // Marketing does all (Fauzan, 23 Nov 2026): every new tender is prepared and lodged by Marketing, and the
+          // company manager is told at once and has 1 day to say "do not bid".
+          ...(deskOn ? { desk: 'MARKETING' as const, bidNotice: this.bidNotice(user, at) } : {}),
           closesOn: o.closesOn,
           guards: o.guards ?? 0,
           sites: 0,
@@ -51489,8 +52537,8 @@ export class PrimaService {
       entityId: o.id,
       summary:
         setBy === 'DOA'
-          ? `Director Office set this company to enter ${o.kind === 'TENDER' ? 'tender' : 'quotation'} ${o.ref || o.title}`
-          : `Company entered ${o.kind === 'TENDER' ? 'tender' : 'quotation'} ${o.ref || o.title}; Director Office informed`,
+          ? `${deskOn ? 'Marketing' : 'Director Office'} set this company to enter ${o.kind === 'TENDER' ? 'tender' : 'quotation'} ${o.ref || o.title}`
+          : `Company entered ${o.kind === 'TENDER' ? 'tender' : 'quotation'} ${o.ref || o.title}; ${deskOn ? 'Marketing' : 'Director Office'} informed`,
     });
     return entry;
   }
@@ -51519,7 +52567,8 @@ export class PrimaService {
     const g = await this.grants();
     const today = this.today();
     const v = this.opportunityInput(input);
-    const doa = isDoa(user);
+    const deskOn = await this.deskOn();
+    const doa = isTenderDesk(user, deskOn);
     let companyIds: Id[];
     if (doa) {
       companyIds = Array.isArray(input.companyIds) ? [...new Set(input.companyIds.filter((x): x is string => typeof x === 'string'))] : [];
@@ -51538,7 +52587,7 @@ export class PrimaService {
     const id = `op-${sha256Hex(`${v.kind}|${v.ref}|${v.title}|${at}|${user.id}`).slice(0, 12)}`;
     const o: TenderOpportunity = { id, ...v, origin: doa ? 'DOA' : 'COMPANY', foundById: user.id, foundBy: user.name, foundAt: at, entries: [] };
     return this.store.transaction(async (tx) => {
-      for (const c of companyIds) o.entries.push(await this.enterOpportunityTx(tx, o, c, user, doa ? 'DOA' : 'COMPANY', '', at));
+      for (const c of companyIds) o.entries.push(await this.enterOpportunityTx(tx, o, c, user, doa ? 'DOA' : 'COMPANY', '', at, deskOn));
       await tx.insert('tenderOpportunities', o);
       await tx.audit({
         at,
@@ -51547,7 +52596,7 @@ export class PrimaService {
         action: 'opportunity.record',
         entity: 'tender_opportunity',
         entityId: id,
-        summary: `${v.kind === 'TENDER' ? 'Tender' : 'Quotation'} opportunity ${v.ref || v.title} recorded${doa ? ' by the Director Office' : ' by a company'}`,
+        summary: `${v.kind === 'TENDER' ? 'Tender' : 'Quotation'} opportunity ${v.ref || v.title} recorded${doa ? (deskOn ? ' by Marketing' : ' by the Director Office') : ' by a company'}`,
       });
       return o;
     });
@@ -51563,7 +52612,8 @@ export class PrimaService {
     if (!o) throw new NotFound('Opportunity');
     const g = await this.grants();
     const today = this.today();
-    const doa = isDoa(user);
+    const deskOn = await this.deskOn();
+    const doa = isTenderDesk(user, deskOn);
     const ids = [...new Set(companyIds)];
     if (!ids.length) throw new BadRequest('Choose the company.');
     for (const c of ids) {
@@ -51581,7 +52631,7 @@ export class PrimaService {
       const entries = [...fresh.entries];
       for (const c of ids) {
         if (entries.some((e) => e.companyId === c)) throw new BadRequest('That company already enters this.');
-        entries.push(await this.enterOpportunityTx(tx, fresh, c, user, doa ? 'DOA' : 'COMPANY', text, at));
+        entries.push(await this.enterOpportunityTx(tx, fresh, c, user, doa ? 'DOA' : 'COMPANY', text, at, deskOn));
       }
       return tx.update('tenderOpportunities', id, { entries });
     });
@@ -51591,7 +52641,7 @@ export class PrimaService {
 
   /** The Director Office's list of buyer and portal sites, what the last check found and which are due again. */
   async tenderSources(user: User) {
-    if (!this.opportunityGroupView(user)) throw new AccessDenied('commercial.view', '(tender sites)');
+    if (!this.opportunityGroupView(user) && !isMarketing(user)) throw new AccessDenied('commercial.view', '(tender sites)');
     const today = this.today();
     const rows = (await this.store.list('tenderSources', {})).map((s) => ({
       ...s,
@@ -51600,8 +52650,11 @@ export class PrimaService {
     }));
     rows.sort((a, b) => Number(b.due) - Number(a.due) || a.buyer.localeCompare(b.buyer));
     const count = (st: string) => rows.filter((r) => r.active && (r.checks[0]?.status ?? 'NOT_CHECKED') === st).length;
+    const deskOn = await this.deskOn();
     return {
-      canEdit: isDoa(user),
+      canEdit: isTenderDesk(user, deskOn),
+      // Only the Marketing Manager or Deputy lets the watcher read a site, after reading its terms (AH11).
+      canAllowWatch: isTenderDeskLead(user, deskOn),
       rows,
       summary: {
         watched: rows.filter((r) => r.active).length,
@@ -51611,15 +52664,91 @@ export class PrimaService {
         vendorLimited: count('VENDOR_LIMITED'),
         partial: count('PARTIAL'),
         error: count('ERROR'),
+        byWatcher: rows.filter((r) => r.active && r.watchAllowed).length,
+        newFinds: rows.reduce((n, r) => n + (r.watchFinds ?? []).filter((f) => f.state === 'NEW').length, 0),
       },
       starterLeft: TENDER_SOURCE_STARTER.filter((x) => !rows.some((r) => r.buyer.toLowerCase() === x.buyer.toLowerCase())).length,
       statusLabels: TENDER_SOURCE_STATUS_LABEL,
     };
   }
 
-  private assertDoa(user: User) {
+  private async assertDoa(user: User) {
     this.notArmsOnly(user);
-    if (!isDoa(user)) throw new AccessDenied('commercial.view', '(Director Office only)');
+    const deskOn = await this.deskOn();
+    if (!isTenderDesk(user, deskOn)) throw new AccessDenied('commercial.view', deskOn ? '(Marketing only)' : '(Director Office only)');
+  }
+
+  /** The notice to the company manager on a Marketing desk bid: 1 day to say "do not bid" (rule TENDER-MARKETING). */
+  /**
+   * Marketing starts a proposal: our own offer to a private client, without tender papers (Marketing item AH8, Fauzan
+   * 23 Nov 2026). Only after the desk has started, only by Marketing staff who cover the company, and only in that
+   * company's name. The company manager is told and may say "do not bid" within the usual notice; the proposal is worked
+   * from the fixed proposal checklist and signed like a desk bid. Quotations stay with the company's admin team.
+   */
+  async startProposal(
+    user: User,
+    input: { companyId?: unknown; client?: unknown; title?: unknown; scope?: unknown; contact?: unknown; sendBy?: unknown; guards?: unknown; sites?: unknown },
+  ) {
+    this.notArmsOnly(user);
+    const g = await this.grants();
+    const today = this.today();
+    const companyId = typeof input.companyId === 'string' ? input.companyId : '';
+    if (!isMarketing(user) || !can(user, g, today, 'tender.work', companyId)) throw new AccessDenied('tender.work', companyId || '(proposal)');
+    if (!(await this.deskOn())) throw new BadRequest('The Marketing desk has not started; the company prepares its own offers until then.');
+    const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+    const client = str(input.client, 120);
+    const title = str(input.title, 160);
+    const scope = str(input.scope, 600);
+    const contact = str(input.contact, 160);
+    const sendBy = str(input.sendBy, 10);
+    if (client.length < 2) throw new BadRequest('Name the client.');
+    if (title.length < 3) throw new BadRequest('Give the proposal a title.');
+    if (scope.length < 3) throw new BadRequest('Say what we will offer.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sendBy) || !realDate(sendBy)) throw new BadRequest('Give the date to send it by as YYYY-MM-DD.');
+    if (sendBy < today) throw new BadRequest('The date to send it by is in the past.');
+    const count = (v: unknown) => (v == null || v === '' ? 0 : Number(v));
+    const guards = count(input.guards);
+    const sites = count(input.sites);
+    if (![guards, sites].every((x) => Number.isInteger(x) && x >= 0 && x <= 100_000)) throw new BadRequest('Guards and sites are whole numbers.');
+    const at = this.now();
+    const id = `prp-${sha256Hex(`${companyId}|${client}|${title}|${at}|${user.id}`).slice(0, 12)}`;
+    const ref = `PRP-${at.slice(0, 10).replace(/-/g, '')}-${id.slice(4, 8).toUpperCase()}`;
+    const t: Tender = {
+      id,
+      companyId,
+      ref,
+      title,
+      buyer: client,
+      channel: 'PRIVATE',
+      source: 'Proposal by Marketing',
+      owner: user.name,
+      closesOn: sendBy,
+      guards,
+      sites,
+      status: 'open',
+      estMonthly: null,
+      desk: 'MARKETING',
+      bidNotice: this.bidNotice(user, at),
+      checklist: PROPOSAL_CHECKLIST.map((c) => ({ ...c })),
+      proposal: { scope, contact, startedBy: user.name, startedById: user.id, startedAt: at },
+    };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('tenders', t);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'proposal.start',
+        entity: 'tender',
+        entityId: id,
+        summary: `${ref}: Marketing started a proposal to ${client} in the company's name (${title})`,
+      });
+      return t;
+    });
+  }
+
+  private bidNotice(user: User, at: IsoDateTime) {
+    return { at, by: user.name, until: new Date(toMs(at) + RULES.marketingDesk.value.noBidNoticeHours * 3_600_000).toISOString() };
   }
 
   private sourceUrls(urls: unknown): string[] {
@@ -51633,7 +52762,7 @@ export class PrimaService {
   }
 
   async addTenderSource(user: User, input: { buyer?: unknown; urls?: unknown; note?: unknown }) {
-    this.assertDoa(user);
+    await this.assertDoa(user);
     const buyer = typeof input.buyer === 'string' ? input.buyer.trim().slice(0, 120) : '';
     if (!buyer) throw new BadRequest('Give the buyer or portal name.');
     const urls = this.sourceUrls(input.urls);
@@ -51659,7 +52788,7 @@ export class PrimaService {
 
   /** Adds the 4 Nov 2026 sweep's sites that are not on the list yet. Names and web addresses only. */
   async loadTenderSourceStarter(user: User) {
-    this.assertDoa(user);
+    await this.assertDoa(user);
     const all = await this.store.list('tenderSources', {});
     const missing = TENDER_SOURCE_STARTER.filter((x) => !all.some((s) => s.buyer.toLowerCase() === x.buyer.toLowerCase()));
     const at = this.now();
@@ -51681,7 +52810,7 @@ export class PrimaService {
   }
 
   async updateTenderSource(user: User, id: Id, input: { urls?: unknown; note?: unknown; active?: unknown }) {
-    this.assertDoa(user);
+    await this.assertDoa(user);
     const s = await this.store.get('tenderSources', id);
     if (!s) throw new NotFound('Tender site');
     const patch: Partial<TenderSource> = {};
@@ -51706,7 +52835,7 @@ export class PrimaService {
 
   /** Records what a staff member saw when checking a site. A page read is not proof that every tender was seen. */
   async recordTenderSourceCheck(user: User, id: Id, input: { status?: unknown; result?: unknown; followUp?: unknown; found?: unknown }) {
-    this.assertDoa(user);
+    await this.assertDoa(user);
     const s = await this.store.get('tenderSources', id);
     if (!s) throw new NotFound('Tender site');
     const status = (['CHECKED', 'VENDOR_LIMITED', 'PARTIAL', 'ERROR'] as const).find((x) => x === input.status);
@@ -51742,6 +52871,214 @@ export class PrimaService {
   }
 
   /**
+   * The tender portal logins for the company of one bid (Marketing item AH10, Fauzan 23 Nov 2026: the shared login list,
+   * not a separate store). Only what the shared login list already lets this person see: the system, where the password
+   * is kept, the owner, the backup and who holds the second-step phone. Never a password.
+   */
+  async tenderPortalLogins(user: User, tenderId: Id) {
+    this.notArmsOnly(user);
+    const t = await this.store.get('tenders', tenderId);
+    if (!t) throw new NotFound('Tender');
+    const g = await this.grants();
+    const today = this.today();
+    if (!can(user, g, today, 'tender.work', t.companyId) && !can(user, g, today, 'commercial.view', t.companyId)) throw new AccessDenied('commercial.view', t.companyId);
+    if (this.store.hasTable && !(await this.store.hasTable('sharedLogins'))) return { installed: false, logins: [], namedOnAll: false };
+    if (!mayBeOnSharedLogin(user)) return { installed: true, logins: [], namedOnAll: false };
+    const board = await this.sharedLogins.board(user);
+    const logins = board.rows
+      .filter((r) => r.companyId === t.companyId && r.status === 'active' && TENDER_LOGIN_KINDS.includes(r.kind ?? ''))
+      .map((r) => ({
+        id: r.id,
+        system: r.system,
+        kind: r.kind ?? 'other',
+        url: r.url,
+        place: r.place,
+        placeLabel: SHARED_LOGIN_PLACE_LABEL[r.place],
+        owner: r.owner.name,
+        backup: r.backup.name,
+        twoFa: r.twoFa?.name ?? null,
+        named: r.people.includes(user.id),
+        state: r.state,
+      }));
+    return { installed: true, logins, namedOnAll: logins.length > 0 && logins.every((l) => l.named) };
+  }
+
+  // ---------- The tender watcher (Marketing item AH11, Fauzan 22-23 Nov 2026) ----------
+
+  /**
+   * Marketing allows (or stops) the watcher reading one site, after reading the site's terms. The note says what was
+   * read, e.g. "Terms of use page, 23 Nov: no ban on automatic reading". The robots file is checked on every run as well.
+   */
+  async setTenderSourceWatch(user: User, id: Id, input: { allowed?: unknown; note?: unknown }) {
+    this.notArmsOnly(user);
+    if (!isTenderDeskLead(user, await this.deskOn())) throw new AccessDenied('commercial.view', '(Marketing Manager or Deputy only)');
+    const s = await this.store.get('tenderSources', id);
+    if (!s) throw new NotFound('Tender site');
+    if (typeof input.allowed !== 'boolean') throw new BadRequest('Say whether the watcher may read this site.');
+    const note = typeof input.note === 'string' ? input.note.trim().slice(0, 300) : '';
+    if (input.allowed && note.length < 3) throw new BadRequest("Say which of the site's terms you read and what they allow.");
+    const at = this.now();
+    const watchAllowed = input.allowed ? { by: user.name, byId: user.id, at, note } : null;
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('tenderSources', id, { watchAllowed });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: null,
+        action: 'tender_source.watch',
+        entity: 'tender_source',
+        entityId: id,
+        summary: `${s.buyer}: the tender watcher ${input.allowed ? 'may read the public pages' : 'no longer reads this site'}${note ? ` (${note})` : ''}`,
+      });
+      return updated;
+    });
+  }
+
+  private assertWatcher(user: User) {
+    if (user.integration !== 'tender_watcher') throw new AccessDenied('commercial.view', '(tender watcher only)');
+  }
+
+  /** The sites the watcher reads today: watched, allowed by Marketing, https pages only. */
+  async tenderWatchPlan(user: User) {
+    this.assertWatcher(user);
+    const all = await this.store.list('tenderSources', {});
+    return all.filter((s) => s.active && s.watchAllowed).map((s) => ({ id: s.id, buyer: s.buyer, urls: s.urls }));
+  }
+
+  /**
+   * One watcher run on one site. New notices are added for Marketing; a notice seen before is not shown again. When
+   * every page was read, the run also counts as the site's check; otherwise a person still checks it.
+   */
+  async recordTenderWatch(
+    user: User,
+    id: Id,
+    input: { pages: { url: string; outcome: TenderWatchOutcome; note: string }[]; finds: WatchCandidate[] },
+  ) {
+    this.assertWatcher(user);
+    const s = await this.store.get('tenderSources', id);
+    if (!s) throw new NotFound('Tender site');
+    if (!s.active || !s.watchAllowed) throw new BadRequest('Marketing has not allowed the watcher to read this site.');
+    const outcomes: TenderWatchOutcome[] = ['READ', 'NOT_ALLOWED', 'NOT_HTML', 'ERROR'];
+    const pages = (Array.isArray(input.pages) ? input.pages : [])
+      .filter((p) => s.urls.includes(p?.url) && outcomes.includes(p.outcome))
+      .map((p) => ({ url: p.url, outcome: p.outcome, note: String(p.note ?? '').slice(0, 200) }));
+    if (!pages.length) throw new BadRequest('No page of this site was tried.');
+    const at = this.now();
+    const opps = await this.store.list('tenderOpportunities', {});
+    const knownRefs = new Set(opps.map((o) => o.ref.toLowerCase()).filter(Boolean));
+    const known = new Set((s.watchFinds ?? []).map((f) => f.key));
+    const fresh: TenderWatchFind[] = [];
+    for (const c of (Array.isArray(input.finds) ? input.finds : []).slice(0, 200)) {
+      if (typeof c?.key !== 'string' || typeof c.title !== 'string' || known.has(c.key)) continue;
+      known.add(c.key);
+      const ref = String(c.ref ?? '').slice(0, 60);
+      if (ref && knownRefs.has(ref.toLowerCase())) continue;
+      const closesOn = typeof c.closesOn === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.closesOn) && realDate(c.closesOn) ? c.closesOn : null;
+      fresh.push({
+        key: c.key.slice(0, 32),
+        title: c.title.slice(0, 240),
+        ref,
+        closesOn,
+        link: typeof c.link === 'string' ? cleanSourceUrl(c.link) : null,
+        page: pages.find((p) => p.outcome === 'READ')?.url ?? pages[0].url,
+        word: String(c.word ?? '').slice(0, 40),
+        foundAt: at,
+        state: 'NEW',
+        answer: null,
+      });
+    }
+    const read = pages.filter((p) => p.outcome === 'READ').length;
+    const found = Array.isArray(input.finds) ? Math.min(input.finds.length, 200) : 0;
+    const run: TenderWatchRun = { at, pages, found, fresh: fresh.length };
+    const status: TenderSourceCheck['status'] = read === pages.length ? 'CHECKED' : read ? 'PARTIAL' : 'ERROR';
+    const notRead = pages.filter((p) => p.outcome !== 'READ');
+    const check: TenderSourceCheck = {
+      at,
+      userId: user.id,
+      by: user.name,
+      status,
+      result:
+        `Read by the tender watcher (public pages only, rules, no AI): ${read} of ${pages.length} page(s), ${found} guarding notice(s), ${fresh.length} new.` +
+        (notRead.length ? ` Not read: ${notRead.map((p) => `${p.url} (${p.note || p.outcome})`).join('; ')}`.slice(0, 400) : ''),
+      followUp: notRead.length ? 'A person checks the pages the watcher could not read.' : '',
+      found: fresh.length,
+    };
+    return this.store.transaction(async (tx) => {
+      const cur = (await tx.get('tenderSources', id))!;
+      const updated = await tx.update('tenderSources', id, {
+        watchRuns: [run, ...(cur.watchRuns ?? [])].slice(0, 10),
+        watchFinds: [...fresh, ...(cur.watchFinds ?? [])].slice(0, 100),
+        checks: [check, ...cur.checks].slice(0, 20),
+      });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: null,
+        action: 'tender_source.watch_run',
+        entity: 'tender_source',
+        entityId: id,
+        summary: `${s.buyer}: watcher read ${read} of ${pages.length} page(s), ${fresh.length} new guarding notice(s)`,
+      });
+      return { id, read, pages: pages.length, found, fresh: fresh.length };
+    });
+  }
+
+  /**
+   * Marketing answers a find: put it on the opportunities list (with the closing date and kind it confirms), or drop it
+   * as not for us, with the reason. The tender desk answers (Marketing staff once the desk has started).
+   */
+  async answerTenderWatchFind(
+    user: User,
+    id: Id,
+    key: string,
+    input: { action?: unknown; note?: unknown; kind?: unknown; channel?: unknown; closesOn?: unknown; guards?: unknown; title?: unknown; ref?: unknown; companyIds?: unknown },
+  ) {
+    await this.assertDoa(user);
+    const s = await this.store.get('tenderSources', id);
+    if (!s) throw new NotFound('Tender site');
+    const f = (s.watchFinds ?? []).find((x) => x.key === key);
+    if (!f) throw new NotFound('Find');
+    if (f.state !== 'NEW') throw new BadRequest('This find has already been answered.');
+    const note = typeof input.note === 'string' ? input.note.trim().slice(0, 300) : '';
+    let opportunityId: Id | null = null;
+    if (input.action === 'NOT_FOR_US') {
+      if (note.length < 3) throw new BadRequest('Give the reason it is not for us (for example "cleaning only" or "outside our areas").');
+    } else if (input.action === 'RECORD') {
+      const o = await this.recordTenderOpportunity(user, {
+        kind: input.kind ?? 'TENDER',
+        ref: typeof input.ref === 'string' ? input.ref : f.ref,
+        title: typeof input.title === 'string' && input.title.trim() ? input.title : f.title.slice(0, 160),
+        buyer: s.buyer,
+        channel: input.channel ?? 'GOVERNMENT',
+        source: `Tender watcher: ${f.link ?? f.page}`.slice(0, 120),
+        closesOn: input.closesOn ?? f.closesOn ?? '',
+        guards: input.guards ?? null,
+        note,
+        companyIds: input.companyIds ?? [],
+      });
+      opportunityId = o.id;
+    } else throw new BadRequest('Choose to record it or drop it.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const cur = (await tx.get('tenderSources', id))!;
+      const finds = (cur.watchFinds ?? []).map((x) =>
+        x.key === key ? { ...x, state: (opportunityId ? 'RECORDED' : 'NOT_FOR_US') as TenderWatchFind['state'], answer: { by: user.name, byId: user.id, at, note, opportunityId } } : x,
+      );
+      const updated = await tx.update('tenderSources', id, { watchFinds: finds });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: null,
+        action: 'tender_source.find',
+        entity: 'tender_source',
+        entityId: id,
+        summary: `${s.buyer}: watcher find ${opportunityId ? 'recorded as an opportunity' : `dropped (${note})`}`,
+      });
+      return updated;
+    });
+  }
+
+  /**
    * What this person must act on, for alerts to Teams and email (staff usability rule 7, Fauzan 4-5 Nov 2026).
    * The same items their home screen and IT board show, read with their own permissions; nothing is changed.
    */
@@ -51757,9 +53094,12 @@ export class PrimaService {
       }
     };
     if (isGroupLeader(user) || ['company_manager', 'admin_exec', 'supervisor'].includes(user.role)) await add(async () => (await this.home(user)).todo);
-    else
+    else {
       for (const f of [this.finHome, this.staffPayHome, this.itHome, this.actHome, this.purHome, this.govHome, this.grcHome, this.corpHome, this.creditHome, this.branchHome, this.corpAuditLegalHome])
         await add(() => (f as (u: User) => Promise<HomeItem[]>).call(this, user));
+      // Central staff have no Home screen: the shared login reminders (owner, backup, IT) reach them by the bell.
+      await add(() => this.sharedLogins.homeItems(user));
+    }
     if (user.department === 'it') await add(() => this.itJobAlertItems(user));
     return items;
   }
@@ -57160,7 +58500,7 @@ export class PrimaService {
     return this.jaSwitch().stageImport(user, body ?? {});
   }
 
-  /** Approve or reject a staged JA export (ACT Lead or Deputy, not the person who staged it). */
+  /** Approve or reject a staged JA export (the ACT Director, never the person who staged it). */
   async jaImportDecide(user: User, id: string, body: Record<string, unknown>) {
     return this.jaSwitch().decideImport(user, id, body ?? {});
   }

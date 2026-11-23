@@ -86,7 +86,7 @@ describe('office accounts in the database', () => {
       [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'], leadership: 'cos' }, /cannot set leadership/],
       [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'], integration: 'ja' }, /cannot set integration/],
       [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'], entraOid: OID }, /cannot set entraOid/],
-      [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'], department: 'finance' }, /department must be one of/],
+      [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'], department: 'director_office' }, /department must be one of/],
       [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'admin_exec', companyIds: ['co-sasa'], department: 'hr' }, /in hr must be central staff/],
     ];
     for (const [input, why] of tries) await assert.rejects(upsert(input), (e: Error) => e instanceof AccountRefused && why.test(e.message));

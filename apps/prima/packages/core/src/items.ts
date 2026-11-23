@@ -91,7 +91,7 @@ export interface ItemSqlCode {
  * months, or null for no limit (Fauzan, 13 Nov 2026 23:52Z: "uniform 6th piece allowed, paid", no upper limit, kept as a
  * setting; earlier 5).
  */
-export const UNIFORM_RULE: { readonly minPerYear: 2; readonly maxPerYear: 3; readonly paidMaxPerYear: number | null; readonly everyMonths: 6; readonly source: string } = { minPerYear: 2, maxPerYear: 3, paidMaxPerYear: null, everyMonths: 6, source: 'Fauzan, 6 Nov 2026; paid pieces without an upper limit 13 Nov 2026' };
+export const UNIFORM_RULE: { readonly minPerYear: 2; readonly maxPerYear: 3; readonly paidMaxPerYear: number | null; readonly everyMonths: 6; readonly source: string } = { minPerYear: 2, maxPerYear: 3, paidMaxPerYear: null, everyMonths: 6, source: 'Fauzan, 6 Nov 2026; paid pieces without an upper limit 13 Nov 2026; a piece is a full suit from shoes to cap, 2 compulsory a year, 23 Nov 2026' };
 
 /**
  * A uniform record that is not a labelled handover (Fauzan, 6 Nov 2026):

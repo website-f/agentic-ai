@@ -99,15 +99,18 @@ type Board = {
   settings: { handOutDays: number; primaOnlyFrom: string | null; contracts: Record<string, { label: string; firstCheck: boolean; bulkCount: boolean; responsible: boolean }> };
   labels: Record<string, string>;
   canSet: boolean;
+  canStart?: boolean;
   watcher: boolean;
   channels: string[];
 };
 type Options = {
   site: { id: string; name: string };
+  asOffice?: boolean;
+  receivers?: { id: string; name: string }[];
   contract: string;
   contractSet: boolean;
   setting: { label: string; startedBy: string; firstCheck: boolean };
-  items: { id: string; name: string; kind: string; size: string | null; onHand: number; onTheWay: number; min: number; max: number | null }[];
+  items: { id: string; name: string; kind: string; size: string | null; onHand: number; onTheWay: number; min: number; max: number | null; kit?: { name: string; qty: number }[] | null; partOf?: string[] }[];
   supplies: { id: string; name: string; unit: string; onHand: number | null; daysLeft: number | null; min: number | null; max: number | null }[];
   equipment: { id: string; name: string; required: number; working: number | null }[];
 };
@@ -162,11 +165,13 @@ const ROW_FILTERS: DtFilter<Row>[] = [
   },
 ];
 
-export function SiteSuppliesPanel({ canAsk }: { canAsk?: boolean }) {
+export function SiteSuppliesPanel({ canAsk, hideIfNothing }: { canAsk?: boolean; hideIfNothing?: boolean }) {
   const { data, error } = useLoad(() => api.siteSuppliesAct('board', {}) as Promise<Board>, []);
   const [open, setOpen] = useState<string | null>(null);
   if (error) return null;
   if (!data) return <Loading what="supplies requests" />;
+  // Someone who only monitors the store sees the panel when they may start a request or have one to act on.
+  if (hideIfNothing && !canAsk && !data.canStart && !data.canSet && data.rows.length === 0) return null;
   return (
     <section className="panel">
       <div className="panel-head">
@@ -181,7 +186,7 @@ export function SiteSuppliesPanel({ canAsk }: { canAsk?: boolean }) {
         Langkah: OM minta (untuk penyelia atau peronda) · semakan awal (Nepal) · OGM sahkan · stor semak stok · Perolehan putuskan keluar atau beli · stor keluarkan · tapak terima dan kira. Uniform tambahan dibayar dengan resit, bukan dari gaji. Kerosakan atau kehilangan kerana kecuaian atau salah guna (diputuskan pengurus) dicaj pada gaji berikutnya dan disemak HR.
       </p>
       {data.channels.length > 1 && <p className="muted small">Tempoh peralihan: borang kertas, e-mel dan SharePoint masih dihantar juga. Prima sahaja bermula {data.settings.primaOnlyFrom ?? '(tarikh belum ditetapkan)'}.</p>}
-      {canAsk && <NewRequest />}
+      {(canAsk || data.canStart) && <NewRequest />}
       {data.canSet && (
         <OpForm
           title="Tetapan jenis kontrak"
@@ -492,6 +497,8 @@ function NewRequest() {
   const [alsoSentRef, setAlsoRef] = useState('');
   const [paper, setPaper] = useState<ProofInput[]>([]);
   const [notes, setNotes] = useState('');
+  const [receiverUserId, setReceiver] = useState('');
+  const [forNewSite, setNewSite] = useState(false);
   if (!open)
     return (
       <button className="btn" onClick={() => setOpen(true)}>
@@ -503,7 +510,7 @@ function NewRequest() {
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <strong>Permohonan Pesanan Barang</strong>
       <div style={{ display: 'flex', gap: 6 }}>
-        <SitePick value={siteId} onChange={setSiteId} />
+        <SupplySitePick value={siteId} onChange={setSiteId} />
         <button className="btn btn-sm" disabled={act.busy || !siteId} onClick={() => act.run(async () => setOpt((await api.siteSuppliesAct('options', { siteId })) as Options), 'Senarai dimuatkan.')}>
           Muat tapak
         </button>
@@ -514,7 +521,26 @@ function NewRequest() {
             {opt.site.name}: <Chip tone="info">{opt.setting.label}</Chip> {!opt.contractSet && <span className="muted">(jenis kontrak belum ditetapkan; tetapkan di bawah jika salah)</span>}
           </div>
           <OpForm title="Tetapkan jenis kontrak tapak" op="siteType" send={send('siteType')} fixed={{ siteId: opt.site.id }} fields={[{ k: 'contract', l: 'Jenis', t: 'select', o: ['KBK', 'PKK_NEPAL', 'PKK'] }, { k: 'reason', l: 'Sebab' }]} />
-          {opt.setting.startedBy !== 'om' && <input className="input" placeholder={opt.setting.startedBy === 'supervisor' ? 'Nama penyelia yang meminta' : 'Nama peronda yang meminta'} aria-label="Dimulakan oleh" value={startedByName} onChange={(e) => setStarted(e.target.value)} />}
+          {opt.asOffice && (
+            <>
+              <label className="small">
+                OM yang menerima di tapak{' '}
+                <Select className="select" aria-label="OM yang menerima" value={receiverUserId} onChange={(e) => setReceiver(e.target.value)}>
+                  <option value="">Pilih OM</option>
+                  {(opt.receivers ?? []).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              {!(opt.receivers ?? []).length && <span className="muted small">Tiada OM untuk tapak ini lagi. Tetapkan OM tapak dahulu.</span>}
+            </>
+          )}
+          <label className="small">
+            <input type="checkbox" checked={forNewSite} onChange={(e) => setNewSite(e.target.checked)} /> Barang untuk tapak baharu (mula operasi)
+          </label>
+          {!opt.asOffice && opt.setting.startedBy !== 'om' && <input className="input" placeholder={opt.setting.startedBy === 'supervisor' ? 'Nama penyelia yang meminta' : 'Nama peronda yang meminta'} aria-label="Dimulakan oleh" value={startedByName} onChange={(e) => setStarted(e.target.value)} />}
           {lines.map((l, k) => {
             const item = opt.items.find((x) => x.id === l.stockItemId);
             return (
@@ -524,11 +550,13 @@ function NewRequest() {
                   {opt.items.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.name}
-                      {x.size ? ` (${x.size})` : ''} · stor {x.onHand} · dalam perjalanan {x.onTheWay}
+                      {x.size ? ` (${x.size})` : ''}
+                      {x.kit ? ` · SET: ${x.kit.map((p) => `${p.qty} ${p.name}`).join(', ')}` : ` · stor ${x.onHand} · dalam perjalanan ${x.onTheWay}`}
+                      {x.partOf?.length ? ` · bahagian ${x.partOf.join(', ')}` : ''}
                     </option>
                   ))}
                 </Select>
-                <input className="input" style={{ width: 60 }} aria-label={`Kuantiti ${k + 1}`} value={l.qty} onChange={(e) => set(k, { qty: e.target.value })} />
+                <input className="input" style={{ width: 60 }} title={item?.kit ? 'Bilangan set' : undefined} aria-label={`Kuantiti ${k + 1}`} value={l.qty} onChange={(e) => set(k, { qty: e.target.value })} />
                 <input className="input" style={{ width: 110 }} placeholder="No. staf (pengawal)" aria-label={`No staf ${k + 1}`} value={l.staffNo} onChange={(e) => set(k, { staffNo: e.target.value })} />
                 {opt.contract === 'KBK' && (
                   <Select className="select" aria-label={`Bekalan tapak ${k + 1}`} value={l.supplyId || (l.equipmentId ? `eq:${l.equipmentId}` : '')} onChange={(e) => (e.target.value.startsWith('eq:') ? set(k, { equipmentId: e.target.value.slice(3), supplyId: '' }) : set(k, { supplyId: e.target.value, equipmentId: '' }))}>
@@ -582,6 +610,8 @@ function NewRequest() {
                     api.siteSuppliesAct('request', {
                       siteId: opt.site.id,
                       startedByName,
+                      receiverUserId: receiverUserId || null,
+                      forNewSite,
                       notes,
                       alsoSentBy: alsoSentBy || null,
                       alsoSentRef,
@@ -610,5 +640,25 @@ function NewRequest() {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * The sites the person may ask supplies for, by name (23 Nov 2026); falls back to typing the site ID. The office's
+ * SitePick above stays for the equipment screens; the supplies form uses the server's own scoped list.
+ */
+function SupplySitePick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data } = useLoad(() => api.siteSuppliesAct('sites', {}).catch(() => []) as Promise<{ id: string; name: string; sector: string | null }[]>, []);
+  if (!data || !data.length) return <input className="input" placeholder="ID tapak" aria-label="ID tapak" value={value} onChange={(e) => onChange(e.target.value)} />;
+  return (
+    <Select className="select" aria-label="Tapak" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Pilih tapak</option>
+      {data.map((x) => (
+        <option key={x.id} value={x.id}>
+          {x.name}
+          {x.sector === 'government' ? ' · kerajaan (stor Goodwill)' : x.sector === 'private' ? ' · swasta' : ''}
+        </option>
+      ))}
+    </Select>
   );
 }

@@ -38,6 +38,10 @@ function receiptReaderFiles(): Plugin {
     ['ocr/tesseract-core-lstm.wasm.js', join(pkg('tesseract.js-core'), 'tesseract-core-lstm.wasm.js')],
     ['ocr/lang/eng.traineddata.gz', join(pkg('@tesseract.js-data/eng'), '4.0.0_best_int/eng.traineddata.gz')],
   ];
+  // The PDF reader (pdf.js, Apache-2.0) for the key-in helper: its worker, and the decoders scanned PDFs need.
+  files.push(['pdf/pdf.worker.min.mjs', join(pkg('pdfjs-dist'), 'build/pdf.worker.min.mjs')]);
+  for (const f of ['jbig2.wasm', 'jbig2_nowasm_fallback.js', 'openjpeg.wasm', 'openjpeg_nowasm_fallback.js', 'qcms_bg.wasm'])
+    files.push([`pdf/wasm/${f}`, join(pkg('pdfjs-dist'), 'wasm', f)]);
   return {
     name: 'prima-receipt-reader-files',
     apply: 'build',

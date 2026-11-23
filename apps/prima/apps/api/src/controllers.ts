@@ -42,6 +42,7 @@ import { shareBase, shareCsp, shareGonePage, shareReportPage, shareSecret, share
 import type { Response } from 'express';
 import { WebConnectors, webConnectorConfig } from './web-connectors';
 import { sharedContractReaderOnline } from './contract-paper-online';
+import { sharedTenderAiChecker } from './tender-ai-check-online';
 
 const webConnectors = new WebConnectors();
 
@@ -3527,6 +3528,12 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.actBoard(u));
   }
 
+  /** The ACT Director's one page a month for the CEO (read-only). */
+  @Get('act/month-summary')
+  actMonthSummary(@UserId() uid: string, @Query('month') month = '') {
+    return this.db.asUser(uid, (svc, u) => svc.actMonthSummary(u, String(month).slice(0, 7) || undefined));
+  }
+
   @Post('act/findings')
   raiseActFinding(@UserId() uid: string, @Body() b: Record<string, unknown>) {
     return this.db.asUser(uid, (svc, u) =>
@@ -3934,6 +3941,109 @@ export class AppController {
     );
   }
 
+  // The Prima agent (Fauzan, 23 Nov 2026). It fills a form from the person's words; Send runs the same action as the
+  // screen, as the person, with every check of that action. The skill library and style need module assistant-v1.
+  @Get('assistant')
+  assistantHome(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.assistant.home(u));
+  }
+
+  @Post('assistant/:op')
+  assistantAct(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send an object');
+    return this.db.asUser(uid, (svc, u): Promise<unknown> => {
+      const a = svc.assistant;
+      switch (op) {
+        case 'understand':
+          return a.understand(u, { text: b.text, actionId: b.actionId, lang: b.lang });
+        case 'send':
+          return a.send(u, { actionId: b.actionId, values: b.values, text: b.text, draft: b.draft, labels: b.labels });
+        case 'lists':
+          return a.listsFor(u, { actionId: b.actionId, values: b.values });
+        case 'style':
+          return a.setStyle(u, { lang: b.lang, signOff: b.signOff, tone: b.tone });
+        case 'forget':
+          return a.forget(u, { said: b.said, all: b.all });
+        case 'skills':
+          return a.saveSkill(u, { scope: b.scope, owner: b.owner, name: b.name, words: b.words, actionId: b.actionId, values: b.values, note: b.note });
+        case 'retire':
+          return a.retireSkill(u, { id: b.id, reason: b.reason });
+        default:
+          throw new BadRequestException('Unknown action');
+      }
+    });
+  }
+
+  // Data and file manager for old records (Fauzan, 23 Nov 2026). The service checks who may see and change each file;
+  // the database module archive-v1 enforces the same walls again. Bytes travel in pieces of at most 1.5 MB.
+  // Part AG, AG15: data clean-up checker. Fixed rules, read only; records by number only.
+  @Get('data-cleanup')
+  dataCleanup(@UserId() uid: string, @Query() q: Record<string, string | undefined>) {
+    const area = q?.area === 'staff' || q?.area === 'site' || q?.area === 'contract' ? q.area : undefined;
+    return this.db.asUser(uid, (svc, u) => svc.dataCleanup.board(u, { companyId: q?.companyId ? str(q.companyId, 'companyId', 80) : undefined, area }));
+  }
+
+  @Get('archive')
+  archive(@UserId() uid: string, @Query() q: Record<string, string | undefined>) {
+    const status = q?.status;
+    return this.db.asUser(uid, (svc, u) =>
+      svc.archive.list(u, {
+        owner: q?.owner ? str(q.owner, 'owner', 80) : undefined,
+        folder: q?.folder ? str(q.folder, 'folder', 20) : undefined,
+        year: q?.year && /^\d{4}$/.test(q.year) ? Number(q.year) : undefined,
+        q: q?.q ? str(q.q, 'q', 80) : undefined,
+        status: status === 'filed' || status === 'to_check' || status === 'set_aside' || status === 'mine' ? status : undefined,
+        page: q?.page && /^\d{1,4}$/.test(q.page) ? Number(q.page) : 0,
+      }),
+    );
+  }
+
+  @Post('archive/files')
+  archiveStart(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.archive.start(u, { owner: b?.owner, fileName: b?.fileName, size: b?.size, folder: b?.folder, title: b?.title, docDate: b?.docDate, ref: b?.ref, origin: b?.origin, words: b?.words }));
+  }
+
+  @Post('archive/files/:id/parts/:n')
+  archivePart(@UserId() uid: string, @Param('id') id: string, @Param('n') n: string, @Body() b: Record<string, unknown>) {
+    if (!/^\d{1,3}$/.test(n)) throw new BadRequestException('No such piece of this file.');
+    return this.db.asUser(uid, (svc, u) => svc.archive.part(u, id.slice(0, 80), Number(n), b?.data));
+  }
+
+  @Post('archive/files/:id/finish')
+  archiveFinish(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.archive.finish(u, id.slice(0, 80), { folder: b?.folder, title: b?.title, docDate: b?.docDate, ref: b?.ref, origin: b?.origin, words: b?.words, checked: b?.checked }));
+  }
+
+  // Opening is logged and gives a pass; the bytes then come in pieces, each asked for with that pass.
+  @Get('archive/files/:id/content')
+  archiveOpen(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.archive.open(u, id.slice(0, 80)));
+  }
+
+  @Post('archive/files/:id/content/:n')
+  async archiveOpenPart(@UserId() uid: string, @Param('id') id: string, @Param('n') n: string, @Body() b: Record<string, unknown>) {
+    if (!/^\d{1,3}$/.test(n)) throw new BadRequestException('No such piece of this file.');
+    const bytes = await this.db.asUser(uid, (svc, u) => svc.archive.openPart(u, id.slice(0, 80), Number(n), b?.pass));
+    return { base64: Buffer.from(bytes).toString('base64') };
+  }
+
+  @Post('archive/files/:id/details')
+  archiveDetails(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.archive.setDetails(u, id.slice(0, 80), { folder: b?.folder, title: b?.title, docDate: b?.docDate, ref: b?.ref, origin: b?.origin, checked: b?.checked }));
+  }
+
+  @Post('archive/files/:id/set-aside')
+  archiveSetAside(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.archive.setAside(u, id.slice(0, 80), b?.reason));
+  }
+
+  // Upload, Key in and Download on every screen (Fauzan, 23 Nov 2026). A download is logged before the file is made;
+  // sensitive data needs a reason; speak-up lists only for their handlers. The file holds only what the screen showed.
+  @Post('exports/log')
+  exportLog(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.exports.log(u, { screen: b?.screen, tab: b?.tab, format: b?.format, rows: b?.rows, reason: b?.reason, companyId: b?.companyId }));
+  }
+
   // Part N8: Report a problem (any staff), answered by IT support.
   @Get('problems')
   problems(@UserId() uid: string) {
@@ -3950,6 +4060,24 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.problems.reply(u, id.slice(0, 80), String(b?.text ?? '')));
   }
 
+  // Org chart (Fauzan, 23 Nov 2026): heads put staff under them; the CEO or HR Director names unit heads. Module org-lines-v1.
+  @Get('org/chart')
+  orgChart(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.org.chart(u));
+  }
+
+  @Post('org/line')
+  orgSetLine(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send an object');
+    return this.db.asUser(uid, (svc, u) => svc.org.setLine(u, { userId: b.userId, managerId: b.managerId, reason: b.reason, until: b.until }));
+  }
+
+  @Post('org/head')
+  orgSetHead(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send an object');
+    return this.db.asUser(uid, (svc, u) => svc.org.setHead(u, { unit: b.unit, headId: b.headId, deputyId: b.deputyId, reason: b.reason, until: b.until }));
+  }
+
   // Accounts and Access (Fauzan, 15 Nov 2026): IT or HR prepares; the HR Director or the CEO approves; module accounts-access-v1.
   @Get('accounts')
   accountsBoard(@UserId() uid: string) {
@@ -3961,6 +4089,24 @@ export class AppController {
     if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send an object');
     if (!['submit', 'decide'].includes(action)) throw new BadRequestException('Unknown action');
     return this.db.asUser(uid, (svc, u) => svc.accounts.act(u, action, b));
+  }
+
+  // Shared login list (Fauzan, 23 Nov 2026): the list only, never a password; module shared-logins-v1.
+  @Get('shared-logins')
+  sharedLoginsBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.sharedLogins.board(u));
+  }
+
+  @Get('shared-logins/leaver/:personId')
+  sharedLoginsLeaver(@UserId() uid: string, @Param('personId') personId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.sharedLogins.leaverList(u, personId.slice(0, 80)));
+  }
+
+  @Post('shared-logins/:action')
+  sharedLoginsAct(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send an object');
+    if (!['save', 'changed', 'close', 'kind'].includes(action)) throw new BadRequestException('Unknown action');
+    return this.db.asUser(uid, (svc, u) => svc.sharedLogins.act(u, action, b));
   }
 
   // Part N4: the CEO adds a company to the company list (audited draft; database module company-add-v1).
@@ -7805,7 +7951,15 @@ export class AppController {
 
   @Post('tenders/:id/verify')
   verifyTender(@UserId() uid: string, @Param('id') id: string, @Body() b: { approve?: unknown; note?: unknown }) {
-    return this.db.asUser(uid, (svc, u) => svc.verifyTender(u, id, b.approve === true, b.note == null ? '' : str(b.note, 'note', 300)));
+    // The AI check runs once when the preparer signs a desk bid, if TENDER_AI_CHECK_ENABLED and Arisha's settings are on.
+    const ai = sharedTenderAiChecker() ?? undefined;
+    return this.db.asUser(uid, (svc, u) => svc.verifyTender(u, id, b.approve === true, b.note == null ? '' : str(b.note, 'note', 1500), ai));
+  }
+
+  @Post('tenders/:id/ai-flags/:flagId')
+  answerTenderAiFlag(@UserId() uid: string, @Param('id') id: string, @Param('flagId') flagId: string, @Body() b: { status?: unknown; note?: unknown }) {
+    if (b.status !== 'FIXED' && b.status !== 'NOT_NEEDED') throw new BadRequestException('status must be FIXED or NOT_NEEDED');
+    return this.db.asUser(uid, (svc, u) => svc.answerTenderAiFlag(u, id, str(flagId, 'flagId', 40), b.status as 'FIXED' | 'NOT_NEEDED', str(b.note ?? '', 'note', 300)));
   }
 
   @Post('tenders/:id/submit')
@@ -7978,6 +8132,91 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.createTenderGroup(u, str(b.sourceTenderId, 'sourceTenderId', 120), ids));
   }
 
+  // Marketing desk (Fauzan, 22-23 Nov 2026): the service decides who may read the board and who may start the desk.
+  @Get('marketing-board')
+  marketingBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.marketingBoard(u));
+  }
+
+  // Company paper library (Marketing item AH7, 23 Nov 2026); module company-papers-v1. The service checks who may.
+  @Get('companies/:companyId/papers')
+  companyPapers(@UserId() uid: string, @Param('companyId') companyId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.companyPapers(u, str(companyId, 'companyId', 40)));
+  }
+
+  @Post('companies/:companyId/papers')
+  addCompanyPaper(
+    @UserId() uid: string,
+    @Param('companyId') companyId: string,
+    @Body() b: { kind?: unknown; title?: unknown; period?: unknown; issuedOn?: unknown; expiresOn?: unknown; note?: unknown; proof?: unknown },
+  ) {
+    const opt = (v: unknown, name: string, max: number) => (v == null || v === '' ? null : str(v, name, max));
+    const input = {
+      kind: str(b.kind, 'kind', 40),
+      title: opt(b.title, 'title', 120),
+      period: opt(b.period, 'period', 7),
+      issuedOn: opt(b.issuedOn, 'issuedOn', 10),
+      expiresOn: opt(b.expiresOn, 'expiresOn', 10),
+      note: opt(b.note, 'note', 300),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.addCompanyPaper(u, str(companyId, 'companyId', 40), input, proofList(b.proof)));
+  }
+
+  @Post('marketing-desk/no-entry-reason')
+  setNoEntryReason(@UserId() uid: string, @Body() b: { companyId?: unknown; reason?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.setNoEntryReason(u, str(b.companyId, 'companyId', 40), str(b.reason, 'reason', 300)));
+  }
+
+  @Post('tenders/:id/hours')
+  recordTenderHours(@UserId() uid: string, @Param('id') id: string, @Body() b: { hours?: unknown; note?: unknown }) {
+    if (typeof b.hours !== 'number' || !Number.isFinite(b.hours)) throw new BadRequestException('hours must be a number');
+    return this.db.asUser(uid, (svc, u) => svc.recordTenderHours(u, id, b.hours as number, b.note == null ? '' : str(b.note, 'note', 200)));
+  }
+
+  @Post('proposals')
+  startProposal(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const opt = (k: string, max: number) => (b[k] == null ? '' : str(b[k], k, max));
+    return this.db.asUser(uid, (svc, u) =>
+      svc.startProposal(u, {
+        companyId: str(b.companyId, 'companyId', 80),
+        client: opt('client', 120),
+        title: opt('title', 160),
+        scope: opt('scope', 600),
+        contact: opt('contact', 160),
+        sendBy: opt('sendBy', 10),
+        guards: b.guards,
+        sites: b.sites,
+      }),
+    );
+  }
+
+  @Post('tenders/:id/to-it')
+  sendTenderToIt(@UserId() uid: string, @Param('id') id: string, @Body() b: { kind?: unknown; codes?: unknown; items?: unknown }) {
+    const list = (v: unknown, name: string) => (v == null ? [] : Array.isArray(v) && v.length <= 20 ? v.map((x) => str(x, name, 120)) : (() => { throw new BadRequestException(`${name} must be a list`); })());
+    return this.db.asUser(uid, (svc, u) => svc.sendTenderToIt(u, id, { kind: b.kind === 'quotation' ? 'quotation' : 'tender', codes: list(b.codes, 'codes'), items: list(b.items, 'items') }));
+  }
+
+  @Post('tenders/:id/attendee')
+  nameTenderAttendee(@UserId() uid: string, @Param('id') id: string, @Body() b: { kind?: unknown; attendee?: unknown; mofNamed?: unknown }) {
+    if (b.kind !== 'BRIEFING' && b.kind !== 'SITE_VISIT') throw new BadRequestException('kind must be BRIEFING or SITE_VISIT');
+    const kind = b.kind;
+    return this.db.asUser(uid, (svc, u) => svc.nameTenderAttendee(u, id, kind, str(b.attendee, 'attendee', 120), b.mofNamed === true));
+  }
+
+  @Post('tenders/:id/attendance')
+  recordTenderAttendance(@UserId() uid: string, @Param('id') id: string, @Body() b: { kind?: unknown; attended?: unknown; note?: unknown; proof?: unknown }) {
+    if (b.kind !== 'BRIEFING' && b.kind !== 'SITE_VISIT') throw new BadRequestException('kind must be BRIEFING or SITE_VISIT');
+    if (typeof b.attended !== 'boolean') throw new BadRequestException('attended must be true or false');
+    const kind = b.kind;
+    const attended = b.attended;
+    return this.db.asUser(uid, (svc, u) => svc.recordTenderAttendance(u, id, kind, attended, b.note == null ? '' : str(b.note, 'note', 300), proofList(b.proof)));
+  }
+
+  @Post('marketing-desk/start')
+  startMarketingDesk(@UserId() uid: string, @Body() b: { from?: unknown; note?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.startMarketingDesk(u, str(b.from, 'from', 10), str(b.note, 'note', 500)));
+  }
+
   @Get('tender-board')
   tenderBoard(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.tenderBoard(u));
@@ -8049,6 +8288,38 @@ export class AppController {
   recordTenderSourceCheck(@UserId() uid: string, @Param('id') id: string, @Body() b: { status?: unknown; result?: unknown; followUp?: unknown; found?: unknown }) {
     return this.db.asUser(uid, (svc, u) =>
       svc.recordTenderSourceCheck(u, str(id, 'id', 80), { status: b?.status, result: b?.result, followUp: b?.followUp, found: b?.found }),
+    );
+  }
+
+  @Get('tenders/:id/portal-logins')
+  tenderPortalLogins(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.tenderPortalLogins(u, str(id, 'id', 80)));
+  }
+
+  @Post('tender-sources/:id/watch')
+  setTenderSourceWatch(@UserId() uid: string, @Param('id') id: string, @Body() b: { allowed?: unknown; note?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.setTenderSourceWatch(u, str(id, 'id', 80), { allowed: b?.allowed, note: b?.note }));
+  }
+
+  @Post('tender-sources/:id/finds/:key')
+  answerTenderWatchFind(
+    @UserId() uid: string,
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @Body() b: { action?: unknown; note?: unknown; kind?: unknown; channel?: unknown; closesOn?: unknown; guards?: unknown; title?: unknown; ref?: unknown; companyIds?: unknown },
+  ) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.answerTenderWatchFind(u, str(id, 'id', 80), str(key, 'key', 32), {
+        action: b?.action,
+        note: b?.note,
+        kind: b?.kind,
+        channel: b?.channel,
+        closesOn: b?.closesOn,
+        guards: b?.guards,
+        title: b?.title,
+        ref: b?.ref,
+        companyIds: Array.isArray(b?.companyIds) && b.companyIds.length <= 40 ? b.companyIds : [],
+      }),
     );
   }
 

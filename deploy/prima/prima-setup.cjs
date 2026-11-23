@@ -180,6 +180,10 @@ const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql'];
 // tender tables, the CEO's read of bulk loads): apps/api/src/office-module-allowances.ts. Not here: accounts-access-v1
 // (PR #144, after the 24; waits for Fauzan's go-ahead).
 const NON_RELEASE = JSON.parse(fs.readFileSync(path.resolve(MODULES_DIR, '../office-non-release.json'), 'utf8')).modules;
+// P126: Fauzan's off-list modules from main c5268831 (org chart lines, shared login list, old files, helper, AI budget,
+// company papers, Marketing accounts, Microsoft use board, office buying, ACT walls; accounts-access-v1 first). Each file
+// says "only with Fauzan's go-ahead", so they run only when the operator sets PRIMA_PENDING_MODULES=1 for that run.
+const PENDING = JSON.parse(fs.readFileSync(path.resolve(MODULES_DIR, '../office-pending.json'), 'utf8')).modules;
 
 async function withClient(fn) {
   const { Client } = require(require.resolve('pg', { paths: [cwd] }));
@@ -196,7 +200,8 @@ async function withClient(fn) {
 }
 
 async function nonRelease(c) {
-  for (const { file, marker } of NON_RELEASE) {
+  const list = process.env.PRIMA_PENDING_MODULES === '1' ? [...NON_RELEASE, ...PENDING] : NON_RELEASE;
+  for (const { file, marker } of list) {
     if ((await c.query(`SELECT (${marker}) AS ok`)).rows[0].ok === true) continue;
     await c.query(readModule(file));
     console.log(`prima-setup: module ${file} installed`);

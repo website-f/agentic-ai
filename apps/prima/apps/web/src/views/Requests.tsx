@@ -40,7 +40,7 @@ function thisMonth(): string {
 }
 
 const PAGE_SUB =
-  "Operation claims: the Operations Manager sets the month's items, the COO approves. Office supplies (not IT or assets such as furniture or renovation), office utilities and rent: the company manager requests, the Chief of Staff approves, the COO gives the final approval.";
+  "Operation claims: the Operations Manager sets the month's items, the COO approves. Office supplies (pens, paper, files), office utilities and rent: the company manager requests, the Chief of Staff approves, the COO gives the final approval. New furniture, fittings or renovation: \"Beli baru / renovasi\" below (Asset Management, then the operations head). IT and electronic items: the IT screen.";
 
 type Filter = 'all' | 'mine' | 'open';
 
@@ -414,8 +414,8 @@ function ExpenseForm({ kind, companies, row, onDone }: { kind: 'OPS_CLAIM' | 'OF
         </div>
         {kind === 'OFFICE' && category === 'SUPPLIES' && (
           <label className="ss-check">
-            <input type="checkbox" checked={notAsset} onChange={(e) => setNotAsset(e.target.checked)} /> These are consumables, not IT or asset items (furniture,
-            renovation)
+            <input type="checkbox" checked={notAsset} onChange={(e) => setNotAsset(e.target.checked)} /> These are consumables, not IT or asset items
+            (furniture, renovation: use "Beli baru / renovasi" above)
           </label>
         )}
         <ProofPicker site={null} refText="Receipt" items={proof} onChange={setProof} documentsOnly />

@@ -8,6 +8,7 @@ import type { Id } from "./types";
 import type { IsoDate } from "./types";
 import type { TableName } from "./types";
 import type { User } from "./types";
+import type { ActAudit } from "./types";
 import type { ItTicket } from "./types";
 import type { LegalHoldTable } from "./types";
 import type { GroupPerson } from "./types";
@@ -97,6 +98,12 @@ export interface Store {
    * the table has no wall and the service reads it as before.
    */
   speakUp?(): Promise<SpeakUpWall | null>;
+  /**
+   * The workflow step timings the ACT Director set, published read-only for every signed-in session (module
+   * act-timings-published-v1, ACT gap B3). Only timing rows, only the timing: never investigations, audits or notes.
+   * Null before the module is installed; absent in the in-memory store, which reads every row anyway.
+   */
+  publishedActTimings?(): Promise<ActAudit[] | null>;
   /** Run several writes as one unit. */
   transaction<R>(fn: (store: Store) => Promise<R>): Promise<R>;
   /**

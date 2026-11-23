@@ -460,7 +460,7 @@ function FilesPanel({ data }: { data: JaSwitchBoard }) {
           <h3>Stage a JA export</h3>
           <p className="muted small">
             A CSV file from JA for one company. Columns used: {cols.join(', ')}. Other columns are ignored; full IC numbers are refused. Nothing is written until
-            the ACT Lead or Deputy approves it.
+            the ACT Director approves it.
           </p>
           <div className="row">
             <label className="field">

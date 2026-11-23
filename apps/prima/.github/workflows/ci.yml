@@ -151,6 +151,14 @@ jobs:
           node scripts/hr-leave-browser-uat.cjs "$RUNNER_TEMP/hr-browser" 2>&1 | tee "$RUNNER_TEMP/hr-browser/leave.txt"
           mkdir -p "$RUNNER_TEMP/hr-browser/languages-appeal"
           node scripts/hr-languages-appeal-browser-uat.cjs "$RUNNER_TEMP/hr-browser/languages-appeal" 2>&1 | tee "$RUNNER_TEMP/hr-browser/languages-appeal/run.txt"
+          mkdir -p "$RUNNER_TEMP/hr-browser/key-in"
+          node scripts/key-in-documents-browser-uat.cjs "$RUNNER_TEMP/hr-browser/key-in" 2>&1 | tee "$RUNNER_TEMP/hr-browser/key-in/run.txt"
+          mkdir -p "$RUNNER_TEMP/hr-browser/archive"
+          node scripts/archive-browser-uat.cjs "$RUNNER_TEMP/hr-browser/archive" 2>&1 | tee "$RUNNER_TEMP/hr-browser/archive/run.txt"
+          mkdir -p "$RUNNER_TEMP/hr-browser/data-cleanup"
+          node scripts/data-cleanup-browser-uat.cjs "$RUNNER_TEMP/hr-browser/data-cleanup" 2>&1 | tee "$RUNNER_TEMP/hr-browser/data-cleanup/run.txt"
+          mkdir -p "$RUNNER_TEMP/hr-browser/assistant"
+          node scripts/assistant-browser-uat.cjs "$RUNNER_TEMP/hr-browser/assistant" 2>&1 | tee "$RUNNER_TEMP/hr-browser/assistant/run.txt"
       - name: Group staff history journeys on the synthetic demo build (HR, HR Director, company head, OM, ROM, COO)
         shell: bash
         env:

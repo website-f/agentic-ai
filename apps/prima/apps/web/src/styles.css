@@ -3483,3 +3483,25 @@ button.k-stat:active {
 .agentic-entries .agentic-entry:nth-child(2) .agentic-mark {
   background: var(--primary);
 }
+/* Upload, Key in and Download on every screen (Fauzan, 23 Nov 2026). */
+.screen-tools {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding-top: 10px;
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+}
+.screen-tools .btn {
+  min-height: 36px;
+}
+[data-screen-content] {
+  min-width: 0;
+}
+@media (max-width: 720px) {
+  .screen-tools .btn {
+    min-height: 44px;
+    flex: 1 1 0;
+  }
+}

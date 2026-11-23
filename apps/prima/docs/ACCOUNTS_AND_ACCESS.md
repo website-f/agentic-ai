@@ -81,6 +81,8 @@ must then be renewed.
 3. The screen "Accounts and access" appears for IT, HR, the HR Director and the CEO.
 4. Suggested first use: put real names on the sample leader accounts (the CEO approves), then send one request per
    company office from the staff directory, each with Microsoft object IDs.
+5. Marketing accounts (Marketing Manager, Deputy, Tender Executive; Fauzan, 22-23 Nov 2026) need the add-on module
+   `db/modules/marketing-accounts-v1.sql`, run the same way after this one. See `docs/MARKETING_TENDER_DESK.md`.
 
 ## Tests
 

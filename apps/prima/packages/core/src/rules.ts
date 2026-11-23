@@ -223,6 +223,28 @@ export const RULES = {
     'Policy',
     'Fauzan, 28 Oct 2026: when a tender is filled, every file is named as the tender asks, never by the company name. The technical part must not show the company name anywhere. The app blocks a file whose name differs from the name asked for or carries the company name, and a technical file whose readable text or file properties carry it; the person who prepared the bid confirms each technical file was checked page by page, because a scan or picture cannot be read in full.',
   ),
+  tenderPapers: rule(
+    'TENDER-PAPERS',
+    {
+      warnDays: 30,
+      bankStatementMonths: 3,
+      auditedAccountYears: 1,
+      accountsReadyMonth: 7,
+      ssmSearchFreshDays: 90,
+      governmentLicences: ['KDN_LICENCE', 'MOF_REGISTRATION', 'MOF_DIGITAL_CERT', 'SSM_ANNUAL_RETURN'] as import('./types').LicenceType[],
+      privateLicences: ['KDN_LICENCE', 'SSM_ANNUAL_RETURN'] as import('./types').LicenceType[],
+      governmentPapers: ['SSM_FORMS', 'SSM_PROFILE', 'COMPANY_PROFILE', 'BANK_STATEMENT', 'AUDITED_ACCOUNTS', 'EPF_REGISTRATION', 'SOCSO_REGISTRATION'] as import('./company-papers').CompanyPaperKind[],
+      privatePapers: ['SSM_FORMS', 'COMPANY_PROFILE', 'BANK_STATEMENT', 'EXPERIENCE_LETTER'] as import('./company-papers').CompanyPaperKind[],
+    },
+    'Policy',
+    'Fauzan, 23 Nov 2026 (Marketing item AH7, "Build"): each company keeps the papers bids need, with end dates and a 30-day warning. Fauzan, 23 Nov 2026 09:52 MYT: "Yes bid need 3 month" (last 3 months of bank statements) and "1 year audited" (the latest year of audited accounts). The July ready month, the 90-day freshness of the SSM company search and the usual paper lists are proposals from public tender papers seen in the 23 Nov 2026 research; each tender document decides.',
+  ),
+  marketingDesk: rule(
+    'TENDER-MARKETING',
+    { noBidNoticeHours: 24, companiesPerExecutive: 6, warnDaysToClose: 3, escalateDaysToClose: 1, approvalReminderHours: 24, visitUrgentDays: 3 },
+    'Policy',
+    'Fauzan, 22-23 Nov 2026: one central Marketing department (1 Manager, 1 Deputy, 7 Tender Executives, under the COO) prepares and lodges every tender and proposal for the group companies; quotations stay with the company ("Marketing does all", no hybrid). Each company stays the bidder. The company manager has 1 day to say "do not bid" and silence means go ("Give 1 day to reply"). The Marketing preparer signs, the Marketing Manager or Deputy checks (never the preparer), and the company manager alone approves the price and the bid at every value ("Company Manager for all is enough"). Each executive looks after 5 to 6 companies. A bid not at the check 3 days before closing is flagged to the executive and the Marketing Manager, and 1 day before closing to the COO; an approval not given within 1 day is chased. The 3-day, 1-day and reminder timings are proposals. Site visits and briefings (item AH13, 23 Nov 2026): the company names who attends from day 1; a mandatory one with nobody named 3 days before also goes to the COO (proposal).',
+  ),
   staffDoorCheck: rule(
     'HR-STAFF-DOOR',
     { leftBeforeSignOutMin: 30 },
@@ -2262,11 +2284,40 @@ export const RULES = {
     'Policy',
     'Fauzan, 2 Nov 2026: each manager may delegate or readjust the work of staff under them, and Arisha advises what to change from the data (time to do tasks, workload). Fauzan approved these thresholds on 2 Nov 2026 (he may change them later). The advice is a prompt for the manager, never a finding, ranking or input to pay or access; the manager decides and gives a reason.',
   ),
+  sharedLogin: rule(
+    'SHARED-LOGIN',
+    { changeDays: 90, remindDays: 14, leaverWorkingDays: 3, maxUsers: 30 },
+    'Policy',
+    'Fauzan, 23 Nov 2026: "Prepare also password key vault so password are kept so each person wont forgot password and it safe", "Wider as a whole", then "Now build" on the Microsoft-Premium-first plan (study doc, decision V6). Prima keeps only the list of shared logins, never a password. A shared password is changed every 90 days (reminder 14 days before) and within 3 working days after anyone named on it leaves. At most 30 other users on one login; above that, ask the portal for one login per person.',
+  ),
+  sharedLoginPortals: rule(
+    'SHARED-LOGIN-PORTALS',
+    {
+      // Every company (security and central) is expected to have these on the list.
+      everyCompany: ['ssm', 'lhdn', 'einvoice', 'kwsp', 'perkeso', 'hrdc', 'mysst', 'bank'] as string[],
+      // Security companies also hold a KDN licence, so their KDN eSIMS login is expected too.
+      securityCompany: ['kdn'] as string[],
+    },
+    'Policy',
+    'Fauzan, 23 Nov 2026 ("Yes" to the proposed list): the portals every group company uses as an employer and a taxpayer (SSM, LHDN MyTax, LHDN MyInvois e-Invoice, KWSP i-Akaun Majikan, PERKESO ASSIST, HRD Corp, the company bank, and Customs MySST for sales and service tax: Fauzan "Custom for sales tax", 23 Nov 2026) and, for the 38 licensed security companies, KDN eSIMS. ePerolehan is not expected because not every company bids for government work. The list only shows what is missing on the shared login list; it changes nothing else. IT or the CEO may change it in the app (Kinds of portal).',
+  ),
   workRebalanceAi: rule(
     'WORK-REBALANCE-AI',
     { perUserPerDay: 10 },
     'Policy',
     'Fauzan, 2 Nov 2026: "Use ai when needed. We use it in case basis." A manager may ask Arisha AI about one rebalance case at a time, by pressing a button; it is off until switched on (WORK_REBALANCE_AI_ENABLED) and needs Arisha AI to be on. Proposed cap: 10 asks per manager per day, to keep within the Arisha cost target. People are sent as Person A, B, C; no names, task titles, leave kinds or reasons go to the AI.',
+  ),
+  aiAgentBudget: rule(
+    'AI-AGENT-BUDGET',
+    { usdPerAgentPerMonth: 25 },
+    'Policy',
+    'Fauzan, 23 Nov 2026 (study "Where AI agents can help across Prima"): budget cap USD 25 per agent a month, one agent per team. An agent is one helper kind working for one company or central department. He also said "Use system more than ai... so we minimize the token amount" and "ai must also be there to help key in more needed. Staff do minimal work": rules, templates and free reading on the phone come first, and the online reader fills only what they could not. Each helper kind is off until listed in AI_AGENT_KINDS, and the price per million tokens must be set from the Azure price sheet before any call is made.',
+  ),
+  m365Use: rule(
+    'M365-USE',
+    { idleDays: 30, activeWithinDays: 30, mailboxFullPct: 90, managedProducts: ['BUSINESS PREMIUM', 'E3', 'E5'], p1Products: ['ENTRA ID P1', 'ACTIVE DIRECTORY PREMIUM P1'] },
+    'Policy',
+    'Fauzan, 23 Nov 2026: "Make sure prima secure can make sure every staff make full use of microsoft 365 premium", then "1. Ok 2. Ok" to (1) one read-only Microsoft report permission and (2) the PDPA officer agreeing to show names in the usage reports. Prima reads Microsoft\'s own usage records once a day and shows each office staff member\'s set-up and use: Authenticator and password reset registered, Teams, Outlook and OneDrive or SharePoint used in the last 30 days, mailbox under 90% full; for Business Premium staff also a managed, compliant device and desktop Office. A licence with no use in 30 days is shown so the Company Manager can move it. Coaching, never discipline; counts only, never the content of e-mail, chats or files. Labels are not measured yet and show Unknown, never green. Fauzan, 23 Nov 2026 (11:28 MYT): "1. Yes. 2. Agreed. Make sure every staff make full use of microsoft we buy": the board also covers every plan bought (Business Basic, Basic with the Entra ID P1 add-on, Business Premium), reads My Apps use from the Entra sign-in log (same read-only AuditLog.Read.All permission), and flags a Premium licence whose Premium-only features (managed device, desktop Office) are both unused. Fauzan, 23 Nov 2026 (11:49 MYT): "How about using the sharepoint?": OneDrive and SharePoint are separate checks; SharePoint is done when shared company or department files were opened or edited in the window (SharePoint activity report, same Reports.Read.All). Fauzan, 23 Nov 2026 (11:53 MYT): "Make sure we fully use the integration between prima secure and microsoft 365": sign-ins to Prima with Microsoft are counted from the same sign-in log, and IT and group leaders see every Prima to Microsoft 365 link with its state and what it still needs. Fauzan, 23 Nov 2026 (12:16 MYT): "One notes and loop?": OneNote use comes from the Microsoft 365 apps usage report (same Reports.Read.All); Loop has no per-person Microsoft report yet and shows Unknown with a how-to. Fauzan, 23 Nov 2026 (12:33 MYT): "Make sure guide can help them to do microsoft. Or help them to do it.": every item not done shows numbered steps, the official Microsoft page and "Ask IT to help" (an ordinary IT help request), and the guide has Microsoft 365 cards.',
   ),
   fwmPassportCheckDays: rule(
     'FWM-PASSPORT-CHECK',
@@ -2637,7 +2688,7 @@ export const RULES = {
       reportRows: 500,
     },
     'Policy',
-    "Fauzan, 5 Nov 2026 (third audit item 3, plan 'How we switch safely'): Prima and JA run the same month side by side for one company and one area; a difference report lists every mismatch and each is explained or fixed; ACT checks the report (proposed: ACT Lead or Deputy, never someone who explained a difference in it); the CEO switches the area, and a switch can be undone; JA stays read-only for 3 months after. Fauzan, 5 Nov 2026: 'Every formula can set by act director': the ACT Director sets these numbers in the app (a run keeps the values it started with). Starting values: 30 days side by side, pay to the sen, attendance hours may differ by 15 minutes, incidents match by site within 60 minutes, JA read-only 92 days. Recommended order: incidents, attendance and patrol, guard pay, then hostels; foreign worker papers live in both apps and never switch. JA history comes by a one-time import of JA exports, staged by ACT and approved by another person (ACT Lead or Deputy); the import never creates people and refuses full IC numbers.",
+    "Fauzan, 5 Nov 2026 (third audit item 3, plan 'How we switch safely'): Prima and JA run the same month side by side for one company and one area; a difference report lists every mismatch and each is explained or fixed; ACT checks the report (the ACT Director, never someone who explained a difference in it; there is no ACT Deputy since the 2 Nov 2026 structure); the CEO switches the area, and a switch can be undone; JA stays read-only for 3 months after. Fauzan, 5 Nov 2026: 'Every formula can set by act director': the ACT Director sets these numbers in the app (a run keeps the values it started with). Starting values: 30 days side by side, pay to the sen, attendance hours may differ by 15 minutes, incidents match by site within 60 minutes, JA read-only 92 days. Recommended order: incidents, attendance and patrol, guard pay, then hostels; foreign worker papers live in both apps and never switch. JA history comes by a one-time import of JA exports, staged by ACT and approved by another person (ACT Lead or Deputy); the import never creates people and refuses full IC numbers.",
   ),
   guardPhone: rule<{
     heartbeatSec: number;

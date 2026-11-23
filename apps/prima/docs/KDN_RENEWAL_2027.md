@@ -30,6 +30,13 @@ leaves out KDN licences. Service `packages/core/src/kdn-renewal.ts`, one door `s
 | W13 | Pendrive pack: ZIP of that company's soft copies named `<label>_<item>_<short>.pdf` plus `00_Senarai_semak.txt` (ticks, hardcopy list, appointment, the no-gift line). Company staff and Central Admin only; logged. |
 | W14 | Group board: stage, papers x of 15, appointment, missing papers, SST, counts, Nepali, countdown. Late ladder: not opened by 18 Nov -> DCoS, no appointment by 23 Nov -> CoS, not accepted by 11 Dec -> CEO, on home. |
 
+## Isi automatik on the papers (AG21, 23 Nov 2026)
+
+Each paper form reads its own date, months or year from the paper on the person's device (`kdnKeyIn` in
+`KdnRenewal.tsx`, `docs/KEY_IN_HELPER.md`). Values wait for the person's check; the W2 checks above stay the fixed rules
+and still decide. Statements and bank statements never go to the online reader. Items 1.4, 2.1, 3.6, 4.1 and 4.2 have
+no value to read (a signer, a file only, or insurance and counts that Prima already holds).
+
 ## Database
 
 New module `db/modules/kdn-renewal-v1.sql` (table `prima.kdn_recs`: template, window, sst, esims, pledge). Not in

@@ -59,12 +59,14 @@ describe('COO checks staff tasks in the departments he monitors', () => {
   it('checks his own direct report as their line manager: still with a reason (a short one is fine), nobody else to tell', async () => {
     const { svc } = fresh();
     const coo = await svc.user('u-coo');
-    const t = await finishedTask(svc, 'u-coo', 'u-transport', 'UAT road tax renewals list');
-    expect((await svc.personWork(coo, 'u-transport')).cooCheck).toBe('own');
+    const t = await finishedTask(svc, 'u-coo', 'u-ogm', 'UAT road tax renewals list');
+    expect((await svc.personWork(coo, 'u-ogm')).cooCheck).toBe('own');
+    // Transport runs under the OGM and the COO oversees it (Fauzan, 23 Nov 2026): he checks there with a reason.
+    expect((await svc.personWork(coo, 'u-transport')).cooCheck).toBe('reason');
     expect((await svc.personWork(await svc.user('u-it-lead'), 'u-it-ex1')).cooCheck).toBeNull();
     await expect(svc.workTaskReview(coo, t.id, true, '')).rejects.toThrow(/Say why you are accepting it \(a short/);
     expect((await svc.workTaskReview(coo, t.id, true, 'OK')).status).toBe('accepted');
-    expect(await notices(svc, 'u-transport')).toHaveLength(0);
+    expect(await notices(svc, 'u-ogm')).toHaveLength(0);
   });
 
   it('refuses the COO in a department he does not directly monitor, even with a reason, on the direct API too', async () => {
@@ -263,7 +265,7 @@ describe('Leadership notice and audit correctness', () => {
 
   it('includes the COO direct-report acceptance reason in the audit', async () => {
     const { svc, ds } = fresh();
-    const t = await finishedTask(svc, 'u-coo', 'u-transport', 'Direct report audit');
+    const t = await finishedTask(svc, 'u-coo', 'u-ogm', 'Direct report audit');
     await svc.workTaskReview(await svc.user('u-coo'), t.id, true, 'Checked personally');
     expect(ds.audit.at(-1)!.summary).toContain('Checked personally');
   });

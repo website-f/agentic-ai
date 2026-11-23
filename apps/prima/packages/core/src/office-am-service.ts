@@ -4,7 +4,7 @@
 // collection (S63-S74) and periodic office visits (S75-S84). One door: `act(user, op, input)`. Every step checks who
 // may take it here; the database module office-am-v1 adds the walls. Prima records; it never moves money, never
 // applies to a bank, and never makes a rent invoice number of its own.
-import { AccessDenied, assetRole, isGroupLeader } from './access';
+import { AccessDenied, GOV_OPS_COMPANY_ID, GROUP_EMPLOYER_ID, assetRole, isGroupLeader } from './access';
 import { BadRequest, NotFound, type ProofInput, type PrimaService } from './service';
 import { RULES } from './rules';
 import type { Store } from './store';
@@ -87,6 +87,27 @@ const LEVEL_RANK: Record<DamageLevel, number> = { MINOR: 0, MEDIUM: 1, CRITICAL:
 /** S3: electronic devices go to IT (Part Q). */
 export const IT_DAMAGE_TYPES = ['computer', 'laptop', 'phone', 'printer', 'network', 'it_device'] as const;
 export const AM_DAMAGE_TYPES = ['furniture', 'fitting', 'aircond', 'lights', 'wiring', 'plumbing', 'door', 'roof', 'safety_equipment', 'other'] as const;
+/**
+ * Buying new office items and renovation (Fauzan, 23 Nov 2026: "IT items go to IT and assets to asset management ...
+ * kalau furniture ... renovation ... Asset management team will supervise, and then ... escalation to operation HOD").
+ * A "buy new" request is an office job like a repair (same record, same work order, same payment and close), with its
+ * own approval line: the Asset Director supervises, then the operations head of the office's side approves (the
+ * Operations Director for private-sector companies, the OGM for Government Operations, the Chief of Staff for head
+ * office), and the CEO also approves above the repair limit (RM50,000). Electronic items stay with IT; pens, paper and
+ * files stay an office request.
+ */
+export const BUY_TYPES = ['furniture', 'fitting', 'aircond', 'renovation', 'signage', 'other'] as const;
+export type BuyHod = 'ops_director' | 'ogm' | 'cos';
+export const BUY_HOD_LABEL: Record<BuyHod, string> = {
+  ops_director: 'Operations Director (private sector)',
+  ogm: 'Operations General Manager (government)',
+  cos: 'Chief of Staff (head office)',
+};
+/** Which operations head approves a new buy for this office. */
+export function buyHodFor(companyId: Id | null): BuyHod {
+  if (!companyId || companyId === GROUP_EMPLOYER_ID) return 'cos';
+  return companyId === GOV_OPS_COMPANY_ID ? 'ogm' : 'ops_director';
+}
 /** S45: shared building areas go to the JMB. */
 export const SHARED_AREAS = ['lobby', 'lift', 'stairs', 'common_pipes', 'common_lights', 'fire_system', 'roof', 'car_park', 'outside'] as const;
 export const JMB_GROUPS = ['building_infrastructure', 'lift', 'shared_water', 'sewerage_sanitary', 'common_electrics', 'fire_prevention', 'roof_structure', 'outside_areas'] as const;
@@ -162,6 +183,23 @@ export class OfficeAmService {
   }
   private ceo(u: User) {
     return !u.integration && u.opsTier === 'ceo';
+  }
+  /** The operations head named on a buy request (never an integration). */
+  private hodIs(u: User, hod: unknown) {
+    if (u.integration) return false;
+    if (hod === 'ops_director') return u.role === 'pwvsb_officer' && u.opsTier === 'ops_director';
+    if (hod === 'ogm') return u.role === 'pwvsb_officer' && u.opsTier === 'ogm';
+    if (hod === 'cos') return u.leadership === 'cos';
+    return false;
+  }
+  private isBuy(r: OfficeAmRec) {
+    return r.kind === 'repair' && r.d.purpose === 'buy';
+  }
+  /** Who may ask to buy new for an office: the company's head (manager, GM or director) or a head office officer. */
+  private canBuy(u: User, companyId: Id | null) {
+    if (u.integration) return false;
+    if (companyId) return this.head(u, companyId);
+    return u.role === 'pwvsb_officer';
   }
   private finance(u: User) {
     return !u.integration && (u.leadership === 'finance_director' || (u.role === 'pwvsb_officer' && u.department === 'finance'));
@@ -253,6 +291,8 @@ export class OfficeAmService {
       // Section 1: office repairs
       case 'repairRequest':
         return this.repairRequest(user, i);
+      case 'buyRequest':
+        return this.buyRequest(user, i);
       case 'repairCheck':
         return this.repairCheck(user, i);
       case 'repairResubmit':
@@ -499,6 +539,49 @@ export class OfficeAmService {
     return this.create(user, 'repair', 'BPP', { d: { ...d, stage: 'submitted', rounds: [], quotes: [], approvals: {} }, status: 'submitted', companyId: where.companyId, unitId: where.unitId, requesterId: user.id, proof: photos }, `${level} ${where.label}: ${description}`);
   }
 
+  /** Buy new (furniture, fittings, air-cond, renovation): the office head asks; IT items go to IT, consumables stay an office request. */
+  private async buyRequest(user: User, i: Record<string, unknown>) {
+    if (user.integration || user.role === 'guard' || user.role === 'site_device') throw new AccessDenied('view', '(the office head asks to buy new)');
+    const type = s(i.buyType, 30);
+    if ((IT_DAMAGE_TYPES as readonly string[]).includes(type) || i.electronic === true)
+      throw new BadRequest('Computers, phones, printers and other electronic items are bought by the IT department: ask on the IT screen.');
+    if (i.consumable === true) throw new BadRequest('Pens, paper, files and other consumables: use "New office request" (Chief of Staff, then COO).');
+    if (!(BUY_TYPES as readonly string[]).includes(type)) throw new BadRequest('Choose what is to be bought (furniture, fitting, air-cond, renovation, signage or other).');
+    const where = await this.place(i, user);
+    if (!this.canBuy(user, where.companyId)) throw new AccessDenied('view', '(the company manager, GM or a head office officer asks to buy new)');
+    const raw = Array.isArray(i.lines) ? (i.lines as Record<string, unknown>[]) : [{ item: i.item, qty: i.qty, estimate: i.estimate }];
+    const lines = raw.slice(0, 20).map((l) => ({ item: s(l.item, 120), qty: Math.max(0, int(l.qty) || 0), estimate: money(l.estimate) }));
+    if (!lines.length || lines.some((l) => l.item.length < 2 || !(l.qty >= 1 && l.qty <= 1000) || !(l.estimate >= 0)))
+      throw new BadRequest('Each line needs the item, the quantity and a rough price (RM, 0 if not known).');
+    const description = this.reason(i.description, 'why it is needed');
+    const photos = this.proofs(user, i.photos);
+    if (type === 'renovation' && !photos.length) throw new BadRequest('Attach at least one photo of the space to renovate.');
+    const estimate = Math.round(lines.reduce((n, l) => n + l.qty * l.estimate, 0) * 100) / 100;
+    const hod = buyHodFor(where.companyId);
+    const d: Record<string, unknown> = {
+      purpose: 'buy',
+      applicant: user.name,
+      position: user.title ?? '',
+      department: user.department ?? '',
+      contact: s(i.contact, 60),
+      complaintOn: this.today(),
+      place: where.label,
+      address: where.address,
+      buyType: type,
+      lines,
+      estimate,
+      description,
+      neededBy: isDate(i.neededBy) && i.neededBy >= this.today() ? i.neededBy : null,
+      hod,
+      ownerCompanyId: where.ownerCompanyId,
+      stage: 'submitted',
+      rounds: [],
+      quotes: [],
+      approvals: {},
+    };
+    return this.create(user, 'repair', 'BBR', { d, status: 'submitted', companyId: where.companyId, unitId: where.unitId, requesterId: user.id, proof: photos }, `buy ${type} ${where.label}: ${description} (RM${estimate.toFixed(2)} rough)`);
+  }
+
   private async repair(id: unknown) {
     return this.get(s(id, 120), 'repair');
   }
@@ -513,7 +596,15 @@ export class OfficeAmService {
     if (r.status !== 'submitted') throw new BadRequest('Only a new request is checked.');
     const reason = this.reason(i.reason);
     if (i.outcome === 'return') return this.save(user, r, { status: 'on_hold', d: { ...r.d, stage: 'on_hold', hold: reason } }, 'on_hold', `incomplete: ${reason}`);
-    if (i.outcome === 'minor') return this.save(user, r, { status: 'closed', d: { ...r.d, stage: 'minor', closedReason: reason } }, 'minor', `Minor - fix yourself: ${reason}`);
+    if (i.outcome === 'minor') {
+      if (this.isBuy(r)) throw new BadRequest('A buy request is accepted, returned, or closed because a spare item is moved in.');
+      return this.save(user, r, { status: 'closed', d: { ...r.d, stage: 'minor', closedReason: reason } }, 'minor', `Minor - fix yourself: ${reason}`);
+    }
+    if (i.outcome === 'spare') {
+      // Asset Management first looks for a spare: an item moved from the office inventory needs no purchase.
+      if (!this.isBuy(r)) throw new BadRequest('Only a buy request is met from a spare item.');
+      return this.save(user, r, { status: 'closed', d: { ...r.d, stage: 'spare', closedReason: reason, spareItemId: s(i.itemId, 120) || null } }, 'spare', `Met from a spare item: ${reason}`);
+    }
     if (i.outcome !== 'accept') throw new BadRequest('Accept, return or mark it minor.');
     const v = (await this.values()).repair;
     if (!r.unitId && i.unitId) {
@@ -574,7 +665,14 @@ export class OfficeAmService {
     quotes.forEach((q, k) => (q.doc = docs[k]?.sha256 ?? null));
     const v = (await this.values()).repair;
     const fewer = quotes.length < v.quotesNeeded;
-    return this.save(user, r, { status: 'quoted', d: { ...r.d, stage: 'quoted', quotes, fewerReason: null, pick: null, path: null }, proof: [...(r.proof ?? []), ...docs] }, 'quotes', `${quotes.length} quote(s)${fewer ? ' (fewer than 3: the Asset Director gives the reason)' : ''}`);
+    let online: { where: string; price: number }[] = [];
+    if (this.isBuy(r)) {
+      // Part U-X14: an office purchase needs 3 shop quotes and 2 online or marketplace prices for the same items.
+      online = (Array.isArray(i.online) ? (i.online as Record<string, unknown>[]) : []).slice(0, 10).map((o) => ({ where: s(o.where, 200), price: money(o.price) })).filter((o) => o.where.length >= 2 && o.price > 0);
+      const need = RULES.procurement.value.officeOnlineChecksNeeded;
+      if (online.length < need) throw new BadRequest(`A new office purchase needs ${need} online or marketplace prices for the same items (shop or link and price).`);
+    }
+    return this.save(user, r, { status: 'quoted', d: { ...r.d, stage: 'quoted', quotes, ...(this.isBuy(r) ? { online } : {}), fewerReason: null, pick: null, path: null }, proof: [...(r.proof ?? []), ...docs] }, 'quotes', `${quotes.length} quote(s)${online.length ? ` and ${online.length} online price(s)` : ''}${fewer ? ' (fewer than 3: the Asset Director gives the reason)' : ''}`);
   }
   /** The team picks one with a reason; fewer than three need the Asset Director's reason (S-X1). */
   private async repairPick(user: User, i: Record<string, unknown>) {
@@ -591,8 +689,15 @@ export class OfficeAmService {
     if (!q) throw new BadRequest('Pick one of the recorded quotes.');
     const lowest = Math.min(...quotes.map((x) => x.price));
     const why = this.reason(i.reason, q.price > lowest ? 'why not the lowest quote' : 'the reason for the pick');
+    let onlineReason: string | null = null;
+    if (this.isBuy(r)) {
+      const online = (r.d.online as { price: number }[] | undefined) ?? [];
+      const onlineLow = online.length ? Math.min(...online.map((o) => o.price)) : Infinity;
+      const tol = RULES.procurement.value.onlineTolerancePct;
+      if (q.price > onlineLow * (1 + tol / 100)) onlineReason = this.reason(i.onlineReason, `why the pick is more than ${tol}% above the lowest online price (RM${onlineLow.toFixed(2)})`);
+    }
     const path = q.price <= v.quoteOnlyUpTo ? 'quote_only' : 'bq';
-    return this.save(user, r, { status: 'for_approval', d: { ...r.d, stage: 'for_approval', pick: { contractor: q.contractor, price: q.price, reason: why, by: user.name, byId: user.id }, path, approvals: {} } }, 'pick', `${q.contractor} RM${q.price.toFixed(2)} (${path})`);
+    return this.save(user, r, { status: 'for_approval', d: { ...r.d, stage: 'for_approval', pick: { contractor: q.contractor, price: q.price, reason: why, by: user.name, byId: user.id, ...(onlineReason ? { onlineReason } : {}) }, path, approvals: {} } }, 'pick', `${q.contractor} RM${q.price.toFixed(2)} (${path})`);
   }
   /** S8: Asset Director approves, the Vice Chairman consents, and the CEO approves above RM50,000; each with a reason. */
   private async repairApprove(user: User, i: Record<string, unknown>) {
@@ -604,13 +709,28 @@ export class OfficeAmService {
     const ap = { ...(r.d.approvals as Record<string, unknown>) };
     const v = (await this.values()).repair;
     const step = { by: user.name, byId: user.id, at: this.now(), reason };
+    const buy = this.isBuy(r);
     if (i.decision === 'turn_down') {
-      if (!this.ad(user) && !this.vc(user) && !this.ceo(user)) throw new AccessDenied('view', '(the approvers)');
+      if (!this.ad(user) && !(buy ? this.hodIs(user, r.d.hod) : this.vc(user)) && !this.ceo(user)) throw new AccessDenied('view', '(the approvers)');
       // Turned down = a new round of quotes; the earlier round is kept.
       const rounds = [...((r.d.rounds as unknown[]) ?? []), { quotes: r.d.quotes, pick, turnedDown: step }];
       return this.save(user, r, { status: 'turned_down', d: { ...r.d, stage: 'turned_down', rounds, quotes: [], pick: null, approvals: {} } }, 'turned_down', reason);
     }
-    if (!ap.ad) {
+    if (buy) {
+      // New buys: the Asset Director supervises, the operations head approves, the CEO also above the limit.
+      const hod = r.d.hod as BuyHod;
+      if (!ap.ad) {
+        if (!this.ad(user)) throw new BadRequest('The Asset Director checks and recommends first.');
+        ap.ad = step;
+      } else if (!ap.hod) {
+        if (!this.hodIs(user, hod)) throw new BadRequest(`The ${BUY_HOD_LABEL[hod] ?? 'operations head'} approves next.`);
+        ap.hod = step;
+      } else if (pick.price > v.ceoAbove && !ap.ceo) {
+        if (!this.ceo(user)) throw new BadRequest(`Above RM${v.ceoAbove.toLocaleString('en-MY')} the CEO approves.`);
+        ap.ceo = step;
+      } else throw new BadRequest('Already approved.');
+      if (ap.hod && (ap.hod as { byId: Id }).byId === (ap.ad as { byId: Id }).byId) throw new BadRequest('The same person cannot recommend and approve.');
+    } else if (!ap.ad) {
       if (!this.ad(user)) throw new BadRequest('The Asset Director approves first.');
       ap.ad = step;
     } else if (!ap.vc) {
@@ -620,7 +740,7 @@ export class OfficeAmService {
       if (!this.ceo(user)) throw new BadRequest(`Above RM${v.ceoAbove.toLocaleString('en-MY')} the CEO approves.`);
       ap.ceo = step;
     } else throw new BadRequest('Already approved.');
-    const done = !!ap.ad && !!ap.vc && (pick.price <= v.ceoAbove || !!ap.ceo);
+    const done = !!ap.ad && !!(buy ? ap.hod : ap.vc) && (pick.price <= v.ceoAbove || !!ap.ceo);
     const saved = await this.save(user, r, { status: done ? 'approved' : 'for_approval', d: { ...r.d, approvals: ap, stage: done ? 'approved' : 'for_approval', approvedAmount: done ? pick.price : null } }, done ? 'approved' : 'approval_step', reason);
     if (done) await this.woPatch(user, saved, { contractor: pick.contractor, cost: pick.price });
     return saved;
@@ -1787,13 +1907,26 @@ export class OfficeAmService {
       if (d.inventoryCopy) d.inventoryCopy = { ...(d.inventoryCopy as object), price: undefined };
       return { ...x, d, proof: (x.proof ?? []).map((p) => ({ ...p, data: '' })) };
     };
-    if (full) return { ...r, proof: (r.proof ?? []).map((p) => ({ ...p, data: '' })) };
+    if (full || (this.isBuy(r) && this.hodIs(user, r.d.hod))) return { ...r, proof: (r.proof ?? []).map((p) => ({ ...p, data: '' })) };
     if (r.kind === 'buildingBuy' || r.kind === 'bldConfirm') return this.bldReader(user, r.companyId) || (r.kind === 'bldConfirm' && this.head(user, r.companyId)) ? r : null;
     if (r.requesterId === user.id) return strip(r);
     if (['repair', 'jmb', 'invItem', 'invUpdate', 'disposal', 'visit'].includes(r.kind) && this.head(user, r.companyId)) return strip(r);
     if (['invItem', 'invUpdate', 'disposal'].includes(r.kind) && this.hrView(user)) return strip(r);
     if (['invItem'].includes(r.kind) && this.staffOf(user, r.companyId)) return strip(r);
     return null;
+  }
+
+  /** Whether this person takes the next approval step on an office job waiting for approval. */
+  private nextApprover(user: User, r: OfficeAmRec) {
+    const ap = (r.d.approvals ?? {}) as Record<string, unknown>;
+    const pick = r.d.pick as { price: number; byId: Id } | null;
+    if (!pick || user.id === r.requesterId || user.id === pick.byId) return false;
+    const ceoAbove = RULES.officeAm.value.repair.ceoAbove;
+    if (!ap.ad) return this.ad(user);
+    if (this.isBuy(r)) {
+      if (!ap.hod) return this.hodIs(user, r.d.hod) && (ap.ad as { byId: Id }).byId !== user.id;
+    } else if (!ap.vc) return this.vc(user);
+    return pick.price > ceoAbove && !ap.ceo && this.ceo(user);
   }
 
   async board(user: User) {
@@ -1824,6 +1957,9 @@ export class OfficeAmService {
       visitLines: v.visitLines,
       targets: { repair: v.repair, inventory: v.inventory, disposal: v.disposal, building: v.building, rent: v.rent, visit: v.visit },
       canSend: user.companyIds.length ? await this.canSendFor(user, user.companyIds[0]) : this.team(user),
+      canBuy: this.canBuy(user, user.companyIds[0] ?? null),
+      buyTypes: BUY_TYPES,
+      canApprove: visible.filter((r) => r.kind === 'repair' && r.status === 'for_approval' && this.nextApprover(user, r)).map((r) => r.id),
       records: visible,
       mine: visible.filter((r) => r.requesterId === user.id),
       alerts,
@@ -1838,12 +1974,15 @@ export class OfficeAmService {
     const b = await this.board(user).catch(() => null);
     if (!b) return [];
     const go = { view: 'assets' as const };
-    const items: { tone: 'warn' | 'crit' | 'info'; tag: string; title: string; detail: string; go: { view: 'assets' } }[] = [];
+    const items: { tone: 'warn' | 'crit' | 'info'; tag: string; title: string; detail: string; go: { view: 'assets' | 'requests' } }[] = [];
     const crit = b.records.filter((r) => r.kind === 'repair' && r.d.level === 'CRITICAL' && !['closed', 'paid'].includes(r.status));
     if (crit.length && (b.role === 'unit' || b.role === 'director' || b.role === 'office_head')) items.push({ tone: 'crit', tag: 'Penyelenggaraan', title: `${crit.length} kerosakan kritikal`, detail: crit.map((r) => r.ref).join(', '), go });
     if (b.alerts.length && (b.role === 'unit' || b.role === 'director')) items.push({ tone: 'warn', tag: 'Pejabat', title: `${b.alerts.length} perkara lewat sasaran`, detail: b.alerts.slice(0, 4).map((a) => `${a.ref} ${a.late}`).join('; '), go });
     const toApprove = b.records.filter((r) => (r.kind === 'repair' || r.kind === 'disposal') && r.status === 'for_approval');
     if (toApprove.length && (b.role === 'director' || user.leadership === 'vice_chairman' || user.opsTier === 'ceo')) items.push({ tone: 'info', tag: 'Lulus', title: `${toApprove.length} office job(s) to approve`, detail: toApprove.map((r) => r.ref).join(', '), go });
+    // The operations head's new office buys waiting for them (they approve on Claims and requests).
+    const buys = b.records.filter((r) => b.canApprove.includes(r.id) && this.isBuy(r) && !(r.d.approvals as Record<string, unknown>)?.hod && this.hodIs(user, r.d.hod));
+    if (buys.length) items.push({ tone: 'info', tag: 'Lulus', title: `${buys.length} new office buy(s) to approve`, detail: buys.map((r) => r.ref).join(', '), go: { view: 'requests' } });
     const confirm = b.mine.filter((r) => r.kind === 'repair' && r.status === 'work_done');
     if (confirm.length) items.push({ tone: 'info', tag: 'Sahkan', title: 'Sahkan pembaikan siap', detail: confirm.map((r) => r.ref).join(', '), go });
     if (b.role === 'unit' && this.today() >= b.policyReviewOn) items.push({ tone: 'info', tag: 'Polisi', title: 'Semak semula polisi pejabat (2 tahun)', detail: `from ${b.policyReviewOn}`, go });

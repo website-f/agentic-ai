@@ -86,6 +86,14 @@ function fresh(): { ds: Dataset; svc: PrimaService; store: MemoryStore } {
   return { ds, store, svc: new PrimaService(store, () => NOW) };
 }
 
+/** The demo data without the ACT Manager: an Auditor's check then closes a medium or low finding on its own (C6). */
+function freshNoActManager(): { ds: Dataset; svc: PrimaService; store: MemoryStore } {
+  const ds = generateDataset({ today: TODAY, now: NOW });
+  ds.users = ds.users.filter((u) => u.actRole !== 'manager');
+  const store = new MemoryStore(ds);
+  return { ds, store, svc: new PrimaService(store, () => NOW) };
+}
+
 /**
  * Prima's own screens stay on until the JA Group app's API is live (Fauzan, 27 Oct 2026). These tests hand an area to
  * the JA app for one call, to prove the switch works when a feed goes live.
@@ -912,7 +920,7 @@ describe('tenders and quotations', () => {
     expect(reviewed.checklist!.some((c) => c.source === 'doa')).toBe(true);
     const board = await svc.tenderBoard(doa);
     expect(board.rows.some((r) => r.tender.id === t.id)).toBe(true);
-    expect(board.reader.readsFiles).toBe(false);
+    expect(board.reader.readsFiles).toBe(true); // AH9: the app reads the text of the papers by fixed rules
     await expect(svc.tenderBoard(ae)).rejects.toBeInstanceOf(AccessDenied);
   });
 });
@@ -3900,7 +3908,7 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
   it('has 1 Director and 2 teams of 1 Auditor and 1 Enforcement officer, watching every company (Fauzan, 2 Nov 2026)', async () => {
     const { svc, ds } = fresh();
     const act = ds.users.filter((u) => u.department === 'audit');
-    expect(act.map((u) => `${u.actRole}${u.actTeam ?? ''}`).sort()).toEqual(['auditor1', 'auditor2', 'enforcement1', 'enforcement2', 'lead']);
+    expect(act.map((u) => `${u.actRole}${u.actTeam ?? ''}`).sort()).toEqual(['auditor1', 'auditor2', 'enforcement1', 'enforcement2', 'lead', 'manager']);
     const b = await svc.actBoard(await svc.user('u-act-enf2'));
     expect(b.job).toBe('enforcement');
     expect(b.myTeam).toBe(2);
@@ -3909,6 +3917,8 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
       ['u-act-aud2', 'u-act-enf2'],
     ]);
     expect(b.structure!.director?.id).toBe('u-audit');
+    // The ACT Manager reports to the ACT Director (Fauzan, 23 Nov 2026).
+    expect(b.structure!.manager?.id).toBe('u-act-mgr');
     // Both teams cover every workflow (Fauzan, 2 Nov 2026): no workflow is tied to a team.
     expect(b.rule.areas.every((a) => !('team' in a))).toBe(true);
     expect(b.signals.length).toBeGreaterThan(15);
@@ -3920,7 +3930,7 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
   });
 
   it('lets the owner plan and fix, the Auditor check, and only the Director close a high finding', async () => {
-    const { svc } = fresh();
+    const { svc } = freshNoActManager();
     const aud = await svc.user('u-act-aud1');
     const enf = await svc.user('u-act-enf1');
     const cm = await svc.user('u-cm-arsh');
@@ -4083,7 +4093,7 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
   });
 
   it('refuses owners from another company and ACT staff from the other team (Arisha main review, 2 Nov 2026)', async () => {
-    const { svc } = fresh();
+    const { svc } = freshNoActManager();
     const aud1 = await svc.user('u-act-aud1');
     const base = { area: 'BILLING', source: 'workflow_audit' as const, title: 'Invoice sent late', detail: '', severity: 'medium' as const, evidence: 'Invoices for October' };
     // Wrong company: Sasa's manager cannot own an Arsh finding; a company manager cannot own a PWVSB department finding.
@@ -4111,7 +4121,7 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
   });
 
   it('lets the team Auditor send a high finding back but only the Director close it', async () => {
-    const { svc } = fresh();
+    const { svc } = freshNoActManager();
     const aud1 = await svc.user('u-act-aud1');
     const dir = await svc.user('u-audit');
     const cm = await svc.user('u-cm-arsh');

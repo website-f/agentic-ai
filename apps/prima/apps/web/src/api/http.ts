@@ -1,9 +1,9 @@
 import { invalidateDutyContext } from '../duty/context';
 import { type ExtractionStatus, type ExtractionRequest, type ExtractionPreview } from './it-extraction';
 import { type SharePointStatus, type SharePointCheck, type SharePointLibraries, type SharePointItems } from './connections';
-import { type Home, type User, type ClientLostReason, type EvidenceDoc, type ProofInput, type ReportDef, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FinRequestAction, type CmsServiceKind, type GrowthMargin, type GrowthPanel, type FwPaper } from '@prima/core';
+import { type Home, type User, type ClientLostReason, type EvidenceDoc, type ProofInput, type ReportDef, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FinRequestAction, type CmsServiceKind, type GrowthMargin, type GrowthPanel, type FwPaper, type TenderAttendanceKind } from '@prima/core';
 import type { DisciplineAppealDecision, DisciplineAppeals, PolicyCopyInput, RosterActName, StaffLangId } from './types';
-import { type FinControlArea, type CashStandInView, type StaffLeaveVcView, ApiError, type Api, type WorkAdjustInput, type WorkReassignInput, type ClientAccountInput, type CrmBoard, type CrmClient, type CmsSettingsPatch, type ContractInput, type FollowUpInput, type FwAddFromJaInput, type FwPaperInput, type LeaveInput, type OfficeDeskInput, type Me, type PdpaCaseInput, type PdpaStepName, type VehicleRequestInput, type ExpenseInput, type ProductInput, type ProductCertInput, type VehicleWorkInput, type PhotoInput, type CmsDispatches, type DeviceDispatches, type DispatchInput, type VideoInput, type DutyDevice, type SiteDutyLog, type PostLogInput, type GateInInput, type SiteTaskBoard, type NeedsReviewInput, type SiteTaskInput, type DoSiteTaskInput, type ArmsRequestAction, type ArmsRequestStepExtra, type RaiseArmsRequestInput, type SpecialOpsLegalFlags, type ArmsTradingState, type TransportBoard, type AmRentCheck, type AmBuyInput, type AmWhatsAppBoard, type ApprovalLimitsView, type OfficerHoursInput, type CleaningRecordInput, type CleaningSetupInput, type CleaningProofInput, type StockLineInput, type CleaningSlipInput, type ClientWorkAckInput, type GuardTermsInput, type OpportunityInput, type SourceCheckInput, type AmBqActionInput, type PaperReadingResult, type ClientCodeBoard, type ClientCodeInput, type ClientCheckInput, type ClientInspectionInput, type SelfAuditBoard, type SelfAuditInput, type RbaBoard, type RbaTraceBoard, type WorkerFilesBoard, type EthicsBoard, type RbaCommitteeInput, type EthicsInput, type ItEwaste } from './types';
+import { type FinControlArea, ApiError, type Api, type WorkAdjustInput, type WorkReassignInput, type ClientAccountInput, type CrmBoard, type CrmClient, type CmsSettingsPatch, type ContractInput, type FollowUpInput, type FwAddFromJaInput, type FwPaperInput, type LeaveInput, type OfficeDeskInput, type Me, type PdpaCaseInput, type PdpaStepName, type VehicleRequestInput, type ExpenseInput, type ProductInput, type ProductCertInput, type VehicleWorkInput, type PhotoInput, type CmsDispatches, type DeviceDispatches, type DispatchInput, type VideoInput, type DutyDevice, type SiteDutyLog, type PostLogInput, type GateInInput, type SiteTaskBoard, type NeedsReviewInput, type SiteTaskInput, type DoSiteTaskInput, type ClientCodeBoard, type ClientCodeInput, type ClientCheckInput, type ClientInspectionInput, type SelfAuditBoard, type SelfAuditInput, type RbaBoard, type RbaTraceBoard, type WorkerFilesBoard, type EthicsBoard, type RbaCommitteeInput, type EthicsInput, type ItEwaste, type ArmsRequestAction, type ArmsRequestStepExtra, type RaiseArmsRequestInput, type SpecialOpsLegalFlags, type ArmsTradingState, type TransportBoard, type AmRentCheck, type AmBuyInput, type AmWhatsAppBoard, type ApprovalLimitsView, type CashStandInView, type StaffLeaveVcView, type OfficerHoursInput, type CleaningRecordInput, type CleaningSetupInput, type CleaningProofInput, type StockLineInput, type CleaningSlipInput, type ClientWorkAckInput, type GuardTermsInput, type OpportunityInput, type SourceCheckInput, type WatchFindAnswer, type AmBqActionInput, type PaperReadingResult } from './types';
 import { MicrosoftSignIn, type SignInConfig } from './microsoft';
 
 
@@ -267,7 +267,7 @@ export class HttpApi implements Api {
   async m365Call(expectedUserId: string, method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal): Promise<unknown> {
     const mail = method === 'GET' ? /^\/connections\/mail\/jobs\/(?:status|[A-Za-z0-9_-]+\/emails)$/ : /^\/connections\/mail\/jobs\/(?:setup|[A-Za-z0-9_-]+\/emails(?:\/preview|\/[A-Za-z0-9_-]+\/remove)?)$/;
     // Microsoft 365 Connections: status, matrix, check/disconnect and link checks only. No send or write route exists.
-    const m365 = method === 'GET' ? /^\/connections\/m365\/(?:status|matrix)$/ : /^\/connections\/m365\/(?:(?:outlook|teams|sharepoint)\/(?:check|disconnect)|(?:teams|sharepoint)\/link)$/;
+    const m365 = method === 'GET' ? /^\/connections\/m365\/(?:status|matrix|usage)$/ : /^\/connections\/m365\/(?:(?:outlook|teams|sharepoint)\/(?:check|disconnect)|(?:teams|sharepoint)\/link)$/;
     if (!mail.test(path) && !m365.test(path)) throw new ApiError('Unsupported Microsoft integration operation.', 400, []);
     const { ms } = await this.ready();
     const accountKey = () => {const a=ms?.account();return a?.homeAccountId ? `${a.homeAccountId}:${a.tenantId}:${a.localAccountId}` : null;};
@@ -294,6 +294,8 @@ export class HttpApi implements Api {
 
   itExtractionStatus(signal?: AbortSignal) { return this.call<ExtractionStatus>('GET', '/arisha/it-extraction', undefined, signal); }
   itExtractionPreview(input: ExtractionRequest, signal?: AbortSignal) { return this.call<ExtractionPreview>('POST', '/arisha/it-extraction/preview', input, signal); }
+  keyInStatus(signal?: AbortSignal) { return this.call<import('./key-in').KeyInStatus>('GET', '/key-in', undefined, signal); }
+  keyInRead(paper: import('@prima/core').KeyInAnyPaper, ask: import('./key-in').KeyInAsk, signal?: AbortSignal) { return this.call<import('@prima/core').KeyInResult>('POST', `/key-in/${encodeURIComponent(paper)}`, { ...ask, consent: 'key-in-v1' }, signal); }
   draftHelpStatus(signal?: AbortSignal) { return this.call<import('./draft-help').DraftHelpStatus>('GET', '/draft-help', undefined, signal); }
   draftHelpSuggest(kind: import('@prima/core').DraftHelpKind, form: unknown, signal?: AbortSignal) { return this.call<import('./draft-help').DraftHelpSuggestion>('POST', `/draft-help/${encodeURIComponent(kind)}`, { consent: 'draft-help-v1', form }, signal); }
 
@@ -1150,6 +1152,9 @@ export class HttpApi implements Api {
   actBoard() {
     return this.call<Awaited<ReturnType<Api['actBoard']>>>('GET', '/act');
   }
+  actMonthSummary(month?: string) {
+    return this.call<Awaited<ReturnType<Api['actMonthSummary']>>>('GET', `/act/month-summary${month ? `?month=${encodeURIComponent(month)}` : ''}`);
+  }
   raiseActFinding(input: Parameters<Api['raiseActFinding']>[0]) {
     return this.call<unknown>('POST', '/act/findings', input);
   }
@@ -1297,14 +1302,78 @@ export class HttpApi implements Api {
   saveRecord(kind: Parameters<Api['saveRecord']>[0], id: string | null, companyId: string | null, values: Parameters<Api['saveRecord']>[3]) {
     return this.call<unknown>('POST', `/records/${kind}`, { id, companyId, values });
   }
+  sharedLogins() {
+    return this.call<Awaited<ReturnType<Api['sharedLogins']>>>('GET', '/shared-logins');
+  }
+  sharedLoginsLeaver(personId: string) {
+    return this.call<Awaited<ReturnType<Api['sharedLoginsLeaver']>>>('GET', `/shared-logins/leaver/${encodeURIComponent(personId)}`);
+  }
+  sharedLoginsAct(action: 'save' | 'changed' | 'close' | 'kind', input: Record<string, unknown>) {
+    return this.call<unknown>('POST', `/shared-logins/${action}`, input);
+  }
   accounts() {
     return this.call<Awaited<ReturnType<Api['accounts']>>>('GET', '/accounts');
+  }
+  orgChart() {
+    return this.call<Awaited<ReturnType<Api['orgChart']>>>('GET', '/org/chart');
+  }
+  orgSetLine(input: { userId: string; managerId: string | null; reason: string; until?: string | null }) {
+    return this.call<unknown>('POST', '/org/line', input);
+  }
+  orgSetHead(input: { unit: string; headId: string | null; deputyId: string | null; reason: string; until?: string | null }) {
+    return this.call<unknown>('POST', '/org/head', input);
   }
   accountsAct(action: 'submit' | 'decide', input: Record<string, unknown>) {
     return this.call<unknown>('POST', `/accounts/${action}`, input);
   }
   problems() {
     return this.call<Awaited<ReturnType<Api['problems']>>>('GET', '/problems');
+  }
+  assistantHome() {
+    return this.call<Awaited<ReturnType<Api['assistantHome']>>>('GET', '/assistant');
+  }
+  assistantUnderstand(input: { text: string; actionId?: string | null; lang?: string }) {
+    return this.call<Awaited<ReturnType<Api['assistantUnderstand']>>>('POST', '/assistant/understand', input);
+  }
+  assistantAct(op: 'send' | 'style' | 'forget' | 'skills' | 'retire', input: Record<string, unknown>) {
+    return this.call<any>('POST', `/assistant/${op}`, input);
+  }
+  assistantLists(input: { actionId: string; values: Record<string, unknown> }) {
+    return this.call<Awaited<ReturnType<Api['assistantLists']>>>('POST', '/assistant/lists', input);
+  }
+  dataCleanup(q: { companyId?: string; area?: string }) {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v) p.set(k, v);
+    return this.call<Awaited<ReturnType<Api['dataCleanup']>>>('GET', `/data-cleanup${p.size ? `?${p}` : ''}`);
+  }
+  archive(query: import('@prima/core').ArchiveQuery) {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== '') p.set(k, String(v));
+    return this.call<Awaited<ReturnType<Api['archive']>>>('GET', `/archive${p.size ? `?${p}` : ''}`);
+  }
+  exportLog(input: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['exportLog']>>>('POST', '/exports/log', input);
+  }
+  archiveStart(input: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['archiveStart']>>>('POST', '/archive/files', input);
+  }
+  archivePart(id: string, index: number, base64: string) {
+    return this.call<unknown>('POST', `/archive/files/${encodeURIComponent(id)}/parts/${index}`, { data: base64 });
+  }
+  archiveFinish(id: string, input: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['archiveFinish']>>>('POST', `/archive/files/${encodeURIComponent(id)}/finish`, input);
+  }
+  archiveOpen(id: string) {
+    return this.call<Awaited<ReturnType<Api['archiveOpen']>>>('GET', `/archive/files/${encodeURIComponent(id)}/content`);
+  }
+  archiveOpenPart(id: string, index: number, pass: string) {
+    return this.call<{ base64: string }>('POST', `/archive/files/${encodeURIComponent(id)}/content/${index}`, { pass });
+  }
+  archiveDetails(id: string, input: Record<string, unknown>) {
+    return this.call<unknown>('POST', `/archive/files/${encodeURIComponent(id)}/details`, input);
+  }
+  archiveSetAside(id: string, reason: string) {
+    return this.call<unknown>('POST', `/archive/files/${encodeURIComponent(id)}/set-aside`, { reason });
   }
   reportProblem(input: { what: string; screen: string; photo?: string | null }) {
     return this.call<unknown>('POST', '/problems', input);
@@ -3111,6 +3180,9 @@ export class HttpApi implements Api {
   tenderSources() {
     return this.call<Awaited<ReturnType<Api['tenderSources']>>>('GET', '/tender-sources');
   }
+  tenderPortalLogins(tenderId: string) {
+    return this.call<Awaited<ReturnType<Api['tenderPortalLogins']>>>('GET', `/tenders/${encodeURIComponent(tenderId)}/portal-logins`);
+  }
   addTenderSource(input: { buyer: string; urls: string[]; note: string }) {
     return this.call<unknown>('POST', '/tender-sources', input);
   }
@@ -3122,6 +3194,45 @@ export class HttpApi implements Api {
   }
   recordTenderSourceCheck(id: string, input: SourceCheckInput) {
     return this.call<unknown>('POST', `/tender-sources/${encodeURIComponent(id)}/check`, input);
+  }
+  setTenderSourceWatch(id: string, input: { allowed: boolean; note?: string }) {
+    return this.call<unknown>('POST', `/tender-sources/${encodeURIComponent(id)}/watch`, input);
+  }
+  answerTenderWatchFind(id: string, key: string, input: WatchFindAnswer) {
+    return this.call<unknown>('POST', `/tender-sources/${encodeURIComponent(id)}/finds/${encodeURIComponent(key)}`, input);
+  }
+  marketingBoard() {
+    return this.call<Awaited<ReturnType<Api['marketingBoard']>>>('GET', '/marketing-board');
+  }
+  companyPapers(companyId: string) {
+    return this.call<Awaited<ReturnType<Api['companyPapers']>>>('GET', `/companies/${encodeURIComponent(companyId)}/papers`);
+  }
+  addCompanyPaper(companyId: string, input: Parameters<Api['addCompanyPaper']>[1], proof: Parameters<Api['addCompanyPaper']>[2]) {
+    return this.call('POST', `/companies/${encodeURIComponent(companyId)}/papers`, { ...input, proof });
+  }
+  setNoEntryReason(companyId: string, reason: string) {
+    return this.call('POST', '/marketing-desk/no-entry-reason', { companyId, reason });
+  }
+  recordTenderHours(tenderId: string, hours: number, note: string) {
+    return this.call('POST', `/tenders/${tenderId}/hours`, { hours, note });
+  }
+  startProposal(input: { companyId: string; client: string; title: string; scope: string; contact: string; sendBy: string; guards: number; sites: number }) {
+    return this.call('POST', '/proposals', input);
+  }
+  answerTenderAiFlag(tenderId: string, flagId: string, status: 'FIXED' | 'NOT_NEEDED', note: string) {
+    return this.call('POST', `/tenders/${tenderId}/ai-flags/${encodeURIComponent(flagId)}`, { status, note });
+  }
+  sendTenderToIt(tenderId: string, kind: 'tender' | 'quotation', codes: string[], items: string[]) {
+    return this.call('POST', `/tenders/${tenderId}/to-it`, { kind, codes, items });
+  }
+  nameTenderAttendee(tenderId: string, kind: TenderAttendanceKind, attendee: string, mofNamed: boolean) {
+    return this.call('POST', `/tenders/${tenderId}/attendee`, { kind, attendee, mofNamed });
+  }
+  recordTenderAttendance(tenderId: string, kind: TenderAttendanceKind, attended: boolean, note: string, proof: ProofInput[]) {
+    return this.call('POST', `/tenders/${tenderId}/attendance`, { kind, attended, note, proof });
+  }
+  startMarketingDesk(from: string, note: string) {
+    return this.call('POST', '/marketing-desk/start', { from, note });
   }
   tenderBoard() {
     return this.call<Awaited<ReturnType<Api['tenderBoard']>>>('GET', '/tender-board');

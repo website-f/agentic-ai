@@ -39,7 +39,10 @@
     "./src/work-kpi-special-ops.ts",
     "./src/work-kpi-time-slip.ts",
     "./src/work-kpi.ts",
-    "./src/inventory-control.ts"
+    "./src/inventory-control.ts",
+    "./src/archive.ts",
+    "./src/m365-guide-cards.ts",
+    "./src/shared-logins.ts"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

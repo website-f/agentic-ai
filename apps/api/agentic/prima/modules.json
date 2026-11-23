@@ -9,6 +9,8 @@
   "sop"
  ],
  "common": [
+  "GET archive",
+  "GET archive/files/:/content",
   "GET arisha",
   "GET arisha/draft-form",
   "GET arisha/drafts",
@@ -25,6 +27,14 @@
   "GET org/inbox",
   "GET org/map",
   "GET org/processes",
+  "GET records/:/form",
+  "GET records/kinds",
+  "POST archive/files",
+  "POST archive/files/:/content/:",
+  "POST archive/files/:/details",
+  "POST archive/files/:/finish",
+  "POST archive/files/:/parts/:",
+  "POST archive/files/:/set-aside",
   "POST arisha",
   "POST arisha/drafts",
   "POST arisha/drafts/:/commit",
@@ -36,6 +46,7 @@
   "POST arisha/summary",
   "POST auth/dev-login",
   "POST draft-help/:",
+  "POST exports/log",
   "POST me/alert-prefs",
   "POST me/clock/session-start",
   "POST me/confidentiality",
@@ -190,6 +201,28 @@
        "blurb": {
         "en": "Memos and notices sent to you.",
         "ms": "Memo dan notis yang dihantar kepada anda."
+       }
+      },
+      {
+       "id": "assistant",
+       "title": {
+        "en": "Helper",
+        "ms": "Pembantu"
+       },
+       "blurb": {
+        "en": "Helper fills the forms of your jobs; you check and send.",
+        "ms": "Pembantu mengisi borang tugas anda; anda semak dan hantar."
+       }
+      },
+      {
+       "id": "archive",
+       "title": {
+        "en": "Old files and data",
+        "ms": "Fail dan data lama"
+       },
+       "blurb": {
+        "en": "Upload and find old files and scanned records for your unit.",
+        "ms": "Muat naik dan cari fail lama serta rekod imbasan unit anda."
        }
       }
      ]
@@ -554,6 +587,17 @@
        }
       },
       {
+       "id": "orgchart",
+       "title": {
+        "en": "Org chart",
+        "ms": "Carta organisasi"
+       },
+       "blurb": {
+        "en": "Who reports to whom; heads put their staff under them.",
+        "ms": "Siapa melapor kepada siapa; ketua meletakkan staf di bawah mereka."
+       }
+      },
+      {
        "id": "work-kpi",
        "title": {
         "en": "Work KPIs",
@@ -855,6 +899,17 @@
        "blurb": {
         "en": "Tenders and quotations from first look to award.",
         "ms": "Tender dan sebut harga dari semakan awal hingga dianugerahkan."
+       }
+      },
+      {
+       "id": "marketing",
+       "title": {
+        "en": "Marketing",
+        "ms": "Pemasaran"
+       },
+       "blurb": {
+        "en": "The central Marketing desk: tenders, papers and bids.",
+        "ms": "Meja Pemasaran pusat: tender, kertas dan bidaan."
        }
       },
       {
@@ -1260,6 +1315,17 @@
        }
       },
       {
+       "id": "shared-logins",
+       "title": {
+        "en": "Shared logins",
+        "ms": "Login kongsi"
+       },
+       "blurb": {
+        "en": "Which shared logins exist and who keeps them (no passwords).",
+        "ms": "Login kongsi yang ada dan siapa menjaganya (tiada kata laluan)."
+       }
+      },
+      {
        "id": "it-procurement",
        "title": {
         "en": "IT purchase fulfilment",
@@ -1332,6 +1398,17 @@
         "en": "Preview of data read by AI from files.",
         "ms": "Pratonton data yang dibaca oleh AI daripada fail."
        }
+      },
+      {
+       "id": "data-cleanup",
+       "title": {
+        "en": "Data clean-up",
+        "ms": "Pembersihan data"
+       },
+       "blurb": {
+        "en": "Find and fix duplicate or incomplete records.",
+        "ms": "Cari dan betulkan rekod pendua atau tidak lengkap."
+       }
       }
      ]
     },
@@ -1376,6 +1453,7 @@
   "act": [
    "GET act",
    "GET act/investigations/:/evidence/:",
+   "GET act/month-summary",
    "POST act/audits",
    "POST act/field-checks",
    "POST act/findings",
@@ -1413,6 +1491,7 @@
    "POST guard-pay/preparers/:",
    "POST statutory"
   ],
+  "archive": [],
   "arms": [
    "GET arms",
    "GET arms/control",
@@ -1420,8 +1499,7 @@
    "GET arms/police-help",
    "GET arms/trading",
    "GET companies/:/arms",
-   "GET records/:/form",
-   "GET records/kinds",
+   "GET key-in",
    "POST arms/issue",
    "POST arms/jobs",
    "POST arms/jobs/:/update",
@@ -1438,6 +1516,7 @@
    "POST arms/rfid-required",
    "POST arms/trading",
    "POST it/act/:",
+   "POST key-in/:",
    "POST vaults/:/count"
   ],
   "arrivalcash": [
@@ -1453,8 +1532,7 @@
    "GET assets/fixed",
    "GET assets/work-orders/:/bq",
    "GET fw-hostel",
-   "GET records/:/form",
-   "GET records/kinds",
+   "GET key-in",
    "GET short-stays",
    "POST am-rental/:",
    "POST am/office/:",
@@ -1477,7 +1555,14 @@
    "POST assets/extras/:/:",
    "POST fw-hostel/:",
    "POST it/act/:",
+   "POST key-in/:",
    "POST short-stays/:"
+  ],
+  "assistant": [
+   "GET assistant",
+   "POST assistant/:",
+   "POST assistant/lists",
+   "POST assistant/understand"
   ],
   "attendance": [
    "GET attendance-reports",
@@ -1491,8 +1576,6 @@
    "GET companies/:/people/:/discipline",
    "GET hr/movements",
    "GET leave",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET shifts/:/candidates",
    "POST attendance-reports/match",
    "POST attendance-reports/uploads",
@@ -1514,8 +1597,6 @@
   "branches": [
    "GET branches",
    "GET branches/:/jv",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST branch-actions/:/review",
    "POST branch-settlements/:/act",
    "POST branch-settlements/:/approve",
@@ -1607,8 +1688,6 @@
    "GET cleaning/sites/:",
    "GET cleaning/sites/:/monthly",
    "GET cleaning/sites/:/proof/:",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST cleaning/sites/:/client-slips",
    "POST cleaning/sites/:/days/:/plan",
    "POST cleaning/sites/:/days/:/publish",
@@ -1630,8 +1709,6 @@
    "GET crm",
    "GET crm/clients/:",
    "GET crm/clients/:/diligence",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET sites/:/instructions",
    "POST clients",
    "POST clients/:/billing",
@@ -1696,8 +1773,6 @@
    "GET me/remote",
    "GET me/test-checkin",
    "GET me/time-slips",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET remote",
    "GET staff-clock",
    "GET staff-clock-photos",
@@ -1771,8 +1846,6 @@
    "GET companies/:/people/:/discipline",
    "GET device/dispatches",
    "GET device/duty",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET shifts/:/candidates",
    "GET sites/:/duty-log",
    "POST arms/police-help",
@@ -1815,8 +1888,6 @@
   ],
   "cmsready": [
    "GET cms/readiness",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST cms/readiness/:/answers/:",
    "POST cms/readiness/:/devices",
    "POST cms/readiness/:/devices/:/remove",
@@ -1825,13 +1896,14 @@
   "commercial": [
    "GET companies/:/commercial",
    "GET companies/:/leads",
-   "GET records/:/form",
-   "GET records/kinds",
+   "GET companies/:/papers",
    "GET tender-counter",
    "GET tender-groups",
    "GET tender-opportunities",
    "GET tender-sources",
+   "GET tenders/:/portal-logins",
    "POST companies/:/leads",
+   "POST companies/:/papers",
    "POST companies/:/quotations",
    "POST companies/:/tenders",
    "POST leads/:/:",
@@ -1844,13 +1916,19 @@
    "POST tender-sources",
    "POST tender-sources/:",
    "POST tender-sources/:/check",
+   "POST tender-sources/:/finds/:",
+   "POST tender-sources/:/watch",
    "POST tender-sources/starter",
+   "POST tenders/:/ai-flags/:",
+   "POST tenders/:/attendance",
+   "POST tenders/:/attendee",
    "POST tenders/:/checklist/draft",
    "POST tenders/:/checklist/review",
    "POST tenders/:/decision",
    "POST tenders/:/files",
    "POST tenders/:/files/:",
    "POST tenders/:/files/:/check",
+   "POST tenders/:/hours",
    "POST tenders/:/papers",
    "POST tenders/:/queries",
    "POST tenders/:/queries/:",
@@ -1861,6 +1939,7 @@
    "POST tenders/:/steps/:/plan",
    "POST tenders/:/steps/:/undo",
    "POST tenders/:/submit",
+   "POST tenders/:/to-it",
    "POST tenders/:/verify"
   ],
   "company": [
@@ -1873,8 +1952,6 @@
    "GET hr/movements",
    "GET hr/people/:/leaving-guide",
    "GET hr/register",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET vacancies",
    "GET vacancies/:/applicants",
    "POST applicants/:/:",
@@ -1895,15 +1972,13 @@
    "POST vacancies/:/applicants"
   ],
   "compliance": [
-   "GET compliance",
-   "GET records/:/form",
-   "GET records/kinds"
+   "GET compliance"
   ],
-  "connections": [],
+  "connections": [
+   "POST it/tickets"
+  ],
   "continuity": [
    "GET continuity",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST continuity/playbooks/:/drills",
    "POST continuity/systems",
    "POST continuity/systems/:/copies/:/:"
@@ -1912,8 +1987,6 @@
    "GET contracts",
    "GET contracts/:/proof",
    "GET crm/clients/:/diligence",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET sites/:/instructions",
    "POST contracts",
    "POST contracts/:/client",
@@ -1937,8 +2010,6 @@
    "GET corporate/panel",
    "GET delegations",
    "GET legal-holds",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST corporate/:/audits",
    "POST corporate/:/changes",
    "POST corporate/:/file",
@@ -1970,6 +2041,9 @@
    "POST credit/loans/:/licence",
    "POST credit/loans/:/repayments",
    "POST credit/loans/:/stamped"
+  ],
+  "data-cleanup": [
+   "GET data-cleanup"
   ],
   "device": [
    "GET cms/dispatches",
@@ -2004,20 +2078,21 @@
    "GET ceo/instructions",
    "GET companies/:/commercial",
    "GET companies/:/leads",
+   "GET companies/:/papers",
    "GET director-office-counter",
    "GET director/digest",
    "GET director/legal-flags",
    "GET finance/dailycash/mine",
    "GET finance/exceptionalcash/:",
    "GET finance/exceptionalcash/:/evidence/:",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET tender-board",
    "GET tender-counter",
    "GET tender-groups",
    "GET tender-opportunities",
    "GET tender-sources",
+   "GET tenders/:/portal-logins",
    "POST companies/:/leads",
+   "POST companies/:/papers",
    "POST companies/:/quotations",
    "POST companies/:/tenders",
    "POST finance/:/controls/:/:",
@@ -2031,13 +2106,19 @@
    "POST tender-sources",
    "POST tender-sources/:",
    "POST tender-sources/:/check",
+   "POST tender-sources/:/finds/:",
+   "POST tender-sources/:/watch",
    "POST tender-sources/starter",
+   "POST tenders/:/ai-flags/:",
+   "POST tenders/:/attendance",
+   "POST tenders/:/attendee",
    "POST tenders/:/checklist/draft",
    "POST tenders/:/checklist/review",
    "POST tenders/:/decision",
    "POST tenders/:/files",
    "POST tenders/:/files/:",
    "POST tenders/:/files/:/check",
+   "POST tenders/:/hours",
    "POST tenders/:/papers",
    "POST tenders/:/queries",
    "POST tenders/:/queries/:",
@@ -2048,6 +2129,7 @@
    "POST tenders/:/steps/:/plan",
    "POST tenders/:/steps/:/undo",
    "POST tenders/:/submit",
+   "POST tenders/:/to-it",
    "POST tenders/:/verify",
    "POST work/tasks/:/review"
   ],
@@ -2061,8 +2143,6 @@
    "GET duty/officers/:",
    "GET duty/sites/:",
    "GET inventory/sites",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET sites/:/close-out",
    "GET sites/:/kit",
    "POST cleaning/sites/:/client-slips",
@@ -2083,15 +2163,15 @@
    "PUT sites/:/kit"
   ],
   "equiprequests": [
+   "GET key-in",
    "GET me/items",
    "GET purchasing",
    "GET purchasing/issues/:/proof",
    "GET purchasing/uniform-requests",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET warranty-claims",
    "POST inventory/:",
    "POST it/act/:",
+   "POST key-in/:",
    "POST me/it-devices/report",
    "POST me/items/:/:",
    "POST purchasing/:/issues",
@@ -2133,8 +2213,6 @@
    "GET finance/summary",
    "GET finance/today",
    "GET finance/unbilled",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST finance/:/:/:",
    "POST finance/:/banks",
    "POST finance/:/books",
@@ -2155,8 +2233,7 @@
    "GET fleet",
    "GET fleet/rentals",
    "GET fleet/usage",
-   "GET records/:/form",
-   "GET records/kinds",
+   "GET key-in",
    "GET transport/board",
    "POST fleet/requests",
    "POST fleet/requests/:/decide",
@@ -2172,13 +2249,12 @@
    "POST fleet/vehicles/:/rental",
    "POST fleet/vehicles/:/rental/end",
    "POST fleet/vehicles/:/work",
+   "POST key-in/:",
    "POST people/:/monitoring-consent"
   ],
   "fwcost": [
    "GET fwm/cost",
    "GET fwm/cost/docs/:",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST fw-cost-charges/:/book",
    "POST fw-placements/:/end",
    "POST fwm/cost/legal-notes",
@@ -2197,8 +2273,7 @@
    "GET fwm/welfare",
    "GET hr/history/board",
    "GET hr/history/person/:",
-   "GET records/:/form",
-   "GET records/kinds",
+   "GET key-in",
    "POST companies/:/guard-phones/codes",
    "POST coo-notices/:/:/seen",
    "POST fw-checks/:/close",
@@ -2222,6 +2297,7 @@
    "POST hr/history/old-employment",
    "POST hr/history/rehire",
    "POST hr/history/separate",
+   "POST key-in/:",
    "POST people/:/fw-checks",
    "POST people/:/fw-papers",
    "POST people/:/fw-renewals",
@@ -2240,8 +2316,6 @@
   "grc": [
    "GET grc",
    "GET grc/speak-up/:",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST grc/companies/:/obligations",
    "POST grc/gifts",
    "POST grc/gifts/:/decide",
@@ -2302,8 +2376,6 @@
    "PUT roster/sites/:/months/:"
   ],
   "handovers": [
-   "GET records/:/form",
-   "GET records/kinds",
    "POST people/:/hiring-docs"
   ],
   "home": [
@@ -2320,8 +2392,6 @@
   "hostels": [
    "GET fw-hostel",
    "GET hostels",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST fw-hostel/:",
    "POST fwm/workers",
    "POST hostel-bills",
@@ -2373,8 +2443,7 @@
    "GET people/:",
    "GET people/:/docs",
    "GET people/:/profile",
-   "GET records/:/form",
-   "GET records/kinds",
+   "GET shared-logins/leaver/:",
    "GET socso",
    "GET socso/:",
    "GET vacancies",
@@ -2483,20 +2552,19 @@
   ],
   "insurance": [
    "GET insurance",
-   "GET records/:/form",
-   "GET records/kinds",
+   "GET key-in",
    "POST insurance-claims/:/act",
    "POST insurance/policies/:/cancel",
    "POST insurance/policies/:/premium",
-   "POST insurance/policies/:/renew"
+   "POST insurance/policies/:/renew",
+   "POST key-in/:"
   ],
   "it": [
    "GET it",
    "GET it/plan",
+   "GET key-in",
    "GET login-handovers",
    "GET problems",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET warranty-claims",
    "GET websites",
    "POST hr/movements/:/login/confirm",
@@ -2508,6 +2576,7 @@
    "POST it/purchases/:/:",
    "POST it/tickets",
    "POST it/tickets/:/:",
+   "POST key-in/:",
    "POST problems",
    "POST problems/:/reply",
    "POST warranty-claims",
@@ -2524,8 +2593,6 @@
    "POST it/act/:"
   ],
   "it-procurement": [
-   "GET records/:/form",
-   "GET records/kinds",
    "POST it/act/:"
   ],
   "items": [
@@ -2537,8 +2604,6 @@
    "GET items/passport/:",
    "GET items/reports/:",
    "GET items/site/:",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST items/act",
    "POST items/import/read",
    "POST items/resolve",
@@ -2580,10 +2645,28 @@
    "POST guard-pay/preparers/:",
    "POST statutory"
   ],
+  "marketing": [
+   "GET marketing-board",
+   "GET tender-opportunities",
+   "GET tender-sources",
+   "POST marketing-desk/no-entry-reason",
+   "POST marketing-desk/start",
+   "POST proposals",
+   "POST tender-opportunities",
+   "POST tender-opportunities/:/enter",
+   "POST tender-sources",
+   "POST tender-sources/:",
+   "POST tender-sources/:/check",
+   "POST tender-sources/:/finds/:",
+   "POST tender-sources/:/watch",
+   "POST tender-sources/starter"
+  ],
   "meetings": [
+   "GET key-in",
    "GET meetings",
    "POST group-month/:",
    "POST it/act/:",
+   "POST key-in/:",
    "POST meetings",
    "POST meetings/:/actions",
    "POST meetings/:/actions/:",
@@ -2627,6 +2710,7 @@
    "GET hr/overtime",
    "GET hr/policies",
    "GET hr/training",
+   "GET key-in",
    "GET leave",
    "GET me/duty",
    "GET me/items",
@@ -2635,9 +2719,8 @@
    "GET people/:/docs",
    "GET people/:/profile",
    "GET purchasing/uniform-requests",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET roster/sites/:",
+   "GET shared-logins/leaver/:",
    "GET socso",
    "GET socso/:",
    "GET statutory",
@@ -2691,6 +2774,7 @@
    "POST hr/training",
    "POST inventory/:",
    "POST it/act/:",
+   "POST key-in/:",
    "POST leave",
    "POST leave/:/decide",
    "POST leave/:/hospital-claim",
@@ -2766,8 +2850,6 @@
    "GET ops/government",
    "GET ops/private",
    "GET ops/region",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET vacancies",
    "GET vacancies/:/applicants",
    "POST applicants/:/:",
@@ -2782,10 +2864,13 @@
    "POST vacancies/:/advert/:",
    "POST vacancies/:/applicants"
   ],
+  "orgchart": [
+   "GET org/chart",
+   "POST org/head",
+   "POST org/line"
+  ],
   "overview": [
    "GET group/overview",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST companies"
   ],
   "payformulas": [
@@ -2809,8 +2894,6 @@
    "GET pdpa/:/docs",
    "GET pdpa/rights",
    "GET products",
-   "GET records/:/form",
-   "GET records/kinds",
    "POST pdpa",
    "POST pdpa-breach/:/details",
    "POST pdpa-consents",
@@ -2847,8 +2930,7 @@
    "GET people/:",
    "GET people/:/docs",
    "GET people/:/profile",
-   "GET records/:/form",
-   "GET records/kinds",
+   "GET shared-logins/leaver/:",
    "GET socso",
    "GET socso/:",
    "POST accounts/:/close",
@@ -2914,15 +2996,15 @@
    "POST socso/:/status"
   ],
   "purchasing": [
+   "GET key-in",
    "GET me/items",
    "GET purchasing",
    "GET purchasing/issues/:/proof",
    "GET purchasing/uniform-requests",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET warranty-claims",
    "POST inventory/:",
    "POST it/act/:",
+   "POST key-in/:",
    "POST me/it-devices/report",
    "POST me/items/:/:",
    "POST purchasing/:/issues",
@@ -2961,17 +3043,15 @@
    "POST rba/committee"
   ],
   "registers": [
-   "GET records/:/form",
-   "GET records/kinds",
    "GET registers",
    "POST registers/:"
   ],
   "renewals": [
    "GET compliance",
-   "GET records/:/form",
-   "GET records/kinds",
+   "GET key-in",
    "GET renewals",
    "POST it/act/:",
+   "POST key-in/:",
    "POST renewals/:/:",
    "POST renewals/kdn/:"
   ],
@@ -2981,12 +3061,14 @@
    "POST reports/list"
   ],
   "requests": [
+   "GET key-in",
    "GET requests",
    "GET requests/:/docs",
    "GET short-stays",
    "POST am/office/:",
    "POST expenses/prefill",
    "POST it/act/:",
+   "POST key-in/:",
    "POST requests",
    "POST requests/:/decide",
    "POST requests/:/submit",
@@ -2994,8 +3076,6 @@
   ],
   "roster": [
    "GET companies/:/sites",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET shifts/:/candidates",
    "GET sites/:/roster",
    "POST shifts/:/assign",
@@ -3017,6 +3097,11 @@
    "POST self-audits/:/fix",
    "POST sites/:/client-codes"
   ],
+  "shared-logins": [
+   "GET shared-logins",
+   "GET shared-logins/leaver/:",
+   "POST shared-logins/:"
+  ],
   "sitehours": [
    "GET public-holidays",
    "GET site-hours",
@@ -3026,8 +3111,6 @@
   "sites": [
    "GET companies/:/sites",
    "GET device/duty",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET sites/:",
    "GET sites/:/client-codes",
    "GET sites/:/duty-log",
@@ -3062,8 +3145,6 @@
    "GET duty/officers/:",
    "GET duty/sites/:",
    "GET inventory/sites",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET sites/:/close-out",
    "GET sites/:/kit",
    "POST cleaning/sites/:/client-slips",
@@ -3112,8 +3193,6 @@
   ],
   "sop": [],
   "staff-directory": [
-   "GET records/:/form",
-   "GET records/kinds",
    "GET staff-directory",
    "GET staff-directory/status",
    "POST staff-directory/:"
@@ -3143,8 +3222,6 @@
    "GET me/remote",
    "GET me/test-checkin",
    "GET me/time-slips",
-   "GET records/:/form",
-   "GET records/kinds",
    "GET remote",
    "GET staff-clock",
    "GET staff-clock-photos",
@@ -3260,8 +3337,6 @@
    "POST site-surveys/:/review"
   ],
   "websites": [
-   "GET records/:/form",
-   "GET records/kinds",
    "GET websites",
    "POST websites-sync",
    "POST websites/:"

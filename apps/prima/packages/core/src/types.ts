@@ -893,6 +893,8 @@ export interface EvidenceDoc {
   /** A foreign-worker renewal receipt or the proof of an FWM task. */
   fwmId?: Id | null;
   tenderId?: Id | null;
+  /** A paper in the company paper library (Marketing item AH7). */
+  paperId?: Id | null;
   reportId?: Id | null;
   /** A hiring paper or hospital claim paper on a worker's file. */
   hrPersonId?: Id | null;
@@ -1789,6 +1791,89 @@ export interface Tender {
   groupId?: Id;
   /** Who recorded the result (won, lost or no bid) and when; the tender counter dates wins by it (Fauzan, 4 Nov 2026). */
   outcome?: { status: 'won' | 'lost' | 'no_bid'; userId: Id; by: string; at: IsoDateTime } | null;
+  /**
+   * MARKETING: the central Marketing department prepares and lodges this bid in the company's name (Fauzan, 23 Nov
+   * 2026: "Marketing does all"). Missing: the company prepares it itself (bids started before the Marketing desk).
+   */
+  desk?: 'MARKETING';
+  /**
+   * The notice to the company manager that Marketing will bid in the company's name (Fauzan, 22 Nov 2026: "Give 1 day
+   * to reply"). The manager may say "do not bid" until `until`; silence means go.
+   */
+  bidNotice?: { at: IsoDateTime; by: string; until: IsoDateTime } | null;
+  /**
+   * Working hours Marketing staff spent on this bid, entered by the person who did the work (Fauzan, 22 Nov 2026:
+   * about 4 hours by hand; the measured average decides when an executive can take 8 companies). Needed before a
+   * Marketing desk bid is lodged.
+   */
+  workLog?: { userId: Id; by: string; hours: number; at: IsoDateTime; note: string }[];
+  /**
+   * What the Marketing check found and sent back, one entry per send-back (Marketing item AH14, Fauzan 23 Nov 2026).
+   * Each line of the checker's note is one item the first pass missed; `preparerId` is who prepared the bid. Counts
+   * show on the Marketing board; the bid itself still follows the tender papers.
+   */
+  checkCaught?: { at: IsoDateTime; by: string; byId: Id; preparerId: Id | null; items: string[] }[];
+  /**
+   * Which tender papers the checklist reader could read the last time it drafted (Marketing item AH9). Unread papers
+   * (scanned pages, pictures) must be read by a person.
+   */
+  checklistRead?: { reader: string; at: IsoDateTime; read: string[]; unread: string[] } | null;
+  /**
+   * The AI check (Fauzan, 23 Nov 2026 decision card: "Yes, AI checks once, person answers"). When the preparer signs a
+   * desk bid, AI reads the tender papers once and lists what they ask for that the checklist misses or states
+   * differently, each with the words quoted from the paper. The Marketing Manager or Deputy answers every point before
+   * the Marketing check. AI never ticks or signs. `error` is set when the AI could not run; the bid is not stopped.
+   */
+  aiCheck?: TenderAiCheck | null;
+  /**
+   * A proposal, not a tender (Marketing item AH8, Fauzan 23 Nov 2026: our own offer to a private client, without
+   * tender papers). It has no tender protocol and no papers to read: it is worked from the fixed proposal checklist,
+   * signed like a desk bid (preparer, Marketing check, company manager) and "lodged" by sending it to the client with a
+   * copy kept. `closesOn` is the date Marketing plans to send it by.
+   */
+  proposal?: { scope: string; contact: string; startedBy: string; startedById: Id; startedAt: IsoDateTime } | null;
+  /**
+   * Who goes to the buyer's briefing or site visit, and whether they went (Marketing item AH13, Fauzan 23 Nov 2026).
+   * Many tenders let only the person named on the company's MOF certificate attend, so the company names that person
+   * on day 1 and the attendance slip is kept. One entry per kind; the dates stay in `record`.
+   */
+  attendance?: TenderAttendance[];
+}
+
+export interface TenderAiFlag {
+  id: string;
+  kind: 'MISSING' | 'DIFFERENT';
+  /** What the papers ask for, in AI's words. */
+  what: string;
+  /** The exact words in the paper; a flag whose words are not in the paper is dropped. */
+  quote: string;
+  paper: string;
+  answer: { status: 'FIXED' | 'NOT_NEEDED'; note: string; by: string; byId: Id; at: IsoDateTime } | null;
+}
+export interface TenderAiCheck {
+  at: IsoDateTime;
+  /** Who signed as preparer when the check ran. */
+  by: string;
+  read: string[];
+  unread: string[];
+  flags: TenderAiFlag[];
+  /** Flags the AI gave whose quoted words were not found in the papers (dropped, counted only). */
+  dropped: number;
+  error: string | null;
+}
+
+export type TenderAttendanceKind = 'BRIEFING' | 'SITE_VISIT';
+export interface TenderAttendance {
+  kind: TenderAttendanceKind;
+  /** The person the company sends, as named by the company (they may have no Prima sign-in). */
+  attendee: string;
+  /** The company says this person is named on its MOF certificate. */
+  mofNamed: boolean;
+  namedBy: string;
+  namedById: Id;
+  namedAt: IsoDateTime;
+  /** Recorded on or after the date: went (with the attendance slip) or missed (with the reason). */
+  result: { attended: boolean; note: string; docIds: Id[]; by: string; byId: Id; at: IsoDateTime } | null;
 }
 
 /**
@@ -1836,8 +1921,8 @@ export interface TenderRecord {
   officialLink?: string;
   /** Closing time, 'HH:MM' MYT. */
   closesAt?: string;
-  briefing?: { on: IsoDate | null; mandatory: boolean; place: string; outcome: string } | null;
-  siteVisit?: { on: IsoDate | null; mandatory: boolean; place: string; outcome: string } | null;
+  briefing?: { on: IsoDate | null; mandatory: boolean; place: string; outcome: string; mofNamedOnly?: boolean } | null;
+  siteVisit?: { on: IsoDate | null; mandatory: boolean; place: string; outcome: string; mofNamedOnly?: boolean } | null;
   /** Last day to register or buy the documents. */
   docsBy?: IsoDate | null;
   /** Last day for questions to the buyer. */
@@ -2041,7 +2126,12 @@ export interface TenderCheckItem {
 }
 
 /** Fauzan, 26 Oct 2026: the person who prepared the bid signs, then the company manager signs that all is verified. */
-export type TenderCheckLevel = 'PREPARER' | 'MANAGER';
+/**
+ * PREPARER, then MANAGER for a bid the company prepares itself. A bid on the Marketing desk (Fauzan, 22 Nov 2026) is
+ * signed by the Marketing preparer, checked by the Marketing Manager or Deputy (CHECK), then approved by the company
+ * manager (MANAGER).
+ */
+export type TenderCheckLevel = 'PREPARER' | 'CHECK' | 'MANAGER';
 
 export interface TenderVerification {
   level: TenderCheckLevel;
@@ -2081,6 +2171,16 @@ export interface TenderProtocol {
   note: string;
   /** True until the Director Office loads the real protocol. */
   placeholder: boolean;
+  /**
+   * The Marketing desk (Fauzan, 23 Nov 2026): from this date Marketing, not the Director Office or the companies,
+   * records, prepares and lodges every new tender. Switched on by the CEO or the COO; missing means not started.
+   */
+  marketingDesk?: { from: IsoDate; by: string; at: IsoDateTime; note: string } | null;
+  /**
+   * Why a company entered no tender in a month (Fauzan, 23 Nov 2026: a company with no entries is shown red with the
+   * reason). One line per company and month, written by Marketing; the newest 24 months are kept.
+   */
+  marketingNoEntry?: { month: string; companyId: Id; reason: string; by: string; byId: Id; at: IsoDateTime }[];
 }
 
 export interface TenderStepDone {
@@ -3035,7 +3135,19 @@ export interface User {
     | 'it'
     | 'legal'
     | 'audit'
-    | 'procurement';
+    | 'procurement'
+    | 'marketing';
+  /**
+   * Marketing department (Fauzan, 22-23 Nov 2026): 1 Marketing Manager, 1 Deputy and 7 Tender Executives prepare and
+   * lodge every tender and proposal for the group companies. An executive works only for the companies they hold an
+   * authority grant for (5 to 6 each).
+   */
+  marketingRole?: 'manager' | 'deputy' | 'executive';
+  /**
+   * The central departments ('d_<department>') and central companies ('c_<companyId>') this person heads, as named by the
+   * CEO or the Chief of Staff in the organisation chart (23 Nov 2026). Read through unitHeadsOf, never from the browser.
+   */
+  headOf?: string[];
   /** PWVSB credit (V8, V10): the credit officer who watches PWVSB's financing to the companies. */
   creditOfficer?: boolean;
   /** IT department (Fauzan, 27 Oct 2026): 1 IT Manager, 1 IT Lead and 4 IT Executives. */
@@ -3089,7 +3201,7 @@ export interface User {
    */
   monthlySalary?: number;
   /** A system sign-in for a connected app (the JA Group app feed), never a person; it cannot sign in to screens. */
-  integration?: 'ja' | 'door' | 'planner' | 'analytics' | 'inhouse' | 'cms' | 'tracker' | 'am' | 'whatsapp';
+  integration?: 'ja' | 'door' | 'planner' | 'analytics' | 'inhouse' | 'cms' | 'tracker' | 'am' | 'whatsapp' | 'tender_watcher';
 
   /** For a far-branch manager (Fauzan, 27 Oct 2026): the branch they run. */
   branchId?: Id;
@@ -3117,6 +3229,10 @@ export interface User {
   directoryId?: Id;
   /** The approved Accounts and Access request that made this account. */
   accountRequestId?: Id;
+  /** Deputy of these units (named in the org chart; filled from prima.org_lines like headOf when users are read). A deputy sees the unit but is not its head. */
+  deputyOf?: string[];
+  /** Org chart: the manager this person was put under by a head, the HR Director or the CEO (from prima.org_lines). */
+  reportsToId?: Id;
 }
 
 /**
@@ -3515,7 +3631,14 @@ export interface Dataset {
   attendanceMatches: import('./attendance-reports').AttendanceMatch[];
   orgImportOks: import('./org-import').OrgImportOk[];
   problemReports: import('./problem-reports').ProblemReport[];
+  /** Org chart lines and named unit heads (Fauzan, 23 Nov 2026; module org-lines-v1). */
+  orgLines: import('./org-structure').OrgLine[];
   accountRequests: import('./accounts-access').AccountRequest[];
+  archiveFiles: import('./archive').ArchiveFile[];
+  /** Prima agent (23 Nov 2026): team and personal skills, and each person's own style. Module assistant-v1. */
+  assistantMemory: import('./assistant').AssistantMemoryRow[];
+  sharedLogins: import('./shared-logins').SharedLogin[];
+  sharedLoginKinds: import('./shared-logins').SharedLoginKindRow[];
   hrLists: import('./hr-lists').HrList[];
   consentGates: import('./paper-consent').ConsentGate[];
   fwMoves: import('./fw-moves').FwMove[];
@@ -3546,6 +3669,8 @@ export interface Dataset {
   /** A9 (Fitri package): office staff overtime claims, paid in the staff payroll run only when HR switches overtime on. */
   staffOtClaims: StaffOtClaim[];
   warrantyClaims: import('./warranty-claims').WarrantyClaim[];
+  /** Company paper library for tenders (Marketing item AH7, 23 Nov 2026; module company-papers-v1, not installed until Fauzan says). */
+  companyPapers: import('./company-papers').CompanyPaper[];
   /** Guard roster engine (Part O, Fauzan 13-14 Nov 2026; module guard-roster-v1, not installed until the CEO says). */
   siteCoverage: import('./roster-records').SiteCoverageRow[];
   rosterVersions: import('./roster-records').RosterVersionRow[];
@@ -6050,6 +6175,13 @@ export interface StockItem {
   /** Part U8: the CSG/TNG course uniform buffer set by the OGM (null = not set); each change kept. */
   courseBufferAt?: number | null;
   courseBufferHistory?: { at: IsoDateTime; by: string; level: number | null; reason: string }[];
+  /**
+   * A set made of parts (Fauzan, 23 Nov 2026: "uniform break down to epaulette, badges, pants, shoes, belt"). Each part
+   * is its own store item with its own stock, so a guard who needs only pants is asked for that part alone. A set holds
+   * no stock of its own: asking for the set asks for each part. Kept by the Inventory Manager, each change with a reason.
+   */
+  kitParts?: { stockItemId: Id; qty: number }[] | null;
+  kitHistory?: { at: IsoDateTime; by: string; byId: Id; note: string }[];
 }
 
 /**
@@ -8766,8 +8898,9 @@ export interface TenderOpportunityEntry {
 }
 
 /**
- * A buyer or portal site the Director Office watches for tenders (Fauzan, 4 Nov 2026). Prima does not visit these
- * sites: staff check them and record what they saw. A page that could be read is not proof every tender was seen.
+ * A buyer or portal site the Director Office watches for tenders (Fauzan, 4 Nov 2026). Staff check them and record what
+ * they saw; where Marketing allowed it, the tender watcher also reads the public pages once a day (AH11, rules only,
+ * never logs in). A page that could be read is not proof every tender was seen.
  */
 export type TenderSourceStatus = 'NOT_CHECKED' | 'CHECKED' | 'VENDOR_LIMITED' | 'PARTIAL' | 'ERROR';
 
@@ -8795,6 +8928,40 @@ export interface TenderSource {
   addedAt: IsoDateTime;
   /** Newest first, last 20 kept. */
   checks: TenderSourceCheck[];
+  /**
+   * The tender watcher may read this site's public pages (Marketing item AH11): set by Marketing after reading the
+   * site's terms, with what they read. Not set = the watcher leaves the site alone.
+   */
+  watchAllowed?: { by: string; byId: Id; at: IsoDateTime; note: string } | null;
+  /** The watcher's last runs on this site, newest first, last 10 kept. */
+  watchRuns?: TenderWatchRun[];
+  /** Guarding notices the watcher found here, newest first, last 100 kept. */
+  watchFinds?: TenderWatchFind[];
+}
+
+/** What happened to one page on one watcher run. */
+export type TenderWatchOutcome = 'READ' | 'NOT_ALLOWED' | 'NOT_HTML' | 'ERROR';
+
+export interface TenderWatchRun {
+  at: IsoDateTime;
+  pages: { url: string; outcome: TenderWatchOutcome; note: string }[];
+  /** Guarding notices on the pages read, and how many of them are new. */
+  found: number;
+  fresh: number;
+}
+
+export interface TenderWatchFind {
+  key: string;
+  title: string;
+  ref: string;
+  closesOn: IsoDate | null;
+  link: string | null;
+  page: string;
+  word: string;
+  foundAt: IsoDateTime;
+  /** NEW = waiting for Marketing; RECORDED = put on the opportunities list; NOT_FOR_US = dropped with a reason. */
+  state: 'NEW' | 'RECORDED' | 'NOT_FOR_US';
+  answer: { by: string; byId: Id; at: IsoDateTime; note: string; opportunityId: Id | null } | null;
 }
 
 export interface TenderOpportunity {

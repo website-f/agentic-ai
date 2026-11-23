@@ -8,7 +8,11 @@ declare const __DEMO__: boolean;
  * date, total, shop and kind by the same rules the server uses, and the staff member checks them before claiming.
  * Returns null when the phone cannot read it (old phone, blurry photo, files not reachable); staff then type the figures.
  */
-export async function readReceiptOnPhone(dataUrl: string, now: string, timeoutMs = 60_000): Promise<ReceiptRead | null> {
+/**
+ * The words of a paper photo, read on the phone (free; the photo is not sent anywhere to be read). Null when the phone
+ * cannot read it (old phone, blurry photo, files not reachable); the person then types the values.
+ */
+export async function readWordsOnPhone(dataUrl: string, timeoutMs = 60_000): Promise<string | null> {
   if (__DEMO__ || !/^data:image\/(jpeg|png)/.test(dataUrl)) return null;
   const base = new URL(`${import.meta.env.BASE_URL}ocr/`, location.href).href;
   const held: { worker: { terminate: () => Promise<unknown> } | null } = { worker: null };
@@ -29,10 +33,15 @@ export async function readReceiptOnPhone(dataUrl: string, now: string, timeoutMs
   void work.finally(() => held.worker?.terminate().catch(() => undefined)).catch(() => undefined);
   try {
     const text = await Promise.race([work, new Promise<null>((r) => setTimeout(() => r(null), timeoutMs))]);
-    if (!text || !text.trim()) return null;
-    const read = parseReceiptText(text, now, 'phone');
-    return read.amount == null && read.date == null ? null : read;
+    return text && text.trim() ? text : null;
   } catch {
     return null;
   }
+}
+
+export async function readReceiptOnPhone(dataUrl: string, now: string, timeoutMs = 60_000): Promise<ReceiptRead | null> {
+  const text = await readWordsOnPhone(dataUrl, timeoutMs);
+  if (!text) return null;
+  const read = parseReceiptText(text, now, 'phone');
+  return read.amount == null && read.date == null ? null : read;
 }

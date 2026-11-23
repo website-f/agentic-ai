@@ -1,10 +1,11 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import { AccessClosed, DEMO_PIN_KEY, PrimaService, accessClosed, dataWalls, dateOf, fromMs, isGroupRole, pinKeeper, tenantCompanyIds, RefusedAfterSave, type AuthorityGrant, type PinKeeper, type User, type Store, orgLinksEnabled, withOrgLinks, withRunCompanies, idLinker, type IdLinker } from '@prima/core';
+import { AccessClosed, DEMO_PIN_KEY, PrimaService, accessClosed, dataWalls, dateOf, fromMs, isGroupRole, pinKeeper, tenantCompanyIds, RefusedAfterSave, type AuthorityGrant, type PinKeeper, type User, type Store, orgLinksEnabled, withOrgLinks, withRunCompanies, overlayOne, idLinker, type IdLinker } from '@prima/core';
 import { Pool } from 'pg';
 import { PgStore, TABLE } from './pg-store';
 import { withReadSnapshots } from './read-cache';
 import { ownRecordCompanyIds } from './office-accounts';
 import { FileStore, fileBackendFromEnv } from './file-store';
+import { BackendArchiveBytes } from './archive-bytes';
 import { migrationSha } from './schema';
 
 export function nowMyt(): string {
@@ -77,6 +78,8 @@ export class Db implements OnModuleDestroy {
     const backend = fileBackendFromEnv();
     return backend ? new FileStore(backend) : null;
   })();
+  /** The data and file manager's bytes: the same file storage; null while FILE_STORE is off. */
+  readonly archiveBytes = this.files ? new BackendArchiveBytes(this.files.backend) : null;
   readonly idLinks = apiIdLinker();
   /** PRIMA_ORG_LINKS=true, read once at start (org-links.ts); off by default. */
   readonly orgLinks = orgLinksEnabled(process.env);
@@ -106,7 +109,10 @@ export class Db implements OnModuleDestroy {
       const grants = g.rows.map((r) => r.data as AuthorityGrant);
       await client.query('SET LOCAL ROLE prima_app');
       const pgStore = new PgStore(client);
-      const user = withRunCompanies(stored, await pgStore.list('companyRunLinks'));
+      // The org chart's named heads and lines (module org-lines-v1) are part of who the person is for this request,
+      // so department walls (e.g. a named head's shared logins) follow them. Readable to the app role before any wall.
+      const orgLines = (await pgStore.hasTable('orgLines')) ? await pgStore.list('orgLines') : [];
+      const user = await overlayOne(withRunCompanies(stored, await pgStore.list('companyRunLinks')), orgLines, dateOf(clock()), (id) => pgStore.get('users', id));
       // P109: an office account of central staff also reaches its own staff record in a licensed company (office-accounts.ts).
       const companies = [...new Set([...tenantCompanyIds(user, grants, dateOf(clock())), ...ownRecordCompanyIds(user)])];
       await client.query(`SELECT set_config('app.company_ids', $1, true)`, [companies.join(',')]);
@@ -121,6 +127,7 @@ export class Db implements OnModuleDestroy {
       const store = this.orgLinks ? withOrgLinks(fileStore) : fileStore;
       const svc = new PrimaService(store, clock);
       svc.pins = this.pins;
+      svc.archiveBytes = this.archiveBytes;
       svc.inhouseKey = this.inhouseKey;
       svc.idLinks = this.idLinks;
       svc.proofLinkHosts = this.proofLinkHosts;

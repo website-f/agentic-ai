@@ -499,6 +499,7 @@ function AccessSection({ data }: { data: PersonDetail }) {
               </div>
               {a.closedFrom ? <Chip tone="crit">Closed from {dateLabel(a.closedFrom)}</Chip> : <Chip tone="ok">Open</Chip>}
             </div>
+            {a.canClose && (a.closedFrom || closing === a.userId) && <LeaverSharedLogins userId={a.userId} />}
             {a.canClose && !a.closedFrom && closing !== a.userId && (
               <div className="pp-actions">
                 <button className="btn btn-sm" onClick={() => setClosing(a.userId)}>
@@ -962,4 +963,25 @@ export function DisciplineAppealBox({ x, self, onChange }: { x: DisciplineEntry;
 function FileHelperButton({ people }: { people: { id: string; name: string; staffNo: string }[] }) {
   const [open, setOpen] = useState(false);
   return open ? <FileHelper people={people} /> : <button className="btn" onClick={() => setOpen(true)}>File many papers</button>;
+}
+
+/**
+ * Leaving steps (Fauzan, 23 Nov 2026): the shared logins this person is named on, shown to whoever closes their access.
+ * The owner of each login changes the password within 3 working days and records it under "Shared logins". Shows
+ * nothing when the shared login list is not installed or the person is on none.
+ */
+function LeaverSharedLogins({ userId }: { userId: string }) {
+  const list = useLoad(() => api.sharedLoginsLeaver(userId).catch(() => []), [userId]);
+  if (!list.data || list.data.length === 0) return null;
+  return (
+    <div className="small" style={{ display: 'grid', gap: 2 }}>
+      <strong>Shared logins this person is on ({list.data.length})</strong>
+      {list.data.map((r) => (
+        <div key={r.id}>
+          {r.system}: on it as {r.as}. Owner {r.owner}, backup {r.backup}.
+        </div>
+      ))}
+      <span className="muted">Each owner is told on Home to change the password within 3 working days. If this person is the owner or the backup, IT names a new one.</span>
+    </div>
+  );
 }

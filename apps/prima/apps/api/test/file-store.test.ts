@@ -1,5 +1,6 @@
 // Cloud file storage for app-captured photos and proof (5 Nov 2026). Synthetic data and an in-memory file backend
 // only; the Azure backend is driven against a fake HTTP function, never a real storage account.
+import { BackendArchiveBytes } from '../src/archive-bytes';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
@@ -218,6 +219,46 @@ describe('Azure Blob backend', () => {
     await assert.rejects(az.get('a/b/c.jpg'), /missing/);
     await assert.rejects(az.get('../other/x'), /Invalid file name/);
     await assert.rejects(new AzureBlobFiles(cfg, {}, http).get('a/b/c.jpg'), /no managed identity/);
+  });
+
+  it('a large file goes up in pieces, is put together write-once, and is read back in stretches (data and file manager)', async () => {
+    const whole = Buffer.concat([Buffer.from('%PDF-1.4 piece one '), Buffer.from('piece two')]);
+    const { calls, http } = fakeAzure([
+      token,
+      () => new Response(null, { status: 201 }),
+      () => new Response(null, { status: 201 }),
+      () => new Response(null, { status: 201 }),
+      () => new Response(new Uint8Array(whole), { status: 206, headers: { 'content-range': `bytes 0-${whole.length - 1}/${whole.length}` } }),
+      () => new Response(null, { status: 400 }),
+      () => new Response(null, { status: 409 }),
+    ]);
+    const az = new AzureBlobFiles(cfg, env, http);
+    const bytes = new BackendArchiveBytes(az);
+    const key = 'archive/dept-finance/arc-abc123.pdf';
+    await bytes.putPart(key, 0, whole.subarray(0, 19));
+    await bytes.putPart(key, 1, whole.subarray(19));
+    const done = await bytes.finish(key, 2, 'application/pdf');
+    assert.equal(done.size, whole.length);
+    assert.equal(done.sha256, createHash('sha256').update(whole).digest('hex'));
+    assert.equal(Buffer.from(done.head).toString(), whole.subarray(0, 16).toString());
+    const block = new URL(calls[1].url);
+    assert.equal(block.pathname, `/evidence/${key}`);
+    assert.equal(block.searchParams.get('comp'), 'block');
+    assert.equal(Buffer.from(block.searchParams.get('blockid')!, 'base64').toString(), 'part-000000');
+    assert.equal(Buffer.from(new URL(calls[2].url).searchParams.get('blockid')!, 'base64').toString(), 'part-000001');
+    const commit = calls[3];
+    assert.equal(new URL(commit.url).searchParams.get('comp'), 'blocklist');
+    const h = commit.init.headers as Record<string, string>;
+    assert.equal(h['if-none-match'], '*');
+    assert.equal(h['x-ms-blob-content-type'], 'application/pdf');
+    assert.equal(h.authorization, 'Bearer synthetic-token');
+    assert.equal(String(commit.init.body).match(/<Latest>/g)?.length, 2);
+    // Read back in stretches, never whole.
+    assert.equal((calls[4].init.headers as Record<string, string>)['x-ms-range'], 'bytes=0-4194303');
+    // A missing piece, and a name that already holds a file, are refused plainly.
+    await assert.rejects(az.commitBlocks(key, 2, 'application/pdf'), /piece of the file is missing/);
+    await assert.rejects(az.commitBlocks(key, 2, 'application/pdf'), /refused to put a file together \(409\)/);
+    await assert.rejects(az.putBlock('../x', 0, Buffer.from('x')), /Invalid file name/);
   });
 
   it('start-up check writes and reads back a probe', async () => {

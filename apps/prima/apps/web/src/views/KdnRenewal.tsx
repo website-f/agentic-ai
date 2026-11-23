@@ -61,6 +61,19 @@ const STAGE: Record<Row['stage'], ['crit' | 'warn' | 'info' | 'ok' | 'neutral', 
 
 const send = (op: string) => (i: Record<string, unknown>) => api.kdnAct(op, i);
 
+/**
+ * Isi automatik on each KDN paper (Part AG, AG21 with AG-K.6): the dates, months and years the checks need are read
+ * from the paper on the person's own device and marked to check. EPF, SOCSO, HRD, tax, SST and accounts papers and bank
+ * statements are never sent to the online reader. The checks themselves stay the fixed rules of the renewal service.
+ */
+function kdnKeyIn(item: string | undefined): { paper: 'certificate' | 'statement' | 'bank-statement'; map: Record<string, string> } | undefined {
+  if (item === '1.2' || item === '1.3') return { paper: 'certificate', map: { docDate: 'paperDate' } };
+  if (item === '3.1' || item === '3.2') return { paper: 'statement', map: { from: 'periodFrom', to: 'periodTo' } };
+  if (item === '3.3' || item === '3.4' || item === '3.5') return { paper: 'statement', map: { year: 'year' } };
+  if (item === '3.7') return { paper: 'bank-statement', map: { month: 'statementMonth' } };
+  return undefined;
+}
+
 function paperFields(p: Paper): Field[] {
   const f: Field[] = [];
   const item = p.item;
@@ -197,7 +210,7 @@ function KdnRow({ r, b }: { r: Row; b: Board }) {
                 {r.hints?.[p.item] && <div className="muted">Petunjuk Prima: {r.hints[p.item].join('; ')}</div>}
                 {own && !p.done && p.item !== '1.1' && p.item !== 'Akhir' && r.stage === 'papers' && (
                   <div className="row">
-                    <OpForm title="Sedia" op="paper" send={send('paper')} fixed={{ ...L, item: p.item }} fields={paperFields(p)} done="Dokumen disimpan." />
+                    <OpForm title="Sedia" op="paper" send={send('paper')} fixed={{ ...L, item: p.item }} fields={paperFields(p)} done="Dokumen disimpan." keyIn={kdnKeyIn(p.item)} />
                     {p.item === '2.1' && <OpForm title="Tidak berkenaan" op="paper" send={send('paper')} fixed={{ ...L, item: p.item, na: true }} fields={[{ k: 'reason', l: 'Sebab' }]} />}
                   </div>
                 )}

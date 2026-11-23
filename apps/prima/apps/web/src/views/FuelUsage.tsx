@@ -5,6 +5,7 @@ import { api, type VehicleUsage } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
 import { ImportButton } from './ImportDrawer';
+import { KeyIn } from '../KeyIn';
 
 /** Today in Malaysia, whatever the device's clock zone (the app keeps Malaysian dates). */
 const mytNow = () => new Date(Date.now() + 8 * 3_600_000).toISOString();
@@ -327,6 +328,8 @@ function FillForm({
   const [station, setStation] = useState('');
   const [driver, setDriver] = useState(defaultDriver ?? '');
   const [proof, setProof] = useState<ProofInput[]>([]);
+  // "Isi automatik" (rule KEY-IN): litres and the amount are read from the receipt and wait for the person's check.
+  const [checked, setChecked] = useState(true);
   const byCard = paidWith === 'FUEL_CARD' || paidWith === 'SUBSIDY_CARD';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -362,6 +365,17 @@ function FillForm({
         <input className="input" inputMode="decimal" aria-label="Amount (RM)" placeholder="RM" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ width: 110 }} />
         <input className="input" inputMode="numeric" aria-label="Odometer (km)" placeholder="Odometer km" value={odo} onChange={(e) => setOdo(e.target.value)} style={{ width: 140 }} />
       </div>
+      <KeyIn
+        paper="fuel"
+        typed={{ litres, amount }}
+        onFields={(read, ok) => {
+          setChecked(ok);
+          for (const f of read) {
+            if (f.name === 'litres') setLitres(f.value == null ? '' : String(f.value));
+            if (f.name === 'amount') setAmount(f.value == null ? '' : String(f.value));
+          }
+        }}
+      />
       <input className="input" aria-label="Station" placeholder="Station (name and place)" value={station} onChange={(e) => setStation(e.target.value)} />
       {askDriver && <input className="input" aria-label="Driver" placeholder="Driver" value={driver} onChange={(e) => setDriver(e.target.value)} />}
       <ProofPicker site={null} refText="fuel receipt" items={proof} onChange={setProof} documentsOnly />
@@ -369,7 +383,7 @@ function FillForm({
       <div>
         <button
           className="btn btn-sm btn-primary"
-          disabled={act.busy || !at || !(Number(litres) > 0) || !(Number(amount) > 0) || !odo || station.trim().length < 2 || (byCard && !card) || (askDriver && driver.trim().length < 2)}
+          disabled={act.busy || !checked || !at || !(Number(litres) > 0) || !(Number(amount) > 0) || !odo || station.trim().length < 2 || (byCard && !card) || (askDriver && driver.trim().length < 2)}
           onClick={() =>
             act.run(async () => {
               await api.recordFuel(

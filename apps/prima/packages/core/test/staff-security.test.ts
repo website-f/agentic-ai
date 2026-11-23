@@ -165,26 +165,29 @@ describe('department walls', () => {
     // Part P (13 Nov 2026): Asset Management also reads hostel needs for its houses and may ask for a staff stay.
     expect(walls('u-asset-mm')).toEqual(['asset_read', 'asset_write', 'hostel_need_am', 'ss_requester']);
     // Parts P and Q (13 Nov 2026): HQ staff may ask for a staff stay; the PDPA officer is a party to the IT policy register.
-    expect(walls('u-pdpa')).toEqual(['pdpa', 'it_policy_party', 'ss_requester']);
-    expect(walls('u-it-ex1')).toEqual(['bcm', 'login_handover', 'it_support', 'ss_requester']);
+    expect(walls('u-pdpa')).toEqual(['pdpa', 'it_policy_party', 'shared_login_head_d_pdpa', 'ss_requester']);
+    // Shared login list (23 Nov 2026): IT keeps the list; HR reads it for leaving steps; a company manager reads their company's.
+    expect(walls('u-it-ex1')).toEqual(['bcm', 'login_handover', 'it_support', 'shared_login_all', 'shared_login_keep', 'ss_requester']);
     // Arisha main, 84b056e: IT reads the login handover, never the movement row (pay, private reason).
     expect(walls('u-it-ex1')).not.toContain('staff_movements');
     // HR also reads pay formulas, pay law and statutory settings, without a write wall.
-    expect(walls('u-pwvsb-hr')).toEqual(['pay_read', 'offboard', 'staff_ids', 'staff_accounts', 'staff_faces', 'hr_cases', 'applicants', 'staff_movements', 'login_handover', 'hr_lists', 'speak_up_hr', 'ss_recovery', 'ss_requester', 'staff_history', 'history_lookup', 'history_local']);
+    expect(walls('u-pwvsb-hr')).toEqual(['pay_read', 'offboard', 'staff_ids', 'staff_accounts', 'staff_faces', 'hr_cases', 'applicants', 'staff_movements', 'login_handover', 'archive_hr', 'hr_lists', 'shared_login_all', 'speak_up_hr', 'ss_recovery', 'ss_requester', 'staff_history', 'history_lookup', 'history_local']);
     // HR wall (slice 3A part 3): Finance reads salary accounts, never the full IC.
     expect(walls('u-fd')).toContain('staff_accounts');
     expect(walls('u-fd')).not.toContain('staff_ids');
     // ACT audits assets but never writes them, ACT head included.
-    expect(walls('u-act-aud1')).toEqual(['asset_read', 'act', 'corporate', 'legal', 'fw_hostel', 'ss_requester', 'reg_risk']);
+    expect(walls('u-act-aud1')).toEqual(['asset_read', 'act', 'act_staff', 'corporate', 'legal', 'fw_hostel', 'ss_requester', 'reg_risk']);
     expect(walls('u-audit')).toContain('asset_read');
     expect(walls('u-audit')).not.toContain('asset_write');
-    expect(walls('u-legal')).toEqual(['corporate', 'legal', 'mandates', 'arms', 'ss_requester']);
-    for (const id of ['u-transport', 'u-proc-exec']) expect(walls(id)).toEqual(['ss_requester']);
+    expect(walls('u-legal')).toEqual(['corporate', 'legal', 'mandates', 'arms', 'shared_login_head_d_legal', 'ss_requester']);
+    expect(walls('u-proc-exec')).toEqual(['ss_requester']);
+    // The Head of Transport sees only the shared logins of Transport and its company (headOf, 23 Nov 2026).
+    expect(walls('u-transport')).toEqual(['shared_login_head_c_pgl', 'shared_login_head_d_transport', 'ss_requester']);
     // Slice 3G: FWM reads foreign workers' passports only; the JA feed keeps guard rows only.
     expect(walls('u-fwm-ex1')).toEqual(['fw_ids', 'fw_hostel', 'ss_requester']);
     expect(walls('u-ja-sync')).toEqual(['guard_feed']);
     // A company manager reads only their own staff's numbers (Fauzan, 1 Nov 2026).
-    expect(walls('u-cm-sasa')).toEqual(['staff_company', 'staff_movements', 'corporate', 'legal', 'mandates', 'arms', 'it_policy_party']);
+    expect(walls('u-cm-sasa')).toEqual(['staff_company', 'staff_movements', 'corporate', 'legal', 'mandates', 'arms', 'it_policy_party', 'shared_login_company']);
     for (const u of ds.users.filter((x) => x.integration && x.integration !== 'ja')) {
       expect(dataWalls(u)).toEqual(['am', 'whatsapp'].includes(u.integration!) ? ['asset_read', 'asset_write'] : []);
       expect(dataWalls(u)).not.toContain('staff_ids');

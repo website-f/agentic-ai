@@ -692,6 +692,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgres://prima_owner:${PRIMA_OWNER_PASSWORD:-prima_owner_dev_password}@prima-db:5432/prima
       PRIMA_API_DB_PASSWORD: ${PRIMA_API_DB_PASSWORD:-prima_api_dev_password_0123456789}
+      # P126: Fauzan's go-ahead modules (apps/prima/db/office-pending.json) run only when this is 1 for a run.
+      PRIMA_PENDING_MODULES: ${PRIMA_PENDING_MODULES:-}
       ENTRA_BOOTSTRAP_LINKS: ${PRIMA_ENTRA_BOOTSTRAP_LINKS:-}
       # P81: the group's real companies and staff (apps/prima/scripts/build-real-data.mjs), loaded
       # into an EMPTY database instead of the sample clean slate. Personal data: the file lives in

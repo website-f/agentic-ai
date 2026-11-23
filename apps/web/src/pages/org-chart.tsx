@@ -243,6 +243,12 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
             ? t("You change the lines and job titles of the people in your branch.")
             : t("You change the lines and job titles of the people in your department.")}</span>
         ) : null}
+        {/* P126: Prima keeps its own org chart (heads put staff under them; work, claims and leave follow it). */}
+        {me.prima && (!me.prima_modules || me.prima_modules.includes("orgchart")) ? (
+          <Link to="/prima" hash="orgchart" className="ml-auto inline-flex items-center gap-1 font-medium text-accent hover:underline">
+            <TreeStructureIcon size={13} /> {t("Prima org chart")}
+          </Link>
+        ) : null}
       </div>
 
       <div ref={area} className="min-w-0">

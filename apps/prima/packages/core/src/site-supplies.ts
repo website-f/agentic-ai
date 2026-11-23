@@ -19,7 +19,8 @@ import { addMonthsIso } from './work';
 import { workingDaysUntil } from './fw-moves';
 import { holidayDates } from './hr-leave';
 import { simplePdf } from './simple-pdf';
-import type { Id, IsoDate, IsoDateTime, PurCategory, Site, StockIssue, StockItem, StockRequest, User } from './types';
+import { expandKit, isKit, wearKey, wornItemIds } from './item-kits';
+import type { AuthorityGrant, Id, IsoDate, IsoDateTime, PurCategory, Site, StockIssue, StockItem, StockRequest, User } from './types';
 
 export type SupplyContract = 'KBK' | 'PKK_NEPAL' | 'PKK';
 export const SUPPLY_CONTRACTS: SupplyContract[] = ['KBK', 'PKK_NEPAL', 'PKK'];
@@ -62,6 +63,8 @@ export interface SupplyLine {
   issued: { at: IsoDateTime; by: string; qty: number; via: 'delivery' | 'issue' | 'bulk'; refId: Id; condition: 'new' | 'good_used' } | null;
   /** Part U15: the OGM released this line's reservation with a reason (the stock is free for others again). */
   released?: { by: string; byId: Id; at: IsoDateTime; reason: string } | null;
+  /** The set this line came from, when a whole set was asked for (23 Nov 2026); each part is its own line. */
+  kitOf?: { id: Id; name: string; sets?: number } | null;
 }
 /** Part U6: the store's finer steps while a request is "Dalam Tindakan". */
 export const STORE_STAGES = ['prepared', 'pic', 'ready'] as const;
@@ -74,7 +77,13 @@ export interface SupplyRequestData {
   siteName: string;
   siteCompanyId: Id;
   zone: string;
-  startedBy: { role: 'supervisor' | 'patrol_officer' | 'om'; name: string };
+  /** 'office': the Inventory Manager, Procurement executive, OGM or Operations Director started it (23 Nov 2026). */
+  startedBy: { role: 'supervisor' | 'patrol_officer' | 'om' | 'office'; name: string };
+  /** The OM or Regional OM who receives the goods at the site; the requester when an OM asked. */
+  receiverId?: Id;
+  receiverName?: string;
+  /** Items for a new site being started (23 Nov 2026): cleaning lines need no existing site supply to refill. */
+  forNewSite?: boolean;
   omPhone: string;
   notes: string;
   alsoSentBy: { channel: 'paper' | 'email' | 'sharepoint' | null; ref: string; docIds: Id[] };
@@ -184,6 +193,45 @@ export class SiteSuppliesService {
     if (user.opsTier !== 'om' && user.opsTier !== 'regional') return false;
     return (await this.svc.cleaning.access(user, site)) === 'manage';
   }
+  /**
+   * Fauzan, 23 Nov 2026: "inventory manager or ogm should be able to start item needs, like we start a new site". Besides
+   * the OM, the office side may start a request: the Inventory Manager or the Procurement executive (any store they
+   * run), the OGM (a government site) and the Operations Director (a private site of a company they cover). The goods
+   * still go to the OM covering the site, who counts them there.
+   */
+  private async isOfficeRequester(user: User, site: Site, grants?: AuthorityGrant[]): Promise<boolean> {
+    if (user.integration) return false;
+    const storeId = this.storeOf(site);
+    if (user.department === 'procurement' && (user.procRole === 'manager' || user.procRole === 'executive') && this.storeRole(user, storeId) === 'proc') return true;
+    if (storeId === GOV_OPS_COMPANY_ID) return isOgm(user);
+    return isOpsDirector(user) && can(user, grants ?? (await this.store.list('grants')), this.today(), 'view', site.companyId);
+  }
+  /** The OMs and Regional OMs covering the site: the people who can receive and count the goods there. */
+  private async receiversOf(site: Site): Promise<User[]> {
+    const users = ((await this.store.list('users')) as User[]).filter((u) => !u.integration && u.role === 'pwvsb_officer' && u.department === 'operations' && (u.opsTier === 'om' || u.opsTier === 'regional') && !u.accessClosed);
+    const out: User[] = [];
+    for (const u of users) if (await this.isRequester(u, site)) out.push(u);
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  /** Who receives at the site: the receiver named on the request, else (older requests) the OM who asked. */
+  private receiverOf(r: StockRequest): Id {
+    return this.dataOf(r).receiverId ?? r.requestedById;
+  }
+  /** The confirmer for this request: the OGM, Operations Director or named deputy, never the person who asked. */
+  private confirmsThis(user: User, r: { companyId?: Id; storeId?: Id; requestedById: Id }, set: SupplySettings): boolean {
+    return !user.integration && r.requestedById !== user.id && this.isConfirmer(user, (r.storeId ?? r.companyId)!, set);
+  }
+  /**
+   * Fauzan, 23 Nov 2026 ("No need, they have the power to start it"): when the confirmer (the OGM, the Operations
+   * Director or the named deputy) starts the request themselves, it is confirmed as it reaches the confirmation step.
+   */
+  private selfConfirm(d: SupplyRequestData, requester: User | undefined, storeId: Id, set: SupplySettings, at: IsoDateTime): Step[] {
+    if (d.status !== 'kelulusan' || !requester || !this.isConfirmer(requester, storeId, set)) return [];
+    for (const l of d.lines) if (l.confirmedQty === null) l.confirmedQty = l.qty;
+    d.status = 'diluluskan';
+    return [{ step: 'confirm', by: requester.name, byId: requester.id, at, note: 'started by the confirmer, approved as asked (Fauzan, 23 Nov 2026)' }];
+  }
+
 
   // ---------- settings ----------
   async settings(storeId: Id): Promise<SupplySettings> {
@@ -301,11 +349,24 @@ export class SiteSuppliesService {
     });
   }
 
+  /** The sites this person may ask supplies for, so nobody types a site ID (23 Nov 2026). */
+  private async startSites(user: User) {
+    const out: { id: Id; name: string; companyId: Id; sector: string | null }[] = [];
+    const grants = isOpsDirector(user) ? await this.store.list('grants') : [];
+    for (const site of (await this.store.list('sites')) as Site[]) {
+      if ((await this.isRequester(user, site)) || (await this.isOfficeRequester(user, site, grants))) out.push({ id: site.id, name: site.name, companyId: site.companyId, sector: site.sector ?? null });
+      if (out.length >= 2000) break;
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   // ---------- the request (T1) ----------
   /** What the OM sees when asking: store list, site supplies and equipment, stock on hand, days left and on the way. */
   private async options(user: User, i: Record<string, unknown>) {
     const site = await this.site(i.siteId);
-    if (!(await this.isRequester(user, site)) && !this.isWatcher(user)) throw new AccessDenied('view', '(the OM covering the site)');
+    const om = await this.isRequester(user, site);
+    const office = !om && (await this.isOfficeRequester(user, site));
+    if (!om && !office && !this.isWatcher(user)) throw new AccessDenied('view', '(the OM covering the site, the Inventory Manager, the OGM or the Operations Director)');
     const storeId = this.storeOf(site);
     const [items, { contract, set }, settings, setup, entries, open] = await Promise.all([
       this.store.list('stockItems', { companyId: [storeId] }),
@@ -325,12 +386,26 @@ export class SiteSuppliesService {
     return {
       site: { id: site.id, name: site.name, companyId: site.companyId },
       storeId,
+      asOffice: office,
+      receivers: office ? (await this.receiversOf(site)).map((u) => ({ id: u.id, name: u.name })) : [],
       contract,
       contractSet: set,
       setting: settings.contracts[contract],
       primaOnlyFrom: settings.primaOnlyFrom,
       items: items
-        .map((it) => ({ id: it.id, name: it.name, kind: it.kind, size: it.size, onHand: it.onHand, onTheWay: onTheWay.get(it.id) ?? 0, min: it.reorderAt, max: it.maxAt ?? null }))
+        .map((it) => ({
+          id: it.id,
+          name: it.name,
+          kind: it.kind,
+          size: it.size,
+          onHand: it.onHand,
+          onTheWay: onTheWay.get(it.id) ?? 0,
+          min: it.reorderAt,
+          max: it.maxAt ?? null,
+          // A set lists its parts; a part names the set(s) it belongs to, so a single part can be asked for alone.
+          kit: isKit(it) ? (it.kitParts ?? []).map((p) => { const x = items.find((y) => y.id === p.stockItemId); return { name: x ? `${x.name}${x.size ? ` (${x.size})` : ''}` : '(missing)', qty: p.qty }; }) : null,
+          partOf: items.filter((k) => k.kitParts?.some((p) => p.stockItemId === it.id)).map((k) => k.name),
+        }))
         .sort((a, b) => a.name.localeCompare(b.name)),
       supplies: (st?.supplies ?? []).map((x) => ({ id: x.supply.id, name: x.supply.name, unit: x.supply.unit, onHand: x.onHand, daysLeft: x.daysLeft, min: x.supply.minOnHand ?? null, max: x.supply.maxOnHand ?? null, flags: x.flags })),
       equipment: (st?.equipment ?? []).map((x) => ({ id: x.equipment.id, name: x.equipment.name, required: x.equipment.required, working: x.working })),
@@ -349,25 +424,50 @@ export class SiteSuppliesService {
   private async request(user: User, i: Record<string, unknown>) {
     await this.need();
     const site = await this.site(i.siteId);
-    if (!(await this.isRequester(user, site))) throw new AccessDenied('view', '(the OM or Regional OM covering the site asks for supplies)');
+    const asOm = await this.isRequester(user, site);
+    const asOffice = !asOm && (await this.isOfficeRequester(user, site));
+    if (!asOm && !asOffice) throw new AccessDenied('view', '(the OM or Regional OM covering the site, the Inventory Manager, the OGM or the Operations Director asks for supplies)');
     const storeId = this.storeOf(site);
     const R = RULES.siteSupplies.value;
     const settings = await this.settings(storeId);
     const { contract } = await this.contractOf(site);
     const cs = settings.contracts[contract];
-    const startedRole = (['supervisor', 'patrol_officer', 'om'] as const).find((x) => x === i.startedByRole) ?? (cs.startedBy as 'supervisor' | 'patrol_officer' | 'om');
-    const startedName = startedRole === 'om' ? user.name : s(i.startedByName, 120);
+    // The office side asks in its own name; the goods go to the OM covering the site, who counts them there.
+    let receiver: User = user;
+    if (asOffice) {
+      const rid = s(i.receiverUserId, 160);
+      const found = rid ? (await this.receiversOf(site)).find((u) => u.id === rid) : undefined;
+      if (!found) throw new BadRequest('Choose the OM or Regional OM covering the site, who receives and counts the goods there. A new site needs its OM set first.');
+      receiver = found;
+    }
+    const startedRole = asOffice ? ('office' as const) : ((['supervisor', 'patrol_officer', 'om'] as const).find((x) => x === i.startedByRole) ?? (cs.startedBy as 'supervisor' | 'patrol_officer' | 'om'));
+    const startedName = startedRole === 'om' || startedRole === 'office' ? user.name : s(i.startedByName, 120);
     if (!startedName) throw new BadRequest(startedRole === 'supervisor' ? 'Name the cleaning supervisor who asked.' : 'Name the patrolling officer who asked.');
-    const raw = Array.isArray(i.lines) ? (i.lines as Record<string, unknown>[]) : [];
-    if (!raw.length) throw new BadRequest('Add at least one line (item and quantity).');
-    if (raw.length > R.maxLines) throw new BadRequest(`At most ${R.maxLines} lines in one request.`);
+    const forNewSite = i.forNewSite === true;
+    const given = Array.isArray(i.lines) ? (i.lines as Record<string, unknown>[]) : [];
+    if (!given.length) throw new BadRequest('Add at least one line (item and quantity).');
     const [items, setup, entries, all] = await Promise.all([
       this.store.list('stockItems', { companyId: [storeId] }),
       this.store.get('cleaningSites', `clean-${site.id}`).catch(() => undefined),
       this.store.list('cleaningStock', { companyId: site.companyId, siteId: site.id }).catch(() => [] as CleaningStockEntry[]),
       this.rows([storeId]),
     ]);
+    // A whole set becomes one line per part (23 Nov 2026); a single part is asked for on its own line.
+    const raw: Record<string, unknown>[] = [];
+    for (const [k, l] of given.entries()) {
+      const kit = items.find((x) => x.id === l.stockItemId);
+      if (!kit || !isKit(kit)) {
+        raw.push(l);
+        continue;
+      }
+      const sets = int(l.qty, `Line ${k + 1} sets`, 1, 1_000);
+      for (const p of expandKit(kit, sets, items)) raw.push({ ...l, stockItemId: p.item.id, qty: p.qty, size: '', kitOf: { id: kit.id, name: kit.name, sets } });
+    }
+    if (raw.length > R.maxLines) throw new BadRequest(`At most ${R.maxLines} lines in one request (a set counts one line per part).`);
     const st = setup ? stockStatus(setup, entries) : null;
+    // Everything a guard wears counts toward the allowance, item by item (Fauzan, 23 Nov 2026).
+    const worn = wornItemIds(items);
+    const keyOf = new Map(items.map((x) => [x.id, wearKey(x)]));
     const open = all.filter((r) => r.kind === 'site_supplies' && REQUEST_STEPS.includes(this.dataOf(r).status) && this.dataOf(r).siteId === site.id);
     const today = this.today();
     const lines: SupplyLine[] = [];
@@ -385,13 +485,14 @@ export class SiteSuppliesService {
       if (contract === 'KBK' && !p) {
         supplyId = setup?.supplies.find((x) => x.id === l.supplyId)?.id ?? null;
         equipmentId = setup?.equipment.find((x) => x.id === l.equipmentId)?.id ?? null;
-        if (!supplyId && !equipmentId) throw new BadRequest(`${at}: pick the site supply or equipment it refills, or give a staff number for a personal item.`);
+        // A new site has nothing to refill yet: its first supplies go as a bulk delivery, counted at the site.
+        if (!supplyId && !equipmentId && !forNewSite) throw new BadRequest(`${at}: pick the site supply or equipment it refills, give a staff number for a personal item, or mark the request as items for a new site.`);
       }
-      if (contract === 'PKK_NEPAL' && item.kind === 'UNIFORM' && !p) throw new BadRequest(`${at}: a uniform for a Nepal site is asked one line per guard (give the staff number).`);
+      if (contract === 'PKK_NEPAL' && worn.has(item.id) && !p) throw new BadRequest(`${at}: a uniform for a Nepal site is asked one line per guard (give the staff number).`);
       // Only one open request per site per item (and per guard for a personal piece): the duplicate is shown, not added.
       const dup = open.find((r) => this.dataOf(r).lines.some((x) => x.stockItemId === item.id && (x.personId ?? '') === (p?.id ?? '') && !x.issued));
       if (dup) throw new BadRequest(`${at}: ${item.name}${p ? ` for ${p.name}` : ''} is already on open request ${this.dataOf(dup).ref}.`);
-      if (lines.some((x) => x.stockItemId === item.id && (x.personId ?? '') === (p?.id ?? ''))) throw new BadRequest(`${at}: the same item is already on this request.`);
+      if (lines.some((x) => x.stockItemId === item.id && (x.personId ?? '') === (p?.id ?? ''))) throw new BadRequest(`${at}: ${item.name} is already on this request${l.kitOf ? ' (asked separately and inside a set)' : ''}.`);
       let maxReason: string | null = null;
       const sup = supplyId ? st?.supplies.find((x) => x.supply.id === supplyId) : undefined;
       if (sup && sup.supply.maxOnHand != null && (sup.onHand ?? 0) + qty > sup.supply.maxOnHand) {
@@ -401,30 +502,32 @@ export class SiteSuppliesService {
       // The uniform allowance (Part I, Fauzan 6 Nov 2026; round 2 13 Nov 2026) on every guard line: 3 free in 12
       // months, every piece after the 3rd paid by the person with a receipt, no upper limit while the setting is empty.
       let allowance: SupplyLine['allowance'] = null;
-      if (p && item.kind === 'UNIFORM') {
-        const U = UNIFORM_REQUEST_RULE;
-        const h = await this.svc.ssUniformHistory(p.id, storeId);
+      if (p && worn.has(item.id)) {
+        const key = keyOf.get(item.id)!;
+        const h = await this.svc.ssUniformHistory(p.id, storeId, key);
+        const U = { ...UNIFORM_REQUEST_RULE, freePerYear: h.free, paidMaxPerYear: UNIFORM_REQUEST_RULE.paidMaxPerYear === null ? null : UNIFORM_REQUEST_RULE.paidMaxPerYear * h.perSuit };
+        const wk = `${p.id}|${key}`;
         const waiting =
-          (waitingPieces.get(p.id) ?? 0) +
+          (waitingPieces.get(wk) ?? 0) +
           all
-            .filter((r) => r.status === 'open' && ((r.kind ?? 'uniform') === 'uniform' ? r.personId === p.id : false))
+            .filter((r) => r.status === 'open' && ((r.kind ?? 'uniform') === 'uniform' ? r.personId === p.id && keyOf.get(r.stockItemId ?? '') === key : false))
             .reduce((n, r) => n + r.qty, 0) +
-          open.reduce((n, r) => n + this.dataOf(r).lines.filter((x) => x.personId === p.id && x.itemKind === 'UNIFORM' && !x.issued).reduce((m, x) => m + (x.confirmedQty ?? x.qty), 0), 0);
+          open.reduce((n, r) => n + this.dataOf(r).lines.filter((x) => x.personId === p.id && !x.issued && keyOf.get(x.stockItemId) === key).reduce((m, x) => m + (x.confirmedQty ?? x.qty), 0), 0);
         const after = h.pieces + waiting + qty;
-        if (U.paidMaxPerYear !== null && after > U.paidMaxPerYear) throw new BadRequest(`${at}: ${p.name} would have ${after} pieces in 12 months. No more than ${U.paidMaxPerYear}.`);
+        if (U.paidMaxPerYear !== null && after > U.paidMaxPerYear) throw new BadRequest(`${at}: ${p.name} would have ${after} x ${item.name} in 12 months. No more than ${U.paidMaxPerYear}.`);
         let paid: { receiptNo: string; amount: number } | null = null;
         if (after > U.freePerYear) {
           const g = (l.paid ?? {}) as Record<string, unknown>;
           const receiptNo = s(g.receiptNo, 60);
           const amount = Math.round(Number(g.amount) * 100) / 100;
           if (!receiptNo || !(amount > 0))
-            throw new BadRequest(`${at}: ${p.name} would have ${after} pieces in 12 months; ${U.freePerYear} are free. Every piece after the ${U.freePerYear}rd is paid by the person: give the receipt number and amount. It is never taken from pay.`);
+            throw new BadRequest(`${at}: ${p.name} would have ${after} x ${item.name} in 12 months; ${U.freePerYear} are free. Every piece after that is paid by the person: give the receipt number and amount. It is never taken from pay.`);
           paid = { receiptNo, amount };
         }
         const early = !!h.last && addMonthsIso(h.last, U.everyMonths) > today;
-        if (early && !purpose) throw new BadRequest(`${at}: ${p.name} had a piece within 6 months. Say why in the purpose.`);
+        if (early && !purpose) throw new BadRequest(`${at}: ${p.name} had ${item.name} within 6 months. Say why in the purpose.`);
         allowance = { pieces: h.pieces, early, paid };
-        waitingPieces.set(p.id, (waitingPieces.get(p.id) ?? 0) + qty);
+        waitingPieces.set(wk, (waitingPieces.get(wk) ?? 0) + qty);
       }
       lines.push({
         n: k + 1,
@@ -448,6 +551,7 @@ export class SiteSuppliesService {
         decision: null,
         purRequestId: null,
         issued: null,
+        kitOf: (l.kitOf as SupplyLine['kitOf']) ?? null,
       });
     }
     // "Also sent by" (T-X2): during the changeover the paper form, email or SharePoint upload runs as well.
@@ -470,6 +574,9 @@ export class SiteSuppliesService {
       siteCompanyId: site.companyId,
       zone: s(i.zone, 60) || site.state || '',
       startedBy: { role: startedRole, name: startedName },
+      receiverId: receiver.id,
+      receiverName: receiver.name,
+      ...(forNewSite ? { forNewSite: true } : {}),
       omPhone: s(i.omPhone, 30),
       notes: s(i.notes, 500),
       alsoSentBy: { channel: ch, ref: chRef, docIds: rec.docs.map((x) => x.id) },
@@ -478,6 +585,7 @@ export class SiteSuppliesService {
       steps: [{ step: status === 'baharu' ? 'draft' : 'submit', by: user.name, byId: user.id, at, note: '' }],
       doneOn: null,
     };
+    d.steps.push(...this.selfConfirm(d, user, storeId, settings, at));
     const id = `ss-${storeId}-${ref}`.toLowerCase();
     const total = lines.reduce((n, l) => n + l.qty, 0);
     const row = this.shell(id, storeId, 'site_supplies', d as unknown as Record<string, unknown>, user, at, `${ref} ${site.name}`, {
@@ -488,7 +596,7 @@ export class SiteSuppliesService {
     return this.store.transaction(async (tx) => {
       if (rec.docs.length) await this.svc.ssSaveProof(tx, rec);
       await tx.insert('stockRequests', row);
-      await tx.audit({ at, actor: user.name, companyId: storeId, action: 'supplies.request', entity: 'stock_request', entityId: id, summary: `${ref} for ${site.name} (${contract}): ${lines.length} lines, ${total} pieces, started by ${startedName}${ch ? `; also sent by ${ch}${chRef ? ` ${chRef}` : ''}` : ''}` });
+      await tx.audit({ at, actor: user.name, companyId: storeId, action: 'supplies.request', entity: 'stock_request', entityId: id, summary: `${ref} for ${site.name} (${contract}): ${lines.length} lines, ${total} pieces, started by ${startedName}${asOffice ? `, to ${receiver.name}` : ''}${forNewSite ? ', new site' : ''}${ch ? `; also sent by ${ch}${chRef ? ` ${chRef}` : ''}` : ''}` });
       return this.view0(row);
     });
   }
@@ -560,9 +668,9 @@ export class SiteSuppliesService {
     if (!r || r.kind !== 'site_supplies') throw new NotFound('Supplies request');
     return { r, d: structuredClone(this.dataOf(r)) };
   }
-  private async save(user: User, r: StockRequest, d: SupplyRequestData, step: string, note: string, extra: (tx: Store) => Promise<void> = async () => {}) {
+  private async save(user: User, r: StockRequest, d: SupplyRequestData, step: string, note: string, extra: (tx: Store) => Promise<void> = async () => {}, after: Step[] = []) {
     const at = this.now();
-    d.steps = [...d.steps, { step, by: user.name, byId: user.id, at, note }];
+    d.steps = [...d.steps, { step, by: user.name, byId: user.id, at, note }, ...after];
     const closed = d.status === 'siap' || d.status === 'ditolak';
     const status: StockRequest['status'] = d.status === 'ditolak' ? 'refused' : d.status === 'siap' ? 'issued' : 'open';
     return this.store.transaction(async (tx) => {
@@ -580,7 +688,8 @@ export class SiteSuppliesService {
     if (d.status !== 'baharu') throw new BadRequest(`${d.ref} is ${SUPPLY_STATUS_LABEL[d.status]}.`);
     const set = await this.settings(r.companyId);
     d.status = set.contracts[d.contract].firstCheck ? 'semakan_awal' : 'kelulusan';
-    return this.save(user, r, d, 'submit', s(i.note));
+    const after = this.selfConfirm(d, user, r.companyId, set, this.now());
+    return this.save(user, r, d, 'submit', s(i.note), undefined, after);
   }
   private async cancel(user: User, i: Record<string, unknown>) {
     const { r, d } = await this.load(i.id);
@@ -612,7 +721,8 @@ export class SiteSuppliesService {
       const gaps = await this.rosterGaps(d, set.rosterDays);
       if (gaps.length && !note) throw new BadRequest(`${gaps.length} guard(s) on the lines were not on this site's roster in the last ${set.rosterDays} days. Say why it is still complete, or return it.`);
       d.status = 'kelulusan';
-      return this.save(user, r, d, 'first_check', note || 'complete and matches the site roster');
+      const after = this.selfConfirm(d, await this.store.get('users', r.requestedById), r.companyId, set, this.now());
+      return this.save(user, r, d, 'first_check', note || 'complete and matches the site roster', undefined, after);
     }
     if (!note) throw new BadRequest('Say why it is returned.');
     d.status = 'baharu';
@@ -623,8 +733,8 @@ export class SiteSuppliesService {
   private async confirm(user: User, i: Record<string, unknown>) {
     const { r, d } = await this.load(i.id);
     const set = await this.settings(r.companyId);
-    if (!this.isConfirmer(user, r.companyId, set)) throw new AccessDenied('view', '(the OGM or the deputy the OGM names confirms orders)');
     if (r.requestedById === user.id) throw new BadRequest('Nobody confirms their own request.');
+    if (!this.confirmsThis(user, r, set)) throw new AccessDenied('view', '(the OGM or the deputy the OGM names confirms orders)');
     if (d.status !== 'kelulusan') throw new BadRequest(`${d.ref} is ${SUPPLY_STATUS_LABEL[d.status]}, not waiting for confirmation.`);
     const note = s(i.note);
     if (i.approve === false) {
@@ -747,7 +857,8 @@ export class SiteSuppliesService {
     if (method) d.deliveryMethod = method;
     const site = await this.site(d.siteId);
     const at = this.now();
-    const om = await this.store.get('users', r.requestedById);
+    const omId = this.receiverOf(r);
+    const om = await this.store.get('users', omId);
     // Guard pieces with the bulk switch off: the existing Goodwill issue and handover per guard (store -> OM -> patrol -> guard).
     const direct = ready.filter((l) => l.personId && !bulkOn && d.contract !== 'KBK');
     for (const l of direct) {
@@ -756,7 +867,7 @@ export class SiteSuppliesService {
         personId: l.personId!,
         qty: l.confirmedQty ?? l.qty,
         forRequestId: r.id,
-        omUserId: r.requestedById,
+        omUserId: omId,
         ...(typeof i.patrolPersonId === 'string' ? { patrolPersonId: i.patrolPersonId } : {}),
         ...(Array.isArray(i.slip) ? { slip: i.slip as ProofInput[] } : {}),
       })) as StockIssue;
@@ -791,8 +902,8 @@ export class SiteSuppliesService {
           ref: d.ref,
           siteId: d.siteId,
           siteName: d.siteName,
-          omUserId: r.requestedById,
-          omName: om?.name ?? r.requestedBy,
+          omUserId: omId,
+          omName: om?.name ?? d.receiverName ?? r.requestedBy,
           lines: bulk.map((l) => ({ n: l.n, stockItemId: l.stockItemId, itemName: l.itemName, qty: l.confirmedQty ?? l.qty, personId: l.personId, personName: l.personName, arrived: null, damaged: null, handedOut: null })),
           sentAt: at,
           sentBy: user.name,
@@ -814,7 +925,7 @@ export class SiteSuppliesService {
         await tx.update('stockItems', it.id, { onHand: it.onHand - q });
       }
       if (delivery) await tx.insert('cleaningStock', delivery);
-      if (bulkRow && bulkId) await tx.insert('stockRequests', this.shell(bulkId, r.companyId, 'ss_bulk', bulkRow as unknown as Record<string, unknown>, user, at, `${d.ref} bulk to ${d.siteName}`, { requestedById: r.requestedById, requestedBy: r.requestedBy }));
+      if (bulkRow && bulkId) await tx.insert('stockRequests', this.shell(bulkId, r.companyId, 'ss_bulk', bulkRow as unknown as Record<string, unknown>, user, at, `${d.ref} bulk to ${d.siteName}`, { requestedById: omId, requestedBy: om?.name ?? r.requestedBy }));
     });
   }
 
@@ -954,7 +1065,7 @@ export class SiteSuppliesService {
     const r = (await this.store.get('stockRequests', s(i.id, 200))) as StockRequest | undefined;
     if (!r || r.kind !== 'site_supplies') throw new NotFound('Supplies request');
     const role = this.storeRole(user, r.companyId);
-    if (role !== 'store' && role !== 'proc' && r.requestedById !== user.id && !this.isWatcher(user)) throw new AccessDenied('view', '(the store and the OM who asked)');
+    if (role !== 'store' && role !== 'proc' && r.requestedById !== user.id && this.receiverOf(r) !== user.id && !this.isWatcher(user)) throw new AccessDenied('view', '(the store and the OM who asked)');
     const d = this.dataOf(r);
     const sent = d.lines.filter((l) => l.issued && l.issued.via !== 'issue');
     if (!sent.length) throw new BadRequest('Nothing has left the store for this request yet.');
@@ -976,7 +1087,7 @@ export class SiteSuppliesService {
   private async close(user: User, i: Record<string, unknown>) {
     const { r, d } = await this.load(i.id);
     const role = this.storeRole(user, r.companyId);
-    if (r.requestedById !== user.id && role !== 'store' && role !== 'proc') throw new AccessDenied('view', '(the OM who asked or the store closes a request)');
+    if (r.requestedById !== user.id && this.receiverOf(r) !== user.id && role !== 'store' && role !== 'proc') throw new AccessDenied('view', '(the OM who asked or the store closes a request)');
     if (d.status !== 'tindakan') throw new BadRequest(`${d.ref} is ${SUPPLY_STATUS_LABEL[d.status]}.`);
     const bulks = await this.bulksFor([r.companyId]);
     const done = (await Promise.all(d.lines.map((l) => this.lineDone(l, bulks)))).every(Boolean);
@@ -1171,12 +1282,12 @@ export class SiteSuppliesService {
     const reqs = all.filter((r) => r.kind === 'site_supplies');
     const mine = (r: StockRequest) => {
       const st = this.dataOf(r).status;
-      if (r.requestedById === user.id) return true;
+      if (r.requestedById === user.id || this.receiverOf(r) === user.id) return true;
       if (watcher) return true;
       const pr = role(r.companyId);
       if (pr === 'store' || pr === 'proc') return true;
       if (st === 'semakan_awal' && this.isFirstChecker(user, r.companyId)) return true;
-      if (st === 'kelulusan' && this.isConfirmer(user, r.companyId, set)) return true;
+      if (st === 'kelulusan' && this.confirmsThis(user, r, set)) return true;
       return false;
     };
     const hol = await this.holidays();
@@ -1190,7 +1301,7 @@ export class SiteSuppliesService {
     const waitDays = (r: (typeof rows)[number]) => daysBetween(dateOf(r.steps.at(-1)!.at), today);
     const myTurn = (r: (typeof rows)[number]) =>
       (r.status === 'semakan_awal' && this.isFirstChecker(user, r.storeId) && r.requestedById !== user.id) ||
-      (r.status === 'kelulusan' && this.isConfirmer(user, r.storeId, set) && r.requestedById !== user.id) ||
+      (r.status === 'kelulusan' && this.confirmsThis(user, r, set)) ||
       (r.status === 'diluluskan' && r.lines.some((l) => (l.confirmedQty ?? 0) > 0 && l.storeCan === null) && role(r.storeId) === 'store') ||
       (r.status === 'diluluskan' && !r.lines.some((l) => (l.confirmedQty ?? 0) > 0 && l.storeCan === null) && role(r.storeId) === 'proc') ||
       (r.status === 'tindakan' && (role(r.storeId) === 'store' || role(r.storeId) === 'proc') && r.lines.some((l) => !l.issued && (l.confirmedQty ?? 0) > 0)) ||
@@ -1210,6 +1321,8 @@ export class SiteSuppliesService {
       settings: set,
       labels: SUPPLY_STATUS_LABEL,
       canSet: isOgm(user),
+      // The office side may start a request too (23 Nov 2026); the site is checked when they choose it.
+      canStart: !user.integration && ((user.department === 'procurement' && (user.procRole === 'manager' || user.procRole === 'executive')) || isOgm(user) || isOpsDirector(user)),
       canConfirm: this.isConfirmer(user, GOV_OPS_COMPANY_ID, set),
       watcher,
       rows: rows
@@ -1265,6 +1378,8 @@ export class SiteSuppliesService {
         return this.view(user, i);
       case 'options':
         return this.options(user, i);
+      case 'sites':
+        return this.startSites(user);
       case 'uniformRecord':
         return this.uniformRecord(user, i);
       case 'returns':

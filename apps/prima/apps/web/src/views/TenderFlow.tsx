@@ -3,14 +3,19 @@ import { openProofItem } from '../save';
 import { useState } from 'react';
 import { TENDER_BID_PART_LABEL, TENDER_PAPER_LABEL, type ProofInput, type TenderBidPart, type TenderDecisionChoice, type TenderPaperKind, type TenderQuery, type TenderRecord } from '@prima/core';
 import { api, type Commercial } from '../api';
-import { Chip, notify, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../ui';
+import { Chip, notify, ErrorNotice, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { DocList, ProofPicker } from './Proof';
 import { StepRow } from './TenderProtocol';
 
 type Row = Commercial['tenders'][number];
 
 const KINDS = Object.keys(TENDER_PAPER_LABEL) as TenderPaperKind[];
-const CHECK_LABEL = { PREPARER: 'Signed by the person who prepared it', MANAGER: 'Signed by the company manager: all verified by the guidelines' } as const;
+const CHECK_LABEL = {
+  PREPARER: 'Signed by the person who prepared it',
+  CHECK: 'Checked by the Marketing Manager or Deputy',
+  MANAGER: 'Signed by the company manager: all verified by the guidelines',
+} as const;
+const SIGN_AS = { PREPARER: 'preparer', CHECK: 'Marketing check', MANAGER: 'company manager' } as const;
 
 /** Tender papers: the notice, the arahan petender, the specification and forms (Fauzan, 25 Oct 2026). */
 export function TenderPapers({ row, canUpload }: { row: Row; canUpload: boolean }) {
@@ -282,17 +287,21 @@ export function TenderChecklist({ row, canPrepare, doa, reader }: { row: Row; ca
   const working = (t.status === 'open' || t.status === 'preparing') && !(t.verifications ?? []).length;
   const hasArahan = row.papers.some((p) => p.kind === 'ARAHAN');
   const done = row.checklist.filter((c) => c.done).length;
-  const reviewing = doa && working && row.checklist.length > 0 && !t.checklistReview;
+  // Marketing desk bids need no separate checklist review (Fauzan, 22 Nov 2026): the executive confirms by working it.
+  const desk = t.desk === 'MARKETING';
+  const ready = desk || !!t.checklistReview;
+  const reviewing = doa && working && row.checklist.length > 0 && !t.checklistReview && !desk;
   return (
     <section>
       <h3>
-        Tender checklist{' '}
+        {t.proposal ? 'Proposal checklist' : 'Tender checklist'}{' '}
         {row.checklist.length > 0 && (
           <Chip tone={done === row.checklist.length ? 'ok' : 'warn'}>
             {done} of {row.checklist.length} done
           </Chip>
         )}{' '}
         {row.checklist.length > 0 &&
+          !desk &&
           (t.checklistReview ? <Chip tone="ok">Checked by Director Office</Chip> : <Chip tone="warn">Director Office to check</Chip>)}
       </h3>
       {row.checklist.length === 0 && (
@@ -303,7 +312,7 @@ export function TenderChecklist({ row, canPrepare, doa, reader }: { row: Row; ca
           <button
             className="btn btn-sm"
             disabled={act.busy}
-            onClick={() => act.run(() => api.draftTenderChecklist(t.id), 'Checklist drafted. The Director Office checks it next.')}
+            onClick={() => act.run(() => api.draftTenderChecklist(t.id), desk ? 'Checklist drafted. Read it, then work through it.' : 'Checklist drafted. The Director Office checks it next.')}
           >
             {row.checklist.length ? 'Draft again from the papers' : 'Draft checklist from the papers'}
           </button>
@@ -311,6 +320,13 @@ export function TenderChecklist({ row, canPrepare, doa, reader }: { row: Row; ca
             {reader.readsFiles ? `By ${reader.name}` : 'Test version: a sample draft; the files are not read yet.'}
           </span>
         </div>
+      )}
+      {t.checklistRead && row.checklist.length > 0 && (
+        <p className="muted small">
+          Drafted {dateTimeLabel(t.checklistRead.at)} from the text of {t.checklistRead.read.length} paper{t.checklistRead.read.length === 1 ? '' : 's'}.
+          {t.checklistRead.unread.length > 0 && <strong> Not readable by the app, read by hand: {t.checklistRead.unread.join(', ')}.</strong>} Items marked
+          "Not found in the papers" are usual for this kind of tender: check whether they are asked.
+        </p>
       )}
       <ErrorNotice error={act.error} />
       {row.checklist.length > 0 && (
@@ -329,8 +345,8 @@ export function TenderChecklist({ row, canPrepare, doa, reader }: { row: Row; ca
               done={c.done}
               plan={c.plan}
               docs={c.docs}
-              canDo={canPrepare && working && !!t.checklistReview}
-              canPlan={canPrepare && working && !!t.checklistReview}
+              canDo={canPrepare && working && ready}
+              canPlan={canPrepare && working && ready}
               canConfirm={row.canConfirmNa && working}
               extra={
                 reviewing && !c.done ? (
@@ -391,6 +407,86 @@ export function TenderChecklist({ row, canPrepare, doa, reader }: { row: Row; ca
 }
 
 /** Fauzan, 26 Oct 2026: the preparer signs, the company manager signs that all is verified, then the submission slip. */
+/** Working hours Marketing staff spent on a desk bid (Fauzan, 22 Nov 2026); needed before the bid is lodged. */
+/**
+ * The company's tender portal logins from the shared login list (Marketing item AH10, Fauzan 23 Nov 2026): who holds
+ * each, the backup and where the password is kept. Prima never shows or keeps a password.
+ */
+function TenderPortalLogins({ tenderId }: { tenderId: string }) {
+  const { data, error } = useLoad(() => api.tenderPortalLogins(tenderId), [tenderId]);
+  if (error || !data) return null;
+  return (
+    <div className="small" style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+      <strong>Portal login for lodging</strong>
+      {!data.installed && <span className="muted">The shared login list is not installed yet.</span>}
+      {data.installed && data.logins.length === 0 && (
+        <span className="muted">
+          No ePerolehan or tender portal login for this company names you on the shared login list. Ask IT to add you to the company's login there.
+        </span>
+      )}
+      {data.logins.map((l) => (
+        <div key={l.id} className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ overflowWrap: 'anywhere' }}>
+            {l.url ? (
+              <a href={l.url} target="_blank" rel="noopener noreferrer">
+                {l.system}
+              </a>
+            ) : (
+              l.system
+            )}{' '}
+            · {l.placeLabel} · owner {l.owner}, backup {l.backup}
+            {l.twoFa ? ` · code phone: ${l.twoFa}` : ''}
+          </span>
+          {!l.named && <Chip tone="warn">You are not named on it: ask IT</Chip>}
+          {(l.state === 'overdue' || l.state === 'leaver' || l.state === 'leaver_late') && <Chip tone="warn">Password change due</Chip>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TenderHours({ row, canPrepare }: { row: Row; canPrepare: boolean }) {
+  const t = row.tender;
+  const act = useAction();
+  const [hours, setHours] = useState('');
+  const log = t.workLog ?? [];
+  const total = log.reduce((n, w) => n + w.hours, 0);
+  const h = Number(hours);
+  const working = t.status === 'open' || t.status === 'preparing';
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className="small">
+        <strong>Working hours on this bid:</strong> {log.length ? `${total} hours (${log.map((w) => `${w.by} ${w.hours}`).join(', ')})` : 'none recorded yet'}
+      </div>
+      {canPrepare && working && (
+        <div className="row" style={{ gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+          <input
+            className="input"
+            type="number"
+            min={0.25}
+            max={100}
+            step={0.25}
+            aria-label="Hours worked"
+            placeholder="Hours you worked, e.g. 1.5"
+            value={hours}
+            onChange={(e) => setHours(e.target.value)}
+            style={{ maxWidth: 220 }}
+          />
+          <button
+            className="btn btn-sm"
+            disabled={act.busy || !(h >= 0.25)}
+            onClick={() => act.run(() => api.recordTenderHours(t.id, h, ''), 'Hours recorded.').then(() => setHours(''))}
+          >
+            Add hours
+          </button>
+          {!log.length && <span className="muted small">Needed before the bid is lodged.</span>}
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
 export function TenderChecks({ row, canPrepare, missing }: { row: Row; canPrepare: boolean; missing: string[] }) {
   const t = row.tender;
   const act = useAction();
@@ -402,7 +498,7 @@ export function TenderChecks({ row, canPrepare, missing }: { row: Row; canPrepar
     <section>
       <h3>Signatures and submission</h3>
       <div className="list">
-        {(['PREPARER', 'MANAGER'] as const).map((l) => {
+        {(t.desk === 'MARKETING' ? (['PREPARER', 'CHECK', 'MANAGER'] as const) : (['PREPARER', 'MANAGER'] as const)).map((l) => {
           const v = given.find((x) => x.level === l);
           return (
             <div key={l} className="list-item">
@@ -420,33 +516,58 @@ export function TenderChecks({ row, canPrepare, missing }: { row: Row; canPrepar
           );
         })}
       </div>
+      {(t.checkCaught ?? []).length > 0 && (
+        <div className="muted small" style={{ marginTop: 8 }}>
+          <div style={{ fontWeight: 600 }}>Found by the Marketing check</div>
+          {(t.checkCaught ?? []).map((c, i) => (
+            <div key={i}>
+              {c.by}, {dateTimeLabel(c.at)}: {c.items.join('; ')}
+            </div>
+          ))}
+        </div>
+      )}
       {row.myCheck && t.status === 'preparing' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
           {missing.length > 0 && <p className="muted small">Finish these before signing: {missing.join(', ')}.</p>}
           <p className="small">
-            {row.myCheck === 'PREPARER' ? 'I prepared this bid and every item is done by the guide.' : 'I have verified that all is done by the guidelines.'}
+            {row.myCheck === 'PREPARER'
+              ? 'I prepared this bid and every item is done by the guide.'
+              : row.myCheck === 'CHECK'
+                ? 'I checked this bid against the tender papers: nothing compulsory is missing.'
+                : 'I have verified that all is done by the guidelines.'}
           </p>
-          <input
-            className="input"
-            aria-label="Check note"
-            placeholder={row.myCheck === 'MANAGER' ? 'Comment (needed to sign or send back; a short one is fine to sign)' : 'Note (optional)'}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
+          {row.myCheck === 'CHECK' && t.desk === 'MARKETING' ? (
+            <textarea
+              className="input"
+              aria-label="Check note"
+              rows={3}
+              placeholder="Comment to sign. To send back, write what the check found, one item per line."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          ) : (
+            <input
+              className="input"
+              aria-label="Check note"
+              placeholder={row.myCheck !== 'PREPARER' ? 'Comment (needed to sign or send back; a short one is fine to sign)' : 'Note (optional)'}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          )}
           <ErrorNotice error={act.error} />
           <div className="row">
             <button
               className="btn btn-primary btn-sm"
-              disabled={act.busy || missing.length > 0 || (row.myCheck === 'MANAGER' && !note.trim())}
+              disabled={act.busy || missing.length > 0 || (row.myCheck !== 'PREPARER' && !note.trim())}
               onClick={() => act.run(() => api.verifyTender(t.id, true, note), 'Signed.')}
             >
-              Sign as {row.myCheck === 'PREPARER' ? 'preparer' : 'company manager'}
+              Sign as {SIGN_AS[row.myCheck]}
             </button>
-            {row.myCheck === 'MANAGER' && (
+            {row.myCheck !== 'PREPARER' && (
               <button
                 className="btn btn-sm"
                 disabled={act.busy || note.trim().length < 3}
-                onClick={() => act.run(() => api.verifyTender(t.id, false, note), 'Sent back to the admin team.')}
+                onClick={() => act.run(() => api.verifyTender(t.id, false, note), t.desk === 'MARKETING' ? 'Sent back to Marketing.' : 'Sent back to the admin team.')}
               >
                 Send back
               </button>
@@ -454,14 +575,19 @@ export function TenderChecks({ row, canPrepare, missing }: { row: Row; canPrepar
           </div>
         </div>
       )}
+      <TenderAiCheckPanel row={row} />
+      {t.desk === 'MARKETING' && <TenderHours row={row} canPrepare={canPrepare} />}
+      {t.desk === 'MARKETING' && !t.proposal && t.status === 'preparing' && <TenderPortalLogins tenderId={t.id} />}
       {t.status === 'preparing' && !row.nextCheck && canPrepare && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-          <p className="small">The bid is signed. Lodge it, then upload the tender submission slip here.</p>
+          <p className="small">
+            {t.proposal ? 'The proposal is signed. Send it to the client, then upload a copy of what was sent.' : 'The bid is signed. Lodge it, then upload the tender submission slip here.'}
+          </p>
           <ProofPicker site={null} refText="Slip" items={slip} onChange={setSlip} documentsOnly required />
           <input
             className="input"
             aria-label="Submission note"
-            placeholder="Where and how it was lodged"
+            placeholder={t.proposal ? 'How and to whom it was sent' : 'Where and how it was lodged'}
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
@@ -469,10 +595,10 @@ export function TenderChecks({ row, canPrepare, missing }: { row: Row; canPrepar
           <div>
             <button
               className="btn btn-primary btn-sm"
-              disabled={act.busy || !slip.length}
-              onClick={() => act.run(() => api.submitTender(t.id, note, slip), `${t.ref} submitted. Slip kept as proof.`)}
+              disabled={act.busy || !slip.length || (t.desk === 'MARKETING' && !(t.workLog ?? []).length)}
+              onClick={() => act.run(() => api.submitTender(t.id, note, slip), t.proposal ? `${t.ref} sent. Copy kept.` : `${t.ref} submitted. Slip kept as proof.`)}
             >
-              Record submission
+              {t.proposal ? 'Record that it was sent' : 'Record submission'}
             </button>
           </div>
         </div>
@@ -480,7 +606,7 @@ export function TenderChecks({ row, canPrepare, missing }: { row: Row; canPrepar
       {t.status === 'submitted' && (
         <>
           <p className="small">
-            Submitted{t.submission ? ` by ${t.submission.by}, ${dateTimeLabel(t.submission.at)}` : ''}.{t.submission?.note ? ` ${t.submission.note}` : ''}
+            {t.proposal ? 'Sent to the client' : 'Submitted'}{t.submission ? ` by ${t.submission.by}, ${dateTimeLabel(t.submission.at)}` : ''}.{t.submission?.note ? ` ${t.submission.note}` : ''}
           </p>
           {row.slip.length ? <DocList docs={row.slip} /> : <p className="muted small">No submission slip on file (submitted before the app).</p>}
         </>
@@ -523,14 +649,20 @@ export function TenderRecordPanel({ row, canEdit }: { row: Row; canEdit: boolean
       <div className="grid-2">
         <Field label="Advertised" value={r.adOn ? dateLabel(r.adOn) : 'Not recorded'} />
         <Field label="Closes (MYT)" value={`${dateLabel(t.closesOn)}${r.closesAt ? `, ${r.closesAt}` : ''}`} />
-        <Field
-          label="Briefing / site visit"
-          value={
-            r.briefing
-              ? `${r.briefing.mandatory ? 'Mandatory' : 'Not mandatory'}${r.briefing.on ? `, ${dateLabel(r.briefing.on)}` : ''}${r.briefing.outcome ? `. ${r.briefing.outcome}` : ''}`
-              : 'Not recorded'
-          }
-        />
+        {(['briefing', 'siteVisit'] as const).map((k) => {
+          const ev = r[k];
+          return (
+            <Field
+              key={k}
+              label={k === 'briefing' ? 'Briefing' : 'Site visit'}
+              value={
+                ev
+                  ? `${ev.mandatory ? 'Mandatory' : 'Not mandatory'}${ev.on ? `, ${dateLabel(ev.on)}` : ''}${ev.mofNamedOnly ? ', MOF-named person only' : ''}${ev.outcome ? `. ${ev.outcome}` : ''}`
+                  : 'Not recorded'
+              }
+            />
+          );
+        })}
         <Field label="Questions to the buyer by" value={r.queriesBy ? dateLabel(r.queriesBy) : 'Not recorded'} />
         <Field label="Submission" value={r.submissionMethod || 'Not recorded'} />
         <Field label="Offer valid" value={r.validityDays ? `${r.validityDays} days` : 'Not recorded'} />
@@ -593,6 +725,217 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * The IT part of a desk bid (Marketing item AH12): Marketing sends it to IT, IT drafts, checks and prices it and hands
+ * it back; Marketing lodges the bid. Marketing sees where IT stands, not the IT files or the IT price.
+ */
+export function TenderItPart({ row }: { row: Row }) {
+  const t = row.tender;
+  const act = useAction();
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<'tender' | 'quotation'>('tender');
+  const [codes, setCodes] = useState('');
+  const it = row.itPart;
+  const working = t.status === 'open' || t.status === 'preparing';
+  if (t.desk !== 'MARKETING' || (!it && !(row.canWork && working))) return null;
+  const STAGE = { preparing: 'IT is preparing', handed_over: 'Handed to Marketing', submitted: 'Lodged', won: 'Won', lost: 'Lost', dropped: 'Dropped by IT' } as const;
+  return (
+    <section>
+      <h3>IT part</h3>
+      {it ? (
+        <div className="list-item">
+          <div className="small">
+            {it.partsDone} of {it.partsTotal} IT parts done · {it.stepsDone} of {it.stepsTotal} steps
+            {it.handedOver ? ` · handed over by ${it.handedOver.by} on ${dateTimeLabel(it.handedOver.at)}` : ' · the bid cannot be lodged before IT hands it over'}
+          </div>
+          <Chip tone={it.handedOver ? 'ok' : 'warn'}>{STAGE[it.stage as keyof typeof STAGE] ?? it.stage}</Chip>
+        </div>
+      ) : !open ? (
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="muted small">An IT tender? IT writes the technical part and the IT price; Marketing lodges.</span>
+          <button className="btn btn-sm" onClick={() => setOpen(true)}>
+            Send the IT part to IT
+          </button>
+        </div>
+      ) : (
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label className="field">
+            <span className="label">Kind</span>
+            <select className="select" value={kind} onChange={(e) => setKind(e.target.value as 'tender' | 'quotation')}>
+              <option value="tender">Open tender</option>
+              <option value="quotation">Quotation (sebut harga)</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="label">IT codes asked (comma between)</span>
+            <input className="input" value={codes} onChange={(e) => setCodes(e.target.value)} placeholder="e.g. 210101" />
+          </label>
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={act.busy}
+            onClick={() =>
+              act.run(
+                () => api.sendTenderToIt(t.id, kind, codes.split(',').map((c) => c.trim()).filter(Boolean), []),
+                'Sent to IT.',
+              )
+            }
+          >
+            Send
+          </button>
+          <button className="btn btn-sm" onClick={() => setOpen(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+    </section>
+  );
+}
+
+type TenderEvent = NonNullable<TenderRecord['briefing']>;
+
+/** A briefing or a site visit in the tender record: mandatory or not, date, place, and whether only the MOF-named person may go. */
+function EventEditor({ label, value, onChange }: { label: string; value: TenderEvent | null; onChange: (v: TenderEvent | null) => void }) {
+  return (
+    <div>
+      <label className="field">
+        <span className="label">{label}</span>
+        <select
+          className="select"
+          value={value ? (value.mandatory ? 'yes' : 'no') : ''}
+          onChange={(e) =>
+            onChange(e.target.value ? { on: value?.on ?? null, mandatory: e.target.value === 'yes', place: value?.place ?? '', outcome: value?.outcome ?? '', mofNamedOnly: value?.mofNamedOnly ?? false } : null)
+          }
+        >
+          <option value="">Not recorded</option>
+          <option value="yes">Mandatory</option>
+          <option value="no">Not mandatory or none</option>
+        </select>
+      </label>
+      {value && (
+        <div className="grid-2">
+          <label className="field">
+            <span className="label">{label} date</span>
+            <input className="input" type="date" value={value.on ?? ''} onChange={(e) => onChange({ ...value, on: e.target.value || null })} />
+          </label>
+          <label className="field">
+            <span className="label">Place</span>
+            <input className="input" value={value.place} onChange={(e) => onChange({ ...value, place: e.target.value })} />
+          </label>
+          <label className="field">
+            <span className="label">Outcome</span>
+            <input className="input" value={value.outcome} onChange={(e) => onChange({ ...value, outcome: e.target.value })} />
+          </label>
+          <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="checkbox" checked={!!value.mofNamedOnly} onChange={(e) => onChange({ ...value, mofNamedOnly: e.target.checked })} />
+            Only the person named on the company's MOF certificate may attend
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ATT_STATE = {
+  NAME: { label: 'Nobody named', tone: 'warn' },
+  NAMED: { label: 'Named', tone: 'info' },
+  RECORD: { label: 'Record attendance', tone: 'warn' },
+  DONE: { label: 'Attended', tone: 'ok' },
+  MISSED: { label: 'Missed', tone: 'crit' },
+} as const;
+
+/**
+ * Who goes to the buyer's briefing and site visit, and the attendance slip (Marketing item AH13, 23 Nov 2026). The
+ * company names its person from day 1; Marketing cannot go in the company's place where only the MOF-named person may.
+ */
+export function TenderAttendancePanel({ row, canEdit }: { row: Row; canEdit: boolean }) {
+  const items = row.attendance ?? [];
+  if (!items.length) return null;
+  const working = row.tender.status === 'open' || row.tender.status === 'preparing';
+  return (
+    <section>
+      <h3>Briefing and site visit</h3>
+      <div className="list">
+        {items.map((a) => (
+          <AttendanceRow key={a.kind} tenderId={row.tender.id} a={a} canEdit={canEdit && working} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AttendanceRow({ tenderId, a, canEdit }: { tenderId: string; a: NonNullable<Row['attendance']>[number]; canEdit: boolean }) {
+  const act = useAction();
+  const [name, setName] = useState('');
+  const [mof, setMof] = useState(false);
+  const [missed, setMissed] = useState(false);
+  const [note, setNote] = useState('');
+  const [proof, setProof] = useState<ProofInput[]>([]);
+  const st = ATT_STATE[a.state];
+  const when = a.on ? `${dateLabel(a.on)}${a.days != null && a.days > 0 ? ` (in ${a.days} day${a.days === 1 ? '' : 's'})` : ''}` : 'date not recorded';
+  return (
+    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+      <div className="row" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 600 }}>
+            {a.label}
+            {a.mandatory ? ' · mandatory' : ''}
+          </div>
+          <div className="muted small">
+            {when}
+            {a.place ? ` · ${a.place}` : ''}
+            {a.mofNamedOnly ? ' · only the person named on the MOF certificate may attend' : ''}
+          </div>
+          {a.entry && (
+            <div className="small">
+              {a.entry.attendee ? `${a.entry.attendee}${a.entry.mofNamed ? ' (on the MOF certificate)' : ''}, named by ${a.entry.namedBy}` : ''}
+              {a.entry.result ? ` · ${a.entry.result.attended ? 'attended, slip kept' : `missed: ${a.entry.result.note}`} (${a.entry.result.by})` : ''}
+            </div>
+          )}
+        </div>
+        <Chip tone={st.tone}>{st.label}</Chip>
+      </div>
+      {canEdit && (a.state === 'NAME' || a.state === 'NAMED') && (
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input className="input" aria-label={`Who attends the ${a.label.toLowerCase()}`} placeholder={a.entry ? 'Change the person' : 'Who will attend'} value={name} onChange={(e) => setName(e.target.value)} style={{ maxWidth: 240 }} />
+          <label className="small" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input type="checkbox" checked={mof} onChange={(e) => setMof(e.target.checked)} /> Named on our MOF certificate
+          </label>
+          <button
+            className="btn btn-sm"
+            disabled={act.busy || name.trim().length < 3 || (a.mofNamedOnly && !mof)}
+            onClick={() => act.run(() => api.nameTenderAttendee(tenderId, a.kind, name.trim(), mof), 'Person named.').then((r) => r !== undefined && setName(''))}
+          >
+            {a.entry ? 'Change' : 'Name'}
+          </button>
+        </div>
+      )}
+      {canEdit && a.state === 'RECORD' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label className="small" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input type="checkbox" checked={missed} onChange={(e) => setMissed(e.target.checked)} /> Nobody attended
+          </label>
+          {missed ? (
+            <input className="input" aria-label="Why nobody attended" placeholder="Why nobody attended" value={note} onChange={(e) => setNote(e.target.value)} />
+          ) : (
+            <ProofPicker site={null} refText="Attendance slip" items={proof} onChange={setProof} documentsOnly required />
+          )}
+          <div>
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy || (missed ? note.trim().length < 5 : proof.length === 0)}
+              onClick={() => act.run(() => api.recordTenderAttendance(tenderId, a.kind, !missed, note.trim(), missed ? [] : proof), 'Attendance recorded.')}
+            >
+              Save attendance
+            </button>
+          </div>
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
 function RecordEditor({ row, onClose }: { row: Row; onClose: () => void }) {
   const t = row.tender;
   const [r, setR] = useState<TenderRecord>({ ...(t.record ?? {}) });
@@ -630,42 +973,8 @@ function RecordEditor({ row, onClose }: { row: Row; onClose: () => void }) {
         {text('locality', 'State / locality rule')}
         {text('officialLink', 'Official link (https://)')}
       </div>
-      <label className="field">
-        <span className="label">Briefing or site visit</span>
-        <select
-          className="select"
-          value={r.briefing ? (r.briefing.mandatory ? 'yes' : 'no') : ''}
-          onChange={(e) =>
-            setR({
-              ...r,
-              briefing: e.target.value
-                ? { on: r.briefing?.on ?? null, mandatory: e.target.value === 'yes', place: r.briefing?.place ?? '', outcome: r.briefing?.outcome ?? '' }
-                : null,
-            })
-          }
-        >
-          <option value="">Not recorded</option>
-          <option value="yes">Mandatory</option>
-          <option value="no">Not mandatory or none</option>
-        </select>
-      </label>
-      {r.briefing && (
-        <div className="grid-2">
-          <label className="field">
-            <span className="label">Briefing date</span>
-            <input
-              className="input"
-              type="date"
-              value={r.briefing.on ?? ''}
-              onChange={(e) => setR({ ...r, briefing: { ...r.briefing!, on: e.target.value || null } })}
-            />
-          </label>
-          <label className="field">
-            <span className="label">Outcome</span>
-            <input className="input" value={r.briefing.outcome} onChange={(e) => setR({ ...r, briefing: { ...r.briefing!, outcome: e.target.value } })} />
-          </label>
-        </div>
-      )}
+      <EventEditor label="Briefing" value={r.briefing ?? null} onChange={(v) => setR({ ...r, briefing: v })} />
+      <EventEditor label="Site visit" value={r.siteVisit ?? null} onChange={(v) => setR({ ...r, siteVisit: v })} />
       <label className="field">
         <span className="label">SST</span>
         <select
@@ -960,6 +1269,69 @@ function QueryRow({ t, q, canEdit }: { t: string; q: TenderQuery; canEdit: boole
             </button>
           </div>
         </>
+      )}
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+/**
+ * The AI check (Fauzan, 23 Nov 2026: "Yes, AI checks once, person answers"): when the preparer signs, AI reads the tender
+ * papers once and lists what the checklist misses or states differently, with the words from the paper. The Marketing
+ * Manager or Deputy answers each point before the Marketing check. AI never ticks or signs.
+ */
+function TenderAiCheckPanel({ row }: { row: Row }) {
+  const t = row.tender;
+  const ai = t.aiCheck;
+  if (!ai) return null;
+  const open = ai.flags.filter((f) => !f.answer).length;
+  const canAnswer = row.myCheck === 'CHECK';
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontWeight: 600 }}>
+        AI check of the papers{' '}
+        {ai.error ? <Chip tone="warn">Could not run</Chip> : open ? <Chip tone="warn">{open} to answer</Chip> : <Chip tone="ok">{ai.flags.length ? 'All answered' : 'Nothing found'}</Chip>}
+      </div>
+      <p className="muted small">
+        {ai.error ??
+          `Read once on ${dateTimeLabel(ai.at)}: ${ai.read.join(', ') || 'no paper'}.${ai.unread.length ? ` Not read: ${ai.unread.join(', ')}.` : ''} The Marketing Manager or Deputy answers each point before the Marketing check; AI never ticks or signs.`}
+      </p>
+      <div className="list">
+        {ai.flags.map((f) => (
+          <AiFlagRow key={f.id} tenderId={t.id} flag={f} canAnswer={canAnswer} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AiFlagRow({ tenderId, flag, canAnswer }: { tenderId: string; flag: NonNullable<Row['tender']['aiCheck']>['flags'][number]; canAnswer: boolean }) {
+  const act = useAction();
+  const [note, setNote] = useState('');
+  return (
+    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+      <div>
+        <Chip tone={flag.kind === 'MISSING' ? 'warn' : 'info'}>{flag.kind === 'MISSING' ? 'Not on the checklist' : 'Differs from the checklist'}</Chip> <strong>{flag.what}</strong>
+        <div className="muted small">
+          {flag.paper}: "{flag.quote}"
+        </div>
+      </div>
+      {flag.answer ? (
+        <div className="small">
+          {flag.answer.status === 'FIXED' ? 'Fixed' : 'Not needed'}: {flag.answer.note} <span className="muted">({flag.answer.by}, {dateTimeLabel(flag.answer.at)})</span>
+        </div>
+      ) : canAnswer ? (
+        <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+          <input className="input" aria-label="Answer" placeholder="What was fixed, or why it is not needed" value={note} onChange={(e) => setNote(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+          <button className="btn btn-sm" disabled={act.busy || note.trim().length < 3} onClick={() => act.run(() => api.answerTenderAiFlag(tenderId, flag.id, 'FIXED', note), 'Answered.')}>
+            Fixed
+          </button>
+          <button className="btn btn-sm" disabled={act.busy || note.trim().length < 3} onClick={() => act.run(() => api.answerTenderAiFlag(tenderId, flag.id, 'NOT_NEEDED', note), 'Answered.')}>
+            Not needed
+          </button>
+        </div>
+      ) : (
+        <span className="muted small">Waiting for the Marketing Manager or Deputy.</span>
       )}
       <ErrorNotice error={act.error} />
     </div>

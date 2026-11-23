@@ -42,7 +42,7 @@ export const NAV_SECTIONS: NavSection[] = [
     home: true,
     groups: [
       { title: 'Dashboards', views: ['home', 'overview', 'company', 'reports'] },
-      { title: 'My work', views: ['mine', 'clock', 'work', 'meetings', 'memos'] },
+      { title: 'My work', views: ['mine', 'clock', 'work', 'meetings', 'memos', 'assistant', 'archive'] },
       // P121: every SOP and workflow, with links to where each step is done.
       { title: 'Guides', views: ['sop'] },
     ],
@@ -77,7 +77,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'HR',
     blurb: 'Staff, attendance, leave and claims.',
     groups: [
-      { title: 'Staff', views: ['hr', 'staff-directory', 'work-kpi', 'handovers'] },
+      { title: 'Staff', views: ['hr', 'staff-directory', 'orgchart', 'work-kpi', 'handovers'] },
       // P111 (Fitri, 17 Nov 2026: "the attendance should be in HR not operation"): the attendance screens sit under HR.
       // Only their place in the menu moved: the screen names (#attendance, #staffclock), who may open them and the data
       // are as before, so old links and bookmarks still open them.
@@ -105,7 +105,7 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'sales',
     title: 'Clients and sales',
     blurb: 'Tenders, quotations, clients and contracts.',
-    groups: [{ title: 'Clients and sales', views: ['commercial', 'clients', 'contracts'] }],
+    groups: [{ title: 'Clients and sales', views: ['commercial', 'marketing', 'clients', 'contracts'] }],
   },
   {
     id: 'finance',
@@ -140,8 +140,8 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'IT and systems',
     blurb: 'IT help, equipment, websites and the JA app.',
     groups: [
-      { title: 'IT help', views: ['it', 'hr-it-intake', 'accounts', 'it-procurement'] },
-      { title: 'Systems and data', views: ['connections', 'websites', 'continuity', 'it-metrics', 'it-extraction'] },
+      { title: 'IT help', views: ['it', 'hr-it-intake', 'accounts', 'shared-logins', 'it-procurement'] },
+      { title: 'Systems and data', views: ['connections', 'websites', 'continuity', 'it-metrics', 'it-extraction', 'data-cleanup'] },
       { title: 'JA Group app', views: ['ja', 'jaswitch'] },
     ],
   },
@@ -195,6 +195,12 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   sitestock: { blurb: 'Stock and fittings kept at each site.', words: 'site stock stok fittings kelengkapan inventory inventori' },
   fleet: { blurb: 'Company vehicles, bookings and drivers.', words: 'vehicle kenderaan car kereta van motorcycle motosikal transport pengangkutan driver pemandu' },
   hr: { blurb: 'HR across the group: staff, leave and cases.', words: 'hr human resources sumber manusia staff kakitangan leave cuti hiring pengambilan' },
+  orgchart: { blurb: 'Who reports to whom; heads put their staff under them.', words: 'org chart carta organisasi hierarchy hierarki line manager pengurus ketua head' },
+  marketing: { blurb: 'The central Marketing desk: tenders, papers and bids.', words: 'marketing pemasaran tender bid bida company papers kertas syarikat' },
+  'shared-logins': { blurb: 'Which shared logins exist and who keeps them (no passwords).', words: 'shared login log masuk kongsi account akaun system sistem vault' },
+  archive: { blurb: 'Upload and find old files and scanned records for your unit.', words: 'old files fail lama archive arkib scan imbas upload muat naik record rekod' },
+  'data-cleanup': { blurb: 'Find and fix duplicate or incomplete records.', words: 'data clean cleanup bersih duplicate pendua incomplete tidak lengkap' },
+  assistant: { blurb: 'Helper fills the forms of your jobs; you check and send.', words: 'helper pembantu assistant form borang fill isi key in ai' },
   'staff-directory': { blurb: 'Office staff names, posts and contacts.', words: 'staff directory direktori senarai staf phone telefon email emel contact hubungi' },
   staffclock: { blurb: 'Office staff clock-in times.', words: 'staff clock jam staf office hours waktu pejabat attendance kehadiran staf' },
   'work-kpi': { blurb: 'How fast and how well work moves between teams.', words: 'kpi performance prestasi target sasaran workflow' },

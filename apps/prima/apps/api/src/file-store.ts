@@ -41,6 +41,11 @@ export interface FileBackend {
   get(name: string): Promise<Buffer>;
   /** Proves the API can write and read the container; run once at start-up in production. */
   check(): Promise<void>;
+  /** Large files in pieces (the data and file manager): see AzureBlobFiles. */
+  putBlock(name: string, index: number, bytes: Buffer): Promise<void>;
+  commitBlocks(name: string, count: number, mime: string): Promise<void>;
+  /** `length` bytes from `start` (fewer at the end), and the whole file's size. */
+  getRange(name: string, start: number, length: number): Promise<{ bytes: Buffer; total: number }>;
 }
 
 export interface FileStoreConfig {
@@ -151,6 +156,52 @@ export class AzureBlobFiles implements FileBackend {
     return buf;
   }
 
+  // Large files of the data and file manager (docs/DATA_FILE_MANAGER.md) arrive in pieces, because one request may
+  // carry only 3 MB. Each piece is an uncommitted block of the final blob; the block list then makes the file.
+
+  private static blockId(index: number): string {
+    return Buffer.from(`part-${String(index).padStart(6, '0')}`).toString('base64');
+  }
+
+  async putBlock(name: string, index: number, bytes: Buffer): Promise<void> {
+    if (!Number.isInteger(index) || index < 0 || index > 9999) throw new Error('Invalid piece number.');
+    const res = await this.http(`${this.url(name)}?comp=block&blockid=${encodeURIComponent(AzureBlobFiles.blockId(index))}`, {
+      method: 'PUT',
+      redirect: 'error',
+      signal: AbortSignal.timeout(this.timeoutMs),
+      headers: await this.headers({ 'content-md5': createHash('md5').update(bytes).digest('base64') }),
+      body: new Uint8Array(bytes),
+    });
+    if (res.status !== 201) throw new Error(`File storage refused a piece of a file (${res.status}).`);
+  }
+
+  /** Makes the file from its pieces. Write once: a name that already holds a file is refused. */
+  async commitBlocks(name: string, count: number, mime: string): Promise<void> {
+    if (!Number.isInteger(count) || count < 1 || count > 9999) throw new Error('Invalid number of pieces.');
+    const list = Array.from({ length: count }, (_x, i) => `<Latest>${AzureBlobFiles.blockId(i)}</Latest>`).join('');
+    const res = await this.http(`${this.url(name)}?comp=blocklist`, {
+      method: 'PUT',
+      redirect: 'error',
+      signal: AbortSignal.timeout(this.timeoutMs),
+      headers: await this.headers({ 'content-type': 'application/xml', 'x-ms-blob-content-type': mime, 'if-none-match': '*' }),
+      body: `<?xml version="1.0" encoding="utf-8"?><BlockList>${list}</BlockList>`,
+    });
+    if (res.status === 400) throw new Error('A piece of the file is missing.');
+    if (res.status !== 201) throw new Error(`File storage refused to put a file together (${res.status}).`);
+  }
+
+  /** Reads one stretch of a large file (the data and file manager), never the whole file at once. */
+  async getRange(name: string, start: number, length: number): Promise<{ bytes: Buffer; total: number }> {
+    if (!Number.isInteger(start) || start < 0 || !Number.isInteger(length) || length < 1 || length > 8 * 1024 * 1024) throw new Error('Invalid stretch of a file.');
+    const res = await this.http(this.url(name), { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(Math.max(this.timeoutMs, 60_000)), headers: await this.headers({ 'x-ms-range': `bytes=${start}-${start + length - 1}` }) });
+    if (res.status === 404) throw new Error('A stored file is missing from file storage.');
+    if (res.status !== 206) throw new Error(`File storage refused to give a file (${res.status}).`);
+    const m = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(res.headers.get('content-range') ?? '');
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (!m || Number(m[1]) !== start || bytes.length !== Number(m[2]) - start + 1 || bytes.length > length) throw new Error('File storage gave a different stretch of the file than was asked for.');
+    return { bytes, total: Number(m[3]) };
+  }
+
   async check(): Promise<void> {
     // Written once like every other file, so the check also works if the container is later made write-once.
     const probe = Buffer.from('prima file store check\n');
@@ -178,6 +229,26 @@ export class MemoryFiles implements FileBackend {
     return Buffer.from(b);
   }
   async check(): Promise<void> {}
+  readonly blocks = new Map<string, Buffer>();
+  async putBlock(name: string, index: number, bytes: Buffer): Promise<void> {
+    this.blocks.set(`${name}#${index}`, Buffer.from(bytes));
+  }
+  async commitBlocks(name: string, count: number): Promise<void> {
+    if (this.blobs.has(name)) throw new Error('File storage refused to put a file together (409).');
+    const parts: Buffer[] = [];
+    for (let i = 0; i < count; i++) {
+      const b = this.blocks.get(`${name}#${i}`);
+      if (!b) throw new Error('A piece of the file is missing.');
+      parts.push(b);
+    }
+    this.blobs.set(name, Buffer.concat(parts));
+    for (let i = 0; i < count; i++) this.blocks.delete(`${name}#${i}`);
+  }
+  async getRange(name: string, start: number, length: number): Promise<{ bytes: Buffer; total: number }> {
+    const b = this.blobs.get(name);
+    if (!b) throw new Error('A stored file is missing from file storage.');
+    return { bytes: Buffer.from(b.subarray(start, start + length)), total: b.length };
+  }
 }
 
 /** Builds the configured backend, or null when the store is off. */

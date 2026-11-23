@@ -1,7 +1,7 @@
 // Tender checklist drafting (Fauzan, 25 Oct 2026): an AI agent reads the tender papers and the arahan petender
 // (instructions to tenderers) and drafts what to do; the Director Office Administrator checks the draft.
 
-import type { Company, IsoDate, Tender, TenderBidPart, TenderPaperKind, TenderProtocolStep, TenderRecord } from './types';
+import type { Company, IsoDate, Tender, TenderBidPart, TenderCheckItem, TenderPaperKind, TenderProtocolStep, TenderRecord } from './types';
 
 export interface DraftItem {
   label: string;
@@ -16,7 +16,8 @@ export interface TenderReader {
   readonly name: string;
   /** True when the reader really reads the files; false for the test version's sample draft. */
   readonly readsFiles: boolean;
-  draft(tender: Tender, papers: { name: string; kind: TenderPaperKind }[]): DraftItem[];
+  /** `text` is the paper's readable text when the app could read it (null for scanned pages and pictures). */
+  draft(tender: Tender, papers: { name: string; kind: TenderPaperKind; text?: string | null }[]): DraftItem[] | Promise<DraftItem[]>;
 }
 
 /** The eight folders of the Director Office data list (11 Oct 2026). */
@@ -122,20 +123,43 @@ function pdfStrings(src: string): string[] {
  * app can read. Pictures and scanned pages cannot be read, so readText is false and a person must check them.
  */
 export async function scanBidFile(dataUrl: string, forms: { long: string[]; words: string[] }): Promise<{ readText: boolean; where: string[] }> {
-  const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
-  if (!m || m[1] !== 'application/pdf') return { readText: false, where: [] };
-  let raw: string;
-  try {
-    raw = latin1(Uint8Array.from(atob(m[2]), (ch) => ch.charCodeAt(0)));
-  } catch {
-    return { readText: false, where: [] };
-  }
+  const raw = pdfRaw(dataUrl);
+  if (raw === null) return { readText: false, where: [] };
   const where: string[] = [];
   const meta = [...raw.matchAll(/\/(Author|Title|Subject|Creator|Producer|Keywords|Company)\s*(\((?:\\.|[^\\)])*\)|<[0-9a-fA-F\s]*>)/g)]
     .flatMap((x) => pdfStrings(x[2]))
     .join(' ');
   const xmp = [...raw.matchAll(/<x:xmpmeta[\s\S]*?<\/x:xmpmeta>/g)].map((x) => x[0].replace(/<[^>]+>/g, ' ')).join(' ');
   if (hasCompanyName(meta + ' ' + xmp, forms)) where.push('file properties');
+  const text = await rawPdfText(raw);
+  const readText = text.replace(/\s+/g, '').length >= 3;
+  if (readText && hasCompanyName(text, forms)) where.push('text');
+  return { readText, where };
+}
+
+/** The raw bytes of a PDF data URL as a latin-1 string, or null when it is not a readable PDF. */
+function pdfRaw(dataUrl: string): string | null {
+  const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl ?? '');
+  if (!m || m[1] !== 'application/pdf') return null;
+  try {
+    return latin1(Uint8Array.from(atob(m[2]), (ch) => ch.charCodeAt(0)));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The text the app can read in a PDF (Marketing item AH9): the text drawn on its pages, without pictures. Scanned pages
+ * and photos give null, and a person must read them.
+ */
+export async function pdfText(dataUrl: string): Promise<string | null> {
+  const raw = pdfRaw(dataUrl);
+  if (raw === null) return null;
+  const text = (await rawPdfText(raw)).replace(/\s+/g, ' ').trim();
+  return text.replace(/\s+/g, '').length >= 3 ? text : null;
+}
+
+async function rawPdfText(raw: string): Promise<string> {
   const texts: string[] = [];
   for (const obj of raw.split(/\bendobj\b/)) {
     const s = /^([\s\S]*?)\bstream\r?\n([\s\S]*?)\r?\n?endstream/.exec(obj);
@@ -146,10 +170,7 @@ export async function scanBidFile(dataUrl: string, forms: { long: string[]; word
     if (!body) continue;
     if (/\b(Tj|TJ|')\b/.test(body)) texts.push(...pdfStrings(body));
   }
-  const text = texts.join(' ');
-  const readText = text.replace(/\s+/g, '').length >= 3;
-  if (readText && hasCompanyName(text, forms)) where.push('text');
-  return { readText, where };
+  return texts.join(' ');
 }
 
 const S02 = '02 Kelayakan & dokumen asas';
@@ -217,6 +238,25 @@ export const TENDER_GUIDE_V1: TenderProtocolStep[] = (
   ...more,
 }));
 
+/**
+ * The checklist of a proposal (Marketing item AH8, Fauzan 23 Nov 2026: our own offer to a private client, without
+ * tender papers). Proposal (draft by Claude, 23 Nov 2026): the steps a Marketing executive follows; there are no tender
+ * papers to read, so the list is fixed. The company manager still approves the price at sign-off.
+ */
+export const PROPOSAL_CHECKLIST: TenderCheckItem[] = (
+  [
+    ['client', 'Client need and contact recorded', 'Who asked or who we met, what they need, sites and start date.', false],
+    ['survey', 'Site survey done or the reason recorded', 'Visit notes or photos; say why if no visit was possible.', false],
+    ['scope', 'Posts, shifts, hours and guard numbers set', 'Day and night posts, shift hours, relief, supervisors and equipment.', false],
+    ['price', 'Price worked out from the cost sheet', 'Wages, overtime, contributions, relief, equipment, margin and tax. The company manager approves it at sign-off.', true],
+    ['profile', 'Company profile attached', 'From the company paper library; latest copy.', false],
+    ['licences', 'KDN licence and SSM papers attached', 'In force on the day the proposal is sent.', false],
+    ['experience', 'Experience letters chosen', 'Similar sites or clients, if the company has them.', false],
+    ['letter', 'Offer letter on company letterhead, signed by the company head', 'States the offer, the validity period and the start date.', true],
+    ['final', 'Client name, figures and file names checked', 'Same figures in the letter and the price schedule; right client name everywhere.', false],
+  ] as [string, string, string, boolean][]
+).map(([key, label, detail, needsDocument]) => ({ id: `prp_${key}`, label, detail, ref: 'Proposal', source: 'doa' as const, needsDocument }));
+
 /** Days to the nearest of the closing date and the buyer's mandatory dates still ahead: URGENT at 3 or less, SHORT WINDOW at 7. */
 export function tenderPriority(t: Tender, today: IsoDate): { level: 'URGENT' | 'SHORT' | null; days: number; what: string } {
   const r = t.record ?? {};
@@ -270,10 +310,10 @@ export function tenderHourly(
  * Test version only: a sample draft from the tender's type and size, the kind of list the agent is expected to give.
  * It does not read the files.
  */
-export const sampleTenderReader: TenderReader = {
+export const sampleTenderReader: Omit<TenderReader, 'draft'> & { draft(t: Tender, papers?: unknown[]): DraftItem[] } = {
   name: 'Sample draft (test version, does not read the files)',
   readsFiles: false,
-  draft(t) {
+  draft(t: Tender): DraftItem[] {
     const items: DraftItem[] = [];
     if (t.channel === 'GOVERNMENT') {
       items.push(

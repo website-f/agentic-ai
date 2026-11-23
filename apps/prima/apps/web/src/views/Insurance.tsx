@@ -5,6 +5,7 @@ import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { api, type Insurance, type InsuranceRenewInput } from '../api';
 import { useApp, useRouteTab } from '../App';
+import { KeyIn } from '../KeyIn';
 import { Card, Empty, Facts, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
 import { SopHelp } from '../sop/SopHelp';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
@@ -998,7 +999,14 @@ function RenewForm({ r, onDone }: { r: PolicyRow; onDone: () => void }) {
     scheduleRef: null,
   });
   const act = useAction();
-  const set = (x: Partial<InsuranceRenewInput>) => setF({ ...f, ...x });
+  // "Isi automatik" (rule KEY-IN): the new policy's number, dates and premium are read from the policy paper and wait
+  // for the person's check. The values carried over from this year count as empty until the person changes them.
+  const [checked, setChecked] = useState(true);
+  const [touched, setTouched] = useState<Partial<Record<keyof InsuranceRenewInput, boolean>>>({});
+  const set = (x: Partial<InsuranceRenewInput>) => {
+    setF((was) => ({ ...was, ...x }));
+    setTouched((was) => ({ ...was, ...Object.fromEntries(Object.keys(x).map((k) => [k, true])) }));
+  };
   return (
     <div className="bz-act">
       <p className="bz-sub">Next year's policy is added as a new record. This year's stays on the register as history.</p>
@@ -1040,11 +1048,27 @@ function RenewForm({ r, onDone }: { r: PolicyRow; onDone: () => void }) {
           <input className="input" placeholder="Document name or link" value={f.scheduleRef ?? ''} onChange={(e) => set({ scheduleRef: e.target.value || null })} />
         </label>
       </div>
+      <KeyIn
+        paper="insurance"
+        typed={{ ref: f.policyNo, startsOn: touched.startsOn ? f.startsOn : '', expiresOn: touched.expiresOn ? f.expiresOn : '', amount: touched.premium ? f.premium : '' }}
+        onFields={(read, ok) => {
+          setChecked(ok);
+          const x: Partial<InsuranceRenewInput> = {};
+          for (const r of read) {
+            if (r.value == null || r.value === '') continue;
+            if (r.name === 'ref') x.policyNo = String(r.value);
+            if (r.name === 'startsOn' && typeof r.value === 'string') x.startsOn = r.value;
+            if (r.name === 'expiresOn' && typeof r.value === 'string') x.expiresOn = r.value;
+            if (r.name === 'amount' && typeof r.value === 'number') x.premium = r.value;
+          }
+          set(x);
+        }}
+      />
       <ErrorNotice error={act.error} />
       <div className="bz-actions">
         <button
           className="btn btn-primary btn-sm"
-          disabled={act.busy || !f.insurer.trim() || !f.policyNo.trim()}
+          disabled={act.busy || !checked || !f.insurer.trim() || !f.policyNo.trim()}
           onClick={() => act.run(() => api.renewInsurancePolicy(p.id, f), 'Renewed. Next year is on the register.').then((x) => x && onDone())}
         >
           Save renewal

@@ -22,7 +22,7 @@ approved by Fauzan; it still goes through the release path.
   day, rest day, public holiday), extra days' wages for a rest day or public holiday worked, and fixed allowances.
   Guard formulas add the shift length, rest hours, whether the guard is relieved during the rest, and the days counted
   as a full month. Driver and staff overtime formulas add an overtime meal allowance and an outstation allowance (0 = none).
-- **Who sets it.** The ACT Director sets a formula live directly. The rest of ACT (Deputy, Assistants) prepare a
+- **Who sets it.** The ACT Director sets a formula live directly. The rest of ACT (ACT Manager, Auditors, Enforcement) prepare a
   change, which waits for the ACT Director to set it live or send it back. Every save and decision carries a reason.
   The preparer can withdraw a draft. Group leadership (CEO, COO, Finance Director, Chief of Staff, Chairman, Vice
   Chairman) sees everything and changes nothing. HR, company managers and everyone else do not see the screen.

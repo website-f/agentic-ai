@@ -116,6 +116,8 @@ function active(u: User, today: IsoDate): boolean {
 /** The department head of a central department, where the organisation records one. */
 function isDepartmentHead(u: User, dept: NonNullable<User['department']>): boolean {
   if (u.role !== 'pwvsb_officer') return false;
+  // A head named in the org chart (Fauzan, 23 Nov 2026) approves too.
+  if ((u.headOf ?? []).includes(`d_${dept}`)) return true;
   switch (dept) {
     case 'it':
       return u.department === 'it' && u.itRole === 'manager';

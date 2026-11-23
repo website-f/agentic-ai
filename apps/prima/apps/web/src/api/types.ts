@@ -1,6 +1,7 @@
 import { type DraftHelpClient } from './draft-help';
+import { type KeyInClient } from './key-in';
 import { type ExtractionClient } from './it-extraction';
-import { type AlertItem, type ClientShareLink, type ClientShareReport, type ClientLostReason, type ArishaDraft, type CmsServiceKind, type ArishaAnswer, type ArishaFinanceDraft, type ArishaReviewDraft, type ArishaTurn, type DataMode, type ArmedJobStatus, type AttendanceIssue, type Case, type CaseType, type Company, type DisciplineStep, type FaceCapture, type FollowUpKind, type Home, type GrowthPanel, type GrowthMargin, type IsoDate, type PrimaService, type RecordKind, type ReportDef, type RecordValues, type EvidenceDoc, type FwPaper, type SocsoStatus, type ProofInput, type Quotation, type Severity, type Tender, type TenderDecisionChoice, type TenderBidPart, type TenderPaperKind, type TenderQuery, type TenderRecord, type TenderStatus, type User, type CleaningService, type SecurityPlanService, type CleaningProofInput, type CleaningSetupInput, type FinRequestAction, type FinCheckSection, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FwRecruitStep, type ImportKind, type ImportOptions, type OrgImportReceipt } from '@prima/core';
+import { type AlertItem, type ClientShareLink, type ClientShareReport, type ClientLostReason, type ArishaDraft, type CmsServiceKind, type ArishaAnswer, type ArishaFinanceDraft, type ArishaReviewDraft, type ArishaTurn, type DataMode, type ArmedJobStatus, type AttendanceIssue, type Case, type CaseType, type Company, type DisciplineStep, type FaceCapture, type FollowUpKind, type Home, type GrowthPanel, type GrowthMargin, type IsoDate, type PrimaService, type RecordKind, type ReportDef, type RecordValues, type EvidenceDoc, type FwPaper, type SocsoStatus, type ProofInput, type Quotation, type Severity, type Tender, type TenderDecisionChoice, type TenderBidPart, type TenderPaperKind, type TenderQuery, type TenderRecord, type TenderStatus, type User, type CleaningService, type SecurityPlanService, type CleaningProofInput, type CleaningSetupInput, type FinRequestAction, type FinCheckSection, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FwRecruitStep, type TenderAttendanceKind, type ImportKind, type ImportOptions, type OrgImportReceipt } from '@prima/core';
 import { type ConnectionsClient } from './connections';
 import type { CheckinClient } from './checkin';
 export type * from './checkin';
@@ -154,9 +155,21 @@ export type HolidayInput = Parameters<PrimaService['addPublicHoliday']>[1];
 export type FlexInput = Parameters<PrimaService['requestFlex']>[1];
 export type TenderProtocolView = R<'tenderProtocol'>;
 export type TenderBoard = R<'tenderBoard'>;
+export type MarketingBoard = R<'marketingBoard'>;
+export type CompanyPapers = R<'companyPapers'>;
 export type TenderCounter = R<'tenderCounter'>;
 export type TenderOpportunities = R<'tenderOpportunities'>;
 export type TenderSources = R<'tenderSources'>;
+export interface WatchFindAnswer {
+  action: 'RECORD' | 'NOT_FOR_US';
+  note?: string;
+  kind?: 'TENDER' | 'QUOTATION';
+  channel?: 'GOVERNMENT' | 'PRIVATE';
+  closesOn?: string;
+  guards?: number | null;
+  title?: string;
+  ref?: string;
+}
 export type DirectorOfficeCounter = R<'directorOfficeCounter'>;
 export interface OpportunityInput {
   kind: 'TENDER' | 'QUOTATION';
@@ -294,6 +307,7 @@ export type CorpAuditLegal = R<'corpAuditLegal'>;
 export type SalesLeads = R<'salesLeads'>;
 export type FixedAssets = R<'fixedAssets'>;
 export type ActBoard = R<'actBoard'>;
+export type ActMonthSummary = R<'actMonthSummary'>;
 export type ActFindingInput = Parameters<PrimaService['raiseActFinding']>[1];
 export type ActFindingBody = Parameters<PrimaService['actFindingStep']>[3];
 export type ActAuditInput = Parameters<PrimaService['recordActAudit']>[1];
@@ -529,7 +543,7 @@ export interface NewQuotation {
 }
 
 /** Everything the screens need. Implemented by the HTTP client and by the in-browser demo. */
-export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClient, CheckinClient {
+export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClient, CheckinClient, KeyInClient {
   /** Hand-overs between departments and real-data import (connect-departments, 2 Nov 2026). */
   readonly org: OrgClient;
   /** P81: past attendance from the monthly PDF reports; server only (the demo has none). */
@@ -865,6 +879,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   salesLeads(companyId: string): Promise<SalesLeads>;
   fixedAssets(): Promise<FixedAssets>;
   actBoard(): Promise<ActBoard>;
+  actMonthSummary(month?: string): Promise<ActMonthSummary>;
   raiseActFinding(input: ActFindingInput): Promise<unknown>;
   actFindingStep(id: string, action: 'plan' | 'fixed' | 'check' | 'follow_up' | 'assign' | 'defer' | 'resume', body: ActFindingBody): Promise<unknown>;
   recordActAudit(input: ActAuditInput): Promise<unknown>;
@@ -916,7 +931,29 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   addCompany(input: Record<string, unknown>): Promise<unknown>;
   problems(): Promise<Awaited<ReturnType<PrimaService['problems']['list']>>>;
   accounts(): Promise<Awaited<ReturnType<PrimaService['accounts']['board']>>>;
+  // Data and file manager for old records (Fauzan, 23 Nov 2026). A file goes up in pieces: start, parts, finish.
+  dataCleanup(q: { companyId?: string; area?: string }): Promise<Awaited<ReturnType<PrimaService['dataCleanup']['board']>>>;
+  exportLog(input: Record<string, unknown>): Promise<Awaited<ReturnType<PrimaService['exports']['log']>>>;
+  /** The Prima agent: fills a form from the person's words; Send runs the same action as its screen, as the person. */
+  assistantHome(): Promise<Awaited<ReturnType<PrimaService['assistant']['home']>>>;
+  assistantUnderstand(input: { text: string; actionId?: string | null; lang?: string }): Promise<Awaited<ReturnType<PrimaService['assistant']['understand']>>>;
+  assistantAct(op: 'send' | 'style' | 'forget' | 'skills' | 'retire', input: Record<string, unknown>): Promise<any>;
+  assistantLists(input: { actionId: string; values: Record<string, unknown> }): Promise<Awaited<ReturnType<PrimaService['assistant']['listsFor']>>>;
+  archive(query: import('@prima/core').ArchiveQuery): Promise<Awaited<ReturnType<PrimaService['archive']['list']>>>;
+  archiveStart(input: Record<string, unknown>): Promise<Awaited<ReturnType<PrimaService['archive']['start']>>>;
+  archivePart(id: string, index: number, base64: string): Promise<unknown>;
+  archiveFinish(id: string, input: Record<string, unknown>): Promise<Awaited<ReturnType<PrimaService['archive']['finish']>>>;
+  archiveOpen(id: string): Promise<Awaited<ReturnType<PrimaService['archive']['open']>>>;
+  archiveOpenPart(id: string, index: number, pass: string): Promise<{ base64: string }>;
+  archiveDetails(id: string, input: Record<string, unknown>): Promise<unknown>;
+  archiveSetAside(id: string, reason: string): Promise<unknown>;
+  orgChart(): Promise<Awaited<ReturnType<PrimaService['org']['chart']>>>;
+  orgSetLine(input: { userId: string; managerId: string | null; reason: string; until?: string | null }): Promise<unknown>;
+  orgSetHead(input: { unit: string; headId: string | null; deputyId: string | null; reason: string; until?: string | null }): Promise<unknown>;
   accountsAct(action: 'submit' | 'decide', input: Record<string, unknown>): Promise<unknown>;
+  sharedLogins(): Promise<Awaited<ReturnType<PrimaService['sharedLogins']['board']>>>;
+  sharedLoginsLeaver(personId: string): Promise<Awaited<ReturnType<PrimaService['sharedLogins']['leaverList']>>>;
+  sharedLoginsAct(action: 'save' | 'changed' | 'close' | 'kind', input: Record<string, unknown>): Promise<unknown>;
   reportProblem(input: { what: string; screen: string; photo?: string | null }): Promise<unknown>;
   replyProblem(id: string, text: string): Promise<unknown>;
   amRecordPayment(unitId: string, input: Parameters<PrimaService['amRecordPayment']>[2]): Promise<unknown>;
@@ -1276,16 +1313,30 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   verifyTender(tenderId: string, approve: boolean, note: string): Promise<unknown>;
   submitTender(tenderId: string, note: string, proof: ProofInput[]): Promise<unknown>;
   tenderBoard(): Promise<TenderBoard>;
+  marketingBoard(): Promise<MarketingBoard>;
+  startMarketingDesk(from: string, note: string): Promise<unknown>;
+  setNoEntryReason(companyId: string, reason: string): Promise<unknown>;
+  companyPapers(companyId: string): Promise<CompanyPapers>;
+  addCompanyPaper(companyId: string, input: { kind: string; title?: string; period?: string; issuedOn?: string; expiresOn?: string; note?: string }, proof: ProofInput[]): Promise<unknown>;
+  recordTenderHours(tenderId: string, hours: number, note: string): Promise<unknown>;
+  sendTenderToIt(tenderId: string, kind: 'tender' | 'quotation', codes: string[], items: string[]): Promise<unknown>;
+  answerTenderAiFlag(tenderId: string, flagId: string, status: 'FIXED' | 'NOT_NEEDED', note: string): Promise<unknown>;
+  startProposal(input: { companyId: string; client: string; title: string; scope: string; contact: string; sendBy: string; guards: number; sites: number }): Promise<unknown>;
+  nameTenderAttendee(tenderId: string, kind: TenderAttendanceKind, attendee: string, mofNamed: boolean): Promise<unknown>;
+  recordTenderAttendance(tenderId: string, kind: TenderAttendanceKind, attended: boolean, note: string, proof: ProofInput[]): Promise<unknown>;
   tenderCounter(): Promise<TenderCounter>;
   tenderOpportunities(): Promise<TenderOpportunities>;
   recordTenderOpportunity(input: OpportunityInput): Promise<unknown>;
   enterTenderOpportunity(id: string, companyIds: string[], note: string): Promise<unknown>;
   tenderSources(): Promise<TenderSources>;
+  tenderPortalLogins(tenderId: string): Promise<R<'tenderPortalLogins'>>;
   directorOfficeCounter(): Promise<DirectorOfficeCounter>;
   addTenderSource(input: { buyer: string; urls: string[]; note: string }): Promise<unknown>;
   loadTenderSourceStarter(): Promise<unknown>;
   updateTenderSource(id: string, input: { urls?: string[]; note?: string; active?: boolean }): Promise<unknown>;
   recordTenderSourceCheck(id: string, input: SourceCheckInput): Promise<unknown>;
+  setTenderSourceWatch(id: string, input: { allowed: boolean; note?: string }): Promise<unknown>;
+  answerTenderWatchFind(id: string, key: string, input: WatchFindAnswer): Promise<unknown>;
   tenderGroups(): Promise<TenderGroups>;
   createTenderGroup(sourceTenderId: string, companyIds: string[]): Promise<unknown>;
   reports(): Promise<Reports>;

@@ -6082,5 +6082,313 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     ],
     "terms": [],
     "notes": "Read only: nothing is changed here. \"Rules register\" lists the rule owners, approvers and time targets."
+  },
+  {
+    "view": "orgchart",
+    "title": "Org chart",
+    "what": "Who reports to whom. Work, help, team memos, claim checks, time slips and leave go to the manager shown here. A head puts staff under themselves, or under someone in their own line, with a reason.",
+    "who": "Office staff. Group leaders, the HR Director and central HR see the whole group; everyone else sees their own line: the people above them and everyone under them. The CEO or the HR Director (Chief of Staff or Deputy) can set any line and names the head and deputy of each department and central company.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to put staff under me",
+        "steps": [
+          "In \"Put staff under me\" choose the person in the list.",
+          "Write the reason in \"Reason\".",
+          "Press \"Put under me\". Their work, help and team memos come to you from then on."
+        ]
+      },
+      {
+        "task": "How to change someone's line",
+        "steps": [
+          "In \"Chart\" type in \"Find a name or title\", or open the tree with the \"+\" button.",
+          "On the person press \"Change line\".",
+          "Choose the new manager in \"Put ... under\", write the \"Reason\", and fill \"Until\" only if it is for a while.",
+          "Press \"Save\". To undo, press \"Back to the line from the job\" with a reason."
+        ]
+      },
+      {
+        "task": "How to name a head or deputy (CEO or HR Director)",
+        "steps": [
+          "In \"Departments and central companies\" press \"Name head\" on the unit.",
+          "Choose the \"Head\" and \"Deputy\", write the reason, and fill \"Until\" only if it is for a while.",
+          "Press \"Save\". Nobody names themselves."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Assumed: no line yet",
+        "means": "No rule or head gives this person a manager, so the Chief of Staff is shown. A head should set the line."
+      },
+      {
+        "term": "From the job",
+        "means": "The manager comes from the person's job; nobody set it by hand."
+      },
+      {
+        "term": "Until",
+        "means": "The last day of a line or role. After it the person goes back to the line from the job. Empty means for good."
+      }
+    ],
+    "notes": "Nobody sets their own line, and a head cannot move their own manager or anyone outside their line or unit. A move between two heads goes to the HR Director. Every change needs a reason and is kept in the audit log. Guards and site devices are not on the chart. If the page says the org chart settings are not installed, the lines come from each job and changes are refused until IT runs the module."
+  },
+  {
+    "view": "shared-logins",
+    "title": "Shared logins",
+    "what": "The list of logins a team shares, such as bank, SSM, eSIMS, LHDN, EPF, SOCSO, tender portals and suppliers: who owns each, the backup, who else uses it and when it was last changed. Prima keeps the list only; it never holds a password.",
+    "who": "Office staff see the logins they are named on. The Company Manager sees that company's logins, a department head their department's, and IT, central HR and the group leaders see all. IT and the CEO add, edit and close logins; the owner, the backup or IT record a change. Rows under \"CEO master accounts\" are for the CEO only.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to add a login (IT or the CEO)",
+        "steps": [
+          "Press \"Add a login\" at the top, or \"+ Add\" (or a \"+\" missing portal) next to a company in \"Across the group\".",
+          "Fill \"System\", \"Kind of portal\" and \"Company or central department\", and choose where it is kept.",
+          "Choose the \"Owner\" and the \"Backup (a different person)\". Add others who may use it if needed.",
+          "Press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to record that a login was changed (owner, backup or IT)",
+        "steps": [
+          "In \"The list\" find the login. \"Show\" > \"Needs a change\" lists the ones due.",
+          "Press the first button on the row (next to \"Edit\").",
+          "Fill \"Day it was changed\" and \"Why (for example: 90-day change, staff left)\".",
+          "Press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to see what a leaver was on (HR, IT, group leaders)",
+        "steps": [
+          "Go to \"When someone leaves\".",
+          "Choose the person. Every shared login they are on is listed with its owner and backup."
+        ]
+      },
+      {
+        "task": "How to add a kind of portal (IT or the CEO)",
+        "steps": [
+          "In \"Kinds of portal\" press \"Add a kind of portal\" (or \"Change\" on one).",
+          "Fill the name and choose which companies must have a login for it.",
+          "Press \"Save kind\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Change soon / Change overdue",
+        "means": "A shared login is changed every 90 days; the owner and backup are reminded 14 days before."
+      },
+      {
+        "term": "Someone left: change now",
+        "means": "A person named on the login left; it must be changed within 3 working days."
+      }
+    ],
+    "notes": "The list does not give or remove access; IT sets that by hand. Bank and e-wallet logins keep only the last 4 digits of each account, never the full number. Never type secret codes in \"Note\"; text that looks like one is refused. If the module is not installed the page says so."
+  },
+  {
+    "view": "archive",
+    "title": "Old files and data",
+    "what": "Put in the old files of your company or department: computer files, and paper that was scanned or photographed. Prima reads each file on your own device and suggests the folder, date and title. You only check and save, and anyone in your unit can find it later.",
+    "who": "Office staff and supervisors file for their own central department, or else their company office. Staff files and Pay and contributions are seen only by the person who put them in, central HR and the group leaders. Guards and site devices have no file manager.",
+    "tabs": [
+      {
+        "name": "All",
+        "what": "Every kept file you may see."
+      },
+      {
+        "name": "To check",
+        "what": "Files saved without a check; look at the suggested details and mark them checked."
+      },
+      {
+        "name": "Added by me",
+        "what": "The files you put in."
+      },
+      {
+        "name": "Set aside",
+        "what": "Files put in by mistake. They stay on record with the reason."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to add old files",
+        "steps": [
+          "In \"Add files\" choose up to 20 files (200 MB each at most). If asked, choose who it is \"For\".",
+          "Check the suggested folder, title, date and \"Ref\" on each file, and tick \"Checked\" (or press \"Mark all checked\").",
+          "Press \"Save all\". Files not ticked are saved too and wait under \"To check\"."
+        ]
+      },
+      {
+        "task": "How to find and open a file",
+        "steps": [
+          "In \"Find a file\" type a title, reference, file name or words from the document.",
+          "Choose the folder or type the \"Year\" if you know it, then press \"Find\".",
+          "Press \"Open\" on the file. It is saved to your device."
+        ]
+      },
+      {
+        "task": "How to correct or set aside a file",
+        "steps": [
+          "Press \"Correct\", change the folder, title, date or reference, and press \"Save\".",
+          "For a file put in by mistake press \"Set aside\", write why, and press \"Set aside\" again. Nothing is deleted."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Restricted",
+        "means": "Staff files and pay files: only the person who put them in, central HR and the group leaders see them."
+      }
+    ],
+    "notes": "Programs and scripts are refused; every other kind of file is kept. A file over 15 MB is not read for its words, so type its title and date. The same file added twice is marked a duplicate. Old Excel lists are kept as files only; they do not become live records. If the page says file storage is not switched on, files cannot be kept yet."
+  },
+  {
+    "view": "data-cleanup",
+    "title": "Data clean-up",
+    "what": "Prima checks staff, site and contract records for duplicates, gaps and clashes. Each line names the record by its number and says how to fix it. Correct the record in its usual screen and the line goes away by itself.",
+    "who": "Company office (company manager, admin executives, director) for their own companies. Central HR sees staff lines in every company. ACT and the group leaders see everything, with a company picker.",
+    "tabs": [
+      {
+        "name": "All",
+        "what": "Every line for staff, sites and contracts."
+      },
+      {
+        "name": "Staff",
+        "what": "Staff entered twice, shared staff numbers, missing IC, phone, birth or start date, and similar."
+      },
+      {
+        "name": "Sites",
+        "what": "Sites with no live contract, no guard post, no address, or a code used twice."
+      },
+      {
+        "name": "Contracts",
+        "what": "Contracts with wrong dates, no site, a reference used twice, or past their end but still open."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to fix a line",
+        "steps": [
+          "Read the rule's heading and \"How to fix:\".",
+          "Note the record number shown (staff number, site code or contract reference).",
+          "Open that record in its usual screen and correct it. The line goes away the next time this page opens."
+        ]
+      },
+      {
+        "task": "How to see one company or one kind of record",
+        "steps": [
+          "Press \"Staff\", \"Sites\" or \"Contracts\" at the top.",
+          "If you see more than one company, choose it in the company list."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Fix",
+        "means": "The record is wrong and must be corrected."
+      },
+      {
+        "term": "Check",
+        "means": "It may be right (for example a real secondment), but look at it."
+      }
+    ],
+    "notes": "Nothing is changed on this page; it only reads the records. Lines show record numbers only, never names or IC. \"Nothing to fix. Well done.\" means no problems were found. A line that is correct cannot be marked checked yet."
+  },
+  {
+    "view": "assistant",
+    "title": "Helper",
+    "what": "Say what you need in your own words and the helper fills the form for that job from Prima's own lists. You check every box and press \"Send\"; it goes exactly as from the job's own screen, as you. Nothing is sent by itself and nothing is approved here.",
+    "who": "Staff with at least one job it can fill: for example leave, IT help, time slips, meetings, claims, site supplies, vehicles, cases or purchase requests, each only for those whose own screen allows it.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to fill and send a form",
+        "steps": [
+          "In \"What do you need?\" type what you need, for example \"OGM asks for 20 trousers size 32 for the new site at ...\".",
+          "Press \"Fill the form\".",
+          "Check the job and every box. Fill anything under \"Still to fill\".",
+          "Press \"Send\". To finish on the job's own screen instead, press \"Use the full screen instead\"."
+        ]
+      },
+      {
+        "task": "How to save a skill",
+        "steps": [
+          "After a form is sent, type a name in \"Save as a skill: name\" and the words that call it up.",
+          "Choose \"Only me\" or \"My team\" (heads only).",
+          "Press \"Save skill\". Next time those words fill the same choices."
+        ]
+      },
+      {
+        "task": "How to clear what the helper learned about me",
+        "steps": [
+          "Go to \"Skills and my style\".",
+          "Press \"Clear what it learned about me\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Skill",
+        "means": "A saved way of doing one job and the words that call it up. It keeps choices only, never dates or quantities."
+      },
+      {
+        "term": "My style",
+        "means": "Your sign-off, usual choices and your own words for things, learned from forms you sent. Only you see it."
+      }
+    ],
+    "notes": "The helper never approves, signs, pays or disciplines; those stay on their own screens. A size the store does not have is never swapped. For a job it cannot fill it shows \"How to do it in Prima\" with an \"Open screen\" button. If the skill library is not installed, the helper still fills forms but does not remember."
+  },
+  {
+    "view": "marketing",
+    "title": "Marketing",
+    "what": "The Marketing tender desk: Marketing prepares and lodges every tender in each company's name, and the company manager approves the price and the bid once. This screen tracks each company's tenders this month, what is closing, and the team.",
+    "who": "The Marketing department (Marketing Manager, Deputy and Tender Executives), directors, the COO and the CEO. The CEO or the COO starts the desk. Tender Executives work only the companies they cover.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to deal with something closing or waiting",
+        "steps": [
+          "Look at \"To do\".",
+          "Press the line. Prima opens the bid on \"Tenders & quotes\"."
+        ]
+      },
+      {
+        "task": "How to write why a company entered nothing",
+        "steps": [
+          "In \"Each company this month\" find the company under \"Reason if none\".",
+          "Press \"Write\" (or \"Change\"), type in \"Why nothing was entered\" (10 characters or more).",
+          "Press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to start a proposal for a private client",
+        "steps": [
+          "In \"Proposals\" press \"New proposal\".",
+          "Choose the company, fill \"Client\", the title, \"What we offer\" and \"Send by\" (guards and sites if known).",
+          "Press \"Start proposal\". The company manager is told."
+        ]
+      },
+      {
+        "task": "How to start the Marketing desk (CEO or COO)",
+        "steps": [
+          "In \"Start the Marketing desk\" choose the start date and write the \"Comment (needed)\".",
+          "Press \"Start\". It cannot be switched back from this screen."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Entered",
+        "means": "A bid lodged with the slip."
+      },
+      {
+        "term": "Do not bid",
+        "means": "The company manager stops a bid with a reason within the notice time. No answer means go ahead."
+      },
+      {
+        "term": "Proposal",
+        "means": "Our own offer to a private client, with no tender papers. It does not count as a tender entered."
+      }
+    ],
+    "notes": "Until the desk starts, each company prepares its own bids and the Director Office keeps the tender protocol. A company with nothing entered and nothing in progress shows red. \"Papers\" shows the company papers not ready; press it to open them. The board shows counts only, no prices or files."
   }
 ];

@@ -42,9 +42,13 @@ describe('Accounts and Access (PostgreSQL)', () => {
 
   it('the database kinds of account equal the application list', async () => {
     await admin(readFileSync(resolve(__dirname, '../../../../db/modules/accounts-access-v1.sql'), 'utf8'));
-    const rows = (await admin('SELECT key, shape FROM prima.acc_templates() ORDER BY key')).rows;
     const want = ACCOUNT_TEMPLATES.map((t) => ({ key: t.key, shape: t.shape })).sort((a, b) => a.key.localeCompare(b.key));
-    assert.deepEqual(rows, want);
+    const read = async () => (await admin('SELECT key, shape FROM prima.acc_templates() ORDER BY key COLLATE "C"')).rows;
+    const byKey = (list: typeof want) => [...list].sort((a, b) => (a.key < b.key ? -1 : 1));
+    // The three Marketing kinds (Fauzan, 22-23 Nov 2026) come with the add-on module marketing-accounts-v1.
+    assert.deepEqual(await read(), byKey(want.filter((t) => !t.key.startsWith('marketing_'))));
+    await admin(readFileSync(resolve(__dirname, '../../../../db/modules/marketing-accounts-v1.sql'), 'utf8'));
+    assert.deepEqual(await read(), byKey(want));
   });
 
   it('IT prepares, the Chief of Staff approves, and the account and access are written', async () => {

@@ -76,6 +76,21 @@ describe('Part S office asset records (PostgreSQL)', () => {
     await assert.rejects(admin(`UPDATE prima.office_am_recs SET data = jsonb_set(data,'{history}','[]'::jsonb) WHERE id=$1`, [r.id]), /append-only/);
     await assert.rejects(admin(`UPDATE prima.office_am_recs SET data = jsonb_set(data,'{companyId}','"co-arsh"'::jsonb) WHERE id=$1`, [r.id]), /immutable/);
     await assert.rejects(admin(`DELETE FROM prima.office_am_recs WHERE id=$1`, [r.id]), /never deleted/);
+    // Buy new (module office-am-buy-v1): the named operations head reads and approves; another operations head does not.
+    await admin(mod('office-am-buy-v1.sql'));
+    const b = (await act('u-cm-sasa', 'buyRequest', { companyId: 'co-sasa', address: 'Level 2, test office', buyType: 'furniture', item: 'Desk (test)', qty: 1, estimate: 500, description: 'New staff joining (test)' })) as OfficeAmRec;
+    assert.equal(b.d.hod, 'ops_director');
+    await act('u-asset-mm', 'repairCheck', { id: b.id, outcome: 'accept', reason: 'no spare desk', unitId: unit });
+    await act('u-asset-mm', 'repairQuotes', { id: b.id, quotes: [{ contractor: 'Shop A (test)', price: 500 }, { contractor: 'Shop B (test)', price: 520 }, { contractor: 'Shop C (test)', price: 540 }], online: [{ where: 'Online one (test)', price: 495 }, { where: 'Online two (test)', price: 510 }], docs: PDF('bq', 3) });
+    await act('u-asset-mm', 'repairPick', { id: b.id, contractor: 'Shop A (test)', reason: 'lowest quote' });
+    assert.equal((await list('u-ogm')).some((x) => x.id === b.id), false);
+    await act('u-asset-dir', 'repairApprove', { id: b.id, reason: 'recommended' });
+    assert.ok((await list('u-opsdir')).some((x) => x.id === b.id));
+    await assert.rejects(act('u-ogm', 'repairApprove', { id: b.id, reason: 'approve it' }));
+    const done = (await act('u-opsdir', 'repairApprove', { id: b.id, reason: 'approved for new staff' })) as OfficeAmRec;
+    assert.equal(done.status, 'approved');
+    assert.equal((await list('u-opsdir')).filter((x) => x.kind !== 'repair' || x.d.purpose !== 'buy').length, 0);
+
     const grants = (await admin(`SELECT privilege_type FROM information_schema.role_table_grants WHERE table_schema='prima' AND table_name='office_am_recs' AND grantee='prima_app'`)).rows.map((x) => x.privilege_type).sort();
     assert.deepEqual(grants, ['INSERT', 'SELECT', 'UPDATE']);
   });

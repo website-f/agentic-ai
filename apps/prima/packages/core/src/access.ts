@@ -33,6 +33,11 @@ export type Action =
   | 'commercial.prepare'
   /** Approve a quotation within written authority. The company decides, never PWVSB on its behalf. */
   | 'commercial.approve'
+  /**
+   * Prepare and lodge a tender on the Marketing desk (Fauzan, 23 Nov 2026). Only Marketing staff, and only for a
+   * company they hold an authority grant for. Never quotations, which stay with the company.
+   */
+  | 'tender.work'
   /** See vaults, firearms and movements. Need-to-know: not admin staff or site devices. */
   | 'arms.view'
   /** Issue, receive and count firearms. Only the licensed company does this, never PWVSB (V14). */
@@ -258,6 +263,16 @@ export function hasOwnStaffRecord(user: User): boolean {
   return !(user.opsTier === 'ceo' || user.leadership === 'chairman' || user.leadership === 'vice_chairman');
 }
 
+/** Marketing department staff: the Manager, the Deputy and the Tender Executives (Fauzan, 22-23 Nov 2026). */
+export function isMarketing(user: User): boolean {
+  return user.role === 'pwvsb_officer' && user.department === 'marketing' && !!user.marketingRole;
+}
+
+/** The Marketing Manager or the Deputy: they check each bid and run the department. */
+export function isMarketingLead(user: User): boolean {
+  return isMarketing(user) && (user.marketingRole === 'manager' || user.marketingRole === 'deputy');
+}
+
 export function isGroupRole(user: User): boolean {
   return user.role === 'director' || user.role === 'pwvsb_officer';
 }
@@ -294,7 +309,9 @@ export function can(user: User, grants: AuthorityGrant[], today: IsoDate, action
     const lead = isGroupLeader(user);
     if (action === 'view') return gs.length > 0;
     // Tenders and quotations: group leadership and the Director Office administrator's line of work.
-    if (action === 'commercial.view') return gs.length > 0 && (lead || user.department === 'director_office');
+    if (action === 'commercial.view') return gs.length > 0 && (lead || user.department === 'director_office' || isMarketing(user));
+    // The Marketing desk prepares and lodges tenders for the companies it is granted (Fauzan, 23 Nov 2026).
+    if (action === 'tender.work') return gs.length > 0 && isMarketing(user);
     // P78: the owner prepares like the company's admin team (leads, tenders, quotations); approving stays with the
     // company manager ('commercial.approve'), and nobody approves a quotation they prepared.
     if (action === 'commercial.prepare' && isOwnerAdmin(user)) return gs.length > 0;
@@ -475,6 +492,11 @@ export type DataWall =
   /** Asset Management records: write. */
   | 'asset_write'
   | 'act'
+  /**
+   * ACT staff only (department 'audit'), never group leadership: ACT investigation files in prima.act_audits
+   * (db/modules/act-investigation-wall-v1.sql). The service keeps the team limit on top.
+   */
+  | 'act_staff'
   | 'pdpa'
   | 'bcm'
   /** May close a leaver's access (prima.close_access in the database). */
@@ -554,6 +576,7 @@ export function dataWalls(user: User): DataWall[] {
   // ACT audits Asset Management; it never changes its records, ACT head included.
   if (assetRole(user) && user.department !== 'audit') out.push('asset_write');
   if (actRole(user)) out.push('act');
+  if (actRole(user) === 'act') out.push('act_staff');
   if (!user.integration && user.role === 'pwvsb_officer' && user.department === 'hr') out.push('pay_read');
   if (readsStatutoryForPayroll(user)) out.push('statutory_read');
   if (pdpaRole(user)) out.push('pdpa');

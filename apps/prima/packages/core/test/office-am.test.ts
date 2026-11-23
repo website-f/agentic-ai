@@ -2,7 +2,7 @@
 // office repairs, office inventory, office asset disposal, building purchase records, office rent and periodic visits.
 // Made-up data only, in memory. PostgreSQL is tested apart in apps/api/test/office-am-pg.test.ts.
 import { describe, expect, it } from 'vitest';
-import { AccessDenied, MemoryStore, PrimaService, generateDataset, myt, type AmUnit, type FinPayment, type FinRegular, type OfficeAmRec, type User } from '../src';
+import { AccessDenied, MemoryStore, buyHodFor, PrimaService, generateDataset, myt, type AmUnit, type FinPayment, type FinRegular, type OfficeAmRec, type User } from '../src';
 
 const TODAY = '2026-11-18';
 const NOW = myt(TODAY, '10:00');
@@ -128,6 +128,71 @@ describe('Part S office repairs (S1-S16, S43-S45)', () => {
     await expect(act('u-asset-mm', 'repairApprove', { id: r.id, reason: 'x' })).rejects.toThrow(/Nobody approves their own/);
     const ceo = (await act('u-fauzan', 'repairApprove', { id: r.id, reason: 'approved above limit' })) as OfficeAmRec;
     expect(ceo.status).toBe('approved');
+  });
+});
+
+describe('Buy new office items and renovation (Fauzan, 23 Nov 2026)', () => {
+  const quotes = (a: number, b: number, c: number) => [{ contractor: 'Shop A (test)', price: a }, { contractor: 'Shop B (test)', price: b }, { contractor: 'Shop C (test)', price: c }];
+  const online = [{ where: 'Marketplace one (test)', price: 980 }, { where: 'Marketplace two (test)', price: 1000 }];
+
+  it('company manager asks; Asset Management checks and quotes; Asset Director, then the Operations Director (private) approve; then work, confirm and pay as a repair', async () => {
+    const { ds, act, unit, exec } = fresh();
+    // Office staff below the head do not ask to buy; IT and consumables go elsewhere.
+    await expect(act(exec.id, 'buyRequest', { unitId: unit.id, buyType: 'furniture', item: 'Office desk', qty: 2, estimate: 500, description: 'Two new staff joining' })).rejects.toThrow(AccessDenied);
+    await expect(act('u-cm-sasa', 'buyRequest', { unitId: unit.id, buyType: 'laptop', item: 'Laptop', qty: 1, estimate: 3000, description: 'New staff' })).rejects.toThrow(/IT department/);
+    await expect(act('u-cm-sasa', 'buyRequest', { unitId: unit.id, buyType: 'furniture', consumable: true, item: 'Paper', qty: 1, estimate: 10, description: 'Paper' })).rejects.toThrow(/office request/);
+    await expect(act('u-cm-sasa', 'buyRequest', { unitId: unit.id, buyType: 'renovation', item: 'Partition', qty: 1, estimate: 8000, description: 'New meeting room' })).rejects.toThrow(/photo/);
+    const r = (await act('u-cm-sasa', 'buyRequest', { unitId: unit.id, buyType: 'furniture', item: 'Office desk', qty: 2, estimate: 500, description: 'Two new staff joining' })) as OfficeAmRec;
+    expect(r.kind).toBe('repair');
+    expect(r.ref).toMatch(/^BBR-/);
+    expect(r.d.hod).toBe('ops_director');
+    expect(r.d.estimate).toBe(1000);
+    await expect(act('u-asset-mm', 'repairCheck', { id: r.id, outcome: 'minor', reason: 'not needed' })).rejects.toThrow(/spare/);
+    await act('u-asset-mm', 'repairCheck', { id: r.id, outcome: 'accept', reason: 'no spare desk in the inventory' });
+    await expect(act('u-asset-mm', 'repairQuotes', { id: r.id, quotes: quotes(1100, 1050, 1200), docs: PDF('q', 3) })).rejects.toThrow(/2 online/);
+    await act('u-asset-mm', 'repairQuotes', { id: r.id, quotes: quotes(1100, 1050, 1200), online, docs: PDF('q', 3) });
+    // Lowest quote is RM1,050, more than 5% above the lowest online price RM980: a reason is needed.
+    await expect(act('u-asset-mm', 'repairPick', { id: r.id, contractor: 'Shop B (test)', reason: 'lowest shop quote' })).rejects.toThrow(/online price/);
+    await act('u-asset-mm', 'repairPick', { id: r.id, contractor: 'Shop B (test)', reason: 'lowest shop quote', onlineReason: 'delivery and assembly included' });
+    await expect(act('u-opsdir', 'repairApprove', { id: r.id, reason: 'looks fine' })).rejects.toThrow(/Asset Director checks and recommends first/);
+    // The Operations Director sees the buy waiting, but not before the Asset Director.
+    expect(((await act('u-opsdir', 'board', {})) as { canApprove: string[] }).canApprove).not.toContain(r.id);
+    await act('u-asset-dir', 'repairApprove', { id: r.id, reason: 'needed, price fair' });
+    await expect(act('u-vchair', 'repairApprove', { id: r.id, reason: 'looks fine' })).rejects.toThrow(/Operations Director/);
+    await expect(act('u-ogm', 'repairApprove', { id: r.id, reason: 'looks fine' })).rejects.toThrow(/Operations Director/);
+    const board = (await act('u-opsdir', 'board', {})) as { canApprove: string[]; records: OfficeAmRec[] };
+    expect(board.canApprove).toContain(r.id);
+    expect(board.records.find((x) => x.id === r.id)?.d.quotes).toBeTruthy();
+    const ap = (await act('u-opsdir', 'repairApprove', { id: r.id, reason: 'approved for the new staff' })) as OfficeAmRec;
+    expect(ap.status).toBe('approved');
+    expect(ds.amWorkOrders.find((w) => w.officeRepairId === r.id)!.cost).toBe(1050);
+    await act('u-asset-mm', 'repairStart', { id: r.id });
+    await act('u-asset-mm', 'repairDone', { id: r.id, photos: PDF('delivered') });
+    const conf = (await act('u-cm-sasa', 'repairConfirm', { id: r.id })) as OfficeAmRec;
+    expect(conf.status).toBe('payment_requested');
+    expect((conf.d.payRequest as { amount: number }).amount).toBe(1050);
+  });
+
+  it('government office goes to the OGM, head office to the Chief of Staff; the CEO also above RM50,000; a spare closes it', async () => {
+    const { act, unit } = fresh();
+    expect(buyHodFor('goodwill')).toBe('ogm');
+    expect(buyHodFor(null)).toBe('cos');
+    expect(buyHodFor('co-sasa')).toBe('ops_director');
+    const r = (await act('u-cm-sasa', 'buyRequest', { unitId: unit.id, buyType: 'renovation', item: 'Office renovation', qty: 1, estimate: 60000, description: 'Whole floor refit', photos: PDF('floor') })) as OfficeAmRec;
+    await act('u-asset-mm', 'repairCheck', { id: r.id, outcome: 'accept', reason: 'site seen' });
+    await act('u-asset-mm', 'repairQuotes', { id: r.id, quotes: quotes(61000, 62000, 63000), online: [{ where: 'Renovation price guide A (test)', price: 60000 }, { where: 'Renovation price guide B (test)', price: 65000 }], docs: PDF('q', 3) });
+    await act('u-asset-mm', 'repairPick', { id: r.id, contractor: 'Shop A (test)', reason: 'lowest' });
+    await act('u-asset-dir', 'repairApprove', { id: r.id, reason: 'recommended' });
+    const hod = (await act('u-opsdir', 'repairApprove', { id: r.id, reason: 'approved' })) as OfficeAmRec;
+    expect(hod.status).toBe('for_approval');
+    const ceo = (await act('u-fauzan', 'repairApprove', { id: r.id, reason: 'approved above the limit' })) as OfficeAmRec;
+    expect(ceo.status).toBe('approved');
+
+    const hq = (await act('u-cos', 'buyRequest', { address: 'Head office level 3 (test)', buyType: 'furniture', item: 'Meeting chairs', qty: 8, estimate: 200, description: 'Meeting room chairs broken beyond repair' })) as OfficeAmRec;
+    expect(hq.d.hod).toBe('cos');
+    const spare = (await act('u-asset-mm', 'repairCheck', { id: hq.id, outcome: 'spare', reason: '8 spare chairs in the store moved in' })) as OfficeAmRec;
+    expect(spare.status).toBe('closed');
+    expect(spare.d.stage).toBe('spare');
   });
 });
 

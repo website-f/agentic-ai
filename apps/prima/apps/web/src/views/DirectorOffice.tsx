@@ -35,6 +35,7 @@ const TENDER_COLUMNS: DtColumn<TenderRow>[] = [
       <span className="small">
         {r.total ? `${r.done} of ${r.total} done` : 'not started'}
         {r.checklistItems > 0 && !r.reviewed ? ', not checked yet' : ''}
+        {r.checks.length ? ` · checks: ${r.checks.map((c) => ({ PREPARER: 'preparer', CHECK: 'Marketing check', MANAGER: 'manager' })[c]).join(', ')}` : ''}
         {r.total > 0 && (
           <span className="ld-bar" aria-hidden="true">
             <span style={{ width: `${Math.round((r.done / r.total) * 100)}%` }} />

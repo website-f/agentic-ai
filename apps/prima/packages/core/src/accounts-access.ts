@@ -71,6 +71,10 @@ export const ACCOUNT_TEMPLATES: AccountTemplate[] = [
   C('legal', 'Legal', { department: 'legal' }),
   C('director_office', 'Director Office (DOA)', { department: 'director_office' }),
   C('asset_staff', 'Asset Management staff', { department: 'asset' }),
+  // Marketing (Fauzan, 22-23 Nov 2026). In the database these three come with module marketing-accounts-v1.
+  C('marketing_manager', 'Marketing Manager', { department: 'marketing', marketingRole: 'manager' }),
+  C('marketing_deputy', 'Deputy Marketing Manager', { department: 'marketing', marketingRole: 'deputy' }),
+  C('marketing_executive', 'Tender Executive (Marketing)', { department: 'marketing', marketingRole: 'executive' }),
   C('cos_office', 'Chief of Staff office staff', { department: 'chief_of_staff' }),
 ];
 
