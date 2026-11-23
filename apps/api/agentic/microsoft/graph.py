@@ -688,6 +688,20 @@ class Graph:
             "GET", f"{GRAPH_BETA}/solutions/approval/approvalItems/{_q(approval_id)}"
         )
 
+    async def approval_requests(self, approval_id: str) -> list[dict[str, Any]]:
+        """P127: who was asked (one request per approver: owner = that approver)."""
+        body = await self.request(
+            "GET", f"{GRAPH_BETA}/solutions/approval/approvalItems/{_q(approval_id)}/requests"
+        )
+        return list((body or {}).get("value") or [])
+
+    async def approval_responses(self, approval_id: str) -> list[dict[str, Any]]:
+        """P127: the answers given so far (response, comments, createdBy, createdDateTime)."""
+        body = await self.request(
+            "GET", f"{GRAPH_BETA}/solutions/approval/approvalItems/{_q(approval_id)}/responses"
+        )
+        return list((body or {}).get("value") or [])
+
     async def respond_approval(self, approval_id: str, response: str, comment: str = "") -> None:
         """Approve or reject (one of the item's responseOptions) with an optional comment.
         Only after the person pressed the button."""

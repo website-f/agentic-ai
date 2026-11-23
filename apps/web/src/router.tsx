@@ -837,12 +837,14 @@ const webConnectionsRoute = createRoute({
 // `mailbox` is what the server's follow-up notices link with; same as `box`.
 // P109: the tabs (Teams, Calendar, Approvals, Other email accounts); none is Outlook mail.
 type M365App = "teams" | "calendar" | "approvals" | "accounts";
-interface M365Search { box?: string; ms?: string; msg?: string; app?: M365App; from?: string; new?: "meeting" }
+// P127: `approval` opens one Microsoft approval (the "your AI prepared an answer" notice links it).
+interface M365Search { box?: string; ms?: string; msg?: string; app?: M365App; from?: string; new?: "meeting"; approval?: string }
 const m365Search = (s: Record<string, unknown>): M365Search => ({
   box: str(s.box) ?? str(s.mailbox), ms: str(s.ms), msg: str(s.msg),
   app: s.app === "teams" || s.app === "calendar" || s.app === "approvals" || s.app === "accounts" ? s.app : undefined,
   from: safeFrom(s.from),
   new: s.new === "meeting" ? "meeting" : undefined,
+  approval: str(s.approval),
 });
 // P109b: /mail (the nav, notices, Microsoft's way back) opens the full-screen workspace.
 const mailRoute = createRoute({

@@ -1543,6 +1543,11 @@ from .teams_tools import TEAMS_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in TEAMS_TOOLS})
 
+# P127: Microsoft approvals for a person's own AI (answers are only prepared: they press Send).
+from .approval_tools import APPROVAL_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in APPROVAL_TOOLS})
+
 # P66: Prima Secure (attendance, leave, claims, pay...), as the person who asked.
 from .prima_tools import PRIMA_TOOLS  # noqa: E402
 

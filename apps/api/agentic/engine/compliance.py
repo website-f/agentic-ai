@@ -38,6 +38,9 @@ TOOL_SERVICE: dict[str, str] = {
             "teams_send",
             "teams_channels",
             "teams_read_channel",
+            "m365_approvals",  # P127
+            "m365_approval",
+            "m365_approval_answer",
         )
     },
     **{n: "google" for n in ("email_search", "email_read", "email_draft_reply", "email_draft")},

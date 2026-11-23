@@ -2361,6 +2361,9 @@ from ..feedback.models import Feedback, FeedbackComment  # noqa: E402, F401
 # P109: other email accounts and their attachment backups (agentic/mailbox/models.py).
 from ..mailbox.models import ExternalMailAccount, MailBackupJob  # noqa: E402, F401
 
+# P127: answers a person's own AI prepared for their Microsoft approvals (they press Send).
+from ..microsoft.approval_models import ApprovalAnswer  # noqa: E402, F401
+
 # P109b: Teams meetings made from the Microsoft 365 workspace and their Prima record.
 from ..microsoft.meeting_models import TeamsMeeting  # noqa: E402, F401
 
@@ -2369,6 +2372,9 @@ from ..org.held_models import HeldChange  # noqa: E402, F401
 
 # P109: who heads which departments, and files uploaded for other companies (org/models.py).
 from ..org.models import DepartmentHead, FileHandoff, PersonRequest  # noqa: E402, F401
+
+# P127: the organization hierarchy kept in step with Prima's org chart (prima/org_sync.py).
+from ..prima.org_sync_models import PrimaOrgSync, PrimaOrgSyncRun  # noqa: E402, F401
 
 # P80: SharePoint and OneDrive folders in the Library (agentic/sharepoint/models.py).
 from ..sharepoint.models import LinkedFile, LinkedSource  # noqa: E402, F401

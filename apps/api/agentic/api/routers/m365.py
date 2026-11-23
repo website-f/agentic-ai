@@ -19,6 +19,8 @@ Teams:    GET /api/m365/teams/chats, GET/POST /api/m365/teams/chats/{id}/message
 Calendar: GET/POST /api/m365/calendar, GET /api/m365/calendar/{id},
           POST /api/m365/calendar/{id}/respond
 Approvals: GET /api/m365/approvals, POST /api/m365/approvals/{id}/respond
+          P127: GET /api/m365/approvals/all[/{id}], POST /api/m365/approvals/all/{id}/respond,
+          GET /api/m365/approvals/prepared, POST .../prepared/{id}/send|discard
 AI:       POST /api/m365/ai
 """
 
@@ -35,7 +37,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
-from ...microsoft import access, app, assist, auth, graph, hub
+from ...microsoft import access, app, assist, auth, graph, hub, org_approvals
 from ...microsoft.errors import MicrosoftError
 from ...models import MicrosoftAccount, Workspace
 from ...services import audit
@@ -741,6 +743,13 @@ async def approval_respond(
                 status.HTTP_404_NOT_FOUND, "not_found", "That was not found in Microsoft 365."
             )
         row = hub.approval_row(item)
+        owner = str(((item.get("owner") or {}).get("user") or {}).get("id") or "")
+        if row["i_own"] or (owner and owner == acct.ms_user_id):  # P127: never one's own
+            raise api_error(
+                status.HTTP_409_CONFLICT,
+                "own_request",
+                "You cannot answer your own request. Another approver does.",
+            )
         if not row["i_approve"] or row["state"] != "pending":
             raise api_error(
                 status.HTTP_409_CONFLICT,
@@ -751,9 +760,16 @@ async def approval_respond(
             raise api_error(
                 status.HTTP_400_BAD_REQUEST, "bad_response", "Pick one of the approval's answers."
             )
+        if len(body.comment.strip()) < org_approvals.MIN_REASON:  # P127: always a reason
+            raise api_error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "reason_required",
+                "Give a reason for your answer (approve or reject).",
+            )
         await g.respond_approval(approval_id, body.response, body.comment.strip())
     except MicrosoftError as e:
         raise _fail(e) from e
+    await org_approvals.forget([acct.id])
     await _sent(db, principal, "m365.approval_answered", approval_id, response=body.response)
     return {"response": body.response}
 
@@ -846,6 +862,104 @@ async def approval_create(
         all_must_approve=body.all_must_approve,
     )
     return {"approvers": [people[u][0] for u in body.approvers]}
+
+
+# P127 (Fitri, 23 Nov 2026: "I didn't see all approvals from my tenant including in Teams. so put
+# it all. and make it I can view the approval to view the content and attachments"): every
+# approval the person may see across the office's connected Microsoft accounts
+# (microsoft/org_approvals.py), one opened with its approvers and answers, an answer with a
+# reason through their own account, and the answers their own AI prepared for them to send.
+
+
+def _problem(e: org_approvals.ApprovalProblem) -> Exception:
+    return api_error(e.status, e.code, e.message)
+
+
+@router.get("/approvals/all")
+async def approvals_all(
+    fresh: bool = Query(default=False),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Every approval this person may see (owner and global admins: the whole office; branch
+    managers and HODs: their people's; everyone else: their own), newest first."""
+    return await org_approvals.visible(db, org_approvals.Viewer.of(principal), fresh=fresh)
+
+
+@router.get("/approvals/prepared")
+async def approvals_prepared(
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Answers this person's own AI prepared, waiting for them to press Send."""
+    return await org_approvals.prepared(db, org_approvals.Viewer.of(principal))
+
+
+class PreparedIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/approvals/prepared/{answer_id}/send")
+async def approvals_prepared_send(
+    answer_id: str,
+    body: PreparedIn,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    try:
+        return await org_approvals.send_prepared(
+            db, org_approvals.Viewer.of(principal), answer_id, body.reason
+        )
+    except org_approvals.ApprovalProblem as e:
+        raise _problem(e) from e
+
+
+@router.post("/approvals/prepared/{answer_id}/discard")
+async def approvals_prepared_discard(
+    answer_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    try:
+        await org_approvals.discard_prepared(db, org_approvals.Viewer.of(principal), answer_id)
+    except org_approvals.ApprovalProblem as e:
+        raise _problem(e) from e
+    return {"ok": True}
+
+
+@router.get("/approvals/all/{approval_id}")
+async def approval_detail(
+    approval_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """One approval this person may see: its details, links, approvers and their answers."""
+    try:
+        return await org_approvals.detail(db, org_approvals.Viewer.of(principal), approval_id)
+    except org_approvals.ApprovalProblem as e:
+        raise _problem(e) from e
+
+
+class AnswerIn(BaseModel):
+    response: str = Field(min_length=1, max_length=60)
+    reason: str = Field(default="", max_length=2000)
+
+
+@router.post("/approvals/all/{approval_id}/respond")
+async def approval_answer(
+    approval_id: str,
+    body: AnswerIn,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """The person's own answer with a reason, through whichever of their own Microsoft accounts
+    is asked (never their own request)."""
+    try:
+        return await org_approvals.respond(
+            db, org_approvals.Viewer.of(principal), approval_id, body.response, body.reason
+        )
+    except org_approvals.ApprovalProblem as e:
+        raise _problem(e) from e
 
 
 # ---------------------------------------------------------------- Ask AI

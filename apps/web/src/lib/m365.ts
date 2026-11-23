@@ -345,6 +345,99 @@ export const approvalsQuery = queryOptions({
 export const respondApproval = (id: string, response: string, comment: string) =>
   api<{ response: string }>(`/api/m365/approvals/${enc(id)}/respond`, "POST", { response, comment });
 
+/** P127: every approval of the office the person may see (owner and global admins: all; branch
+ * managers and HODs: their people's; everyone else: their own), across every connected Microsoft
+ * account, each approval once. The server keeps each account's list and refreshes it behind, so
+ * the page opens at once. */
+export interface OrgApproval extends Omit<TeamsApproval, "source"> {
+  source: "teams" | "sharepoint" | "flow";
+  waiting_for_me: boolean;
+  owner_user_id: string | null;
+  approvers: { name: string }[];
+  /** The Approvals app in Teams (Microsoft has no link to one approval). */
+  teams_link: string;
+}
+
+export interface OrgApprovals {
+  items: OrgApproval[];
+  view: "all" | "scope" | "own";
+  /** Connected Microsoft accounts read, and how many of them could not be read just now. */
+  accounts: number;
+  failed: number;
+  connected: boolean;
+  at: string;
+}
+
+export interface ApprovalPerson {
+  name: string;
+  group?: boolean;
+  reassigned?: boolean;
+  asked_at?: string | null;
+  response?: string;
+  comment?: string;
+  answered_at?: string | null;
+}
+
+/** An answer the person's own AI prepared: sent only when they press Send. */
+export interface PreparedAnswer {
+  id: string;
+  approval_id: string;
+  title: string;
+  response: string;
+  reason: string;
+  status: string;
+  created_at: string | null;
+}
+
+export interface ApprovalDetail extends OrgApproval {
+  links: string[];
+  people: ApprovalPerson[];
+  answered: boolean;
+  can_answer: boolean;
+  prepared: PreparedAnswer[];
+}
+
+export const orgApprovalKeys = {
+  all: [...m365Keys.approvals, "all"] as const,
+  one: (id: string) => [...m365Keys.approvals, "one", id] as const,
+  prepared: [...m365Keys.approvals, "prepared"] as const,
+};
+
+export const orgApprovalsQuery = queryOptions({
+  queryKey: orgApprovalKeys.all,
+  queryFn: () => api<OrgApprovals>("/api/m365/approvals/all"),
+  retry: false,
+  staleTime: 30_000,
+  refetchInterval: 60_000,
+});
+
+export const approvalDetailQuery = (id: string) =>
+  queryOptions({
+    queryKey: orgApprovalKeys.one(id),
+    queryFn: () => api<ApprovalDetail>(`/api/m365/approvals/all/${enc(id)}`),
+    retry: false,
+    staleTime: 30_000,
+  });
+
+export const preparedAnswersQuery = queryOptions({
+  queryKey: orgApprovalKeys.prepared,
+  queryFn: () => api<PreparedAnswer[]>("/api/m365/approvals/prepared"),
+  retry: false,
+  refetchInterval: 60_000,
+});
+
+/** Look again now (the Refresh button): every account asked afresh. */
+export const freshOrgApprovals = () => api<OrgApprovals>("/api/m365/approvals/all?fresh=true");
+
+export const answerApproval = (id: string, response: string, reason: string) =>
+  api<{ response: string }>(`/api/m365/approvals/all/${enc(id)}/respond`, "POST", { response, reason });
+
+export const sendPreparedAnswer = (id: string, reason?: string) =>
+  api<{ response: string }>(`/api/m365/approvals/prepared/${enc(id)}/send`, "POST", reason ? { reason } : {});
+
+export const discardPreparedAnswer = (id: string) =>
+  api<{ ok: boolean }>(`/api/m365/approvals/prepared/${enc(id)}/discard`, "POST", {});
+
 // ------------------------------------------------------------------------------------- Ask AI
 
 export type AiAction =

@@ -2074,3 +2074,13 @@ MS.update({k: v for k, v in MS_WORK_MAIL.items() if k not in MS})
 from .ms_held import MS_HELD  # noqa: E402
 
 MS.update({k: v for k, v in MS_HELD.items() if k not in MS})
+
+# P127: every Microsoft approval of the office, and answers the AI prepares for its person.
+from .ms_approvals import MS_APPROVALS  # noqa: E402
+
+MS.update({k: v for k, v in MS_APPROVALS.items() if k not in MS})
+
+# P127: the organization chart in step with Prima's, and its Excel and PDF downloads.
+from .ms_org_sync import MS_ORG_SYNC  # noqa: E402
+
+MS.update({k: v for k, v in MS_ORG_SYNC.items() if k not in MS})

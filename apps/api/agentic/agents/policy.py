@@ -57,6 +57,9 @@ OUTSIDE_CONTENT = frozenset(
         "teams_read_chat",
         "teams_channels",  # P63: channel posts
         "teams_read_channel",
+        # P127: Microsoft approvals (what other people wrote in them).
+        "m365_approvals",
+        "m365_approval",
         # P66: Prima's records (what staff typed).
         "prima_read",
         "prima_record",

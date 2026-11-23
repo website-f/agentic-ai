@@ -4,7 +4,7 @@ import {
   BookOpenTextIcon, BrainIcon, BrowserIcon, CalculatorIcon, CalendarBlankIcon, CalendarCheckIcon, CalendarPlusIcon, CalendarXIcon,
   ChartLineUpIcon, ClipboardTextIcon, ClockCountdownIcon, ClockIcon, CodeIcon, CursorClickIcon, EnvelopeSimpleIcon, FileTextIcon,
   FilesIcon, FloppyDiskIcon, FlowArrowIcon, GlobeIcon, HandIcon, ImageIcon, KanbanIcon, LightbulbIcon, LightningIcon,
-  ChatsCircleIcon, MagnifyingGlassIcon, NotePencilIcon, PaperPlaneRightIcon, SparkleIcon, TrendDownIcon, UsersThreeIcon, WhatsappLogoIcon,
+  ChatsCircleIcon, MagnifyingGlassIcon, NotePencilIcon, PaperPlaneRightIcon, SealCheckIcon, SparkleIcon, TrendDownIcon, UsersThreeIcon, WhatsappLogoIcon,
   type Icon,
 } from "@phosphor-icons/react";
 
@@ -35,6 +35,10 @@ export const TOOL_LOOK: Record<string, ToolLook> = {
   teams_send: { label: msg("Drafted a Teams message"), icon: PaperPlaneRightIcon },
   teams_channels: { label: msg("Checked your Teams channels"), icon: ChatsCircleIcon },
   teams_read_channel: { label: msg("Read a Teams channel"), icon: ChatsCircleIcon },
+  // P127: Microsoft approvals (an answer is only prepared: the person presses Send)
+  m365_approvals: { label: msg("Checked your approvals"), icon: SealCheckIcon },
+  m365_approval: { label: msg("Read an approval"), icon: SealCheckIcon },
+  m365_approval_answer: { label: msg("Prepared an approval answer"), icon: SealCheckIcon },
   outlook_search: { label: msg("Searched email"), icon: MagnifyingGlassIcon },
   outlook_read: { label: msg("Read an email"), icon: EnvelopeSimpleIcon },
   outlook_draft_reply: { label: msg("Drafted a reply"), icon: PaperPlaneRightIcon },
