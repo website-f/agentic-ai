@@ -73,6 +73,7 @@ REAL = ("set", "standard")
 # Why a row shows as it does (the web turns each into words: pages/org-chart-sync.tsx).
 WHY = (
     "office_newer", "prima_newer", "office_changed", "prima_changed", "filled_from_prima",
+    "filled_to_prima",
     "unsure_office_keeps", "both_changed_office_keeps", "prima_manager_not_linked",
     "office_manager_not_linked", "would_loop", "prima_no_line", "prima_job_line", "prima_top",
     "not_installed", "refused", "prima_down",
@@ -269,6 +270,9 @@ def _decide(
         winner, why = "prima", "prima_changed"
     elif office is None:
         winner, why = "prima", "filled_from_prima"
+    elif p is None:
+        # P128: Prima has only its "assumed" Chief of Staff, the office a real line: Prima gets it.
+        winner, why = "office", "filled_to_prima"
     else:
         return Plan(uid, pid, line, "differs", "office", "unsure_office_keeps")
     if winner == "prima":

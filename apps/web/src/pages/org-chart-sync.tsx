@@ -84,6 +84,7 @@ export function PrimaSyncLine({ me }: { me: Me }) {
     h === "set" ? t("set by a head") : h === "standard" ? t("from the job") : h === "assumed" ? t("assumed (Chief of Staff)") : h === "top" ? t("top of the group") : "";
   const why = (p: SyncPerson): string => {
     switch (p.why) {
+      case "filled_to_prima": return t("Prima had no real line for them: the office line was sent there.");
       case "unsure_office_keeps": return t("Both already had a line: the office keeps its own. Set it again here to send it to Prima, or change it in Prima.");
       case "both_changed_office_keeps": return t("Both changed and it is not clear which was last: the office keeps its own.");
       case "prima_manager_not_linked": return t("Prima's manager is not linked to anyone in the office.");

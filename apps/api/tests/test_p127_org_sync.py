@@ -210,6 +210,24 @@ async def test_no_loops_and_never_oneself(client, fake_prima):
     assert (bob.state, bob.why) == ("differs", "would_loop")
 
 
+async def test_an_assumed_prima_line_takes_hr_s_office_line(client, fake_prima):
+    """P128 (live, 24 Nov 2026): 18 people had a line set by HR in the office while Prima only had
+    its assumed Chief of Staff for them; once Prima's chart takes lines, HR's line goes there."""
+    ws, ids, _ = await _office(client)
+    await _set(client, ids["cara"], ids["bob"])  # HR set Cara's line before the sync existed
+    async with SessionLocal() as db:
+        await db.execute(PrimaOrgSync.__table__.delete())
+        await db.commit()
+    fake_prima["installed"] = True
+    await _sync(ws)
+    sent = [p for p in _posts(fake_prima) if p["userId"] == "p-c"]
+    assert sent and sent[-1]["managerId"] == "p-b"
+    assert fake_prima["people"]["p-c"][1:3] == ["p-b", "set"]
+    assert (await _lines(ws))[ids["cara"]] == ids["bob"]  # the office keeps HR's line
+    cara = await _state(ws, ids["cara"])
+    assert (cara.state, cara.winner) == ("in_step", "office")
+
+
 async def test_office_lines_go_to_prima_or_wait_for_it(client, fake_prima):
     ws, ids, _ = await _office(client)
     await _sync(ws)
