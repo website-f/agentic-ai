@@ -5440,6 +5440,7 @@ const ROWS: Row[] = [
   ['My AI', 'AI saya', null],
   ['No location within 100 m yet. On a computer, turn on Windows location and Wi-Fi; on a phone, allow precise location for Prima.', 'Belum ada lokasi dalam lingkungan 100 m. Di komputer, hidupkan lokasi Windows dan Wi-Fi; di telefon, benarkan lokasi tepat untuk Prima.', null],
   ['Location only approximate (100 to 300 m)', 'Lokasi hanya anggaran (100 hingga 300 m)', null],
+  ['No location precise enough yet. On a computer, turn on Windows location and Wi-Fi; on a phone, allow precise location for Prima.', 'Belum ada lokasi yang cukup tepat. Di komputer, hidupkan lokasi Windows dan Wi-Fi; di telefon, benarkan lokasi tepat untuk Prima.', null],
 ];
 
 const DICT = new Map<string, [string, string]>();

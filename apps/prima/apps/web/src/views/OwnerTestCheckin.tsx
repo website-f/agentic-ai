@@ -20,35 +20,57 @@ const time = (t: string) => t.slice(11, 16);
 const dur = (min: number) => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min` : `${min} min`);
 const minutesOf = (from: string, to: string) => Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 60_000));
 
-/** One reading from the phone: the best within a few seconds. Rejects with the reason it did not come. */
+/**
+ * One reading: the best within a few seconds. Rejects with the reason it did not come.
+ * P123 (owner, 23 Nov 2026: "why not detect the location at once, like the map pin in our other apps?"): the quick
+ * answer the browser already has (Wi-Fi or network, up to a minute old) is taken at once, next to the precise watch;
+ * after the first reading it looks 2.5 s more for a better one, and only with no reading at all in 15 s does it give
+ * up. The server keeps the accuracy; the route and the movement figures judge it.
+ */
 function readLocation(timeoutMs = 15_000): Promise<TestCheckinFix> {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject({ problem: 'unsupported' as LocationProblem });
+    const geo = navigator.geolocation;
+    if (!geo) return reject({ problem: 'unsupported' as LocationProblem });
     let best: GeolocationPosition | null = null;
     let done = false;
+    let settle: number | null = null;
+    let lastError: GeolocationPositionError | null = null;
+    const watches: number[] = [];
+    const stop = () => {
+      done = true;
+      for (const w of watches) geo.clearWatch(w);
+      window.clearTimeout(limit);
+      if (settle !== null) window.clearTimeout(settle);
+    };
     const finish = () => {
       if (done) return;
-      done = true;
-      navigator.geolocation.clearWatch(id);
-      window.clearTimeout(timer);
-      if (!best) return reject({ problem: 'timeout' as LocationProblem });
-      resolve({ lat: best.coords.latitude, lng: best.coords.longitude, accuracyM: Math.round(best.coords.accuracy), capturedAt: fromMs(best.timestamp) });
+      stop();
+      if (!best) return reject({ problem: lastError ? locationProblem(lastError) : ('timeout' as LocationProblem) });
+      const at = Math.abs(best.timestamp - Date.now()) < 120_000 ? best.timestamp : Date.now();
+      resolve({ lat: best.coords.latitude, lng: best.coords.longitude, accuracyM: Math.round(best.coords.accuracy), capturedAt: fromMs(at) });
     };
-    const id = navigator.geolocation.watchPosition(
-      (p) => {
-        if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
-        if (best.coords.accuracy <= 30) finish();
-      },
-      (e) => {
-        if (done) return;
-        done = true;
-        navigator.geolocation.clearWatch(id);
-        window.clearTimeout(timer);
+    const take = (p: GeolocationPosition) => {
+      if (done) return;
+      if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
+      if (best.coords.accuracy <= 30) return finish();
+      if (settle === null) settle = window.setTimeout(finish, 2_500);
+    };
+    const fail = (e: GeolocationPositionError) => {
+      if (done) return;
+      lastError = e;
+      if (e.code === e.PERMISSION_DENIED) {
+        stop();
         reject({ problem: locationProblem(e) });
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: timeoutMs },
-    );
-    const timer = window.setTimeout(finish, Math.min(timeoutMs, 8_000));
+      }
+    };
+    try {
+      geo.getCurrentPosition(take, fail, { enableHighAccuracy: false, maximumAge: 60_000, timeout: 8_000 });
+    } catch {
+      /* the watches still run */
+    }
+    watches.push(geo.watchPosition(take, fail, { enableHighAccuracy: true, maximumAge: 0, timeout: timeoutMs }));
+    watches.push(geo.watchPosition(take, fail, { enableHighAccuracy: false, maximumAge: 20_000, timeout: timeoutMs }));
+    const limit = window.setTimeout(finish, timeoutMs);
   });
 }
 
