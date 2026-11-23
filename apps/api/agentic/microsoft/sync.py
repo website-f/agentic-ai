@@ -221,8 +221,11 @@ async def sync_box(db: AsyncSession, box: Box) -> list[MailItem]:
 
 async def record_failure(db: AsyncSession, box: Box, e: Exception) -> None:
     """Remember why a sync failed, in words for the dashboard."""
+    # Read the kind and id BEFORE the rollback: it expires the row, and reading box.id afterwards
+    # would load it lazily outside the async context (MissingGreenlet; P127 live logs).
+    kind, box_id = kind_of(box), box.id
     await db.rollback()
-    box = await load_box(db, kind_of(box), box.id) or box
+    box = await load_box(db, kind, box_id) or box
     if isinstance(e, ReconnectNeeded):
         return  # auth.access_token already marked the account reconnect_needed
     if isinstance(box, SharedMailbox) and isinstance(e, Forbidden):
