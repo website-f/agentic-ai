@@ -316,3 +316,12 @@ function tableOfLines(lines: Piece[][]): string[][] {
     return row;
   });
 }
+
+/**
+ * P129: a table from pieces found some other way (the PDF reader pdf.js, or OCR of a scanned page on the device), by
+ * the same line and column rules as extractPdfTable.
+ */
+export function tableOfPieces(pieces: readonly PdfTextPiece[]): string[][] {
+  if (!pieces.length) return [];
+  return tableOfLines(linesOf(pieces.map((p) => ({ ...p }))));
+}

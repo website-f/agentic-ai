@@ -30,6 +30,7 @@ import {
   type SmartColumn,
   type SmartLevel,
   type XlsxSheet,
+  tableOfPieces,
 } from '@prima/core';
 import { api, ApiError, type OrgImportPreview, type OrgImportTemplate } from '../api';
 import { useApp } from '../App';
@@ -37,6 +38,7 @@ import { Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, RefreshContext, dateTimeLabel } from '../ui';
 import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { useRecordKinds } from './RecordForm';
+import { pdfTableAnyWay } from '../pdf-ocr';
 import '../styles/import.css';
 
 /**
@@ -93,7 +95,7 @@ async function inflatePdf(b: Uint8Array): Promise<Uint8Array> {
 }
 
 /** Any supported file to its sheets of cell text (also the guard pay import's reader). */
-export async function sheetsOf(f: File): Promise<XlsxSheet[]> {
+export async function sheetsOf(f: File, progress?: (msg: string) => void): Promise<XlsxSheet[]> {
   const name = f.name.toLowerCase();
   // Excel 97-2003 (.xls), read here too (core xls-read.ts), as the old systems save it.
   if (name.endsWith('.xls')) return readXls(new Uint8Array(await f.arrayBuffer()));
@@ -107,9 +109,12 @@ export async function sheetsOf(f: File): Promise<XlsxSheet[]> {
   }
   const bytes = new Uint8Array(await f.arrayBuffer());
   if (name.endsWith('.pdf') || f.type === 'application/pdf') {
-    const rows = await extractPdfTable(bytes, inflatePdf);
-    if (rows.filter((r) => r.length >= 2).length < 2)
-      throw new Error('No table could be read from this PDF. A scanned paper is a picture: type it into the template, or ask for the Excel copy.');
+    let rows = await extractPdfTable(bytes, inflatePdf).catch(() => [] as string[][]);
+    const enough = (r: string[][]) => r.filter((x) => x.length >= 2).length >= 2;
+    // P129: another PDF encoding (pdf.js), then a scanned PDF read with OCR on this device.
+    if (!enough(rows)) rows = await pdfTableAnyWay(bytes, tableOfPieces, enough, progress);
+    if (!enough(rows))
+      throw new Error('No table could be read from this PDF, even with OCR (the scan may be too faint or skewed). Type it into the template, or ask for the Excel copy.');
     return [{ name: f.name, rows }];
   }
   if (name.endsWith('.docx')) return readDocxTables(bytes, inflateRaw);

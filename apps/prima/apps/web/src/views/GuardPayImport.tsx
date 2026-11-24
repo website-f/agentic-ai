@@ -28,6 +28,7 @@ import {
   type SmartColumn,
   type SmartLevel,
   type XlsxSheet,
+  tableOfPieces,
 } from '@prima/core';
 import { api, ApiError, type GuardPayBoard, type GuardPayImportResult } from '../api';
 import { Select } from '../SearchSelect';
@@ -35,6 +36,7 @@ import { Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, useAction, useLoad } from '../ui';
 import { AddImportMenu } from './AddImportMenu';
 import { useScreenUploader } from '../upload-handlers';
+import { ocrPdfPieces } from '../pdf-ocr';
 import { sheetsOf } from './ImportDrawer';
 import '../styles/import.css';
 
@@ -410,7 +412,7 @@ async function pdfRows(bytes: Uint8Array): Promise<string[][]> {
 }
 
 /** Any file the guard pay import takes, to sheets of cell text. Read here on the device; nothing is uploaded to read it. */
-async function readGuardPayFile(f: File): Promise<XlsxSheet[]> {
+async function readGuardPayFile(f: File, progress?: (msg: string) => void): Promise<XlsxSheet[]> {
   const name = f.name.toLowerCase();
   const bytes = new Uint8Array(await f.arrayBuffer());
   if (name.endsWith('.xls') || isXlsFile(bytes)) return readXls(bytes);
@@ -419,7 +421,10 @@ async function readGuardPayFile(f: File): Promise<XlsxSheet[]> {
     if (rows.filter((r) => r.length >= 3).length >= 2) return [{ name: f.name, rows }];
     const more = await pdfRows(bytes).catch(() => [] as string[][]);
     if (more.filter((r) => r.length >= 3).length >= 2) return [{ name: f.name, rows: more }];
-    throw new Error('No table could be read from this PDF. A scanned paper is a picture: ask for the Excel copy, or type the figures in with Add.');
+    // P129: a scanned PDF: its pages are read with OCR on this device.
+    const ocr = tableOfPieces(await ocrPdfPieces(bytes, progress).catch(() => []));
+    if (ocr.filter((r) => r.length >= 3).length >= 2) return [{ name: f.name, rows: ocr }];
+    throw new Error('No table could be read from this PDF, even with OCR (the scan may be too faint or skewed). Ask for the Excel copy, or type the figures in with Add.');
   }
   return sheetsOf(f);
 }
@@ -521,7 +526,7 @@ function GuardPayImportDrawer({ targets, initialFile, onClose }: { targets: Targ
   const readFile = (f: File | undefined) => {
     if (!f) return;
     if (f.size > GUARD_PAY_IMPORT_RULE.maxFileBytes) return setError(errOf('The file is too big. Keep only the sheet with the guards, then choose it again.'));
-    void load(() => readGuardPayFile(f), f.name);
+    void load(() => readGuardPayFile(f, (m) => setBusy(m)), f.name);
   };
   // P129: a file handed over from the toolbar's Upload is read at once (the person chose it there).
   const handedRead = useRef(false);

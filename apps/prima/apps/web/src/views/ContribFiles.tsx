@@ -6,6 +6,7 @@
 // downloaded again; every download is in the audit log.
 import { useEffect, useMemo, useState } from 'react';
 import { takeHandedFile, useScreenUploader } from '../upload-handlers';
+import { ocrPdfPieces } from '../pdf-ocr';
 import { CheckCircleIcon, DownloadSimpleIcon, FileArrowUpIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import {
   FIGURE_LABEL,
@@ -136,7 +137,7 @@ async function pdfjsPieces(bytes: Uint8Array): Promise<PdfTextPiece[]> {
 }
 
 /** Any file to rows of cell text: every sheet of a workbook, the tables of a Word file, a PDF by where its text sits. */
-async function readAnyFile(f: File): Promise<string[][][]> {
+async function readAnyFile(f: File, progress?: (msg: string) => void): Promise<string[][][]> {
   const name = f.name.toLowerCase();
   const bytes = new Uint8Array(await f.arrayBuffer());
   if (name.endsWith('.pdf') || f.type === 'application/pdf') {
@@ -146,7 +147,14 @@ async function readAnyFile(f: File): Promise<string[][][]> {
       pieces = await pdfjsPieces(bytes).catch(() => []);
       grid = payGridFromPdf(pieces);
     }
-    if (grid.filter((r) => r.length >= 3).length < 2) throw new Error('No table could be read from this PDF. A scanned paper is a picture: ask for the Excel copy, or paste the rows.');
+    // P129: no text in the PDF (a scan, or printed to a picture): read the page pictures with OCR on this device.
+    if (grid.filter((r) => r.length >= 3).length < 2) {
+      pieces = await ocrPdfPieces(bytes, progress).catch((e: unknown) => {
+        throw new Error(`This PDF is a picture (a scan), and reading it with OCR did not work: ${e instanceof Error ? e.message : String(e)} Ask for the Excel copy, or paste the rows.`);
+      });
+      grid = payGridFromPdf(pieces);
+    }
+    if (grid.filter((r) => r.length >= 3).length < 2) throw new Error('No table could be read from this PDF, even with OCR (the scan may be too faint or skewed). Ask for the Excel copy, or paste the rows.');
     return [grid];
   }
   if (name.endsWith('.csv') || name.endsWith('.txt') || name.endsWith('.tsv') || f.type === 'text/csv') return [pastedRows(new TextDecoder().decode(bytes))];
@@ -293,7 +301,7 @@ function NewFile({ board, handed, onHandedRead }: { board: ContribBoard; handed?
     setBusy('Reading on this device…');
     await new Promise((r) => setTimeout(r, 30));
     try {
-      load(await readAnyFile(f), f.name);
+      load(await readAnyFile(f, setBusy), f.name);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

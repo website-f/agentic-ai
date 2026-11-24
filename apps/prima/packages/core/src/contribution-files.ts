@@ -163,8 +163,16 @@ export function payHeaderKey(header: string): { key: PayKey; score: number } | n
   const h = normHeader(header);
   if (!h || h.length > 120) return null;
   for (const [re, key, score] of HEADER_RULES) if (re.test(h)) return { key: key(h), score };
+  // P129: a scanned sheet read with OCR may run heading words together ("GAJIKASAR", "GAJIBERSIH"): split the known
+  // heading words apart and try once more.
+  const split = h.replace(/\s+/g, '').replace(RUN_TOGETHER, ' $1 ').replace(/\s+/g, ' ').trim();
+  if (split !== h) for (const [re, key, score] of HEADER_RULES) if (re.test(split)) return { key: key(split), score: score * 0.9 };
   return null;
 }
+
+/** Heading words a scan may join to their neighbours. */
+const RUN_TOGETHER =
+  /(gaji|kasar|bersih|pokok|asas|elaun|jumlah|potongan|caruman|pekerja|majikan|kwsp|epf|perkeso|socso|skbbk|pcb|zakat|cuti|tanpa|lebih|masa|yuran|pengarah|tunggakan|bonus|perjalanan|pinjaman|pendahuluan|nama|gross|basic|salary|allowance|overtime|employer|employee)/g;
 
 // ---------- Values ----------
 
