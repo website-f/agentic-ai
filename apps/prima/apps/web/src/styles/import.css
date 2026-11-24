@@ -523,7 +523,8 @@
   align-items: center;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 38%, var(--line));
+  background-color: color-mix(in oklab, var(--accent) 5%, var(--surface));
   border-radius: var(--r);
   background: var(--surface, transparent);
 }

@@ -27,15 +27,7 @@
   gap: 6px;
   white-space: nowrap;
 }
-/* P128: the head runs title, line and buttons top to bottom, so the line under the title is never squeezed into a
-   narrow column beside five buttons. */
-.fin > .k-head {
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-}
-.fin > .k-head .k-head-actions {
-  justify-content: flex-start;
-}
+/* P130: the head layout for every screen (styles.css) keeps the line under the title full width. */
 
 /* P128: the area bar (four areas as one segmented control) and the area's own tabs under it, underlined. */
 .fin-nav {
@@ -227,13 +219,13 @@
   border-bottom: 0;
 }
 .fin-today-item[data-tone='crit'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .fin-today-item[data-tone='warn'] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .fin-today-item[data-tone='info'] {
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--accent) 6%, transparent);
 }
 button.fin-today-item {
   cursor: pointer;
@@ -539,10 +531,10 @@ td[data-neg='yes'] {
   border-bottom: 0;
 }
 .fin-pay[data-tone='crit'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .fin-pay[data-tone='warn'] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .fin-pay-main {
   flex: 1;

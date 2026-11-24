@@ -40,10 +40,10 @@ button.op-item:disabled {
   cursor: default;
 }
 .op-item[data-tone='crit'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .op-item[data-tone='warn'] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .op-line {
   display: flex;
@@ -335,7 +335,7 @@ td.op-num[data-tone='warn'],
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 .st-row[data-problem='true'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .st-main {
   display: grid;
@@ -970,4 +970,16 @@ td.op-num[data-tone='warn'],
 }
 .op-unknown p {
   margin-top: 6px;
+}
+
+/* P130: urgency as a small dot beside the title (the row is already washed in its tone), not a bar down the side. */
+.cm-q {
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+}
+.cm-q-bar {
+  align-self: start;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
 }

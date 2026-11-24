@@ -46,7 +46,7 @@
   --unknown: #5f50a0;
   --unknown-soft: #ebe8f7;
   --focus: #13895f;
-  --shadow: 0 1px 2px hsl(152 30% 18% / 0.06), 0 8px 24px -12px hsl(152 30% 18% / 0.18);
+  --shadow: 0 1px 2px hsl(152 30% 18% / 0.05), 0 6px 16px -12px hsl(152 30% 18% / 0.12);
 
   --font-display: 'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-body: 'Geist Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -915,7 +915,7 @@ th.num {
 }
 .cell[data-state='blocked'] {
   border-color: var(--crit);
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .cell[data-state='draft'] {
   background: var(--surface-2);
@@ -3704,4 +3704,250 @@ button.k-stat:active {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ---------- P130 (Fitri, 24 Nov 2026: "no slop, clean, readable"): one design pass for every screen ---------- */
+/* Number tiles: one quiet panel split by hairlines, not a row of boxed cards with tinted icon squares. The row
+   splits evenly by count (7 -> 4 + 3, 9 -> 5 + 4), so a tile is never left alone on a line of its own. */
+.k-stats,
+.kpis {
+  --per: 6;
+  --min: 150px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(var(--min), calc(100% / var(--per) - 1px)), 1fr));
+  gap: 0;
+  row-gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px hsl(152 30% 18% / 0.04);
+}
+.k-stats:has(> :last-child:nth-child(1)),
+.kpis:has(> :last-child:nth-child(1)) {
+  --per: 1;
+}
+.k-stats:has(> :last-child:nth-child(2)),
+.kpis:has(> :last-child:nth-child(2)) {
+  --per: 2;
+}
+.k-stats:has(> :last-child:nth-child(3)),
+.kpis:has(> :last-child:nth-child(3)) {
+  --per: 3;
+}
+.k-stats:has(> :last-child:nth-child(4)),
+.kpis:has(> :last-child:nth-child(4)),
+.k-stats:has(> :last-child:nth-child(7)),
+.kpis:has(> :last-child:nth-child(7)),
+.k-stats:has(> :last-child:nth-child(8)),
+.kpis:has(> :last-child:nth-child(8)) {
+  --per: 4;
+}
+.k-stats:has(> :last-child:nth-child(5)),
+.kpis:has(> :last-child:nth-child(5)),
+.k-stats:has(> :last-child:nth-child(9)),
+.kpis:has(> :last-child:nth-child(9)),
+.k-stats:has(> :last-child:nth-child(10)),
+.kpis:has(> :last-child:nth-child(10)) {
+  --per: 5;
+}
+.k-stats > *,
+.kpis > * {
+  margin: 0 -1px -1px 0;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.k-stat {
+  padding: 16px 18px 18px;
+  background: transparent;
+  box-shadow: none;
+}
+button.k-stat {
+  transition: background-color 0.15s;
+}
+button.k-stat:hover {
+  background: color-mix(in oklab, var(--accent) 5%, var(--surface));
+}
+button.k-stat:active {
+  transform: none;
+  background: color-mix(in oklab, var(--accent) 9%, var(--surface));
+}
+button.k-stat:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.k-stat-top {
+  align-items: center;
+  gap: 6px;
+}
+.k-stat-icon,
+.k-stat[data-tone] .k-stat-icon {
+  width: auto;
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  opacity: 0.8;
+}
+.k-stat-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.k-stat[data-tone='crit'] .k-stat-icon {
+  color: var(--crit);
+  opacity: 1;
+}
+.k-stat[data-tone='warn'] .k-stat-icon {
+  color: var(--warn);
+  opacity: 1;
+}
+.k-stat-label,
+.kpi .label {
+  font-size: 0.78rem;
+  font-weight: 550;
+  color: var(--muted);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.kpi {
+  padding: 16px 18px 18px;
+}
+@media (max-width: 860px) {
+  .k-stats,
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+  }
+  .k-stats > :last-child:nth-child(odd),
+  .kpis > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .k-stat,
+  .kpi {
+    padding: 14px;
+  }
+}
+
+/* Notes: a soft wash in their tone with a small mark, not a hard green frame with a thick left bar. */
+.notice,
+.notice[data-tone],
+.notice:not([data-tone]) {
+  border: 1px solid color-mix(in oklab, var(--n-tone, var(--accent)) 16%, transparent);
+  border-left-width: 1px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--n-tone, var(--accent)) 6%, var(--surface));
+  color: var(--ink);
+  --n-tone: var(--accent);
+}
+.notice[data-tone='crit'] {
+  --n-tone: var(--crit);
+  background: color-mix(in oklab, var(--crit) 8%, var(--surface));
+}
+.notice[data-tone='warn'] {
+  --n-tone: var(--warn);
+  background: color-mix(in oklab, var(--warn) 9%, var(--surface));
+}
+.notice[data-tone='ok'] {
+  --n-tone: var(--ok);
+}
+.notice[data-tone='unknown'] {
+  --n-tone: var(--unknown);
+}
+.notice[data-tone='neutral'],
+.notice[data-tone='info'] {
+  --n-tone: var(--muted);
+  background: var(--surface-2);
+  border-color: transparent;
+}
+.notice:is([class='notice'], [class='notice small']) {
+  position: relative;
+  padding-left: 38px;
+}
+.notice:is([class='notice'], [class='notice small'])::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 12px;
+  width: 16px;
+  height: 16px;
+  background: var(--n-tone);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v5M12 7.5v.01'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v5M12 7.5v.01'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.notice:is([class='notice'], [class='notice small']):is([data-tone='crit'], [data-tone='warn'])::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5 2.8 19.5h18.4z'/%3E%3Cpath d='M12 10v4.5M12 17v.01'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5 2.8 19.5h18.4z'/%3E%3Cpath d='M12 10v4.5M12 17v.01'/%3E%3C/svg%3E");
+}
+.notice.small::before {
+  top: 10px;
+}
+
+/* Tabs: the chosen one is a soft wash with ink text, not a solid green pill. */
+.tabbar button[aria-selected='true'] {
+  background: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  color: var(--ink);
+  border-color: color-mix(in oklab, var(--accent) 30%, var(--line));
+  font-weight: 600;
+}
+
+/* Page heads: the title and its actions share the first line; the line of explanation runs the full width under
+   them, so it is never squeezed into a narrow column beside a row of buttons. */
+@media (min-width: 861px) {
+  .k-head {
+    grid-template-columns: minmax(12rem, 1fr) minmax(0, max-content);
+    align-items: center;
+    row-gap: 8px;
+  }
+  .k-head > .k-head-text {
+    display: contents;
+  }
+  .k-head h1 {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .k-head .k-head-sub {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-top: 0;
+    max-width: 92ch;
+  }
+  .k-head > .k-head-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .k-head > .k-head-more {
+    grid-row: 3;
+  }
+}
+.sheet .sheet-item[aria-current='page'] {
+  background: color-mix(in oklab, var(--accent) 9%, var(--surface));
+  color: var(--ink);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+/* Data clean-up: each record to look at as a small tile in a grid, not a long bullet list. */
+.panel > ul.dc-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 18px 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px;
+}
+.dc-list > li {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dc-co {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-right: 4px;
 }

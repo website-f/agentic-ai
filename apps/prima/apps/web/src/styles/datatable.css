@@ -109,14 +109,14 @@
 .dt-table tbody tr[data-on] td {
   background: color-mix(in srgb, var(--accent-soft) 60%, transparent);
 }
-.dt-table tbody tr[data-tone] > td:first-child {
-  box-shadow: inset 3px 0 0 var(--warn);
+.dt-table tbody tr[data-tone] > td {
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
-.dt-table tbody tr[data-tone='crit'] > td:first-child {
-  box-shadow: inset 3px 0 0 var(--crit);
+.dt-table tbody tr[data-tone='crit'] > td {
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
-.dt-table tbody tr[data-tone='info'] > td:first-child {
-  box-shadow: inset 3px 0 0 var(--accent);
+.dt-table tbody tr[data-tone='info'] > td {
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--accent) 6%, transparent);
 }
 .dt-table tbody tr[data-has-detail] > td {
   border-bottom: 0;
@@ -448,13 +448,13 @@ th[data-align='right'] .dt-sort {
   overflow-wrap: anywhere;
 }
 .dt-card[data-tone] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .dt-card[data-tone='crit'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .dt-card[data-tone='info'] {
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--accent) 6%, transparent);
 }
 .dt-card[data-click] {
   cursor: pointer;

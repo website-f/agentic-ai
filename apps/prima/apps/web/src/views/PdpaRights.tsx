@@ -19,8 +19,10 @@ const KIND: Record<PdpaRequestInput['kind'], string> = {
 
 type RequestRow = PdpaRights['requests'][number];
 const requestState = (row: RequestRow): ['ok' | 'info' | 'crit' | 'warn', string] => {
+  // P130: this called itself (a stack overflow that blanked the Data requests tab since P121); the rule as before.
   const r = row.request;
-  const [tone, label] = requestState(row);
+  const tone = r.status === 'done' ? 'ok' : r.status === 'refused' ? 'info' : row.late ? 'crit' : row.daysLeft <= 5 ? 'warn' : 'info';
+  const label = r.status === 'done' ? 'Answered' : r.status === 'refused' ? 'Refused' : row.late ? `${-row.daysLeft} days late` : `${row.daysLeft} days left`;
   return [tone, label];
 };
 const REQUEST_COLUMNS: DtColumn<RequestRow>[] = [

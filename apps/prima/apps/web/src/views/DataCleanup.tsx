@@ -77,12 +77,12 @@ export function DataCleanupView() {
           <p className="small">
             <strong>{en ? 'How to fix:' : 'Cara betulkan:'}</strong> {r.fix}
           </p>
-          <ul className="small" aria-label={r.rule}>
+          <ul className="small dc-list" aria-label={r.rule}>
             {data.findings
               .filter((f) => f.rule === r.rule)
               .map((f) => (
                 <li key={f.id}>
-                  {f.companyCode} · <strong>{f.record}</strong>
+                  <span className="dc-co">{f.companyCode}</span> <strong>{f.record}</strong>
                   {f.with.length > 0 && <span className="muted"> · {en ? 'with' : 'dengan'} {f.with.join(', ')}</span>}
                 </li>
               ))}

@@ -194,7 +194,6 @@
 .navm-hit[data-active='true'] {
   background: var(--surface-2);
   color: var(--ink);
-  box-shadow: inset 2px 0 0 var(--accent);
 }
 .navm-hit-text {
   display: flex;
@@ -511,10 +510,13 @@
   padding-left: 0;
 }
 .nav button[aria-current='page'] {
-  background: var(--accent-soft);
+  background: color-mix(in oklab, var(--accent) 9%, var(--surface));
   color: var(--ink);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 16%, transparent);
+}
+.nav button[aria-current='page']:hover {
+  background: color-mix(in oklab, var(--accent) 13%, var(--surface));
 }
 .nav button[aria-current='page'] svg {
   color: var(--accent);
@@ -570,4 +572,36 @@
 .agentic-entries-sheet.agentic-entries-top .agentic-text small,
 .agentic-entries-sheet.agentic-entries-top .agentic-caret {
   display: initial;
+}
+
+/* P130: section names in sentence case, quiet; the open screen is a soft wash (no bar on the left). */
+.nav .navm-head,
+.navm-sheet .navm-head {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.nav .navm-head:hover {
+  color: var(--ink);
+  background: transparent;
+}
+.nav .navm-section[data-open='true'] > .navm-head {
+  color: var(--ink);
+}
+.nav .navm-body button {
+  min-height: 34px;
+  border-radius: 8px;
+}
+/* The open screen: a soft wash, ink text, the icon in the accent (stronger selector: styles.css loads after this). */
+.nav button[aria-current='page'][aria-current] {
+  background: color-mix(in oklab, var(--accent) 9%, var(--surface));
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 14%, transparent);
+}
+.nav button[aria-current='page'][aria-current] svg {
+  color: var(--accent);
+  opacity: 1;
 }

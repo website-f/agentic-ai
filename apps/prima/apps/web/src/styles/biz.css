@@ -27,7 +27,7 @@
   color: inherit;
   font: inherit;
   text-align: left;
-  box-shadow: inset 3px 0 0 transparent;
+  box-shadow: inset 0 0 0 100vmax transparent;
   transition: background-color 0.12s;
 }
 button.bz-row {
@@ -41,13 +41,13 @@ button.bz-row:focus-visible {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 .bz-row[data-tone='crit'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .bz-row[data-tone='warn'] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .bz-row[data-tone='ok'] {
-  box-shadow: inset 3px 0 0 var(--ok);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--ok) 6%, transparent);
 }
 .bz-row-main {
   display: grid;
@@ -155,7 +155,7 @@ button.bz-row:focus-visible {
   font: inherit;
   text-align: left;
   min-width: 0;
-  box-shadow: inset 3px 0 0 transparent;
+  box-shadow: inset 0 0 0 100vmax transparent;
   transition: border-color 0.12s, background-color 0.12s;
 }
 button.bz-tile {
@@ -169,10 +169,10 @@ button.bz-tile:focus-visible {
   box-shadow: var(--ring);
 }
 .bz-tile[data-tone='crit'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .bz-tile[data-tone='warn'] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .bz-tile-foot {
   display: flex;
@@ -622,10 +622,10 @@ button.bz-tile:focus-visible {
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   padding: 12px 14px;
-  box-shadow: inset 3px 0 0 transparent;
+  box-shadow: inset 0 0 0 100vmax transparent;
 }
 .bz-ct-item[data-state='late'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .bz-ct-item[data-state='done'] .bz-ct-item-label {
   color: var(--muted);
@@ -1495,14 +1495,14 @@ button.bz-tile:focus-visible {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
-  box-shadow: inset 3px 0 0 transparent;
+  box-shadow: inset 0 0 0 100vmax transparent;
 }
 .bz-am-watch-item[data-tone='crit'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
   background: color-mix(in srgb, var(--crit-soft) 40%, var(--surface));
 }
 .bz-am-watch-item[data-tone='warn'] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .bz-am-watch-item[data-tone='ok'] {
   background: var(--surface-2);
@@ -1942,13 +1942,13 @@ button.bz-tile:focus-visible {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
-  box-shadow: inset 3px 0 0 transparent;
+  box-shadow: inset 0 0 0 100vmax transparent;
 }
 .bz-br-item[data-tone='crit'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .bz-br-item[data-tone='warn'] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .bz-br-item-top {
   display: flex;

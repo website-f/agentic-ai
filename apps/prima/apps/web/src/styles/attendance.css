@@ -95,7 +95,8 @@
   width: 100%;
   padding: 10px 12px 10px 14px;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--tone);
+  border-color: color-mix(in oklab, var(--tone) 38%, var(--line));
+  background-color: color-mix(in oklab, var(--tone) 5%, var(--surface));
   border-radius: var(--r-sm);
   background: var(--surface);
   color: inherit;
@@ -194,10 +195,19 @@
 .att-sheet tr[data-state='no_show'] td:first-child,
 .att-sheet tr[data-state='unfilled'] td:first-child,
 .att-sheet tr.att-stray td:first-child {
-  box-shadow: inset 3px 0 0 var(--crit), inset -1px 0 0 var(--line);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent), inset -1px 0 0 var(--line);
 }
 .att-sheet tr[data-state='late_on_duty'] td:first-child {
-  box-shadow: inset 3px 0 0 var(--warn), inset -1px 0 0 var(--line);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent), inset -1px 0 0 var(--line);
+}
+/* P130: the whole row carries the soft wash, not only the name cell. */
+.att-sheet tr[data-state='no_show'] td:not(:first-child),
+.att-sheet tr[data-state='unfilled'] td:not(:first-child),
+.att-sheet tr.att-stray td:not(:first-child) {
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
+}
+.att-sheet tr[data-state='late_on_duty'] td:not(:first-child) {
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .att-site {
   font-weight: 500;
@@ -455,12 +465,14 @@
   white-space: nowrap;
 }
 .ros-grid .cell[data-state='ok'] {
-  border-left: 3px solid var(--ok);
+  border-color: color-mix(in oklab, var(--ok) 38%, var(--line));
+  background-color: color-mix(in oklab, var(--ok) 5%, var(--surface));
 }
 .ros-grid .cell[data-state='draft'] {
   background: var(--surface-2);
   border-style: dashed;
-  border-left: 3px solid var(--warn);
+  border-color: color-mix(in oklab, var(--warn) 38%, var(--line));
+  background-color: color-mix(in oklab, var(--warn) 5%, var(--surface));
 }
 .ros-grid .cell[data-state='unfilled'] {
   border: 1px dashed var(--crit);
@@ -470,7 +482,7 @@
 }
 .ros-grid .cell[data-state='blocked'] {
   border-color: var(--crit);
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
   background: color-mix(in srgb, var(--crit-soft) 50%, var(--surface));
 }
 .ros-grid .cell[data-state='blocked'] .who {
@@ -512,12 +524,12 @@
   background: var(--surface);
 }
 .ros-key[data-state='ok']::before {
-  box-shadow: inset 3px 0 0 var(--ok);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--ok) 6%, transparent);
 }
 .ros-key[data-state='draft']::before {
   border-style: dashed;
   background: var(--surface-2);
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .ros-key[data-state='unfilled']::before {
   border: 1px dashed var(--crit);
@@ -525,7 +537,7 @@
 }
 .ros-key[data-state='blocked']::before {
   border-color: var(--crit);
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .ros-key[data-state='past']::before {
   opacity: 0.55;

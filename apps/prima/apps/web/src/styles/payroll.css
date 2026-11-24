@@ -66,10 +66,10 @@
 }
 .pay-run[data-turn='yes'] {
   border-color: var(--warn);
-  box-shadow: inset 4px 0 0 var(--warn), var(--shadow);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent), var(--shadow);
 }
 .pay-run[data-late='yes']:not([data-turn='yes']) {
-  box-shadow: inset 4px 0 0 var(--crit), var(--shadow);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent), var(--shadow);
 }
 .pay-run-head {
   display: flex;
@@ -168,7 +168,7 @@
   background: var(--surface-2);
 }
 .pay-hist-row[data-turn='yes'] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .pay-hist-name {
   display: grid;
@@ -218,7 +218,7 @@
 }
 .pay-inbox > .panel > .list > .list-item:has(.chip[data-tone='warn']) {
   border-color: var(--warn);
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .pay-inbox > .panel > .list > .empty {
   padding: 20px 12px;
@@ -428,7 +428,7 @@
   border-bottom: 0;
 }
 .pay-line[data-flagged='yes'] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .pay-line-head {
   display: flex;

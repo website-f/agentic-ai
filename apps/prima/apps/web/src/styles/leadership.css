@@ -276,7 +276,7 @@
   background: none;
   border: 0;
   border-radius: 0;
-  box-shadow: inset 3px 0 0 transparent;
+  box-shadow: inset 0 0 0 100vmax transparent;
 }
 button.ld-row {
   cursor: pointer;
@@ -290,10 +290,10 @@ button.ld-row:focus-visible {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 .ld-row[data-tone='crit'] {
-  box-shadow: inset 3px 0 0 var(--crit);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--crit) 6%, transparent);
 }
 .ld-row[data-tone='warn'] {
-  box-shadow: inset 3px 0 0 var(--warn);
+  box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--warn) 6%, transparent);
 }
 .ld-row-sev {
   grid-template-columns: auto minmax(0, 1fr) auto;

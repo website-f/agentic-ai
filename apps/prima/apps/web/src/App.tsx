@@ -1812,7 +1812,7 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
         </aside>
         )}
         <div className="main">
-          {!me.user.integration && <CleanupReceiptRecovery key={`${me.user.id}:${route.view}`} owner={me.user.id}/>}
+          {!me.user.integration && <CleanupReceiptRecovery key={`crr:${me.user.id}:${route.view}`} owner={me.user.id}/>}
           {api.mode === 'demo' && demoAdminOn() && <DemoAdminBar me={me} onSwitch={onSwitch} />}
           {api.mode === 'demo' && (
             <div className="demo-band">
@@ -1876,7 +1876,7 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
           {/* P90: every screen sits in one page frame (padding, width, rhythm), even one that draws no .page of its own. */}
           {apps && space && <SpacePhoneBar id={space} menu={menu} current={route.view === 'home' ? null : route.view} onHome={() => openSpace(null)} onSpace={openSpace} onView={(v) => go({ view: v })} />}
           {/* Upload, Key in and Download on every screen and tab (Fauzan, 23 Nov 2026). */}
-          <ScreenTools key={`${me.user.id}:${route.view}`} screen={route.view} label={nav.find((n) => n.view === route.view)?.label ?? route.view} contentRef={contentRef} />
+          <ScreenTools key={`tools:${me.user.id}:${route.view}`} screen={route.view} label={nav.find((n) => n.view === route.view)?.label ?? route.view} contentRef={contentRef} />
           <div className="view-host" ref={contentRef} data-screen-content="">
             {/* P103: a screen's code arrives the first time it opens (lazyView); this shows meanwhile. Upstream's guard: a
                 screen whose file cannot be fetched says so and offers a reload instead of a blank page. */}
