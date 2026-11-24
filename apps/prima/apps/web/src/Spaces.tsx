@@ -185,7 +185,7 @@ export function SpotSearch({
           autoComplete="off"
           spellCheck={false}
           className="input"
-          placeholder="Search apps and screens"
+          placeholder={onSpace ? 'Search apps and screens' : 'Search your screens'}
           aria-label="Search apps and screens"
           role="combobox"
           aria-expanded={!!query.trim()}
@@ -589,5 +589,74 @@ export function SpacePhoneBar({ id, menu, current, onHome, onSpace, onView }: { 
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * P129 (Fitri, 24 Nov 2026: "modify the home to be nicer with some shortcuts"): the top of Home now that the side menu
+ * holds every screen in Prima's sections: a greeting and the date, one search over the menu, the person's own first
+ * screens as shortcut tiles (what each is for under its name), and the screens opened lately.
+ */
+export function HomeShortcuts({ name, intro, menu, main, userId, onView }: { name: string; intro?: string; menu: MenuItem[]; main: MenuItem[]; userId: string; onView: (v: ViewName) => void }) {
+  const { lang } = useLang();
+  const shortcuts = useMemo(() => {
+    const seen = new Set<string>(['home']);
+    // Their own first screens, then the rest of the menu's top, up to eight tiles.
+    return [...main, ...menu].filter((i) => !seen.has(i.view) && !!seen.add(i.view)).slice(0, 8);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menu, main.map((m) => m.view).join(',')]);
+  const recent = useMemo(() => {
+    const by = new Map(menu.map((i) => [i.view, i]));
+    const tiles = new Set(shortcuts.map((s) => s.view));
+    return recentViews(userId)
+      .map((v) => by.get(v))
+      .filter((x): x is MenuItem => !!x && x.view !== 'home' && !tiles.has(x.view))
+      .slice(0, 6);
+    // Read once per visit to the home screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menu, userId]);
+  const today = new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'ms-MY', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Kuala_Lumpur' }).format(new Date());
+  return (
+    <>
+      <section className="sp-hero hs-hero" aria-labelledby="hs-hero-title">
+        <p className="sp-hero-date" data-no-translate>
+          {today}
+        </p>
+        <h1 id="hs-hero-title">
+          <span>{greeting()}</span>
+          <span className="sp-hero-comma" aria-hidden="true">
+            ,{' '}
+          </span>
+          <span className="sp-hero-name" data-no-translate>
+            {name}
+          </span>
+        </h1>
+        {intro && <p className="sp-hero-sub">{intro}</p>}
+        {menu.length > 8 && <SpotSearch menu={menu} onView={onView} big />}
+      </section>
+      {shortcuts.length > 0 && (
+        <section className="home-section hs-shortcuts" aria-labelledby="hs-shortcuts-title">
+          <div className="home-section-head">
+            <h2 id="hs-shortcuts-title">Shortcuts</h2>
+          </div>
+          <ul className="home-tiles hs-tiles">
+            {shortcuts.map((s) => (
+              <ScreenTile key={s.view} item={s} onOpen={() => onView(s.view)} />
+            ))}
+          </ul>
+          {recent.length > 0 && (
+            <div className="home-recent sp-recent" role="group" aria-label="Recently opened">
+              <span className="home-recent-label">Recently opened</span>
+              {recent.map((r) => (
+                <button key={r.view} type="button" className="home-recent-chip" onClick={() => onView(r.view)}>
+                  <ViewIcon view={r.view} fallback={r.icon} size={15} />
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+    </>
   );
 }

@@ -988,3 +988,46 @@
     transform: none;
   }
 }
+
+/* P129: Home's shortcut tiles (the person's own first screens), in the accent colour. */
+.hs-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.hs-tiles .sp-tile.home-tile:hover {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+  box-shadow: 0 10px 24px -18px color-mix(in oklab, var(--accent) 60%, transparent);
+}
+.hs-tiles .home-tile-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 0;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.hs-tiles .home-tile-blurb {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+@media (max-width: 520px) {
+  .hs-tiles {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .hs-tiles .sp-tile.home-tile {
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding: 12px;
+    gap: 8px;
+  }
+  .hs-tiles .home-tile-blurb,
+  .hs-tiles .sp-tile-go {
+    display: none;
+  }
+}

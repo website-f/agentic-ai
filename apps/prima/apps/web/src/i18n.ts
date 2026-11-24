@@ -3505,6 +3505,8 @@ const ROWS: Row[] = [
   ['All your screens', 'Semua skrin anda', 'Semua screen anda'],
   ['Find a screen', 'Cari skrin', 'Cari screen'],
   ['Recently opened', 'Dibuka baru-baru ini', 'Baru dibuka'],
+  ['Shortcuts', 'Pintasan', 'Shortcut'],
+  ['Search your screens', 'Cari skrin anda', 'Cari skrin anda'],
   ['Show fewer', 'Tunjuk kurang', 'Show kurang'],
   // P91: Prima as apps: the home screen's app cards, each app's own menu, one search (Fitri, 9 Nov 2026)
   ['Your day, your dashboards and your own work.', 'Hari anda, papan pemuka anda dan kerja anda sendiri.', 'Hari anda, dashboard anda dan kerja anda sendiri.'],

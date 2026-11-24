@@ -493,3 +493,81 @@
     min-height: 52px;
   }
 }
+
+/* ---------- P129: Prima's own sections, collapsible; a clear open screen ---------- */
+.nav .navm-section + .navm-section {
+  margin-top: 6px;
+}
+.nav .navm-head {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+}
+.nav .navm-section[data-open='true'] > .navm-head {
+  color: var(--ink);
+}
+.nav .navm-body {
+  padding-left: 0;
+}
+.nav button[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.nav button[aria-current='page'] svg {
+  color: var(--accent);
+}
+.nav button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* A long menu keeps its head (brand, Agentic Office, search) and scrolls under it on a computer. */
+@media (min-width: 900px) {
+  .rail .navm-rail .navm-search {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface);
+    padding-bottom: 6px;
+  }
+}
+
+/* The Agentic Office and My AI at the top of the side menu: two compact tiles side by side. */
+.agentic-entries.agentic-entries-top {
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 0 0 12px;
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
+}
+.agentic-entries.agentic-entries-top .agentic-entry {
+  padding: 8px;
+  gap: 8px;
+  border-radius: var(--r-sm, 8px);
+}
+.agentic-entries.agentic-entries-top .agentic-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+.agentic-entries.agentic-entries-top .agentic-text strong {
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+.agentic-entries.agentic-entries-top .agentic-text small,
+.agentic-entries.agentic-entries-top .agentic-caret {
+  display: none;
+}
+/* On the phone's More sheet they stay full rows (with what each does), at the top. */
+.agentic-entries-sheet.agentic-entries-top {
+  grid-template-columns: 1fr;
+  padding: 4px 0 10px;
+  margin-bottom: 4px;
+}
+.agentic-entries-sheet.agentic-entries-top .agentic-text small,
+.agentic-entries-sheet.agentic-entries-top .agentic-caret {
+  display: initial;
+}

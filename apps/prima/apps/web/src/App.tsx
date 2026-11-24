@@ -27,7 +27,7 @@ import { NavMenu } from './NavMenu';
 import { AppGrid, AppSwitcher, SpacePhoneBar, SpaceRailHead, SpotSearch } from './Spaces';
 import { framed as inFrame, isShown, onOfficeGo, onShown, tellOffice } from './office-embed';
 import { LaunchpadView, SpaceRoute } from './views/SpaceRoute';
-import { appsOf, rememberView, spaceLayout, spaceOf, usesApps, type SpaceId } from './nav-catalog';
+import { appsOf, rememberView, sidebarLayout, spaceLayout, spaceOf, usesApps, type SpaceId } from './nav-catalog';
 import { asTop, myName, officeNarrowed, primaOnly } from './office-access';
 
 /**
@@ -321,6 +321,8 @@ interface AppCtx {
   canOpen?: (view: ViewName) => boolean;
   /** P90: this person's menu (screen, label, icon), for the home screen's "All your screens". */
   menu?: { view: ViewName; label: string; icon: string }[];
+  /** P129: this person's own first screens ("Main screens"), for Home's shortcut tiles. */
+  mainMenu?: { view: ViewName; label: string; icon: string }[];
   /** P91: whether this person's menu is split into apps, and opening one (null = the home screen). */
   apps?: boolean;
   openSpace?: (id: SpaceId | null) => void;
@@ -432,10 +434,10 @@ function ShellEntry({ onOpen, sheet, mark, title, sub }: { onOpen: () => void; s
   );
 }
 
-/** The Agentic Office, then My AI: the last two entries of Prima's home menu and of the phone's More sheet. */
-function AgenticEntries({ sheet, onPick }: { sheet?: boolean; onPick?: () => void }) {
+/** The Agentic Office, then My AI: at the top of Prima's side menu and of the phone's More sheet (P129). */
+function AgenticEntries({ sheet, top, onPick }: { sheet?: boolean; top?: boolean; onPick?: () => void }) {
   return (
-    <div className={sheet ? 'agentic-entries agentic-entries-sheet' : 'agentic-entries'}>
+    <div className={`${sheet ? 'agentic-entries agentic-entries-sheet' : 'agentic-entries'}${top ? ' agentic-entries-top' : ''}`}>
       <ShellEntry
         sheet={sheet}
         mark="A"
@@ -1290,7 +1292,9 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
     return VIEW_TOKENS.includes(h) && nav.some((x) => x.view === h) ? h : nav[0].view;
   };
   // P91: Prima as apps for a long menu; `#@hr` opens an app's own home page.
-  const apps = usesApps(nav);
+  // P129 (Fitri, 24 Nov 2026: "no more grouping like that ... follow the original sidebar grouping"): apps are off; the
+  // side menu shows every screen in Prima's own sections (nav-catalog.ts sidebarLayout), each opening and closing.
+  const apps = false && usesApps(nav);
   const initialRoute = (): Route => {
     const h = location.hash.slice(1);
     if (apps && h.startsWith('@')) {
@@ -1329,6 +1333,8 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
   // Phones show four tabs; the rest and Switch person live under More.
   const tabNav = nav.length > 5 ? nav.slice(0, 4) : nav;
   const moreNav = nav.length > 5 ? nav.slice(4) : [];
+  // P129: the person's own first screens head the menu as "Main screens" (as in Prima).
+  const mainCount = nav.filter((n) => rank(n.view) < first.length).length;
   const pilots = me.companies.filter((c) => c.isPilot);
   const [companyId, setCompanyId] = useState<string>((pilots[0] ?? me.companies[0])?.id ?? '');
   const company = me.companies.find((c) => c.id === companyId);
@@ -1414,9 +1420,14 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
     // (no dashboard numbers), so nobody sees more than before.
     return apps && !m.some((n) => n.view === 'home') ? [{ view: 'home' as ViewName, label: 'Home', icon: 'company' }, ...m] : m;
   }, [menuKey, apps]);
-  const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup, canOpen, menu, apps, openSpace, route }), [me, companyId, company, go, isGroup, canOpen, menu, apps, openSpace, route]);
+  const mainMenu = useMemo(() => menu.slice(0, mainCount), [menu, mainCount]);
+  const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup, canOpen, menu, mainMenu, apps, openSpace, route }), [me, companyId, company, go, isGroup, canOpen, menu, mainMenu, apps, openSpace, route]);
   // P91: the side menu shows the open app's screens only (or, on the home screen, the everyday screens).
   const railItems = useMemo(() => (apps ? (spaceLayout(menu, space ?? 'home')?.groups.flatMap((g) => g.items) ?? []) : menu), [apps, menu, space]);
+  // P129: the side menu in Prima's sections; the More sheet's own in the same sections (the phone tabs left out).
+  const railSections = useMemo(() => sidebarLayout(railItems, mainCount), [railItems, mainCount]);
+  const moreItems = useMemo(() => moreNav.map((n) => ({ view: n.view, label: n.label, icon: n.icon })), [moreNav]);
+  const moreSections = useMemo(() => sidebarLayout(moreItems, Math.max(0, mainCount - tabNav.length)), [moreItems, mainCount, tabNav.length]);
   // P117: inside the office page the office's sidebar opens screens and apps (the same '#clock' and '#@hr' addresses),
   // and Prima tells it what this person has and where they are, so its sidebar lists and marks them.
   const routeOfHash = useCallback(
@@ -1453,10 +1464,15 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
     const item = (n: { view: ViewName; label: string }) => ({ view: n.view, label: tr(n.label, primaLang) });
     return {
       lang: primaLang,
-      apps: apps ? appsOf(menu).map((a) => ({ id: a.id, title: tr(a.title, primaLang), screens: a.groups.flatMap((g) => g.items.map(item)) })) : [],
-      screens: apps ? (spaceLayout(menu, 'home')?.groups.flatMap((g) => g.items.map(item)) ?? []) : menu.map(item),
+      // P129: the office's sidebar shows Prima's own sections, each opening and closing (no apps any more).
+      apps: apps
+        ? appsOf(menu).map((a) => ({ id: a.id, title: tr(a.title, primaLang), screens: a.groups.flatMap((g) => g.items.map(item)) }))
+        : menu.length > 8
+          ? railSections.map((s) => ({ id: s.id, title: tr(s.title, primaLang), section: true, screens: s.groups.flatMap((g) => g.items.map(item)) }))
+          : [],
+      screens: apps ? (spaceLayout(menu, 'home')?.groups.flatMap((g) => g.items.map(item)) ?? []) : menu.length > 8 ? [] : menu.map(item),
     };
-  }, [apps, menu, primaLang]);
+  }, [apps, menu, primaLang, railSections]);
   useEffect(() => {
     if (framed) tellOffice({ type: 'menu', ...officeMenu });
   }, [officeMenu]);
@@ -1753,12 +1769,15 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
             </div>
           </div>
           {apps && space && <SpaceRailHead id={space} menu={menu} onHome={() => openSpace(null)} onSpace={openSpace} />}
+          {/* P129 (Fitri, 24 Nov 2026): the Agentic Office and My AI at the top, so nobody scrolls down a long menu for them. */}
+          {agentic && <AgenticEntries top />}
           <nav className="nav" aria-label="Main">
             <NavMenu
               key={apps ? `space-${space ?? 'home'}` : 'menu'}
               variant="rail"
               items={railItems}
               searchItems={menu}
+              sections={apps ? undefined : railSections}
               layout={apps ? 'groups' : 'sections'}
               after={apps && !space ? <AppSwitcher menu={menu} onSpace={openSpace} label /> : undefined}
               current={route.view}
@@ -1767,8 +1786,6 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
               onHotkeyHidden={openMoreSearch}
             />
           </nav>
-          {/* P123: the Agentic Office, the last entry of Prima's home menu (not for Prima-only people). */}
-          {agentic && !space && <AgenticEntries />}
           <div className="rail-foot">
             <div>
               <div style={{ fontWeight: 600 }} data-no-translate>{myName(me)}</div>
@@ -1919,10 +1936,21 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
               }}
             />
             <div className="sheet" role="dialog" aria-label="More">
+              {agentic && (
+                <AgenticEntries
+                  sheet
+                  top
+                  onPick={() => {
+                    setMoreOpen(false);
+                    setMoreSearch(false);
+                  }}
+                />
+              )}
               <NavMenu
                 variant="sheet"
                 layout={apps ? 'groups' : 'sections'}
-                items={apps ? (spaceLayout(menu, 'home')?.groups.flatMap((g) => g.items) ?? []) : moreNav.map((n) => ({ view: n.view, label: n.label, icon: n.icon }))}
+                items={apps ? (spaceLayout(menu, 'home')?.groups.flatMap((g) => g.items) ?? []) : moreItems}
+                sections={apps ? undefined : moreSections}
                 searchItems={menu}
                 current={route.view}
                 userId={me.user.id}
@@ -1933,15 +1961,6 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
                   go({ view: v });
                 }}
               />
-              {agentic && (
-                <AgenticEntries
-                  sheet
-                  onPick={() => {
-                    setMoreOpen(false);
-                    setMoreSearch(false);
-                  }}
-                />
-              )}
               <button
                 className="sheet-item"
                 onClick={() => {

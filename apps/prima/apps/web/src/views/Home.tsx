@@ -13,7 +13,7 @@ import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { FoldSection, useFoldMap } from '../fold';
 import '../styles/home.css';
 import { AllScreens } from './AllScreens';
-import { HomeLaunchpad, waitingBySpace } from '../Spaces';
+import { HomeLaunchpad, HomeShortcuts, waitingBySpace } from '../Spaces';
 
 const RANK: Record<string, number> = { crit: 0, warn: 1, info: 2, neutral: 3, ok: 4 };
 const worst = (items: HomeItem[]): Tone => items.reduce<Tone>((w, t) => ((RANK[t.tone] ?? 5) < (RANK[w] ?? 5) ? t.tone : w), 'ok');
@@ -203,7 +203,7 @@ function GroupedList({
 
 /** The first screen for each job: only what that person must watch, each line opening where the work is done (Fauzan, 25 Oct 2026). */
 export function HomeView() {
-  const { me, companyId, setCompanyId, go, apps, menu, openSpace } = useApp();
+  const { me, companyId, setCompanyId, go, apps, menu, mainMenu, openSpace } = useApp();
   const companyScoped = me.user.role === 'company_manager' || me.user.role === 'admin_exec';
   const { data, error } = useLoad(() => api.home(companyScoped ? companyId : undefined), [companyScoped ? companyId : '']);
   if (error)
@@ -229,6 +229,9 @@ export function HomeView() {
           screens on top; the decisions and key numbers follow. A short menu keeps the plain page title. */}
       {apps && openSpace ? (
         <HomeLaunchpad name={myName(me)} intro={forMe(me, data.intro)} menu={menu ?? []} userId={me.user.id} waiting={waitingBySpace(data.todo)} onView={(v) => go({ view: v })} onSpace={openSpace} />
+      ) : (menu ?? []).length > 8 ? (
+        // P129: a greeting, one search and shortcut tiles; the side menu holds every screen in Prima's sections.
+        <HomeShortcuts name={myName(me)} intro={forMe(me, data.intro)} menu={menu ?? []} main={mainMenu ?? []} userId={me.user.id} onView={(v) => go({ view: v })} />
       ) : (
         <PageHead title={data.title} sub={forMe(me, data.intro)} />
       )}
@@ -255,7 +258,8 @@ export function HomeView() {
         </Stats>
       </FoldSection>
       {/* P90 (Fitri, 9 Nov 2026): every screen this person may open, by category, after the decisions and key numbers. */}
-      {!apps && <AllScreens />}
+      {/* P129: every screen is in the side menu's sections; Home keeps the shortcuts only. */}
+      {!apps && (menu ?? []).length <= 8 && <AllScreens />}
       {/* Growth for group leadership (Fauzan, 3 Nov 2026): after the decisions and key numbers, before the monitor list. */}
       {isGroupLeader(me.user) && !companyScoped && <GrowthPanel />}
       {/* P128: the leadership switches fold under one heading (closed until opened), so the dashboard stays short. */}

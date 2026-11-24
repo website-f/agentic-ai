@@ -426,3 +426,58 @@ export function appsOf<T extends { view: ViewName }>(items: T[]): NavLayout<T>[]
 export function spaceLayout<T extends { view: ViewName }>(items: T[], id: SpaceId): NavLayout<T> | undefined {
   return layoutNav(items).find((s) => s.id === id);
 }
+
+/* ---------- P129: the side menu in Prima's own sections ---------- */
+
+/**
+ * P129 (Fitri, 24 Nov 2026: "no more grouping like that, follow the original sidebar grouping from the original Prima
+ * repo ... collapsible"): the side menu and the phone's More sheet use the sections of Fauzan's Prima (NavMenu.tsx at
+ * 329ac72a, whole-app review): the person's own first screens as "Main screens", then My work, Operations, Arms and CMS,
+ * People and HR, Money and buying, Company and governance, IT and tools. Office-only screens are placed beside their
+ * nearest neighbours. Any screen not listed falls under IT and tools, as in Prima.
+ */
+export const PRIMA_SIDEBAR: { id: string; title: string; views: ViewName[] }[] = [
+  { id: 'me', title: 'My work', views: ['mine', 'clock', 'work', 'claims', 'memos', 'meetings', 'handovers', 'sop'] },
+  {
+    id: 'ops',
+    title: 'Operations',
+    views: ['home', 'overview', 'company', 'office', 'sites', 'roster', 'guardroster', 'duty', 'cleaning', 'sitestock', 'people', 'attendance', 'cases', 'ops', 'surveys', 'clients', 'contracts', 'requests', 'branches', 'branchwork', 'fleet', 'ja', 'jaswitch', 'sitehours', 'salarycalc', 'quality', 'device'],
+  },
+  { id: 'security', title: 'Arms and CMS', views: ['arms', 'cms', 'cmsready'] },
+  {
+    id: 'people',
+    title: 'People and HR',
+    views: ['hr', 'staffclock', 'socso', 'fwm', 'fwcost', 'fwstat', 'hostels', 'staff-directory', 'orgchart', 'hr-it-intake', 'staffpay', 'contribfiles', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'payformulas'],
+  },
+  { id: 'money', title: 'Money and buying', views: ['finance', 'payreq', 'credit', 'purchasing', 'items', 'assets', 'equiprequests'] },
+  {
+    id: 'company',
+    title: 'Company and governance',
+    views: ['compliance', 'selfaudit', 'rba', 'commercial', 'marketing', 'doa', 'corporate', 'renewals', 'governance', 'registers', 'insurance', 'pdpa', 'grc', 'act', 'audit', 'reports'],
+  },
+  {
+    id: 'tools',
+    title: 'IT and tools',
+    views: ['it', 'it-metrics', 'work-kpi', 'it-procurement', 'accounts', 'shared-logins', 'connections', 'continuity', 'websites', 'archive', 'data-cleanup', 'assistant', 'it-extraction'],
+  },
+];
+
+export function sidebarSectionOf(view: ViewName): string {
+  return PRIMA_SIDEBAR.find((s) => s.views.includes(view))?.id ?? 'tools';
+}
+
+/**
+ * The menu in Prima's sections: the person's first `mainCount` screens as "Main screens", then each section in a fixed
+ * order, each keeping the menu's own order. One group per section (no sub-groups).
+ */
+export function sidebarLayout<T extends { view: ViewName }>(items: T[], mainCount: number): NavLayout<T>[] {
+  const main = items.slice(0, Math.max(0, mainCount));
+  const rest = items.slice(Math.max(0, mainCount));
+  const out: NavLayout<T>[] = [];
+  if (main.length) out.push({ id: 'main', title: 'Main screens', blurb: '', home: true, groups: [{ title: '', items: main }], count: main.length });
+  for (const s of PRIMA_SIDEBAR) {
+    const its = rest.filter((n) => sidebarSectionOf(n.view) === s.id);
+    if (its.length) out.push({ id: s.id, title: s.title, blurb: '', home: false, groups: [{ title: '', items: its }], count: its.length });
+  }
+  return out;
+}

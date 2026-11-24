@@ -19,6 +19,8 @@ export interface PrimaApp {
   id: string;
   title: string;
   screens: PrimaScreen[];
+  /** P129: a section of Prima's side menu (opens and closes here), not an app with its own home page. */
+  section?: boolean;
 }
 
 export interface PrimaMenu {
@@ -62,7 +64,7 @@ export function cleanMenu(raw: unknown): PrimaMenu | null {
   const apps = Array.isArray(r.apps)
     ? r.apps
         .filter((a): a is PrimaApp => !!a && typeof (a as PrimaApp).id === "string" && typeof (a as PrimaApp).title === "string")
-        .map((a) => ({ id: a.id, title: a.title, screens: Array.isArray(a.screens) ? a.screens.filter(isScreen).slice(0, 100) : [] }))
+        .map((a) => ({ id: a.id, title: a.title, screens: Array.isArray(a.screens) ? a.screens.filter(isScreen).slice(0, 100) : [], ...(a.section === true ? { section: true } : {}) }))
         .slice(0, 30)
     : [];
   return apps.length || screens.length ? { apps, screens } : null;

@@ -3,7 +3,7 @@ import { CaretDownIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react
 import type { ViewName } from './App';
 import { ViewIcon } from './icons';
 import { tr, useLang } from './i18n';
-import { layoutNav, matchSpan, saveSectionState, searchNav, sectionState, whereIs } from './nav-catalog';
+import { layoutNav, matchSpan, saveSectionState, searchNav, sectionState, whereIs, type NavLayout } from './nav-catalog';
 import './styles/nav.css';
 
 export interface MenuItem {
@@ -61,6 +61,7 @@ export function NavMenu({
   onHotkeyHidden,
   layout = 'sections',
   after,
+  sections: given,
 }: {
   items: MenuItem[];
   /** What the search looks through (the More sheet shows only the rest of the menu but searches all of it). */
@@ -77,6 +78,8 @@ export function NavMenu({
   layout?: 'sections' | 'groups';
   /** P91: shown under the screens when no search is typed (the Apps button on the home menu). */
   after?: ReactNode;
+  /** P129: the sections to draw (Prima's own sidebar sections); else the catalogue's. */
+  sections?: NavLayout<MenuItem>[];
 }) {
   const { lang } = useLang();
   const [query, setQuery] = useState('');
@@ -85,11 +88,13 @@ export function NavMenu({
   const root = useRef<HTMLDivElement>(null);
   const listId = useId();
   const long = searchItems.length > SHORT;
-  const sections = useMemo(() => layoutNav(items), [items]);
-  const here = whereIs(current)?.section.id;
+  const sections = useMemo(() => given ?? layoutNav(items), [given, items]);
+  const here = given ? given.find((s) => s.groups.some((g) => g.items.some((i) => i.view === current)))?.id : whereIs(current)?.section.id;
+  // P129: which section a search result sits in, as this menu shows it.
+  const sectionTitle = useMemo(() => new Map(sections.flatMap((s) => s.groups.flatMap((g) => g.items.map((i) => [i.view, s.title] as const)))), [sections]);
 
   const [open, setOpen] = useState<Record<string, boolean>>(() => sectionState(userId));
-  const isOpen = (id: string) => open[id] ?? (items.length <= ALL_OPEN || id === 'home' || id === here || id === 'more');
+  const isOpen = (id: string) => open[id] ?? (items.length <= ALL_OPEN || id === 'home' || id === 'main' || id === here || id === 'more');
   const toggle = (id: string) => {
     const was = isOpen(id);
     // From the latest state, so quick clicks on several sections all count.
@@ -227,6 +232,7 @@ export function NavMenu({
           ) : (
             hits.map((n, i) => {
               const where = whereIs(n.view);
+              const inSection = given ? sectionTitle.get(n.view) : undefined;
               return (
                 <button
                   key={n.view}
@@ -243,10 +249,18 @@ export function NavMenu({
                   <ViewIcon view={n.view} fallback={n.icon} />
                   <span className="navm-hit-text">
                     <Marked text={n.label} query={query} />
-                    {where && (
-                      <span className="navm-hit-where" data-no-translate>
-                        {tr(where.section.title, lang)} · {tr(where.group.title, lang)}
-                      </span>
+                    {given ? (
+                      inSection && (
+                        <span className="navm-hit-where" data-no-translate>
+                          {tr(inSection, lang)}
+                        </span>
+                      )
+                    ) : (
+                      where && (
+                        <span className="navm-hit-where" data-no-translate>
+                          {tr(where.section.title, lang)} · {tr(where.group.title, lang)}
+                        </span>
+                      )
                     )}
                   </span>
                 </button>

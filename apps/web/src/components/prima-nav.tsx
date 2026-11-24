@@ -8,7 +8,8 @@ import {
 } from "@phosphor-icons/react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Fragment, useEffect, type MouseEvent } from "react";
+import { CaretDownIcon, StarIcon, UserIcon } from "@phosphor-icons/react";
+import { Fragment, useEffect, useState, type MouseEvent } from "react";
 
 import { useT } from "@/i18n";
 import { allScreens, primaGo, usePrima } from "@/lib/prima-embed";
@@ -27,6 +28,13 @@ const APP_ICON: Record<string, Icon> = {
   gov: ScalesIcon,
   board: CrownIcon,
   it: DesktopIcon,
+  // P129: Prima's own side-menu sections.
+  main: StarIcon,
+  me: UserIcon,
+  people: UsersThreeIcon,
+  money: MoneyIcon,
+  company: ScalesIcon,
+  tools: DesktopIcon,
 };
 
 const ROW =
@@ -71,6 +79,8 @@ export function PrimaNav() {
   const screens = allScreens(menu);
   const clock = screens.find((s) => s.view === "clock");
   const apps = menu.apps;
+  // P129: Prima's side menu in its own sections, each opening and closing here as in Prima.
+  if (apps.some((a) => a.section)) return <PrimaSections />;
   return (
     <ul className="grid gap-0.5">
       {clock ? <Entry hash="clock" label={t("Clock in")} icon={ClockUserIcon} active={here && view === "clock"} /> : null}
@@ -116,6 +126,59 @@ export function PrimaNav() {
           </Link>
         </li>
       ) : null}
+    </ul>
+  );
+}
+
+/** P129 (Fitri, 24 Nov 2026): Prima's screens in its own sections (Main screens, My work, Operations ...), each a
+ * heading that opens and closes; the section holding the open screen starts open. */
+function PrimaSections() {
+  const t = useT();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const menu = usePrima((s) => s.menu);
+  const view = usePrima((s) => s.view);
+  const here = pathname === "/prima";
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  if (!menu) return null;
+  const clock = allScreens(menu).find((s) => s.view === "clock");
+  return (
+    <ul className="grid gap-0.5">
+      {clock ? <Entry hash="clock" label={t("Clock in")} icon={ClockUserIcon} active={here && view === "clock"} /> : null}
+      <Entry hash="home" label={t("Prima home")} icon={HouseIcon} active={here && view === "home"} />
+      {menu.apps.map((a) => {
+        const hasHere = here && a.screens.some((sc) => sc.view === view);
+        const isOpen = open[a.id] ?? (hasHere || a.id === "main");
+        const Ico = APP_ICON[a.id] ?? DotsThreeCircleIcon;
+        return (
+          <li key={a.id}>
+            <button
+              type="button"
+              title={a.title}
+              aria-expanded={isOpen}
+              onClick={() => setOpen((o) => ({ ...o, [a.id]: !isOpen }))}
+              className={cn(ROW, "w-full", hasHere && !isOpen ? ON : OFF)}
+            >
+              <Ico size={19} className="shrink-0" />
+              <span className="hidden flex-1 truncate text-left wide:inline">{a.title}</span>
+              <CaretDownIcon size={12} weight="bold" className={cn("hidden shrink-0 transition-transform wide:inline", isOpen ? "" : "-rotate-90")} />
+            </button>
+            {isOpen ? (
+              <ul className="mb-1 ml-[1.15rem] hidden gap-0.5 border-l border-border pl-2 wide:grid">
+                {a.screens.map((sc) => (
+                  <li key={sc.view}>
+                    <Link to="/prima" hash={sc.view} title={sc.label}
+                      onClick={(e) => { if (pathname === "/prima" && primaGo(`#${sc.view}`)) e.preventDefault(); }}
+                      aria-current={here && view === sc.view ? "page" : undefined}
+                      className={cn("flex h-8 items-center rounded-sm px-2 text-[13px] transition-colors", here && view === sc.view ? "bg-accent-soft font-medium text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}>
+                      <span className="truncate">{sc.label}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }
