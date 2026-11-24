@@ -253,6 +253,19 @@ export function OrgChartView({ me, initialFocus, embedded }: { me: Me; initialFo
           </Link>
         ) : null}
       </div>
+      {/* P129 (Fitri, 24 Nov 2026): the hierarchy is kept in Prima (full-page chart); the office adds members and sets lines. */}
+      {me.prima && (!me.prima_modules || me.prima_modules.includes("orgchart")) && !embedded ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/50 px-4 py-3">
+          <TreeStructureIcon size={26} className="shrink-0 text-accent" aria-hidden />
+          <div className="grid min-w-0 flex-1 gap-0.5">
+            <strong className="text-[14px]">{t("The full hierarchy is in Prima")}</strong>
+            <span className="text-[12.5px] text-muted">{t("Open Prima's chart full page: drag to move, zoom in and out, find anyone, change lines and put people under their heads. Here you add members and set who they report to; both stay in step.")}</span>
+          </div>
+          <Link to="/prima" hash="orgchart" className="inline-flex h-9 items-center gap-1.5 rounded-[var(--radius-sm)] bg-accent px-3.5 text-[13px] font-semibold text-accent-fg hover:opacity-90">
+            {t("Open in Prima")}
+          </Link>
+        </div>
+      ) : null}
       {/* P127: in step with Prima's org chart (members.manage only). */}
       <PrimaSyncLine me={me} />
 

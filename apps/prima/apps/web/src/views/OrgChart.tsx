@@ -1,11 +1,13 @@
 import { useMemo, useState, type CSSProperties } from 'react';
-import { CaretRightIcon, TableIcon, TreeStructureIcon, UserSwitchIcon, UsersThreeIcon, WarningIcon, ArrowsClockwiseIcon, UserIcon } from '@phosphor-icons/react';
+import { CaretRightIcon, TreeStructureIcon, UserSwitchIcon, UsersThreeIcon, WarningIcon, ArrowsClockwiseIcon, UserIcon, ArrowsOutSimpleIcon } from '@phosphor-icons/react';
+import { useRouteTab } from '../App';
+import { OrgCanvas } from './OrgCanvas';
 import { api } from '../api';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { Avatar, Card, Empty, PageHead, Person as PersonCell, Search, Stat, Stats } from '../kit';
 import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { Select } from '../SearchSelect';
-import { FoldNotice, useFold } from '../fold';
+import { FoldNotice } from '../fold';
 import '../styles/org.css';
 
 /**
@@ -49,9 +51,10 @@ export function OrgChart() {
 
 function Screen({ c }: { c: Chart }) {
   const [moving, setMoving] = useState<Person | null>(null);
+  const [adding, setAdding] = useState<Person | null>(null);
   const [naming, setNaming] = useState<Unit | null>(null);
-  // Line view (the tree) or the table, remembered on this device.
-  const [asTable, setAsTable] = useFold('org.table', false);
+  // P129 (Fitri, 24 Nov 2026): the chart opens as a full-page canvas; Back shows the details (tables, units, notices).
+  const [tab, setTab] = useRouteTab<'chart' | 'details'>('chart', ['chart', 'details']);
   const table = useTableState('org.people');
   const byId = useMemo(() => new Map(c.people.map((p) => [p.id, p])), [c]);
   const unitName = useMemo(() => new Map(c.units.map((u) => [u.key, u.label])), [c]);
@@ -68,25 +71,46 @@ function Screen({ c }: { c: Chart }) {
   const setCount = c.people.filter((p) => p.how === 'set').length;
   const assumed = c.people.filter((p) => p.how === 'assumed').length;
   const showAssumed = () => {
-    setAsTable(true);
+    setTab('details');
     table.set({ f: { how: 'assumed' } });
   };
+  const drawers = (
+    <>
+      {moving && (
+        <Drawer title="Change line" sub={`${moving.name} · ${moving.title}`} onClose={() => setMoving(null)}>
+          <MoveForm p={moving} c={c} onDone={() => setMoving(null)} />
+        </Drawer>
+      )}
+      {adding && (
+        <Drawer title="Put someone under" sub={`${adding.name} · ${adding.title}`} onClose={() => setAdding(null)}>
+          <AddUnderForm boss={adding} c={c} byId={byId} onDone={() => setAdding(null)} />
+        </Drawer>
+      )}
+      {naming && (
+        <Drawer title="Name head" sub={naming.label} onClose={() => setNaming(null)}>
+          <HeadForm c={c} unit={naming} onDone={() => setNaming(null)} />
+        </Drawer>
+      )}
+    </>
+  );
+  if (tab === 'chart')
+    return (
+      <div className="page org">
+        <OrgCanvas c={c} byId={byId} kids={children} unitName={unitName} onMove={setMoving} onAddUnder={setAdding} onBack={() => setTab('details')}>
+          {drawers}
+        </OrgCanvas>
+      </div>
+    );
   return (
     <div className="page org">
       <PageHead
         title="Org chart"
         sub="Who reports to whom, and who heads each department and central company."
         actions={
-          <div className="seg org-view" role="group" aria-label="Show">
-            <button type="button" aria-pressed={!asTable} onClick={() => setAsTable(false)}>
-              <TreeStructureIcon size={16} aria-hidden="true" />
-              Line view
-            </button>
-            <button type="button" aria-pressed={asTable} onClick={() => setAsTable(true)}>
-              <TableIcon size={16} aria-hidden="true" />
-              Table
-            </button>
-          </div>
+          <button type="button" className="btn btn-primary" onClick={() => setTab('chart')}>
+            <ArrowsOutSimpleIcon size={16} aria-hidden="true" />
+            Open the chart
+          </button>
         }
       />
       <div className="org-notices">
@@ -119,23 +143,21 @@ function Screen({ c }: { c: Chart }) {
         <Stat label="Lines set by a head" value={setCount} tone="info" icon={<UserSwitchIcon size={18} />} />
         <Stat label="Assumed lines" value={assumed} tone={assumed ? 'warn' : 'ok'} icon={<WarningIcon size={18} />} onClick={assumed ? showAssumed : undefined} />
       </Stats>
+      <button type="button" className="org-open-chart" onClick={() => setTab('chart')}>
+        <TreeStructureIcon size={34} aria-hidden="true" />
+        <span className="org-open-chart-text">
+          <strong>The chart, full page</strong>
+          <span className="muted small">Boxes and lines for everyone you may see. Drag to move, zoom in and out, find a person, change a line or put someone under a head.</span>
+        </span>
+        <span className="btn btn-primary">
+          Open the chart
+          <CaretRightIcon size={14} aria-hidden="true" />
+        </span>
+      </button>
       {c.canBring.length > 0 && <Bring c={c} />}
-      {asTable ? (
-        <PeopleTable c={c} byId={byId} unitName={unitName} control={table} onMove={setMoving} />
-      ) : (
-        <LineView c={c} byId={byId} kids={children} unitName={unitName} onMove={setMoving} />
-      )}
+      <PeopleTable c={c} byId={byId} unitName={unitName} control={table} onMove={setMoving} />
       <Units c={c} onName={setNaming} />
-      {moving && (
-        <Drawer title="Change line" sub={`${moving.name} · ${moving.title}`} onClose={() => setMoving(null)}>
-          <MoveForm p={moving} c={c} onDone={() => setMoving(null)} />
-        </Drawer>
-      )}
-      {naming && (
-        <Drawer title="Name head" sub={naming.label} onClose={() => setNaming(null)}>
-          <HeadForm c={c} unit={naming} onDone={() => setNaming(null)} />
-        </Drawer>
-      )}
+      {drawers}
     </div>
   );
 }
@@ -143,109 +165,6 @@ function Screen({ c }: { c: Chart }) {
 // ---------- Line view (the tree) ----------
 
 type NodeProps = { c: Chart; byId: Map<string, Person>; unitName: Map<string, string>; onMove: (p: Person) => void };
-
-function LineView({ c, byId, kids, unitName, onMove }: NodeProps & { kids: Map<string, Person[]> }) {
-  const [find, setFind] = useState('');
-  const q = find.trim().toLowerCase();
-  const matches = q ? c.people.filter((p) => `${p.name} ${p.title}`.toLowerCase().includes(q)).slice(0, 50) : [];
-  const top = kids.get('') ?? [];
-  return (
-    <Card
-      title="Chart"
-      sub="Open a person to see who is under them. The path to you is open."
-      actions={<Search value={find} onChange={setFind} placeholder="Find a name or title" />}
-      flush
-    >
-      {q ? (
-        matches.length ? (
-          <ul className="org-tree" aria-label="Chart">
-            {matches.map((p) => (
-              <Node key={p.id} p={p} c={c} byId={byId} unitName={unitName} onMove={onMove} depth={0} showManager />
-            ))}
-          </ul>
-        ) : (
-          <Empty title="Nobody matches." />
-        )
-      ) : top.length ? (
-        <ul className="org-tree" aria-label="Chart">
-          {top.map((p) => (
-            <Tree key={p.id} p={p} c={c} byId={byId} kids={kids} unitName={unitName} onMove={onMove} depth={0} />
-          ))}
-        </ul>
-      ) : (
-        <Empty title="Nobody on the chart yet." />
-      )}
-    </Card>
-  );
-}
-
-function Tree({ p, kids, depth, ...rest }: NodeProps & { p: Person; kids: Map<string, Person[]>; depth: number }) {
-  const under = kids.get(p.id) ?? [];
-  // Open the first two levels and the path down to the signed-in person.
-  const [shown, setShown] = useState(depth < 2 || p.above || p.id === rest.c.meId);
-  return (
-    <>
-      <Node p={p} depth={depth} {...rest} count={under.length} expanded={shown} onToggle={() => setShown((s) => !s)} />
-      {shown && depth < 12 && under.map((k) => <Tree key={k.id} p={k} kids={kids} depth={depth + 1} {...rest} />)}
-    </>
-  );
-}
-
-function Node({
-  p,
-  c,
-  byId,
-  unitName,
-  onMove,
-  depth,
-  count,
-  expanded,
-  onToggle,
-  showManager,
-}: NodeProps & { p: Person; depth: number; count?: number; expanded?: boolean; onToggle?: () => void; showManager?: boolean }) {
-  const how = HOW[p.how];
-  const manager = p.managerId ? byId.get(p.managerId) : undefined;
-  const me = p.id === c.meId;
-  return (
-    <li className="org-node" style={{ '--depth': Math.min(depth, 8) } as CSSProperties} data-depth={Math.min(depth, 8)} data-me={me || undefined}>
-      {onToggle && count ? (
-        <button type="button" className="org-toggle" aria-expanded={expanded} aria-label={`${p.name}: ${count}`} onClick={onToggle}>
-          <CaretRightIcon size={14} weight="bold" aria-hidden="true" />
-          <span className="num">{count}</span>
-        </button>
-      ) : (
-        <span className="org-toggle-space" aria-hidden="true" />
-      )}
-      <Avatar name={p.name} size={34} />
-      <span className="org-node-text">
-        <span className="org-node-name">
-          <strong title={p.name}>{p.name}</strong>
-          {me && <Chip tone="info">You</Chip>}
-        </span>
-        <span className="org-node-title" title={p.title}>
-          {p.title}
-        </span>
-        {showManager && manager && <span className="org-node-sub">{`Reports to ${manager.name}`}</span>}
-      </span>
-      <span className="org-node-tags">
-        <Chip tone={how.tone} title={p.setBy ? `${p.setBy.by}, ${dateLabel(p.setBy.at)}: ${p.setBy.reason}` : undefined}>
-          {p.setBy?.until ? `${how.text} until ${dateLabel(p.setBy.until)}` : how.text}
-        </Chip>
-        {p.heads.length > 0 && (
-          <Chip tone="ok" title={p.heads.map((k) => unitName.get(k) ?? k).join(', ')}>
-            {`Head: ${p.heads.length} unit${p.heads.length > 1 ? 's' : ''}`}
-          </Chip>
-        )}
-      </span>
-      {p.canMove && (
-        <button type="button" className="btn btn-sm org-node-act" onClick={() => onMove(p)}>
-          <ArrowsClockwiseIcon size={15} aria-hidden="true" />
-          Change line
-        </button>
-      )}
-    </li>
-  );
-}
 
 // ---------- Table view ----------
 
@@ -416,6 +335,52 @@ function MoveForm({ p, c, onDone }: { p: Person; c: Chart; onDone: () => void })
             Back to the line from the job
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** P129: put someone under this person: anyone whose line the viewer may change (the server checks it again). */
+function AddUnderForm({ boss, c, byId, onDone }: { boss: Person; c: Chart; byId: Map<string, Person>; onDone: () => void }) {
+  const act = useAction();
+  const [who, setWho] = useState('');
+  const [reason, setReason] = useState('');
+  const [until, setUntil] = useState('');
+  // Not the head themselves, nor anyone above them (no loops), nor someone already directly under them.
+  const above = new Set<string>();
+  for (let at = boss.managerId, n = 0; at && n < 40; at = byId.get(at)?.managerId ?? null, n++) above.add(at);
+  const choices = c.people.filter((p) => p.canMove && p.id !== boss.id && !above.has(p.id) && p.managerId !== boss.id).sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div className="org-form">
+      <ErrorNotice error={act.error} />
+      <label className="field">
+        <span>{`Who goes under ${boss.name}`}</span>
+        <Select className="input" value={who} onChange={(e) => setWho(e.target.value)} searchable>
+          <option value="">Choose…</option>
+          {choices.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name} ({m.title})
+            </option>
+          ))}
+        </Select>
+      </label>
+      <label className="field">
+        <span>Reason</span>
+        <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Joins the Selangor team" />
+      </label>
+      <label className="field">
+        <span>Until (leave empty if it is for good)</span>
+        <input className="input" type="date" aria-label="Until" value={until} onChange={(e) => setUntil(e.target.value)} />
+      </label>
+      <p className="muted small">New staff are added in Accounts and access (or People); they then show here and can be put under a head.</p>
+      <div className="org-form-actions">
+        <button
+          className="btn btn-primary"
+          disabled={act.busy || !who || reason.trim().length < 3}
+          onClick={() => act.run(() => api.orgSetLine({ userId: who, managerId: boss.id, reason, until: until || null }), 'Line saved.').then((r) => r && onDone())}
+        >
+          Save
+        </button>
       </div>
     </div>
   );

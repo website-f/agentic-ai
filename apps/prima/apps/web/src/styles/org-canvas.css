@@ -1,0 +1,548 @@
+/* P129: the org chart as a full-page canvas (views/OrgCanvas.tsx). Theme tokens only (light and dark). */
+.oc-full {
+  position: fixed;
+  inset: 0;
+  z-index: 35; /* over the side menu and the phone tabs; its own drawers are drawn inside it */
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.oc-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px max(16px, env(safe-area-inset-left, 0px));
+  padding-top: max(10px, env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.oc-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.oc-title {
+  display: grid;
+  line-height: 1.2;
+  margin-right: auto;
+}
+.oc-title strong {
+  font-size: 1.05rem;
+}
+.oc-find {
+  position: relative;
+  flex: 1 1 260px;
+  max-width: 420px;
+}
+.oc-find .input {
+  width: 100%;
+  padding-left: 34px;
+  padding-right: 30px;
+}
+.oc-find-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.oc-find-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: none;
+  color: var(--muted);
+  padding: 4px;
+  cursor: pointer;
+}
+.oc-hits {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px -16px rgb(0 0 0 / 0.35);
+  max-height: 60vh;
+  overflow: auto;
+}
+.oc-hits button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.oc-hits button:hover,
+.oc-hits button:focus-visible {
+  background: var(--surface-2);
+}
+.oc-hits button > span {
+  display: grid;
+  min-width: 0;
+}
+.oc-hits-none {
+  padding: 8px;
+}
+.oc-tools {
+  display: flex;
+  gap: 6px;
+}
+.oc-tools .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The canvas: a dotted sheet that moves under the pointer. */
+.oc-view {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, color-mix(in oklab, var(--muted) 35%, transparent) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  outline: none;
+}
+.oc-view:active {
+  cursor: grabbing;
+}
+.oc-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  width: max-content;
+  padding: 12px;
+  will-change: transform;
+}
+.oc-roots {
+  display: flex;
+  align-items: flex-start;
+  gap: 48px;
+}
+
+/* A box and the people under it, joined by lines. */
+.oc-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.oc-stem {
+  width: 2px;
+  height: 26px;
+  background: color-mix(in oklab, var(--muted) 45%, transparent);
+}
+.oc-kids {
+  display: flex;
+  align-items: flex-start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.oc-kids > li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 10px 0;
+}
+.oc-kids > li::before,
+.oc-kids > li::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  height: 2px;
+  background: color-mix(in oklab, var(--muted) 45%, transparent);
+}
+.oc-kids > li::before {
+  left: 0;
+  right: 50%;
+}
+.oc-kids > li::after {
+  left: 50%;
+  right: 0;
+}
+.oc-kids > li:first-child::before,
+.oc-kids > li:last-child::after {
+  display: none;
+}
+.oc-kids > li > .oc-node::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+  height: 24px;
+  background: color-mix(in oklab, var(--muted) 45%, transparent);
+}
+
+.oc-box {
+  --oc-h: 160;
+  position: relative;
+  width: 248px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 8px 20px -16px rgb(0 0 0 / 0.35);
+  transition: box-shadow 0.15s, border-color 0.15s, transform 0.15s;
+  cursor: default;
+}
+.oc-box:hover {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 14px 28px -18px rgb(0 0 0 / 0.45);
+}
+.oc-box[data-me] {
+  border-color: var(--accent);
+}
+.oc-box[data-focus] {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 55%, transparent), 0 14px 28px -18px rgb(0 0 0 / 0.45);
+}
+.oc-band {
+  display: block;
+  height: 5px;
+  border-radius: 13px 13px 0 0;
+  background: hsl(var(--oc-h) 55% 52%);
+}
+.oc-box[data-how='assumed'] .oc-band {
+  background: repeating-linear-gradient(135deg, hsl(38 85% 55%) 0 6px, hsl(38 85% 70%) 6px 12px);
+}
+.oc-box-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 10px 14px 12px;
+}
+.oc-box-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.oc-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.oc-role {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.oc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-top: 2px;
+  font-size: 0.7rem;
+}
+.oc-dept {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: hsl(var(--oc-h) 55% 52% / 0.14);
+  color: var(--ink);
+}
+.oc-how {
+  color: var(--muted);
+}
+.oc-how[data-how='assumed'] {
+  color: hsl(30 80% 42%);
+  font-weight: 600;
+}
+.oc-heads {
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.oc-menu-wrap {
+  position: relative;
+  flex: none;
+}
+.oc-more {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.oc-more:hover,
+.oc-more[aria-expanded='true'] {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.oc-menu {
+  position: absolute;
+  z-index: 4;
+  top: 30px;
+  right: 0;
+  min-width: 190px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 16px 36px -16px rgb(0 0 0 / 0.4);
+}
+.oc-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+.oc-menu button:hover {
+  background: var(--surface-2);
+}
+.oc-toggle {
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px;
+  transform: translateX(-50%);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.oc-toggle:hover {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 50%, var(--line));
+}
+.oc-toggle[aria-expanded='false'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* A team of people with nobody under them: one list box. */
+.oc-team {
+  width: 268px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 8px 20px -16px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+}
+.oc-team-head {
+  padding: 8px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.oc-team ul {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 420px;
+  overflow: auto;
+}
+.oc-team li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 8px;
+}
+.oc-team li[data-focus] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.oc-team li[data-me] {
+  background: var(--accent-soft);
+}
+.oc-team-text {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+.oc-team-text > * {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.oc-team-act {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.oc-team-act:hover {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+/* Zoom buttons and the key, over the canvas. */
+.oc-zoom {
+  position: absolute;
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 10px 26px -16px rgb(0 0 0 / 0.4);
+}
+.oc-zoom button {
+  min-width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.oc-zoom button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.oc-zoom button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.oc-zoom-pct {
+  min-width: 54px !important;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.oc-legend {
+  position: absolute;
+  left: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  max-width: calc(100% - 240px);
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.oc-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.oc-dot[data-how='set'] {
+  background: hsl(210 70% 55%);
+}
+.oc-dot[data-how='standard'] {
+  background: color-mix(in oklab, var(--muted) 70%, transparent);
+}
+.oc-dot[data-how='assumed'] {
+  background: hsl(38 85% 55%);
+}
+
+@media (max-width: 640px) {
+  .oc-bar {
+    gap: 8px;
+  }
+  .oc-find {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .oc-legend {
+    display: none;
+  }
+  .oc-tools .btn {
+    padding-inline: 8px;
+  }
+}
+
+/* The page: the chart's preview card that opens the full canvas. */
+.org-open-chart {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle, color-mix(in oklab, var(--muted) 30%, transparent) 1px, transparent 1.2px) 0 0 / 18px 18px,
+    var(--surface);
+}
+.org-open-chart-text {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 260px;
+}
+.org-open-chart-text strong {
+  font-size: 1.05rem;
+}
+.org-open-chart:hover {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+  box-shadow: 0 12px 28px -20px color-mix(in oklab, var(--accent) 70%, transparent);
+}
+.org-open-chart > svg {
+  color: var(--accent);
+  flex: none;
+}
