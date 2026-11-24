@@ -73,7 +73,7 @@ REAL = ("set", "standard")
 # Why a row shows as it does (the web turns each into words: pages/org-chart-sync.tsx).
 WHY = (
     "office_newer", "prima_newer", "office_changed", "prima_changed", "filled_from_prima",
-    "filled_to_prima",
+    "filled_to_prima", "prima_kept",
     "unsure_office_keeps", "both_changed_office_keeps", "prima_manager_not_linked",
     "office_manager_not_linked", "would_loop", "prima_no_line", "prima_job_line", "prima_top",
     "not_installed", "refused", "prima_down",
@@ -249,44 +249,23 @@ def _decide(
         return Plan(uid, pid, line, "in_step")
     if line.how == "top":
         return Plan(uid, pid, line, "differs", "none", "prima_top")
-    known = st is not None and st.synced_at is not None
-    oc = bool(st and st.pending) or (known and st is not None and office != st.office_manager)
-    pc = known and st is not None and p != st.prima_manager
-    winner, why = None, None
-    if oc and pc:
-        o_at = st.office_at if st else None
-        p_at = _when(line.at) if line.how == "set" else None
-        if o_at and p_at:
-            winner, why = ("office", "office_newer") if o_at >= p_at else ("prima", "prima_newer")
-        elif o_at:
-            winner, why = "office", "office_newer"
-        elif p_at:
-            winner, why = "prima", "prima_newer"
-        else:
-            return Plan(uid, pid, line, "differs", "office", "both_changed_office_keeps")
-    elif oc:
-        winner, why = "office", "office_changed"
-    elif pc:
-        winner, why = "prima", "prima_changed"
-    elif office is None:
-        winner, why = "prima", "filled_from_prima"
-    elif p is None:
-        # P128: Prima has only its "assumed" Chief of Staff, the office a real line: Prima gets it.
-        winner, why = "office", "filled_to_prima"
-    else:
-        return Plan(uid, pid, line, "differs", "office", "unsure_office_keeps")
-    if winner == "prima":
-        if p is None:
-            return Plan(uid, pid, line, "differs", "office", "prima_no_line")
+    # P129 (Fitri, 24 Nov 2026: "we should follow the Prima side ... if Prima is not
+    # complete, add some from Agentic"): Prima's chart is the hierarchy. Where Prima has a real
+    # line (set by a head there, or from the job) the office follows it, whatever changed where;
+    # the office's line goes to Prima only where Prima has none (its assumed Chief of Staff).
+    if p is not None:
+        moved = st is not None and st.synced_at is not None and p != st.prima_manager
+        why = "prima_changed" if moved else "prima_kept"
         boss = rev.get(p)
         if boss is None:
             return Plan(uid, pid, line, "differs", "office", "prima_manager_not_linked")
         return Plan(uid, pid, line, "take", "prima", why, boss)
-    if office is not None and office_in_prima is None:
-        return Plan(uid, pid, line, "differs", "office", "office_manager_not_linked")
-    if office is None and line.how != "set":
-        return Plan(uid, pid, line, "differs", "office", "prima_job_line")
-    return Plan(uid, pid, line, "push", "office", why, office_in_prima)
+    if office is not None:
+        if office_in_prima is None:
+            return Plan(uid, pid, line, "differs", "office", "office_manager_not_linked")
+        return Plan(uid, pid, line, "push", "office", "filled_to_prima", office_in_prima)
+    # Neither side has a real line: nothing to do (handled as in step above).
+    return Plan(uid, pid, line, "in_step")
 
 
 async def _read_chart(top_id: str) -> PrimaChart | None:

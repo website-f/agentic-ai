@@ -30,6 +30,14 @@ import '../styles/org-canvas.css';
  */
 type Chart = Awaited<ReturnType<typeof api.orgChart>>;
 type Person = Chart['people'][number];
+type Unit = Chart['units'][number];
+type Mode = 'lines' | 'units';
+
+/** The people of a Prima unit: its central department's staff, or a central company's (core unitsOfMember). */
+function membersOf(u: Unit, people: Person[]): Person[] {
+  const co = u.key.startsWith('c_') ? u.key.slice(2) : null;
+  return people.filter((p) => (u.key.startsWith('d_') && `d_${p.department}` === u.key) || (co !== null && p.companyIds.includes(co))).sort((a, b) => a.name.localeCompare(b.name));
+}
 
 const TEAM_BOX = 6;
 const MIN = 0.2;
@@ -98,6 +106,23 @@ export function OrgCanvas({
   tRef.current = t;
   const [focus, setFocus] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  // P129: Prima's own structure (its departments and central companies, each with its head and deputy) or the lines.
+  const [mode, setModeState] = useState<Mode>(() => {
+    try {
+      return localStorage.getItem('prima.org.mode') === 'units' ? 'units' : 'lines';
+    } catch {
+      return 'lines';
+    }
+  });
+  const setMode = (m: Mode) => {
+    setModeState(m);
+    try {
+      localStorage.setItem('prima.org.mode', m);
+    } catch {
+      /* this browser only */
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => fitWidth()));
+  };
   const canAddUnder = useMemo(() => new Set(c.managerChoices.map((m) => m.id)), [c]);
   const movable = useMemo(() => c.people.some((p) => p.canMove), [c]);
 
@@ -130,8 +155,14 @@ export function OrgCanvas({
     else n.add(id);
     return n;
   });
-  const openAll = () => setClosed(new Set());
-  const closeAll = () => setClosed(new Set(c.people.filter((p) => (kids.get(p.id) ?? []).length).map((p) => p.id)));
+  const openAll = () => {
+    setClosed(new Set());
+    setOpenUnits(new Set(c.units.map((u) => u.key)));
+  };
+  const closeAll = () => {
+    setClosed(new Set(c.people.filter((p) => (kids.get(p.id) ?? []).length).map((p) => p.id)));
+    setOpenUnits(new Set());
+  };
 
   // ---------- moving and zooming ----------
   const zoomAt = useCallback((factor: number, cx?: number, cy?: number) => {
@@ -174,16 +205,19 @@ export function OrgCanvas({
   }, []);
 
   // Start: the top of the chart in the middle, at a size that shows the width (not smaller than 60%).
-  const started = useRef(false);
-  useLayoutEffect(() => {
-    if (started.current) return;
-    started.current = true;
+  const fitWidth = useCallback(() => {
     const el = view.current;
     const box = inner.current;
     if (!el || !box) return;
     const s = clamp(Math.min((el.clientWidth - 48) / box.offsetWidth, 1), 0.6, 1);
     setT({ s, x: (el.clientWidth - box.offsetWidth * s) / 2, y: 28 });
   }, []);
+  const started = useRef(false);
+  useLayoutEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    fitWidth();
+  }, [fitWidth]);
 
   // The wheel zooms at the pointer (the page itself does not scroll under the canvas).
   useEffect(() => {
@@ -263,6 +297,7 @@ export function OrgCanvas({
     return c.people.filter((p) => `${p.name} ${p.title} ${deptLabel(p.department)}`.toLowerCase().includes(w)).slice(0, 8);
   }, [q, c]);
   const goTo = (id: string) => {
+    if (mode !== 'lines') setModeState('lines');
     const up = pathTo(id);
     setClosed((s) => new Set([...s].filter((x) => !up.includes(x))));
     setFocus(id);
@@ -272,7 +307,15 @@ export function OrgCanvas({
   };
 
   const roots = kids.get('') ?? [];
-  const ctx: Ctx = { c, kids, byId, unitName, closed, toggle, focus, canAddUnder, onMove, onAddUnder };
+  const [openUnits, setOpenUnits] = useState<Set<string>>(new Set());
+  const toggleUnit = (key: string) =>
+    setOpenUnits((s) => {
+      const n = new Set(s);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  const ctx: Ctx = { c, kids, byId, unitName, closed, toggle, focus, canAddUnder, onMove, onAddUnder, openUnits, toggleUnit };
   return (
     <div className="oc-full" role="dialog" aria-label="Org chart">
       <header className="oc-bar">
@@ -324,6 +367,14 @@ export function OrgCanvas({
             </ul>
           )}
         </div>
+        <div className="seg oc-mode" role="group" aria-label="Show">
+          <button type="button" aria-pressed={mode === 'lines'} onClick={() => setMode('lines')}>
+            Reporting lines
+          </button>
+          <button type="button" aria-pressed={mode === 'units'} onClick={() => setMode('units')}>
+            Departments
+          </button>
+        </div>
         <div className="oc-tools" role="group" aria-label="Chart tools">
           <button type="button" className="btn btn-sm" onClick={() => goTo(c.meId)} title="Find me">
             <CrosshairIcon size={16} aria-hidden="true" />
@@ -341,7 +392,9 @@ export function OrgCanvas({
       </header>
       <div className="oc-view" ref={view} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} tabIndex={0} aria-label="Chart canvas: drag to move, wheel or pinch to zoom">
         <div className="oc-inner" ref={inner} style={{ transform: `translate(${t.x}px, ${t.y}px) scale(${t.s})` }}>
-          {roots.length ? (
+          {mode === 'units' ? (
+            <UnitsTree ctx={ctx} />
+          ) : roots.length ? (
             <div className="oc-roots">
               {roots.map((p) => (
                 <TreeNode key={p.id} p={p} ctx={ctx} />
@@ -392,6 +445,8 @@ type Ctx = {
   canAddUnder: Set<string>;
   onMove: (p: Person) => void;
   onAddUnder: (p: Person) => void;
+  openUnits: Set<string>;
+  toggleUnit: (key: string) => void;
 };
 
 function TreeNode({ p, ctx }: { p: Person; ctx: Ctx }) {
@@ -494,6 +549,102 @@ function Box({ p, ctx, count, open }: { p: Person; ctx: Ctx; count: number; open
           {open ? <CaretDownIcon size={11} weight="bold" aria-hidden="true" /> : <CaretRightIcon size={11} weight="bold" aria-hidden="true" />}
           <span className="num">{open ? count : total}</span>
         </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * P129 (Fitri, 24 Nov 2026: "follow the Prima side"): Prima's own structure. The top of the group, then each central
+ * department and central company Prima knows, with its head (by job, or named in Prima), its deputy and its staff.
+ */
+function UnitsTree({ ctx }: { ctx: Ctx }) {
+  const tops = ctx.c.people.filter((p) => p.how === 'top');
+  const units = ctx.c.units;
+  return (
+    <div className="oc-node">
+      <div className="oc-box oc-group" style={{ '--oc-h': 160 } as CSSProperties}>
+        <span className="oc-band" aria-hidden="true" />
+        <div className="oc-box-main">
+          <div className="oc-box-text">
+            <strong className="oc-name">PWVSB Security Group</strong>
+            <span className="oc-role">{tops.length ? tops.map((t) => `${t.name} (${t.title})`).join(' · ') : 'Group leadership'}</span>
+            <span className="oc-meta">
+              <span className="oc-dept">
+                <span className="num">{units.length}</span> <span>units</span>
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+      {units.length > 0 && (
+        <>
+          <span className="oc-stem" aria-hidden="true" />
+          <ul className="oc-kids oc-wrap">
+            {units.map((u) => (
+              <li key={u.key}>
+                <UnitNode u={u} ctx={ctx} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function UnitNode({ u, ctx }: { u: Unit; ctx: Ctx }) {
+  const id = `unit:${u.key}`;
+  const open = !ctx.closed.has(id) && ctx.openUnits.has(u.key);
+  const members = useMemo(() => membersOf(u, ctx.c.people), [u, ctx.c.people]);
+  const hue = hueOf(u.key);
+  return (
+    <div className="oc-node">
+      <div className="oc-box oc-unit" data-nohead={!u.heads.length || undefined} style={hue == null ? undefined : ({ '--oc-h': hue } as CSSProperties)}>
+        <span className="oc-band" aria-hidden="true" />
+        <div className="oc-box-main">
+          <div className="oc-box-text">
+            <strong className="oc-name" title={u.label}>
+              {u.label}
+            </strong>
+            {u.heads.length ? (
+              u.heads.map((h) => (
+                <span key={h.id} className="oc-unit-person">
+                  <Avatar name={h.name} size={22} />
+                  <span>
+                    <strong>{h.name}</strong>
+                    <span className="muted"> · {h.how === 'named' ? 'Head (named)' : 'Head'}</span>
+                  </span>
+                </span>
+              ))
+            ) : (
+              <span className="oc-how" data-how="assumed">
+                No head named
+              </span>
+            )}
+            {u.deputy && (
+              <span className="oc-unit-person">
+                <Avatar name={u.deputy.name} size={22} />
+                <span>
+                  <strong>{u.deputy.name}</strong>
+                  <span className="muted"> · Deputy</span>
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
+        {members.length > 0 && (
+          <button type="button" className="oc-toggle" aria-expanded={open} onClick={() => ctx.toggleUnit(u.key)} title={open ? 'Close' : 'Staff'}>
+            {open ? <CaretDownIcon size={11} weight="bold" aria-hidden="true" /> : <CaretRightIcon size={11} weight="bold" aria-hidden="true" />}
+            <span className="num">{members.length}</span>
+          </button>
+        )}
+      </div>
+      {open && members.length > 0 && (
+        <>
+          <span className="oc-stem" aria-hidden="true" />
+          <TeamBox people={members} ctx={ctx} />
+        </>
       )}
     </div>
   );

@@ -546,3 +546,58 @@
   color: var(--accent);
   flex: none;
 }
+
+/* P129: Prima's own structure (departments and central companies). */
+.oc-mode button {
+  white-space: nowrap;
+}
+.oc-unit {
+  width: 236px;
+}
+.oc-unit[data-nohead] {
+  border-style: dashed;
+}
+.oc-unit-person {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  line-height: 1.25;
+  margin-top: 4px;
+  min-width: 0;
+}
+.oc-unit-person > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc-group {
+  width: 320px;
+}
+@media (max-width: 640px) {
+  .oc-mode {
+    order: 2;
+  }
+}
+
+/* Departments: the units wrap in rows inside one bracket under the group (no line to each). */
+.oc-kids.oc-wrap {
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 18px 14px;
+  max-width: 1580px;
+  padding: 22px 18px 18px;
+  border: 2px solid color-mix(in oklab, var(--muted) 30%, transparent);
+  border-radius: 20px;
+  background: color-mix(in oklab, var(--surface) 55%, transparent);
+}
+.oc-kids.oc-wrap > li {
+  padding: 0;
+}
+.oc-kids.oc-wrap > li::before,
+.oc-kids.oc-wrap > li::after,
+.oc-kids.oc-wrap > li > .oc-node::before {
+  display: none;
+}

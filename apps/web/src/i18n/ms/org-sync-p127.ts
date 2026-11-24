@@ -11,6 +11,8 @@ export const ORG_SYNC_P127: Record<string, string> = {
   "from the job": "daripada jawatan",
   "assumed (Chief of Staff)": "andaian (Ketua Staf)",
   "top of the group": "teratas kumpulan",
+  "Prima's line is the hierarchy: the office follows it. Change it in Prima's org chart.":
+    "Garis Prima ialah hierarki: pejabat mengikutnya. Tukar dalam carta organisasi Prima.",
   "Prima had no real line for them: the office line was sent there.":
     "Prima tiada garis sebenar untuk mereka: garis pejabat telah dihantar ke sana.",
   "Both already had a line: the office keeps its own. Set it again here to send it to Prima, or change it in Prima.":

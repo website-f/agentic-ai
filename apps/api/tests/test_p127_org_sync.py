@@ -156,7 +156,7 @@ def _posts(state: dict) -> list[dict]:
     return [json.loads(c[3]) for c in state["calls"] if c[0] == "POST" and c[1] == "/api/org/line"]
 
 
-async def test_prima_fills_the_office_never_assumed_never_wiping_hr(client, fake_prima):
+async def test_prima_is_the_hierarchy_assumed_lines_never_copied(client, fake_prima):
     ws, ids, _ = await _office(client)
     await _set(client, ids["evan"], ids["alice"])  # HR set Evan's line before the sync existed
     async with SessionLocal() as db:  # ... so it is no office change waiting for Prima
@@ -167,20 +167,23 @@ async def test_prima_fills_the_office_never_assumed_never_wiping_hr(client, fake
     lines = await _lines(ws)
     assert lines[ids["alice"]] == ids["bob"]  # no office line: Prima's is copied in
     assert lines[ids["cara"]] is None  # an assumed line (Chief of Staff) is never copied
-    assert lines[ids["evan"]] == ids["alice"]  # HR's line stays; the difference is shown
+    # P129: Prima's chart is the hierarchy: HR's older office line gives way to Prima's.
+    assert lines[ids["evan"]] == ids["bob"]
     evan = await _state(ws, ids["evan"])
-    assert (evan.state, evan.why, evan.winner) == ("differs", "unsure_office_keeps", "office")
+    assert (evan.state, evan.why, evan.winner) == ("in_step", "prima_kept", "prima")
     assert run.counts["unlinked"] == 2  # the owner (no Prima record) and Dan
-    assert run.counts["from_prima"] == 1 and run.counts["differs"] == 1
+    assert run.counts["from_prima"] == 2 and run.counts["differs"] == 0
     # Prima was asked twice (staff list, whole chart), not once per person; nothing was sent.
     assert [c[1] for c in fake_prima["calls"]] == ["/api/office/staff", "/api/org/chart"]
     async with SessionLocal() as db:
-        row = await db.scalar(
-            select(AuditLog).where(
-                AuditLog.action == "member.manager_changed", AuditLog.actor == "system:prima"
+        rows = (
+            await db.scalars(
+                select(AuditLog).where(
+                    AuditLog.action == "member.manager_changed", AuditLog.actor == "system:prima"
+                )
             )
-        )
-        assert row is not None and row.target == ids["alice"]
+        ).all()
+        assert {r.target for r in rows} >= {ids["alice"], ids["evan"]}
 
     # Again: nothing new. Then Prima moves Evan (a head set it): Prima changed, the office follows.
     run = await _sync(ws)
@@ -253,48 +256,46 @@ async def test_office_lines_go_to_prima_or_wait_for_it(client, fake_prima):
     assert fake_prima["people"]["p-c"][1:3] == ["p-a", "set"]
     cara = await _state(ws, ids["cara"])
     assert (cara.state, cara.pending, cara.winner) == ("in_step", False, "office")
-    # A refusal by Prima's own rules: waiting, with Prima's words; the office keeps its line.
-    fake_prima["refuse"].add("p-e")
+    # P129: someone Prima already has a line for (Evan, set by a head there) follows Prima: an
+    # office change is not sent, and the office line goes back to Prima's.
+    n = len(_posts(fake_prima))
     await _set(client, ids["evan"], ids["alice"])
     await _sync(ws)
+    assert len(_posts(fake_prima)) == n
+    assert (await _lines(ws))[ids["evan"]] == ids["bob"]
     evan = await _state(ws, ids["evan"])
-    assert (evan.state, evan.message) == ("waiting", "Ask the HR Director.")
-    assert _posts(fake_prima)[-1]["reason"] == "Set in Agentic Office by Owner One: no reason given"
-    # Someone not linked to Prima is skipped (Dan), and a line to him cannot reach Prima.
+    assert (evan.state, evan.why, evan.winner) == ("in_step", "prima_kept", "prima")
+    # Someone not linked to Prima is skipped (Dan).
     await _set(client, ids["dan"], ids["alice"])
-    await _set(client, ids["cara"], ids["dan"])
-    n = len(_posts(fake_prima))
     run = await _sync(ws)
-    assert all(p["userId"] != "p-c" for p in _posts(fake_prima)[n:])
-    assert (await _state(ws, ids["cara"])).why == "office_manager_not_linked"
     assert run.counts["unlinked"] == 2
     # The button on the chart page runs it and answers the status; staff cannot.
     r = await client.post("/api/org-chart/prima-sync", json={}, headers=csrf(client))
     assert r.status_code == 200, r.text
     people = {p["user_id"]: p for p in r.json()["people"]}
-    assert people[ids["evan"]]["state"] == "waiting"
-    assert people[ids["evan"]]["office_line"] == "Alice"
+    assert ids["evan"] not in people  # in step: only the ones to look at are listed
 
 
-async def test_the_side_changed_last_wins(client, fake_prima):
+async def test_prima_wins_whoever_changed_last(client, fake_prima):
+    """P129 (Fitri, 24 Nov 2026: "we should follow the Prima side"): where Prima has a real
+    line, the office follows it, even after an office change made later than Prima's."""
     ws, ids, _ = await _office(client)
     fake_prima["installed"] = True
     await _sync(ws)  # Alice -> Bob from Prima, in step
-    # Both change Alice: the office now, Prima a head an hour from now: Prima wins.
+    # The office moves Alice now; Prima keeps its line from the job: Prima's stays.
+    n = len(_posts(fake_prima))
     await _set(client, ids["alice"], ids["cara"])
+    await _sync(ws)
+    assert (await _lines(ws))[ids["alice"]] == ids["bob"]
+    assert len(_posts(fake_prima)) == n
+    alice = await _state(ws, ids["alice"])
+    assert (alice.state, alice.winner, alice.why) == ("in_step", "prima", "prima_kept")
+    # A head moves Alice in Prima: the office follows.
     fake_prima["people"]["p-a"][1:] = ["p-e", "set", _at(1)]
     await _sync(ws)
     assert (await _lines(ws))[ids["alice"]] == ids["evan"]
     alice = await _state(ws, ids["alice"])
-    assert (alice.state, alice.winner, alice.why) == ("in_step", "prima", "prima_newer")
-    # Both change again: Prima yesterday (an older line), the office now: the office wins.
-    await _set(client, ids["alice"], ids["cara"])
-    fake_prima["people"]["p-a"][1:] = ["p-b", "set", _at(-24)]
-    await _sync(ws)
-    assert (await _lines(ws))[ids["alice"]] == ids["cara"]
-    assert fake_prima["people"]["p-a"][1] == "p-c"
-    alice = await _state(ws, ids["alice"])
-    assert (alice.state, alice.winner, alice.why) == ("in_step", "office", "office_newer")
+    assert (alice.state, alice.winner, alice.why) == ("in_step", "prima", "prima_changed")
 
 
 async def test_downloads_show_only_what_the_reader_may_see(client, fake_prima):

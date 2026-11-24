@@ -85,6 +85,7 @@ export function PrimaSyncLine({ me }: { me: Me }) {
   const why = (p: SyncPerson): string => {
     switch (p.why) {
       case "filled_to_prima": return t("Prima had no real line for them: the office line was sent there.");
+      case "prima_kept": return t("Prima's line is the hierarchy: the office follows it. Change it in Prima's org chart.");
       case "unsure_office_keeps": return t("Both already had a line: the office keeps its own. Set it again here to send it to Prima, or change it in Prima.");
       case "both_changed_office_keeps": return t("Both changed and it is not clear which was last: the office keeps its own.");
       case "prima_manager_not_linked": return t("Prima's manager is not linked to anyone in the office.");
