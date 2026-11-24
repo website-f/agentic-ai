@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, type PayChangesData } from '../api';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { VcRecordForm } from './VcRecord';
 
 
 const rm = (n: number | null) =>
@@ -59,6 +60,7 @@ function PayRow({
 }) {
   const [note, setNote] = useState("");
   const [open, setOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
   const act = useAction();
   const c = r.change;
   const consent = r.as === "vice_chairman";
@@ -112,6 +114,7 @@ function PayRow({
               ? ` · HR Director: ${c.hrDirectorCheck.by}${c.hrDirectorCheck.note ? ` (${c.hrDirectorCheck.note})` : ""}`
               : ""}
             {c.vcConsent ? ` · Vice Chairman: ${c.vcConsent.by}` : ""}
+            {c.vcRecord ? ` (by ${c.vcRecord.how === "app" ? "message" : c.vcRecord.how} on ${dateLabel(c.vcRecord.givenOn)}, ${c.vcRecord.proofIds.length} file(s))` : ""}
             {c.financeCheck ? ` · Finance: ${c.financeCheck.by}` : ""}
             {c.decidedBy
               ? ` · ${c.status} by ${c.decidedBy}${c.note ? `: ${c.note}` : ""}`
@@ -136,6 +139,16 @@ function PayRow({
               : "Rejected"}
         </Chip>
       </div>
+      {r.canRecordVc && !recording && !open && (
+        <div>
+          <button className="btn btn-sm" onClick={() => setRecording(true)}>
+            Record the Vice Chairman's answer
+          </button>
+        </div>
+      )}
+      {r.canRecordVc && recording && (
+        <VcRecordForm refText={`${r.person?.staffNo ?? c.personId} pay ${c.effectiveOn}`} send={(body) => api.recordPayVc(c.id, body)} onClose={() => setRecording(false)} />
+      )}
       {canVerify && r.mine && !open && (
         <div>
           <button className="btn btn-sm" onClick={() => setOpen(true)}>

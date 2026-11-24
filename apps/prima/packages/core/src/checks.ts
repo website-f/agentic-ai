@@ -2,7 +2,7 @@
 // discipline or contracts; they block clear breaches and flag the rest for a person.
 
 import { CREDENTIAL_LABEL, LICENCE_LABEL, REQUIRED_ALL, REQUIRED_FOREIGN, RULES } from './rules';
-import { addMinutes, addWorkingDays, ageOn, dateOf, daysBetween, minutesBetween, myt, toMs } from './time';
+import { addDays, addMinutes, addWorkingDays, ageOn, dateOf, daysBetween, minutesBetween, myt, toMs } from './time';
 import type {
   ArmsMovement,
   AttendanceFlag,
@@ -96,12 +96,23 @@ export function deployability(person: Person, credentials: Credential[], on: Iso
   }
   const age = ageOn(person.dob, on);
   if (age > RULES.maxGuardAge.value) {
-    findings.push({
-      level: 'block',
-      code: 'OVER_AGE',
-      message: `${person.name} is ${age}. Group policy allows guards up to ${RULES.maxGuardAge.value}.`,
-      ruleId: RULES.maxGuardAge.id,
-    });
+    // Up to 65 by exception only (rule HR-AGE-EXCEPTION, Fauzan 23 Nov 2026): an exception in force and a valid yearly medical.
+    const ex = RULES.ageException.value;
+    const exc = person.ageException;
+    const inForce = !!exc && !exc.endedAt && exc.until >= on;
+    const med = latestCredentials(credentials.filter((c) => c.personId === person.id)).get('MEDICAL_CHECK');
+    const medOk = !!med && !!med.expiresOn && med.expiresOn >= on;
+    if (age > ex.upToAge)
+      findings.push({ level: 'block', code: 'OVER_AGE', message: `${person.name} is ${age}. No guard may work over ${ex.upToAge}.`, ruleId: RULES.ageException.id });
+    else if (inForce && medOk)
+      findings.push({ level: 'warn', code: 'AGE_EXCEPTION', message: `${person.name} is ${age}: working on an age exception until ${exc!.until} (${exc!.by}).`, ruleId: RULES.ageException.id });
+    else
+      findings.push({
+        level: 'block',
+        code: 'OVER_AGE',
+        message: `${person.name} is ${age}. Group policy allows guards up to ${RULES.maxGuardAge.value}; up to ${ex.upToAge} only with ${inForce ? 'a valid yearly medical on record' : medOk ? "an age exception from the HR Director or the CEO" : 'a valid yearly medical and an age exception from the HR Director or the CEO'}.`,
+        ruleId: RULES.maxGuardAge.id,
+      });
   }
   if (armed && person.role !== 'office' && RULES.armsLocalOnly.value && person.nationality !== 'MY') {
     findings.push({
@@ -259,6 +270,10 @@ export function checkAssignment(args: { person: Person; credentials: Credential[
   }
 
   findings.push(...deployability(person, credentials, shift.date, site.armed));
+  // Signed employment agreement on the HR file (rule GUARD-AGREEMENT, Fauzan 23 Nov 2026).
+  const ga = RULES.guardAgreement.value;
+  if (person.role !== 'office' && !hasSignedAgreement(person) && addDays(person.hiredOn, ga.graceDays) <= shift.date)
+    findings.push({ level: ga.level, code: 'NO_AGREEMENT', message: `No signed employment agreement uploaded for ${person.name}. Upload it on the HR file.`, ruleId: RULES.guardAgreement.id });
   // E9: site risk briefing before the first shift at a medium or high risk site (rule QMS-RISK-BRIEF). Only when the
   // guard has no earlier shift at this site in what the roster holds.
   const rb = RULES.riskBriefing.value;
@@ -470,6 +485,8 @@ export function armsIssueCheck(args: {
   site: Site;
   shift: Shift | null;
   issuer: string;
+  /** The issuer's own person record; the written authorised list is matched by it, not by the name (B2, 23 Nov 2026). */
+  issuerPersonId?: string | null;
   witness: string;
   today: IsoDate;
   firearmBusy: boolean;
@@ -504,7 +521,16 @@ export function armsIssueCheck(args: {
   if (person.status !== 'active') block('NOT_ACTIVE', `${person.name} is ${person.status}.`);
   if (RULES.armsLocalOnly.value && person.nationality !== 'MY')
     block('FOREIGN_GUARD', `${person.name} is not Malaysian. Firearms are never issued to a foreign guard.`, 'ARMS-LOCAL-ONLY');
-  if (vault.authorisedUsers && !vault.authorisedUsers.includes(issuer))
+  // The written authorised list (Part R10) is matched by staff record, so two staff with the same name are never taken
+  // for each other; the Amra is always authorised at their own vault. Entries made before staff links existed (no
+  // person id) and the older name list still match by name.
+  const written = (vault.authorisedStaff ?? []).filter((a) => !a.removedOn);
+  if (written.length) {
+    const pid = args.issuerPersonId ?? null;
+    const byRecord = !!pid && (vault.custodianPersonId === pid || written.some((a) => a.personId === pid));
+    const byOldName = written.some((a) => !a.personId && a.name.trim().toLowerCase() === issuer.trim().toLowerCase());
+    if (!byRecord && !byOldName) block('NOT_AUTHORISED_USER', `${issuer} is not on the written authorised list for ${vault.name}.`);
+  } else if (vault.authorisedUsers && vault.authorisedUsers.length && !vault.authorisedUsers.includes(issuer))
     block('NOT_AUTHORISED_USER', `${issuer} is not on the authorised list for ${vault.name}.`);
   const scan = normaliseRfid(args.rfidScan);
   if (scan && scan !== firearm.rfidTag)
@@ -540,4 +566,9 @@ export function armsOverdueState(m: ArmsMovement, now: IsoDateTime): ArmsOverdue
   if (late >= r.escalateMin) return 'escalate';
   if (late >= r.alertMin) return 'alert';
   return 'out';
+}
+
+/** The signed employment agreement is uploaded on the person's HR file (rule GUARD-AGREEMENT). */
+export function hasSignedAgreement(person: Pick<Person, 'hiringDocs'>): boolean {
+  return (person.hiringDocs ?? []).some((d) => d.kind === 'AGREEMENT' && d.docIds.length > 0);
 }

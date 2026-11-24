@@ -629,13 +629,13 @@ function Resorts({ d }: { d: AmExtrasBoard }) {
   return (
     <>
       <div className="kpis">
-        <Kpi label="Guests in house (both resorts)" value={d.kpis.inHouse} />
+        <Kpi label="Guests in house (resorts and training centre)" value={d.kpis.inHouse} />
         <Kpi label="Arriving today here" value={r.arrivingToday} />
         <Kpi label="Payments for Finance to confirm" value={d.kpis.toBank} tone={d.kpis.toBank ? "warn" : "ok"} />
       </div>
       <section className="panel">
         <div className="panel-head">
-          <h3>Resort bookings</h3>
+          <h3>Resort and training centre bookings</h3>
           <div className="row" style={{ gap: 4 }}>
             {d.resorts.map((x) => (
               <button key={x.id} className="btn btn-sm" aria-pressed={x.id === r.id} onClick={() => setRid(x.id)}>
@@ -646,6 +646,7 @@ function Resorts({ d }: { d: AmExtrasBoard }) {
           <span className="muted small">
             Never more rooms than there are. An outside booking is held {d.rule.holdDays} days, confirmed with a {d.rule.depositPct}% deposit, and paid in full before
             check-out. A group booking is billed to its company. The Asset Director sets the price list; a lower price needs a reason.
+            {r.training ? " Training centre: hostel rooms and halls; a group company's course is booked as a group booking at the Asset Director's rate and billed to that company." : ""}
           </span>
         </div>
         <Flags flags={r.flags} />

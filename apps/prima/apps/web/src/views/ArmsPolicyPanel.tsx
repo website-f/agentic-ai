@@ -30,6 +30,7 @@ type Board = {
     vaultsBlocked: { id: string; name: string }[];
     monthly: { month: string; due: string; missing: { firearmId: string; tag: string; companyId: string }[]; state: string };
     extinguishers: { vaultId: string; name: string; expiresOn: string | null; state: string }[];
+    vaults?: { id: string; name: string; companyId: string; state: string; amra: string | null; amraPersonId: string | null; aLicence: string | null; aLicencePersonId: string | null; authorised: { personId: string | null; name: string }[] }[];
     completeness: { companyId: string; firearms: number; vaults: number; licences: number; missing: string[]; complete: boolean }[];
     missedDates: { kind: 'licence' | 'vault'; ref: string; companyId: string; since: string }[];
   };
@@ -236,10 +237,13 @@ export function ArmsPolicyPanel() {
   const tagOf: Record<string, string> = Object.fromEntries([...firearms, ...t.monthly.missing.map((x) => ({ id: x.firearmId, tag: x.tag }))].reverse().map((f) => [f.id, f.tag]));
   const vaultName: Record<string, string> = Object.fromEntries([...t.vaultsBlocked.map((v) => [v.id, v.name]), ...t.extinguishers.map((x) => [x.vaultId, x.name])]);
   const coName = (id: string) => companies.find((c) => c.id === id)?.name ?? id;
-  const vaultField: Field = Object.keys(vaultName).length ? { k: 'vaultId', l: 'Vault', t: 'select', o: Object.keys(vaultName), labels: vaultName } : { k: 'vaultId', l: 'Vault id' };
   const companyField: Field = { k: 'companyId', l: 'Company', t: 'select', o: companies.map((c) => c.id), labels: Object.fromEntries(companies.map((c) => [c.id, c.name])) };
   const firearmField: Field = { k: 'firearmId', l: 'Firearm', t: 'select', o: [...new Set(firearms.map((f) => f.id))], labels: tagOf };
   const ac = b.role === 'arms_control';
+  // Vaults are picked by name (23 Nov 2026 review); the id still travels.
+  const vaultList = t.vaults ?? [];
+  for (const v of vaultList) vaultName[v.id] = `${v.name} (${coName(v.companyId)})`;
+  const vaultField: Field = Object.keys(vaultName).length ? { k: 'vaultId', l: 'Vault', t: 'select', o: Object.keys(vaultName), labels: vaultName } : { k: 'vaultId', l: 'Vault id' };
   return (
     <section className="panel" style={{ marginTop: 16 }}>
       <h2>Polisi senjata</h2>
@@ -298,8 +302,9 @@ export function ArmsPolicyPanel() {
             <F title="Permohonan lesen" op="licenceApp" fields={[{ k: 'personId', l: 'Staff (person id)' }, { k: 'category', l: 'Category', t: 'select', o: ['PELESEN_A', 'AMRA', 'CNU', 'BODYGUARD', 'OTHER'] }, { k: 'categoryOther', l: 'Other licence name' }, { k: 'type', l: 'Type', t: 'select', o: ['NEW', 'RENEWAL'] }]} />
             <F title="Status lesen" op="licState" fields={[{ k: 'credentialId', l: 'Licence (credential id)' }, { k: 'state', l: 'State', t: 'select', o: ['active', 'suspended', 'cancelled'] }, REASON]} />
             <F title="Permohonan bilik kebal" op="vaultApp" fields={[companyField, { k: 'name', l: 'Vault name' }, { k: 'kind', l: 'Kind', t: 'select', o: ['COMPANY_ARMOURY', 'POLICE_STATION', 'CLIENT_SAFE'] }, { k: 'liaison', l: 'Liaison (role)' }]} />
+            <F title="Lantik Amra / Pelesen A" op="vaultKeeper" fields={[vaultField, { k: 'post', l: 'Post', t: 'select', o: ['amra', 'a_licence'], labels: { amra: 'Amra (armoury keeper)', a_licence: 'A licence holder' } }, { k: 'personId', l: 'Staff (person id; blank clears)' }, REASON]} />
             <F title="Kebenaran akses" op="vaultAuth" fields={[vaultField, { k: 'name', l: 'Name' }, { k: 'personId', l: 'Person id' }, { k: 'letterRef', l: 'Letter reference' }, { k: 'letterOn', l: 'Letter date', t: 'date' }, REASON]} />
-            <F title="Batal akses" op="vaultAuthRemove" fields={[vaultField, { k: 'name', l: 'Name' }, REASON]} />
+            <F title="Batal akses" op="vaultAuthRemove" fields={[vaultField, { k: 'name', l: 'Name' }, { k: 'personId', l: 'Person id (when two share a name)' }, REASON]} />
             <F title="Log bilik kebal" op="vaultLog" fields={[vaultField, { k: 'person', l: 'Who entered' }, { k: 'purpose', l: 'Purpose' }, { k: 'witness', l: 'Witness' }]} />
             <F title="Pemeriksaan bilik kebal" op="vaultInspect" fields={[vaultField, ...checks(['inventory', 'accessList', 'approval', 'sop']), { k: 'faults', l: 'Faults' }, { k: 'serious', l: 'Serious', t: 'check' }, { k: 'photos', l: 'Photos', t: 'photos' }]} />
             <F title="Perubahan bilik kebal" op="vaultChange" fields={[vaultField, { k: 'what', l: 'What changes' }, { k: 'policeNeeded', l: 'Police approval needed', t: 'check' }, { k: 'policeRef', l: 'Police reference' }, REASON]} />
@@ -312,6 +317,39 @@ export function ArmsPolicyPanel() {
         {ac && <F title="Kelulusan stor dagangan" op="tradeStore" fields={[vaultField, { k: 'ref', l: 'Police reference' }, ON, { k: 'placeOfBusiness', l: 'Place of business' }, DOCS]} />}
         {ac && <F title="Rekod kesediaan" op="readiness" fields={[companyField, { k: 'line', l: 'Line', t: 'select', o: ['policeViewSharedVault', 'counselOpinion', 'kdnCircular2017', 'importRoute', 'stockInsurance', 'sqlAccounts', 'staffLicences'] }, { k: 'ref', l: 'Reference' }, ON, { k: 'note', l: 'Note' }, DOCS]} />}
       </div>
+      {b.role !== 'stores' && vaultList.length > 0 && (
+        <>
+          <h3>Penjaga bilik kebal</h3>
+          <p className="small">The Amra and the people on the written authorised list issue, return and count at their own vault only.</p>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Vault</th>
+                  <th>Company</th>
+                  <th>Amra</th>
+                  <th>A licence holder</th>
+                  <th>Authorised list</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vaultList.map((v) => (
+                  <tr key={v.id}>
+                    <td>
+                      {v.name}
+                      {v.state !== 'ACTIVE' && <span className="small"> ({v.state})</span>}
+                    </td>
+                    <td>{coName(v.companyId)}</td>
+                    <td>{v.amra ? `${v.amra}${v.amraPersonId ? '' : ' (name only, not linked)'}` : <span className="badge" data-tone="warn">Not named</span>}</td>
+                    <td>{v.aLicence ?? <span className="badge" data-tone="warn">Not named</span>}</td>
+                    <td>{v.authorised.length ? v.authorised.map((a) => a.name).join(', ') : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
       {b.role !== 'stores' && <History known={{ firearm: tagOf, vault: vaultName, credential: Object.fromEntries(t.licencesExpiring.map((x) => [x.credentialId, `${x.category ?? 'Lesen'} (tamat ${x.expiresOn})`])) }} />}
       {b.role !== 'stores' && t.completeness.some((c) => !c.complete) && (
         <>

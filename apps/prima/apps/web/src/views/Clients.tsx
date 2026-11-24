@@ -349,7 +349,9 @@ function ClientDetail({ a, act, canBill, onClose, onFile }: { a: Account; act: b
                   )}
                 </span>
                 {!s.doneAt &&
-                  (act ? (
+                  (phase === 'onboarding' && s.key === 'pdpa' ? (
+                    <span className="bz-sub">waiting for the PDPA officer (PDPA screen)</span>
+                  ) : act ? (
                     <button
                       className="btn btn-sm"
                       disabled={action.busy}

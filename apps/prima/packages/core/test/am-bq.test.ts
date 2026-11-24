@@ -33,6 +33,9 @@ const fresh = () => {
   });
   const unit = ds.amUnits[0].id;
   ds.amWorkOrders.push(job('wo-t1', 'Repaint unit (test)', unit), job('wo-t2', 'Repaint second unit (test)', ds.amUnits[1].id), job('wo-t3', 'Fence repair (test)', unit));
+  // These tests are about the BQ itself, so the contractors list is empty here (names stay free text, as before the list
+  // is in use). The approved-contractors rule has its own test at the end.
+  ds.amContractors.length = 0;
   const svc = new PrimaService(new MemoryStore(ds), () => myt(TODAY, '10:00'));
   return { ds, svc };
 };
@@ -174,17 +177,48 @@ describe('BQ, quotes and award', () => {
     expect(await s2.amBqDecide(dir2, 'wo-t1', true, 'Matches the site visit')).toMatchObject({ status: 'approved' });
   });
 
-  it('a large BQ also needs the COO after the Asset Director', async () => {
-    const { svc } = fresh();
+  it('D3: the Asset Director alone decides even a large BQ; the award above RM5,000 needs the Vice Chairman and above RM50,000 the CEO', async () => {
+    const { svc, ds } = fresh();
     const mm = await u(svc, 'u-asset-mm');
     const dir = await u(svc, 'u-asset-dir');
     const coo = await u(svc, 'u-coo');
+    const vc = await u(svc, 'u-vchair');
+    const ceo = await u(svc, 'u-fauzan');
     await brief(svc, 'u-asset-mm', 'wo-t1', 'RENOVATION', { floorArea: 1000 });
     await svc.amBqSave(mm, 'wo-t1', { jobKind: 'RENOVATION', measurements: { floorArea: 1000 }, lines: [{ item: 'Supply and lay floor tiles', unit: 'm2', qty: 1000, rate: 90, note: 'Supplier call, mock' }], version: 1 });
     expect(await svc.amBqSubmit(mm, 'wo-t1')).toMatchObject({ route: 'TENDER' });
     await expect(svc.amBqDecide(coo, 'wo-t1', true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
-    expect(await svc.amBqDecide(dir, 'wo-t1', true, 'Needed before the new tenant')).toMatchObject({ status: 'submitted' });
-    expect(await svc.amBqDecide(coo, 'wo-t1', true, 'Budget is there')).toMatchObject({ status: 'approved' });
+    expect(await svc.amBqDecide(dir, 'wo-t1', true, 'Needed before the new tenant')).toMatchObject({ status: 'approved' });
+    const q = (c: string, rate: number) => ({ contractor: c, ref: `T-${c.slice(-1)}`, receivedOn: TODAY, validUntil: '2026-12-31', lines: [{ lineId: 'L1', rate }], statedTotal: 1000 * rate });
+    await svc.amQuoteAdd(mm, 'wo-t1', q('Tender Bidder A', 85));
+    await svc.amQuoteAdd(mm, 'wo-t1', q('Tender Bidder B', 88));
+    await svc.amQuoteAdd(mm, 'wo-t1', q('Tender Bidder C', 92));
+    await svc.amAwardAsk(mm, 'wo-t1', 'Q1', '');
+    await expect(svc.amAwardDecide(vc, 'wo-t1', true, 'too early')).rejects.toBeInstanceOf(AccessDenied);
+    expect((await svc.amAwardDecide(dir, 'wo-t1', true, 'Lowest bid')).award).toMatchObject({ final: false });
+    await expect(svc.amAwardDecide(coo, 'wo-t1', true, 'not my step')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.amAwardDecide(ceo, 'wo-t1', true, 'not yet')).rejects.toBeInstanceOf(AccessDenied);
+    expect((await svc.amBq(vc, 'wo-t1')).can.decideAward).toBe(true);
+    expect((await svc.amAwardDecide(vc, 'wo-t1', true, 'Consent')).award).toMatchObject({ final: false, vc: { approve: true } });
+    expect(ds.amWorkOrders.find((w) => w.id === 'wo-t1')!.cost).toBeNull();
+    expect((await svc.amAwardDecide(ceo, 'wo-t1', true, 'Approved')).award).toMatchObject({ final: true, ceo: { approve: true } });
+    expect(ds.amWorkOrders.find((w) => w.id === 'wo-t1')).toMatchObject({ contractor: 'Tender Bidder A', cost: 85000 });
+  });
+
+  it('D3: a Vice Chairman refusal turns the award down', async () => {
+    const { svc } = fresh();
+    const mm = await u(svc, 'u-asset-mm');
+    const dir = await u(svc, 'u-asset-dir');
+    await brief(svc, 'u-asset-mm', 'wo-t1', 'RENOVATION', { floorArea: 100 });
+    await svc.amBqSave(mm, 'wo-t1', { jobKind: 'RENOVATION', measurements: { floorArea: 100 }, lines: [{ item: 'Supply and lay floor tiles', unit: 'm2', qty: 100, rate: 90, note: 'Supplier call, mock' }], version: 1 });
+    expect(await svc.amBqSubmit(mm, 'wo-t1')).toMatchObject({ route: 'RFQ' });
+    await svc.amBqDecide(dir, 'wo-t1', true, 'ok');
+    await svc.amQuoteAdd(mm, 'wo-t1', { contractor: 'RFQ Bidder A', ref: 'R-A', receivedOn: TODAY, validUntil: '2026-12-31', lines: [{ lineId: 'L1', rate: 80 }], statedTotal: 8000 });
+    await svc.amAwardAsk(mm, 'wo-t1', 'Q1', 'Only one bidder so far (test)');
+    await svc.amAwardDecide(dir, 'wo-t1', true, 'Fair');
+    const r = await svc.amAwardDecide(await u(svc, 'u-vchair'), 'wo-t1', false, 'Too dear');
+    expect(r.award).toMatchObject({ final: false, vc: { approve: false } });
+    expect((await svc.amBq(mm, 'wo-t1')).can.askAward).toBe(true);
   });
 
   it('compares quotes, needs a reason for a dearer one, and the final approval sets the contractor and price', async () => {
@@ -364,20 +398,20 @@ describe('Variation orders (Fauzan, 5 Nov 2026: every price change is a VO)', ()
     await expect(svc.saveRecord(mm, 'amWorkOrder', 'wo-t1', null, { ...form, cost: 2000 } as never)).rejects.toThrow(/awarded through its BQ/);
   });
 
-  it('the COO also decides once the VOs together pass 10% of the award, and a turned-down VO leaves the price', async () => {
+  it('D3: no COO rung on a VO even past 10% of the award; the Asset Director, then the CEO and the Chairman', async () => {
     const { svc, ds } = fresh();
     const { mm, dir, coo, ceo, chair } = await awarded(svc);
     await svc.amVoAsk(mm, 'wo-t1', { reason: 'Extra wall (test)', contractorRef: 'VO-1', lines: [add(20)] });
     await svc.amVoDecide(dir, 'wo-t1', 'VO1', true, 'Measured on the visit');
     await svc.amVoDecide(ceo, 'wo-t1', 'VO1', true, 'Consent');
     await svc.amVoDecide(chair, 'wo-t1', 'VO1', true, 'Consent');
-    // 140 + 70 = 210, past 10% of RM1,650.
+    // 140 + 70 = 210, past 10% of RM1,650: still no COO step.
     await svc.amVoAsk(mm, 'wo-t1', { reason: 'Another wall (test)', contractorRef: 'VO-2', lines: [add(10)] });
-    expect((await svc.amBq(mm, 'wo-t1')).price).toMatchObject({ openVo: 'VO2', openVoCooToo: true });
+    expect((await svc.amBq(mm, 'wo-t1')).price).toMatchObject({ openVo: 'VO2', openVoCooToo: false });
     const half = await svc.amVoDecide(dir, 'wo-t1', 'VO2', true, 'Needed');
     expect(half.variations![1].final).toBe(false);
-    expect(ds.amWorkOrders.find((w) => w.id === 'wo-t1')!.cost).toBe(1790);
-    await svc.amVoDecide(coo, 'wo-t1', 'VO2', false, 'Do it in the next job');
+    await expect(svc.amVoDecide(coo, 'wo-t1', 'VO2', false, 'Do it in the next job')).rejects.toBeInstanceOf(AccessDenied);
+    await svc.amVoDecide(ceo, 'wo-t1', 'VO2', false, 'Do it in the next job');
     expect(ds.amWorkOrders.find((w) => w.id === 'wo-t1')!.cost).toBe(1790);
     expect((await svc.amBq(mm, 'wo-t1')).can.askVo).toBe(true);
   });
@@ -419,5 +453,23 @@ describe('Variation orders (Fauzan, 5 Nov 2026: every price change is a VO)', ()
     await svc.amVoDecide(ceo, 'wo-t1', 'VO1', true, 'Consent');
     expect(await tags(ceo)).toEqual([]);
     expect(await tags(chair)).toHaveLength(1);
+  });
+});
+
+describe('Quotes only from approved contractors (department check, 23 Nov 2026)', () => {
+  it('once the contractors list is in use, refuses a name not on it, one waiting, suspended or blacklisted, and checks again at the award', async () => {
+    const { svc, ds } = fresh();
+    const c = (id: string, name: string, status: 'active' | 'pending' | 'suspended' | 'blacklisted') =>
+      ({ id, name, ssm: `SSM-${id}`, trades: ['PAINTING'], cidbGrade: null, cidbExpiry: null, states: ['Selangor'], phone: '', email: '', status, statusNote: '', addedBy: 'Mock', addedById: 'u-asset-mm', on: TODAY, decidedBy: null, ratings: [], version: 1 }) as never;
+    ds.amContractors.push(c('ct-a', 'Approved Painter (mock)', 'active'), c('ct-p', 'Waiting Painter (mock)', 'pending'), c('ct-s', 'Suspended Painter (mock)', 'suspended'));
+    const { mm } = await approvedBq(svc);
+    await expect(svc.amQuoteAdd(mm, 'wo-t1', quote('Unknown Painter (mock)', 7, 250))).rejects.toThrow(/not on the contractors list/);
+    await expect(svc.amQuoteAdd(mm, 'wo-t1', quote('Waiting Painter (mock)', 7, 250))).rejects.toThrow(/waiting for the Asset Director/);
+    await expect(svc.amQuoteAdd(mm, 'wo-t1', quote('Suspended Painter (mock)', 7, 250))).rejects.toThrow(/suspended/);
+    await svc.amQuoteAdd(mm, 'wo-t1', quote('approved painter (mock)', 7, 250));
+    // Suspended after quoting: the award is refused.
+    (ds.amContractors.find((x) => x.id === 'ct-a') as { status: string }).status = 'suspended';
+    const q = (await svc.amBq(mm, 'wo-t1')).bq!.quotes[0];
+    await expect(svc.amAwardAsk(mm, 'wo-t1', q.id, 'Only quote, small job')).rejects.toThrow(/suspended/);
   });
 });

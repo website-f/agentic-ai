@@ -14,6 +14,7 @@ import { Chip, ErrorNotice, Loading, dayLabel, hhmm, money, useLoad } from '../u
 import '../styles/ops.css';
 import { VacanciesPanel } from './HrJoinLeave';
 import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
+import { StandardsDutiesPanel } from './StandardsDuties';
 
 type Item = RegionalOps['attention'][number];
 type CompanyRow = RegionalOps['rows'][number];
@@ -96,6 +97,8 @@ export function OpsView() {
           </>
         }
       />
+
+      <StandardsDutiesPanel />
 
       <Stats>
         <Stat label="On duty now" value={t.onDuty} note={`${t.shiftsToday} shifts today, ${t.sites} sites`} icon={<UserCheckIcon size={16} />} tone="info" />
@@ -229,7 +232,7 @@ export function OpsView() {
 
       {data.sector !== 'private' && <GovOpsMonitorPanel sector="government" />}
       {data.sector !== 'government' && <GovOpsMonitorPanel sector="private" />}
-      {(me.user.opsTier === 'ogm' || me.user.opsTier === 'ops_director' || me.user.opsTier === 'coo') && <ManagementFeeBillsPanel />}
+      {(me.user.opsTier === 'ogm' || me.user.opsTier === 'ops_director' || me.user.opsTier === 'coo' || (me.user.deputyOf ?? []).some((k) => k === 'c_goodwill' || k === 'c_sasateam')) && <ManagementFeeBillsPanel />}
     </div>
   );
 }

@@ -28,9 +28,12 @@ const fresh = () => {
 const who = (svc: PrimaService, ...ids: string[]) => Promise.all(ids.map((id) => svc.user(id)));
 
 /** Confirmed set-up, approved chart of accounts with bank codes. */
+const COPY = 'SYN-COPY-BOOK';
 const setUp = (f: FinStatusT) => {
   f.sqlDiscovery = {
     companyFile: BOOK,
+    // D4 (Fauzan, 23 Nov 2026): Prima posts to a copy of the book first.
+    copyBook: COPY,
     deployment: 'on_premises',
     version: '5.2025.1038.875',
     modules: { restApi: 'yes', asset: 'unknown', project: 'unknown', consolidation: 'unknown', bankFeed: 'unknown' },
@@ -158,7 +161,7 @@ describe('L5 sending, retries and "did it go in?"', () => {
     const r = await svc.financeSqlPosting.sendNow(fd);
     expect(r.posted).toBe(1);
     const job = jobs().find((j) => j.sourceId === id)!;
-    expect(job).toMatchObject({ status: 'posted', sqlDocNo: 'PV-000001', book: BOOK });
+    expect(job).toMatchObject({ status: 'posted', sqlDocNo: 'PV-000001', book: COPY });
     expect(F().payments!.find((p) => p.id === id)!.sqlPost?.docNo).toBe('PV-000001');
     await svc.financeSqlPosting.sendNow(fd);
     expect(fake.docs.length).toBe(1);

@@ -4,10 +4,12 @@
 //   node dist/src/purge-locations.js --by "<name or job>"            (counts what would go)
 //   node dist/src/purge-locations.js --by "<name or job>" --apply    (deletes, one audit entry with the counts)
 // Only the reading rows go; sessions, clock-ins, SOS alerts and cases keep their own records. Backups follow the
-// server's own backup retention.
+// server's own backup retention. D1 (Fauzan, 23 Nov 2026): --apply deletes only while the PDPA officer's weekly OK is
+// valid (module pdpa-officer-v1); counting what would go needs no OK.
 import { RULES, fromMs, locationCutoff } from '@prima/core';
 import { Pool, type PoolClient } from 'pg';
 import { PgStore } from './pg-store';
+import { notePurgeRun, requirePurgeOk } from './purge-ok';
 
 export async function purgeLocations(client: PoolClient, by: string, apply: boolean, now = Date.now()) {
   if (!by.trim()) throw new Error('Say who is running this (--by).');
@@ -15,6 +17,7 @@ export async function purgeLocations(client: PoolClient, by: string, apply: bool
   const staffCut = locationCutoff(now, RULES.staffTrackKeepDays.value);
   await client.query('BEGIN');
   try {
+    const ok = apply ? await requirePurgeOk(client, fromMs(now).slice(0, 10)) : null;
     const q = (table: string, cut: string) =>
       apply
         ? client.query(`DELETE FROM prima.${table} WHERE (data->>'receivedAt')::timestamptz < $1::timestamptz`, [cut])
@@ -29,10 +32,11 @@ export async function purgeLocations(client: PoolClient, by: string, apply: bool
         action: 'LOCATION_PURGE',
         entity: 'location',
         entityId: 'daily',
-        summary: `Location readings deleted: ${guard} guard phone reading(s) before ${guardCut}, ${staff} staff reading(s) before ${staffCut}`,
+        summary: `Location readings deleted: ${guard} guard phone reading(s) before ${guardCut}, ${staff} staff reading(s) before ${staffCut}. Under the PDPA officer's OK ${ok!.id} (${ok!.by})`,
       });
+    if (ok) await notePurgeRun(client, ok.id, { at: fromMs(now), by: by.trim(), what: `${guard} guard phone and ${staff} staff location reading(s)` });
     await client.query(apply ? 'COMMIT' : 'ROLLBACK');
-    return { guard, staff, guardCut, staffCut, applied: apply };
+    return { guard, staff, guardCut, staffCut, applied: apply, okId: ok?.id ?? null };
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;

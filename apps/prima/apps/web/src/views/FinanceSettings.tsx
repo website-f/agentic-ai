@@ -1,6 +1,7 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
+import type { FinSettingsView } from '../api/types';
 import { ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
 import { Card } from '../kit';
 import { DataTable, type DtColumn } from '../DataTable';
@@ -137,6 +138,9 @@ export function FinanceSettingsTab() {
           </div>
         </div>
       </Card>
+      <ConfirmPanel data={data} onSaved={() => setN((x) => x + 1)} />
+      {data.accountManagers.length > 0 && <AccountManagerPanel data={data} onSaved={() => setN((x) => x + 1)} />}
+      {data.canSet && data.budgetLimits.length > 0 && <BudgetLimitPanel rows={data.budgetLimits} onSaved={() => setN((x) => x + 1)} />}
       {data.canSet && data.noBooks.length > 0 && <StartBooks rows={data.noBooks} onSaved={() => setN((x) => x + 1)} />}
       {data.canSet && data.teams.length > 0 && <TeamPanel rows={data.teams} onSaved={() => setN((x) => x + 1)} />}
       {data.canSet && data.teams.length > 0 && <YearEndPanel rows={data.teams} onSaved={() => setN((x) => x + 1)} />}
@@ -379,5 +383,205 @@ function YearEndPanel({ rows, onSaved }: { rows: { companyId: string; name: stri
         </div>
       )}
     </section>
+  );
+}
+
+/** D3 (Fauzan, 23 Nov 2026): the FD confirms the limits and thresholds by 18 January 2027; any later change needs a fresh confirmation. */
+function ConfirmPanel({ data, onSaved }: { data: FinSettingsView; onSaved: () => void }) {
+  const act = useAction();
+  const [comment, setComment] = useState('');
+  return (
+    <Card
+      title="Limits and thresholds confirmed"
+      sub={data.confirmed ? undefined : `The Finance Director confirms the values above by ${data.confirmBy}`}
+      footer={
+        data.canSet && !data.confirmed ? (
+          <div className="fin-foot-form fin-foot-wide">
+            <label className="field">
+              <span>What you checked (needed)</span>
+              <textarea className="textarea" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
+            </label>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || !comment.trim()}
+              onClick={async () => {
+                if (await act.run(() => api.finConfirmSettings(comment), 'Limits and thresholds confirmed.')) {
+                  setComment('');
+                  onSaved();
+                }
+              }}
+            >
+              Confirm these values
+            </button>
+          </div>
+        ) : undefined
+      }
+    >
+      {data.confirmed ? (
+        <p className="notice" data-tone="ok">
+          Confirmed by {data.confirmed.sign.by} on {dateTimeLabel(data.confirmed.sign.at)}: {data.confirmed.sign.comment}
+        </p>
+      ) : (
+        <p className="notice" data-tone="warn">
+          Not confirmed yet. The Finance Director confirms the values above (or changes them first) by {data.confirmBy}. A later change needs a new confirmation.
+        </p>
+      )}
+      <ErrorNotice error={act.error} />
+    </Card>
+  );
+}
+
+/** D3: a yearly spending limit per company; a budget above it goes to the CEO to approve. */
+function BudgetLimitPanel({ rows, onSaved }: { rows: FinSettingsView['budgetLimits']; onSaved: () => void }) {
+  const act = useAction();
+  const [companyId, setCompanyId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [comment, setComment] = useState('');
+  return (
+    <Card
+      title="Budget limits"
+      sub="The most a company may plan to spend in its yearly budget. A budget above the limit can be approved only by the CEO. Empty means no limit."
+      flush
+      footer={
+        <div className="fin-foot-form fin-foot-wide">
+          <label className="field">
+            <span>Company</span>
+            <Select className="select fin-w-md" value={companyId} onChange={(e) => setCompanyId(e.target.value)} aria-label="Company">
+              <option value="">Company</option>
+              {rows.map((r) => (
+                <option key={r.companyId} value={r.companyId}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="field">
+            <span>Limit RM (empty = none)</span>
+            <input className="input fin-w-sm" inputMode="decimal" placeholder="Limit RM (empty = none)" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Why (needed)</span>
+            <input className="input" placeholder="Why (needed)" value={comment} onChange={(e) => setComment(e.target.value)} />
+          </label>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={act.busy || !companyId || !comment.trim()}
+            onClick={async () => {
+              const value = amount.trim() === '' ? null : Number(amount);
+              if (await act.run(() => api.finSetBudgetLimit(companyId, value, comment), 'Budget limit saved.')) {
+                setAmount('');
+                setComment('');
+                onSaved();
+              }
+            }}
+          >
+            Save limit
+          </button>
+        </div>
+      }
+    >
+      <ErrorNotice error={act.error} />
+      <div className="fin-rows">
+        {rows.map((r) => (
+          <div key={r.companyId} className="fin-kv fin-kv-wrap">
+            <span className="fin-min0 fin-strong">{r.name}</span>
+            <span className="muted small">{r.limit ? `RM ${r.limit.amount.toLocaleString('en-MY')} (${r.limit.set.by})` : 'No limit'}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+/** D1 (Fauzan, 23 Nov 2026): the Account Manager sits below the FD and does what the FD delegates. */
+function AccountManagerPanel({ data, onSaved }: { data: FinSettingsView; onSaved: () => void }) {
+  const act = useAction();
+  const [userId, setUserId] = useState('');
+  const [level, setLevel] = useState('');
+  const [all, setAll] = useState(true);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [comment, setComment] = useState('');
+  const labelOf = (l: string) => data.amLevels.find((x) => x.level === l)?.label ?? l;
+  const nameOf = (id: string) => data.teams.find((t) => t.companyId === id)?.name ?? id;
+  return (
+    <Card
+      title="Account Manager"
+      sub="The Account Manager sits below the Finance Director and does only what the Finance Director delegates. Approving payments stays with the Finance Director, the CEO or the COO."
+      flush
+      footer={
+        data.canSet ? (
+          <div className="fin-foot-form fin-foot-wide">
+            <label className="field">
+              <span>Account Manager</span>
+              <Select className="select fin-w-md" value={userId} onChange={(e) => setUserId(e.target.value)} aria-label="Account Manager">
+                <option value="">Account Manager</option>
+                {data.accountManagers.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="field">
+              <span>What they may do</span>
+              <Select className="select fin-w-lg" value={level} onChange={(e) => setLevel(e.target.value)} aria-label="What they may do">
+                <option value="">What they may do</option>
+                {data.amLevels.map((l) => (
+                  <option key={l.level} value={l.level}>
+                    {l.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="small">
+              <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Every company
+            </label>
+            {!all && (
+              <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+                {data.teams.map((t) => (
+                  <label key={t.companyId} className="small">
+                    <input
+                      type="checkbox"
+                      checked={picked.includes(t.companyId)}
+                      onChange={(e) => setPicked((p) => (e.target.checked ? [...p, t.companyId] : p.filter((x) => x !== t.companyId)))}
+                    />{' '}
+                    {t.name}
+                  </label>
+                ))}
+              </div>
+            )}
+            <label className="field">
+              <span>What is delegated and why (needed)</span>
+              <input className="input" placeholder="What is delegated and why (needed)" value={comment} onChange={(e) => setComment(e.target.value)} />
+            </label>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || !userId || !level || !comment.trim() || (!all && !picked.length)}
+              onClick={async () => {
+                if (await act.run(() => api.finDelegateAm({ userId, level, companies: all ? 'all' : picked, comment }), 'Delegation saved.')) {
+                  setComment('');
+                  onSaved();
+                }
+              }}
+            >
+              Save delegation
+            </button>
+          </div>
+        ) : undefined
+      }
+    >
+      <ErrorNotice error={act.error} />
+      <div className="fin-rows">
+        {data.accountManagers.map((m) => (
+          <div key={m.userId} className="fin-kv fin-kv-wrap">
+            <span className="fin-min0 fin-strong">{m.name}</span>
+            <span className="muted small">
+              {labelOf(m.level)}, {m.companies ? m.companies.map(nameOf).join(', ') : 'every company'}
+              {m.set ? ` (set by ${m.set.by}: ${m.set.comment})` : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }

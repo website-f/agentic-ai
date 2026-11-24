@@ -61,3 +61,36 @@ registerWorkKpiAdapter({
     }
   },
 });
+/**
+ * The Director Office's own work (Director Office study B6, Fauzan 23 Nov 2026: "Do the gap"). Marketing now runs the
+ * bids, so the Director Office is measured on what it does itself. Read-only, no migration.
+ *
+ * - Minutes of a meeting the Director Office set: from the end of the meeting to the minutes in Prima. Proposed target
+ *   3 office days, the same window as the COO's monthly operations meetings (rule OPS-MEETING).
+ * - The summary drafted from any meeting's minutes: from the draft to the Director Office's check. Proposed target
+ *   1 office day.
+ */
+registerWorkKpiAdapter({
+  id: 'director-office-desk',
+  depts: ['director_office'],
+  tables: ['meetings'],
+  targets: {
+    'director_office.meeting.minutes': 1620,
+    'director_office.meeting.summary_check': 540,
+  },
+  limits: {
+    director_office: {
+      unknown: ['Reports due to the Director Office: the sender is timed against the due day on the Reports screen, not the Director Office'],
+      notTimed: ['CEO instructions: timed for the person who was given each one, against its own due time'],
+    },
+  },
+  collect(data, put) {
+    for (const m of data.meetings ?? []) {
+      if (m.status !== 'held') continue;
+      if (m.department === 'director_office' && m.minutes)
+        put.step({ dept: 'director_office', workflow: 'meeting', stage: 'minutes', kind: 'work', recordId: m.id, companyId: m.companyId ?? null, byId: null, by: m.minutes.by, arrivedAt: m.end, doneAt: m.minutes.at });
+      if (m.summary?.checkedBy && m.summary.checkedAt)
+        put.step({ dept: 'director_office', workflow: 'meeting', stage: 'summary_check', kind: 'check', recordId: m.id, companyId: m.companyId ?? null, byId: null, by: m.summary.checkedBy, arrivedAt: m.summary.at, doneAt: m.summary.checkedAt });
+    }
+  },
+});

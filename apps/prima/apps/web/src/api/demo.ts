@@ -1,8 +1,9 @@
+import { FW_GAP_READS } from '@prima/core';
 import { MemoryArchiveBytes, keyInFill, keyInRulesRead, keyInStart, type KeyInAnyPaper } from '@prima/core';
 import { invalidateDutyContext } from '../duty/context';
 import { AccessDenied, BadRequest, MemoryStore, NotFound, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, makeTestInhouseKey, sampleLabelToken, type ItemAction, type User, type ClientLostReason, type ProofInput, type ReportDef, testReceiptReader, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FinRequestAction, type CmsServiceKind, ImportError, OrgLinkError, registeredRollouts, withOrgLinks, RULES, type FwPaper, QUALITY_OPS_ACTIONS, demoFwRecruitFiles, type TenderAttendanceKind, type OrgImportReceipt } from '@prima/core';
 import { type ExpenseInput, type PdpaCaseInput, type PdpaStepName, type ProductCertInput, type ProductInput, type VehicleRequestInput, type VehicleWorkInput, ApiError, type Api, type CmsSettingsPatch, type FollowUpInput, type LeaveInput, type Me, type PhotoInput, type TenderProtocolInput, type DispatchInput, type DetectionInput, type VideoInput, type PostLogInput, type GateInInput, type NeedsReviewInput, type SiteTaskInput, type DoSiteTaskInput, type ClientCodeInput, type ClientCheckInput, type ClientInspectionInput, type SelfAuditInput, type RbaCommitteeInput, type EthicsInput, type ItEwaste, type FinControlArea, type ArmsRequestAction, type ArmsRequestStepExtra, type AmBuyInput, type RaiseArmsRequestInput, type OfficeDeskInput, type WorkAdjustInput, type WorkReassignInput, type OfficerHoursInput, type CleaningRecordInput, type CleaningSetupInput, type CleaningProofInput, type StockLineInput, type CleaningSlipInput, type ClientWorkAckInput, type GuardTermsInput, type OpportunityInput, type SourceCheckInput, type WatchFindAnswer, type FwAddFromJaInput, type FwPaperInput, type AmBqActionInput, type PaperReadingResult } from './types';
-import type { DisciplineAppealDecision, PolicyCopyInput, RosterActName, StaffLangId } from './types';
+import type { VcRecordBody, DisciplineAppealDecision, PolicyCopyInput, RosterActName, StaffLangId } from './types';
 
 const ROSTER_WRITES = new Set(['saveSiteCoverage', 'saveRosterDraft', 'rosterStep', 'recordRosterActual', 'proposeRosterCorrection', 'decideRosterCorrection', 'decideRosterAbsence', 'recordRosterBreak', 'confirmRosterBreak', 'recordRosterEvidence', 'proposeGuardAllowance', 'decideGuardAllowance', 'proposeLumpSum', 'approveLumpSum', 'setLumpSumSwitch', 'decideMyLumpSum', 'checkRosterEvidence']);
 const CLEANING_WRITES = new Set(['saveSetup', 'setMap', 'makePlan', 'publish', 'recordTasks', 'recordDelivery', 'receiveDelivery', 'stockCheck', 'recordClientAck', 'saveSiteKit', 'recordSiteKit', 'approveGift', 'recordTakeBack']);
@@ -68,7 +69,7 @@ function toApiError(e: unknown): never {
 }
 
 type Mutations =
-  'startMarketingDesk' | 'addCompanyPaper' | 'setNoEntryReason' | 'recordTenderHours' | 'nameTenderAttendee' | 'sendTenderToIt' | 'answerTenderAiFlag' | 'startProposal' | 'recordTenderAttendance' | 'orgClose' | 'orgRead' | 'orgImport' | 'assign' | 'publish' | 'lockAttendance' | 'clockIn' | 'clockOut' | 'scan' | 'raiseCase' | 'addCasePhoto' | 'startSiteVisit' | 'addVisitPhoto' | 'closeSiteVisit' | 'siteSurveyReceive' | 'siteSurveyPhoto' | 'siteSurveyReview' | 'updateCase' | 'signOffCase' | 'createQuotation' | 'quotationAction' | 'correctQuotation' | 'updateTender' | 'setTenderProtocol' | 'doTenderStep' | 'staffClockIn' | 'registerFace' | 'staffFaceCheck' | 'decideFace' | 'removeFace' | 'addPublicHoliday' | 'removePublicHoliday' | 'setLeaveOverride' | 'setWfhAllowed' | 'requestFlex' | 'decideFlex' | 'recordHrFiling' | 'openHrCase' | 'hrCaseStep' | 'appointOshCoordinator' | 'setOshCoordinatorSees' | 'setArmsRfidRequired' | 'recordOfficeAssessment' | 'reportOshIncident' | 'recordOshReport' | 'recordTraining' | 'recordGuardPaper' | 'historyLookup' | 'markByLookup' | 'linkExistingRecords' | 'setRehire' | 'linkHistory' | 'separateHistory' | 'addOldEmployment' | 'carryHistoryPaper' | 'openAppraisal' | 'rateAppraisal' | 'commentAppraisal' | 'closeAppraisal' | 'publishPolicy' | 'setStaffOvertime' | 'updateHrLegalCheck' | 'acknowledgePolicy' | 'recordBriefingAcks' | 'screeningAct' | 'screeningRepeat' | 'decideProbation' | 'raiseVacancy' | 'vacancyStep' | 'advertStep' | 'addApplicant' | 'applicantStep' | 'prepareStaffMovement' | 'staffMovementStep' | 'cancelStaffMovement' | 'applyStaffMovement' | 'authoriseMovementLogin' | 'confirmMovementLogin' | 'applyDueStaffMovements' | 'saveAllowanceType' | 'requestAllowanceChange' | 'eaDraft' | 'employeeRegister' | 'staffSessionStart' | 'acceptConfidentiality' | 'setApprovalLimits' | 'setStaffLeaveVc' | 'setCashStandIn' | 'staffSessionEnd' | 'startSocsoClaim' | 'addSocsoDoc' | 'overrideSocsoDoc' | 'advanceSocsoClaim' | 'setSocsoRehab' | 'addSocsoAppointment' | 'addSocsoRestriction' | 'clearSocsoRestriction' | 'addSocsoCheckIn' | 'recordLindung' | 'verifyLindung' | 'addSocsoDependant' | 'addDependantPaper' | 'confirmDependantRoute' | 'recordDeathNotice' | 'addDependantPayment' | 'confirmDependantReceived' | 'assessDosh' | 'recordDoshImmediate' | 'recordDoshForm' | 'recordDoshClientTold' | 'submitFwRenewal' | 'recordFwPaper' | 'ackFwPaper' | 'addFwWorkerFromJa' | 'createTenderGroup' | 'recordTenderOpportunity' | 'enterTenderOpportunity' | 'addTenderSource' | 'loadTenderSourceStarter' | 'updateTenderSource' | 'recordTenderSourceCheck' | 'setTenderSourceWatch' | 'answerTenderWatchFind' | 'uploadHiringDoc' | 'updateHospitalClaim' | 'createFwmTask' | 'doneFwmTask' | 'reviewFwmTask' | 'recordFwCheck' | 'closeFwCheck' | 'openFwRecruitFile' | 'setFwRecruitTravel' | 'recordFwRecruitStep' | 'clearFwRecruitFile' | 'recordFwRecruitArrival' | 'stopFwRecruitFile' | 'addHostelBill' | 'hostelCheckIn' | 'recordRiskBriefing' | 'guardPhoneCodes' | 'setMyAlertPrefs' | 'hostelCheckOut' | 'requestHostelPayment' | 'checkHostelBill' | 'approveHostelBill' | 'uploadHostelSlip' | 'decideUtilityCharge' | 'ackUtilityNotice' | 'fileUtilityPaper' | 'submitStaffClaim' | 'addReceipts' | 'receiptAction' | 'headVerifyClaim' | 'prepareStaffPay' | 'setMyZakat' | 'loadStatTable' | 'checkStatTable' | 'setEmployerNos' | 'saveContributionFile' | 'contributionFileDownloaded' | 'setFinPack' | 'finCreatePayment' | 'finPaymentStep' | 'finCooStep' | 'finCreateRequest' | 'finRequestStep' | 'finSetSettings' | 'finClearUnbilled' | 'finSetSiteTarget' | 'finSetSiteCosts' | 'finSqlPostingAct' | 'finCloseStep' | 'finControlAction' | 'setMobItem' | 'setCmsService' | 'verifyCmsContact' | 'recordCmsTest' | 'acceptCmsService' | 'approveBranchSettlement' | 'addBranch' | 'branchAct' | 'branchSettlementAct' | 'insuranceClaimAct' | 'raiseItTicket' | 'reportItDevice' | 'websiteAction' | 'registerAction' | 'websiteSyncFeed' | 'corpFilingStep' | 'renewalStep' | 'saveCompanyFile' | 'addPanelFirm' | 'panelFirmStep' | 'adviserMoneyStep' | 'addDelegation' | 'delegationStep' | 'addCriticalRole' | 'placeLegalHold' | 'releaseLegalHold' | 'criticalRoleStep' | 'creditCheckLenderLicence' | 'ceoInstruct' | 'checkCompanyFile' | 'runCreditCheck' | 'creditDecide' | 'creditEnforcementStep' | 'creditRepayment' | 'creditChargeLodged' | 'creditStamped' | 'creditCorrectCollateral' | 'creditCorrectRecord' | 'creditDispute' | 'addCreditLoan' | 'corpAuditStep' | 'addSalesLead' | 'postDepreciation' | 'raiseActFinding' | 'actFindingStep' | 'recordActAudit' | 'assignActWork' | 'setActReportForm' | 'setActTiming' | 'recordActFieldCheck' | 'openActInvestigation' | 'addActEvidence' | 'actEvidence' | 'actInvestigationStep' | 'addActImprovement' | 'actImprovementStep' | 'amDisposalStep' | 'amLifeReview' | 'amBqAction' | 'amRecordPayment' | 'arishaSubmit' | 'arishaCommit' | 'arishaResubmit' | 'arishaReturn' | 'saveRecord' | 'decidePayChange' | 'savePayFormula' | 'decidePayFormula' | 'withdrawPayFormula' | 'setPayFormulaUse' | 'approveSiteHours' | 'savePayLaw' | 'setPublicHolidays' | 'amReversePayment' | 'amBankCash' | 'amFollowUp' | 'amDecideLetter' | 'salesLeadStep' | 'addLegalMatter' | 'legalMatterStep' | 'bcmRecord' | 'bcmDrill' | 'recordPdpaDpo' | 'addPdpaRequest' | 'pdpaRequestStep' | 'grcEvidence' | 'grcCheck' | 'recordOshAssessment' | 'submitWhistle' | 'whistleStep' | 'whistleReply' | 'whistleMessage' | 'declareGift' | 'decideGift' | 'addGovMandate' | 'govMandateStep' | 'raisePurRequest' | 'purStep' | 'addPurSupplier' | 'purSupplierStep' | 'stockIssue' | 'itemAct' | 'confirmMyItem' | 'handoverStep' | 'setManagementFee' | 'stockReturn' | 'raiseCorpChange' | 'decideCorpChange' | 'recordCorpBoard' | 'itTicketStep' | 'itAct' | 'armsPolicyAct' | 'officeAmAct' | 'kdnAct' | 'toolboxAct' | 'groupMonthAct' | 'registerAct' | 'siteSuppliesAct' | 'inventoryAct' | 'amRentalAct' | 'staffDirectoryAct' | 'setItOnboardingStep' | 'setItTenderItem' | 'setItAsset' | 'itMaintenance' | 'raiseItPurchase' | 'itPurchaseStep' | 'reviewBranchAction' | 'addBranchAgreement' | 'contractStep' | 'contractReview' | 'addContractVariation' | 'addContract' | 'addClientAccount' | 'setStaffPayLine' | 'staffPayStep' | 'staffPayExport' | 'prepareGuardPay' | 'prepareGuardPayLater' | 'setGuardPayLine' | 'importGuardPayLines' | 'setGuardPayPreparers' | 'guardPayStep' | 'guardPayExport' | 'guardPayCash' | 'recordPayConsent' | 'approvePayConsent' | 'setStatutory' | 'setGuardAdvances' | 'changeGuardAdvance' | 'approveGuardAdvances' | 'payGuardAdvance' | 'recordGuardLoan' | 'guardLoanStep' | 'cosDecideClaim' | 'hrDecideClaim' | 'cooDecideClaim' | 'financePayClaim' | 'setClaimRate' | 'publishMemo' | 'withdrawMemo' | 'remindMemo' | 'changeMeeting' | 'cancelMeeting' | 'answerMeeting' | 'openPdpaCase' | 'requestVehicle' | 'recordVehicleRental' | 'endVehicleRental' | 'setVehicleRent' | 'moveVehicleUse' | 'setVehicleFuel' | 'addVehicleCard' | 'endVehicleCard' | 'recordFuel' | 'reviewFuel' | 'clientStep' | 'setOfficeDesks' | 'setCompanyRunBy' | 'clientInvoice' | 'clientWorkAck' | 'setInvoicePortal' | 'createClientShareLink' | 'revokeClientShareLink' | 'saveExpense' | 'prefillOfficeRequest' | 'submitExpense' | 'decideExpense' | 'startOffboarding' | 'setClientOwner' | 'addClientPerson' | 'updateClientPerson' | 'addClientRequest' | 'closeClientRequest' | 'decideClientRenewal' | 'sendClientRenewalOffer' | 'answerClientRenewal' | 'clientContact' | 'clientReport' | 'clientRating' | 'clientComplaint' | 'resolveClientComplaint' | 'clientBilling' | 'saveProduct' | 'saveProductCert' | 'decideVehicleRequest' | 'vehicleOut' | 'vehicleIn' | 'recordVehicleWork' | 'fileMonitoringConsent' | 'setStaffPin' | 'closeAccess' | 'pdpaStep' | 'savePdpaRegisterItem' | 'setPdpaSettings' | 'pdpaRegisterStep' | 'recordPdpaConsent' | 'withdrawPdpaConsent' | 'pdpaBreachDetails' | 'recordInsurancePremium' | 'renewInsurancePolicy' | 'cancelInsurancePolicy' | 'readMemo' | 'staffClockOut' | 'staffPing' | 'remoteApply' | 'remotePlan' | 'remoteTask' | 'remoteCheckIn' | 'remoteReport' | 'remoteDecide' | 'remoteEnd' | 'remoteReview' | 'requestTimeSlip' | 'cancelTimeSlip' | 'decideTimeSlip' | 'requestOtClaim' | 'setHrList' | 'fwHostelAct' | 'shortStayAct' | 'recordPaperConsent' | 'setPaperConsentGate' | 'setFinalPay' | 'reportProblem' | 'replyProblem' | 'accountsAct' | 'setOpeningBalance' | 'checkOpeningBalance' | 'loadOpeningBalances' | 'addCompany' | 'orgImportOk' | 'decideUniformRequest' | 'requestUniform' | 'reportWarrantyFault' | 'checkWarrantyClaim' | 'sendWarrantyClaim' | 'closeWarrantyClaim' | 'cancelOtClaim' | 'decideOtClaim' | 'seenTimeSlip' | 'setTimeSlipApprover' | 'workCheckIn' | 'workTaskAdd' | 'workTaskDone' | 'workTaskLate' | 'workTaskReview' | 'workTaskReassign' | 'workTaskAdjust' | 'seenCooNotice' | 'helpAsk' | 'helpAnswer' | 'oneOnOneRecord' | 'playbookSignOff' | 'plannerSync' | 'branchCheckSubmit' | 'branchVisitRecord' | 'confirmTenderNa' | 'undoTenderStep' | 'planTenderStep' | 'decideTender' | 'setTenderRecord' | 'addTenderQuery' | 'setTenderQuery' | 'addTenderPapers' | 'setTenderBidFiles' | 'uploadTenderBidFile' | 'confirmTenderBidFile' | 'draftTenderChecklist' | 'reviewTenderChecklist' | 'verifyTender' | 'submitTender' | 'submitReport' | 'setReportDefs' | 'scheduleMeeting' | 'addMinutes' | 'checkMeetingSummary' | 'setMeetingAction' | 'setMeetingPrep' | 'issueFirearm' | 'returnFirearm' | 'planArmedJob' | 'updateArmedJob' | 'escalateFirearm' | 'countVault' | 'setPatrolInterval' | 'assignCmsShift' | 'updateCmsSettings' | 'approveCmsOvertime' | 'setCmsReadinessAnswer' | 'saveCmsReadinessDevice' | 'removeCmsReadinessDevice' | 'reviewCmsReadiness' | 'planCmsRoster' | 'recordCmsHandover' | 'giveCmsHandover' | 'cmsSeatClockIn' | 'cmsSeatClockOut' | 'releaseCmsSeat' | 'logCallback' | 'acknowledgeAlarm' | 'sendDispatch' | 'closeDispatch' | 'cancelDispatch' | 'simulateDetection' | 'dispatchSeen' | 'acknowledgeDispatch' | 'addDispatchPhoto' | 'addDispatchVideo' | 'replyDispatch' | 'addPostLog' | 'gateIn' | 'gateOut' | 'saveNeedsReview' | 'setSiteTask' | 'stopSiteTask' | 'setGateLog' | 'doSiteTask' | 'saveClientCode' | 'stopClientCode' | 'checkClientRequirement' | 'saveClientInspection' | 'fixInspectionLine' | 'saveSelfAudit' | 'nameRbaCommittee' | 'runRbaTrace' | 'settleRbaTraceRow' | 'signEthicsDeclaration' | 'reviewEthicsInterests' | 'fixSelfAuditLine' | 'followUpAttendance' | 'requestLeave' | 'decideLeave' | 'closeAlarm' | 'requestTrip' | 'decideTrip' | 'whistleReview' | 'confirmStockLoss' | 'stockCount' | 'amDecideReversal' | 'reviewFalseAlarm' | 'reviewArmsRequest' | 'armsRequestStep' | 'raiseArmsRequest' | 'setArmsTrading' | 'amBuyRequest' | 'amBuyDecide' | 'amBuyReceived' | 'amBuyReprice' | 'amWhatsAppConsent' | 'amWhatsAppSettle' | 'amQueueRentReminders' | 'recordFwPlacement' | 'endFwPlacement' | 'setFwCostRate' | 'addFwCostLegalNote' | 'draftFwCostMonth' | 'decideFwCostCharges' | 'bookFwCostCharge' | 'askPoliceHelp' | 'assignPoliceHelp' | 'recordPoliceHelpOutcome' | 'answerPoliceHelp' | 'withdrawPoliceHelp' | 'cleaningOp' | 'rosterOp' | 'dutyOp' | 'addMobItem' | 'certifyContractRound' | 'renewContract' | 'linkContractClient' | 'qualityAction' | 'fwStatAct' | 'clientDiligenceAct' | 'siteInstructionsAct' | 'amExtrasAct' | 'jaSwitchAct' | 'jaImportStage' | 'jaSwitchSettings' | 'jaImportDecide' | 'setClientReport' | 'addPolicyCopy' | 'setMotherTongue' | 'lodgeDisciplineAppeal' | 'decideDisciplineAppeal' | 'orgSetLine' | 'orgSetHead' | 'sharedLoginsAct' | 'assistantAct' | 'exportLog' | 'changeStaffJobTitle' | 'addFwWorker' | 'staffPings' | 'addShifts' | 'addTender' | 'finAddBankAccount' | 'finStartBooks' | 'finAddPaper' | 'startCompanyFile' | 'addCorpAudit' | 'addBcmSystem' | 'addGrcObligation' | 'addCorpFiling' | 'checkIn' | 'saveCheckinPlace' | 'ownerTestCheckin' | 'setCheckinPlaceActive' | 'setCheckinPolicy' | 'setCheckinRules' | 'decideCheckin' | 'decideClockPhoto' | 'addMeetingAction';
+  'startMarketingDesk' | 'addCompanyPaper' | 'setNoEntryReason' | 'recordTenderHours' | 'nameTenderAttendee' | 'sendTenderToIt' | 'answerTenderAiFlag' | 'startProposal' | 'recordTenderAttendance' | 'orgClose' | 'orgRead' | 'orgImport' | 'assign' | 'publish' | 'lockAttendance' | 'clockIn' | 'clockOut' | 'scan' | 'raiseCase' | 'addCasePhoto' | 'startSiteVisit' | 'addVisitPhoto' | 'closeSiteVisit' | 'siteSurveyReceive' | 'siteSurveyPhoto' | 'siteSurveyReview' | 'updateCase' | 'signOffCase' | 'createQuotation' | 'quotationAction' | 'correctQuotation' | 'updateTender' | 'setTenderProtocol' | 'doTenderStep' | 'staffClockIn' | 'registerFace' | 'staffFaceCheck' | 'decideFace' | 'removeFace' | 'addPublicHoliday' | 'removePublicHoliday' | 'setLeaveOverride' | 'setWfhAllowed' | 'requestFlex' | 'decideFlex' | 'recordHrFiling' | 'openHrCase' | 'hrCaseStep' | 'appointOshCoordinator' | 'setOshCoordinatorSees' | 'setArmsRfidRequired' | 'recordOfficeAssessment' | 'reportOshIncident' | 'recordOshReport' | 'recordTraining' | 'recordGuardPaper' | 'historyLookup' | 'markByLookup' | 'linkExistingRecords' | 'setRehire' | 'linkHistory' | 'separateHistory' | 'addOldEmployment' | 'carryHistoryPaper' | 'openAppraisal' | 'rateAppraisal' | 'commentAppraisal' | 'closeAppraisal' | 'publishPolicy' | 'setStaffOvertime' | 'updateHrLegalCheck' | 'acknowledgePolicy' | 'recordBriefingAcks' | 'screeningAct' | 'screeningRepeat' | 'decideProbation' | 'raiseVacancy' | 'vacancyStep' | 'advertStep' | 'addApplicant' | 'applicantStep' | 'prepareStaffMovement' | 'staffMovementStep' | 'cancelStaffMovement' | 'applyStaffMovement' | 'authoriseMovementLogin' | 'confirmMovementLogin' | 'applyDueStaffMovements' | 'saveAllowanceType' | 'requestAllowanceChange' | 'eaDraft' | 'employeeRegister' | 'staffSessionStart' | 'acceptConfidentiality' | 'setApprovalLimits' | 'setStaffLeaveVc' | 'setCashStandIn' | 'staffSessionEnd' | 'startSocsoClaim' | 'addSocsoDoc' | 'overrideSocsoDoc' | 'advanceSocsoClaim' | 'setSocsoRehab' | 'addSocsoAppointment' | 'addSocsoRestriction' | 'clearSocsoRestriction' | 'addSocsoCheckIn' | 'recordLindung' | 'verifyLindung' | 'addSocsoDependant' | 'addDependantPaper' | 'confirmDependantRoute' | 'recordDeathNotice' | 'addDependantPayment' | 'confirmDependantReceived' | 'assessDosh' | 'recordDoshImmediate' | 'recordDoshForm' | 'recordDoshClientTold' | 'submitFwRenewal' | 'recordFwPaper' | 'ackFwPaper' | 'addFwWorkerFromJa' | 'createTenderGroup' | 'recordTenderOpportunity' | 'enterTenderOpportunity' | 'addTenderSource' | 'loadTenderSourceStarter' | 'updateTenderSource' | 'recordTenderSourceCheck' | 'setTenderSourceWatch' | 'answerTenderWatchFind' | 'uploadHiringDoc' | 'updateHospitalClaim' | 'createFwmTask' | 'doneFwmTask' | 'reviewFwmTask' | 'recordFwCheck' | 'closeFwCheck' | 'openFwRecruitFile' | 'setFwRecruitTravel' | 'recordFwRecruitStep' | 'clearFwRecruitFile' | 'recordFwRecruitArrival' | 'stopFwRecruitFile' | 'addHostelBill' | 'hostelCheckIn' | 'recordRiskBriefing' | 'guardPhoneCodes' | 'setMyAlertPrefs' | 'hostelCheckOut' | 'requestHostelPayment' | 'checkHostelBill' | 'approveHostelBill' | 'uploadHostelSlip' | 'decideUtilityCharge' | 'ackUtilityNotice' | 'fileUtilityPaper' | 'submitStaffClaim' | 'addReceipts' | 'receiptAction' | 'headVerifyClaim' | 'prepareStaffPay' | 'setMyZakat' | 'loadStatTable' | 'checkStatTable' | 'setEmployerNos' | 'saveContributionFile' | 'contributionFileDownloaded' | 'setFinPack' | 'finCreatePayment' | 'finPaymentStep' | 'finCooStep' | 'finCreateRequest' | 'finRequestStep' | 'finSetSettings' | 'finClearUnbilled' | 'finSetSiteTarget' | 'finSetSiteCosts' | 'finSqlPostingAct' | 'finCloseStep' | 'finControlAction' | 'setMobItem' | 'setCmsService' | 'verifyCmsContact' | 'recordCmsTest' | 'acceptCmsService' | 'approveBranchSettlement' | 'addBranch' | 'branchAct' | 'branchSettlementAct' | 'insuranceClaimAct' | 'raiseItTicket' | 'reportItDevice' | 'websiteAction' | 'registerAction' | 'websiteSyncFeed' | 'corpFilingStep' | 'renewalStep' | 'saveCompanyFile' | 'addPanelFirm' | 'panelFirmStep' | 'adviserMoneyStep' | 'addDelegation' | 'delegationStep' | 'addCriticalRole' | 'placeLegalHold' | 'releaseLegalHold' | 'criticalRoleStep' | 'creditCheckLenderLicence' | 'ceoInstruct' | 'checkCompanyFile' | 'runCreditCheck' | 'creditDecide' | 'creditEnforcementStep' | 'creditRepayment' | 'creditChargeLodged' | 'creditStamped' | 'creditCorrectCollateral' | 'creditCorrectRecord' | 'creditDispute' | 'addCreditLoan' | 'corpAuditStep' | 'addSalesLead' | 'postDepreciation' | 'raiseActFinding' | 'actFindingStep' | 'recordActAudit' | 'assignActWork' | 'setActReportForm' | 'setActTiming' | 'recordActFieldCheck' | 'openActInvestigation' | 'addActEvidence' | 'actEvidence' | 'actInvestigationStep' | 'addActImprovement' | 'actImprovementStep' | 'amDisposalStep' | 'amLifeReview' | 'amBqAction' | 'amRecordPayment' | 'arishaSubmit' | 'arishaCommit' | 'arishaResubmit' | 'arishaReturn' | 'saveRecord' | 'decidePayChange' | 'savePayFormula' | 'decidePayFormula' | 'withdrawPayFormula' | 'setPayFormulaUse' | 'approveSiteHours' | 'savePayLaw' | 'setPublicHolidays' | 'amReversePayment' | 'amBankCash' | 'amFollowUp' | 'amDecideLetter' | 'salesLeadStep' | 'addLegalMatter' | 'legalMatterStep' | 'bcmRecord' | 'bcmDrill' | 'recordPdpaDpo' | 'addPdpaRequest' | 'pdpaRequestStep' | 'grcEvidence' | 'grcCheck' | 'recordOshAssessment' | 'submitWhistle' | 'whistleStep' | 'whistleReply' | 'whistleMessage' | 'declareGift' | 'decideGift' | 'addGovMandate' | 'govMandateStep' | 'raisePurRequest' | 'purStep' | 'addPurSupplier' | 'purSupplierStep' | 'stockIssue' | 'itemAct' | 'confirmMyItem' | 'handoverStep' | 'setManagementFee' | 'stockReturn' | 'raiseCorpChange' | 'decideCorpChange' | 'recordCorpBoard' | 'itTicketStep' | 'itAct' | 'armsPolicyAct' | 'officeAmAct' | 'kdnAct' | 'toolboxAct' | 'groupMonthAct' | 'registerAct' | 'siteSuppliesAct' | 'inventoryAct' | 'amRentalAct' | 'staffDirectoryAct' | 'setItOnboardingStep' | 'setItTenderItem' | 'setItAsset' | 'itMaintenance' | 'raiseItPurchase' | 'itPurchaseStep' | 'reviewBranchAction' | 'addBranchAgreement' | 'contractStep' | 'contractReview' | 'addContractVariation' | 'addContract' | 'addClientAccount' | 'setStaffPayLine' | 'staffPayStep' | 'staffPayExport' | 'prepareGuardPay' | 'prepareGuardPayLater' | 'setGuardPayLine' | 'importGuardPayLines' | 'setGuardPayPreparers' | 'guardPayStep' | 'guardPayExport' | 'guardPayCash' | 'recordPayConsent' | 'approvePayConsent' | 'setStatutory' | 'setGuardAdvances' | 'changeGuardAdvance' | 'approveGuardAdvances' | 'payGuardAdvance' | 'recordGuardLoan' | 'guardLoanStep' | 'cosDecideClaim' | 'hrDecideClaim' | 'cooDecideClaim' | 'financePayClaim' | 'setClaimRate' | 'publishMemo' | 'withdrawMemo' | 'remindMemo' | 'changeMeeting' | 'cancelMeeting' | 'answerMeeting' | 'openPdpaCase' | 'requestVehicle' | 'recordVehicleRental' | 'endVehicleRental' | 'setVehicleRent' | 'moveVehicleUse' | 'setVehicleFuel' | 'addVehicleCard' | 'endVehicleCard' | 'recordFuel' | 'reviewFuel' | 'clientStep' | 'setOfficeDesks' | 'setCompanyRunBy' | 'clientInvoice' | 'clientWorkAck' | 'setInvoicePortal' | 'createClientShareLink' | 'revokeClientShareLink' | 'saveExpense' | 'prefillOfficeRequest' | 'submitExpense' | 'decideExpense' | 'startOffboarding' | 'setClientOwner' | 'addClientPerson' | 'updateClientPerson' | 'addClientRequest' | 'closeClientRequest' | 'decideClientRenewal' | 'sendClientRenewalOffer' | 'answerClientRenewal' | 'clientContact' | 'clientReport' | 'clientRating' | 'clientComplaint' | 'resolveClientComplaint' | 'clientBilling' | 'saveProduct' | 'saveProductCert' | 'decideVehicleRequest' | 'vehicleOut' | 'vehicleIn' | 'recordVehicleWork' | 'fileMonitoringConsent' | 'setStaffPin' | 'closeAccess' | 'pdpaStep' | 'savePdpaRegisterItem' | 'setPdpaSettings' | 'pdpaRegisterStep' | 'recordPdpaConsent' | 'withdrawPdpaConsent' | 'pdpaBreachDetails' | 'recordInsurancePremium' | 'renewInsurancePolicy' | 'cancelInsurancePolicy' | 'readMemo' | 'staffClockOut' | 'staffPing' | 'remoteApply' | 'remotePlan' | 'remoteTask' | 'remoteCheckIn' | 'remoteReport' | 'remoteDecide' | 'remoteEnd' | 'remoteReview' | 'requestTimeSlip' | 'cancelTimeSlip' | 'decideTimeSlip' | 'requestOtClaim' | 'setHrList' | 'fwHostelAct' | 'shortStayAct' | 'recordPaperConsent' | 'setPaperConsentGate' | 'setFinalPay' | 'reportProblem' | 'replyProblem' | 'accountsAct' | 'setOpeningBalance' | 'checkOpeningBalance' | 'loadOpeningBalances' | 'addCompany' | 'orgImportOk' | 'decideUniformRequest' | 'requestUniform' | 'reportWarrantyFault' | 'checkWarrantyClaim' | 'sendWarrantyClaim' | 'closeWarrantyClaim' | 'cancelOtClaim' | 'decideOtClaim' | 'seenTimeSlip' | 'setTimeSlipApprover' | 'workCheckIn' | 'workTaskAdd' | 'workTaskDone' | 'workTaskLate' | 'workTaskReview' | 'workTaskReassign' | 'workTaskAdjust' | 'seenCooNotice' | 'helpAsk' | 'helpAnswer' | 'oneOnOneRecord' | 'playbookSignOff' | 'plannerSync' | 'branchCheckSubmit' | 'branchVisitRecord' | 'confirmTenderNa' | 'undoTenderStep' | 'planTenderStep' | 'decideTender' | 'setTenderRecord' | 'addTenderQuery' | 'setTenderQuery' | 'addTenderPapers' | 'setTenderBidFiles' | 'uploadTenderBidFile' | 'confirmTenderBidFile' | 'draftTenderChecklist' | 'reviewTenderChecklist' | 'verifyTender' | 'submitTender' | 'submitReport' | 'setReportDefs' | 'scheduleMeeting' | 'addMinutes' | 'checkMeetingSummary' | 'setMeetingAction' | 'setMeetingPrep' | 'issueFirearm' | 'returnFirearm' | 'planArmedJob' | 'updateArmedJob' | 'escalateFirearm' | 'countVault' | 'setPatrolInterval' | 'assignCmsShift' | 'updateCmsSettings' | 'approveCmsOvertime' | 'setCmsReadinessAnswer' | 'saveCmsReadinessDevice' | 'removeCmsReadinessDevice' | 'reviewCmsReadiness' | 'planCmsRoster' | 'recordCmsHandover' | 'giveCmsHandover' | 'cmsSeatClockIn' | 'cmsSeatClockOut' | 'releaseCmsSeat' | 'logCallback' | 'acknowledgeAlarm' | 'sendDispatch' | 'closeDispatch' | 'cancelDispatch' | 'simulateDetection' | 'dispatchSeen' | 'acknowledgeDispatch' | 'addDispatchPhoto' | 'addDispatchVideo' | 'replyDispatch' | 'addPostLog' | 'gateIn' | 'gateOut' | 'saveNeedsReview' | 'setSiteTask' | 'stopSiteTask' | 'setGateLog' | 'doSiteTask' | 'saveClientCode' | 'stopClientCode' | 'checkClientRequirement' | 'saveClientInspection' | 'fixInspectionLine' | 'saveSelfAudit' | 'nameRbaCommittee' | 'runRbaTrace' | 'settleRbaTraceRow' | 'signEthicsDeclaration' | 'reviewEthicsInterests' | 'fixSelfAuditLine' | 'followUpAttendance' | 'requestLeave' | 'decideLeave' | 'closeAlarm' | 'requestTrip' | 'decideTrip' | 'whistleReview' | 'confirmStockLoss' | 'stockCount' | 'amDecideReversal' | 'reviewFalseAlarm' | 'reviewArmsRequest' | 'armsRequestStep' | 'raiseArmsRequest' | 'setArmsTrading' | 'amBuyRequest' | 'amBuyDecide' | 'amBuyReceived' | 'amBuyReprice' | 'amWhatsAppConsent' | 'amWhatsAppSettle' | 'amQueueRentReminders' | 'recordFwPlacement' | 'endFwPlacement' | 'setFwCostRate' | 'addFwCostLegalNote' | 'draftFwCostMonth' | 'decideFwCostCharges' | 'bookFwCostCharge' | 'askPoliceHelp' | 'assignPoliceHelp' | 'recordPoliceHelpOutcome' | 'answerPoliceHelp' | 'withdrawPoliceHelp' | 'cleaningOp' | 'rosterOp' | 'dutyOp' | 'addMobItem' | 'certifyContractRound' | 'renewContract' | 'linkContractClient' | 'qualityAction' | 'fwStatAct' | 'clientDiligenceAct' | 'siteInstructionsAct' | 'amExtrasAct' | 'jaSwitchAct' | 'jaImportStage' | 'jaSwitchSettings' | 'jaImportDecide' | 'setClientReport' | 'addPolicyCopy' | 'setMotherTongue' | 'lodgeDisciplineAppeal' | 'decideDisciplineAppeal' | 'orgSetLine' | 'orgSetHead' | 'sharedLoginsAct' | 'assistantAct' | 'exportLog' | 'changeStaffJobTitle' | 'addFwWorker' | 'staffPings' | 'addShifts' | 'addTender' | 'finAddBankAccount' | 'finStartBooks' | 'finAddPaper' | 'startCompanyFile' | 'addCorpAudit' | 'addBcmSystem' | 'addGrcObligation' | 'addCorpFiling' | 'checkIn' | 'saveCheckinPlace' | 'ownerTestCheckin' | 'setCheckinPlaceActive' | 'setCheckinPolicy' | 'setCheckinRules' | 'decideCheckin' | 'decideClockPhoto' | 'addMeetingAction' | 'recordVcConsent' | 'setCosCover' | 'finGapsAct' | 'openCorpFiling' | 'setCorpFilingExec' | 'purLinkItemSku' | 'autoReportAct' | 'fleetRecordAct' | 'pdpaOfficerAct' | 'decideAgeException' | 'setGoodwillPrice' | 'jaUploadPay' | 'jaUploadRoster' | 'decideGoodwillSale' | 'fwGapsAct' | 'replaceCmsSeat' | 'uploadCmsRoster';
 
 export class DemoApi implements Api {
   async m365Call(): Promise<unknown> { throw new Error('Microsoft integration requires the signed-in server app.'); }
@@ -297,6 +298,10 @@ export class DemoApi implements Api {
         return this.svc.setCashStandIn(u, args[0] as Record<string, unknown>);
       case 'setStaffLeaveVc':
         return this.svc.setStaffLeaveVc(u, args[0] as Record<string, unknown>);
+      case 'recordVcConsent':
+        return this.svc.recordVcConsent(u, a[0], a[1], a[2]);
+      case 'setCosCover':
+        return this.svc.setCosCover(u, args[0] as Record<string, unknown>);
       case 'setApprovalLimits':
         return this.svc.setApprovalLimits(u, args[0] as Record<string, unknown>);
       case 'acceptConfidentiality':
@@ -489,6 +494,8 @@ export class DemoApi implements Api {
         return this.svc.recordDoshForm(u, a[0], a[1]);
       case 'recordDoshClientTold':
         return this.svc.recordDoshClientTold(u, a[0], a[1]);
+      case 'decideAgeException':
+        return this.svc.decideAgeException(u, a[0], a[1]);
       case 'uploadHiringDoc':
         return this.svc.uploadHiringDoc(u, a[0], a[1], a[2]);
       case 'updateHospitalClaim':
@@ -624,6 +631,8 @@ export class DemoApi implements Api {
         return this.svc.problems.report(u, a[0]);
       case 'sharedLoginsAct':
         return this.svc.sharedLogins.act(u, a[0], a[1]);
+      case 'pdpaOfficerAct':
+        return this.svc.pdpaOfficer.act(u, a[0], a[1]);
       case 'accountsAct':
         return this.svc.accounts.act(u, a[0], a[1]);
       case 'orgSetLine':
@@ -791,6 +800,8 @@ export class DemoApi implements Api {
         return this.svc.raisePurRequest(u, a[0], a[1]);
       case 'purStep':
         return this.svc.purStep(u, a[0], a[1], a[2]);
+      case 'purLinkItemSku':
+        return this.svc.purLinkItemSku(u, a[0], a[1], a[2]);
       case 'addPurSupplier':
         return this.svc.addPurSupplier(u, a[0], a[1]);
       case 'purSupplierStep':
@@ -807,12 +818,24 @@ export class DemoApi implements Api {
         return this.svc.requestUniform(u, a[0]);
       case 'decideUniformRequest':
         return this.svc.decideUniformRequest(u, a[0], { ...(a[2] as object), action: a[1] });
+      case 'jaUploadPay':
+        return this.svc.jaUploadPay(u, a[0]);
+      case 'jaUploadRoster':
+        return this.svc.jaUploadRoster(u, a[0]);
+      case 'setGoodwillPrice':
+        return this.svc.setGoodwillPrice(u, a[0], a[1]);
+      case 'decideGoodwillSale':
+        return this.svc.decideGoodwillSale(u, a[0], a[1]);
       case 'itemAct':
         return this.svc.items.act(u, a[0], a[1]);
       case 'stockReturn':
         return this.svc.stockReturn(u, a[0], a[1], a[2]);
       case 'corpFilingStep':
         return this.svc.corpFilingStep(u, a[0], a[1], a[2]);
+      case 'openCorpFiling':
+        return this.svc.openCorpFiling(u, a[0]);
+      case 'setCorpFilingExec':
+        return this.svc.setCorpFilingExec(u, a[0]);
       case 'ceoInstruct':
         return this.svc.ceoInstruct(u, a[0]);
       case 'addPanelFirm':
@@ -877,8 +900,12 @@ export class DemoApi implements Api {
         return this.svc.toolboxAct(u, a[0], a[1]);
       case 'groupMonthAct':
         return this.svc.groupMonthAct(u, a[0], a[1]);
+      case 'autoReportAct':
+        return this.svc.autoReportAct(u, a[0], a[1]);
       case 'registerAct':
         return this.svc.registerAct(u, a[0], a[1]);
+      case 'fwGapsAct':
+        return this.svc.fwGapsAct(u, a[0], a[1]);
       case 'siteSuppliesAct':
         return this.svc.siteSuppliesAct(u, a[0], a[1]);
       case 'inventoryAct':
@@ -962,6 +989,16 @@ export class DemoApi implements Api {
         if (kind === 'paste') return p.pasteListing(u, String(b.companyId), b.csv);
         if (kind === 'send') return p.sendNow(u);
         return p.checkNow(u);
+      }
+      case 'finGapsAct': {
+        const [kind, b] = a as unknown as [string, Record<string, unknown>];
+        if (kind === 'confirm') return this.svc.finance.confirmSettings(u, b);
+        if (kind === 'budget') return this.svc.finance.setBudgetLimit(u, String(b.companyId), b);
+        if (kind === 'am') return this.svc.finance.delegateToAm(u, b);
+        if (kind === 'prepare') return this.svc.financePayouts.prepare(u, b);
+        if (kind === 'record') return this.svc.recordPayout(u, b);
+        if (kind === 'journal') return this.svc.financePayouts.journal(u, String(b.companyId), String(b.payoutId), b.action === 'check' ? 'check' : 'enter', b);
+        throw new Error('Unknown Finance action');
       }
       case 'finSetSettings':
         return this.svc.finance.setSettings(u, { values: a[0], comment: a[1], ...(a[2] ? { effectiveFrom: a[2] } : {}) });
@@ -1133,7 +1170,9 @@ export class DemoApi implements Api {
       case 'decideVehicleRequest':
         return this.svc.decideVehicleRequest(u, a[0], a[1], a[2], a[3]);
       case 'vehicleOut':
-        return this.svc.vehicleOut(u, a[0], a[1], a[2], a[3]);
+        return this.svc.vehicleOut(u, a[0], a[1], a[2], a[3], a[4]);
+      case 'fleetRecordAct':
+        return this.svc.fleetRecordAct(u, a[0], a[1], a[2]);
       case 'vehicleIn':
         return this.svc.vehicleIn(u, a[0], a[1], a[2]);
       case 'recordVehicleWork':
@@ -1346,6 +1385,8 @@ export class DemoApi implements Api {
         return this.svc.reviewCmsReadiness(u, a[0], a[1]);
       case 'planCmsRoster':
         return this.svc.planCmsRoster(u, a[0]);
+      case 'uploadCmsRoster':
+        return this.svc.uploadCmsRoster(u, a[0]);
       case 'recordCmsHandover':
         return this.svc.recordCmsHandover(u, a[0], a[1], a[2] !== false);
       case 'giveCmsHandover':
@@ -1356,6 +1397,8 @@ export class DemoApi implements Api {
         return this.svc.cmsSeatClockOut(u, a[0], a[1]);
       case 'releaseCmsSeat':
         return this.svc.releaseCmsSeat(u, a[0], a[1]);
+      case 'replaceCmsSeat':
+        return this.svc.replaceCmsSeat(u, a[0], a[1], a[2]);
       case 'logCallback':
         return this.svc.logCallback(u, a[0], a[1]);
       case 'followUpAttendance':
@@ -1550,7 +1593,7 @@ export class DemoApi implements Api {
   }
 
   me(): Promise<Me> {
-    return this.read(async (svc, user) => ({ user, companies: await svc.visibleCompanies(user), now: svc.now(), dataMode: 'test' as const }));
+    return this.read(async (svc, user) => ({ user, companies: await svc.visibleCompanies(user), now: svc.now(), keptVaultCompanyIds: await svc.keptVaultCompanyIds(user), dataMode: 'test' as const }));
   }
 
   overview() {
@@ -2441,6 +2484,27 @@ export class DemoApi implements Api {
   sharedLoginsAct(action: 'save' | 'changed' | 'close' | 'kind', input: Record<string, unknown>) {
     return this.write<unknown>('sharedLoginsAct', [action, input]);
   }
+  pdpaOfficerToday() {
+    return this.read((s, u) => s.pdpaOfficer.doToday(u));
+  }
+  pdpaOfficerInbox() {
+    return this.read((s, u) => s.pdpaOfficer.inbox(u));
+  }
+  pdpaOfficerDownloads() {
+    return this.read((s, u) => s.pdpaOfficer.downloads(u));
+  }
+  pdpaOfficerClientSteps() {
+    return this.read((s, u) => s.pdpaOfficer.clientSteps(u));
+  }
+  pdpaOfficerKeep() {
+    return this.read((s, u) => s.pdpaOfficer.keepList(u));
+  }
+  pdpaMyAsks() {
+    return this.read((s, u) => s.pdpaOfficer.myAsks(u));
+  }
+  pdpaOfficerAct(action: 'ask' | 'handle' | 'client-step' | 'purge-ok', input: Record<string, unknown>) {
+    return this.write<unknown>('pdpaOfficerAct', [action, input]);
+  }
   orgChart() {
     return this.read((s, u) => s.org.chart(u));
   }
@@ -2643,6 +2707,9 @@ export class DemoApi implements Api {
   reportItDevice(input: Parameters<Api['reportItDevice']>[0]) {
     return this.write<unknown>('reportItDevice', [input]);
   }
+  purOrderPdf(id: string) {
+    return this.read((s, u) => s.purOrderPdf(u, id));
+  }
   deliveryProof(issueId: string) {
     return this.read((s, u) => s.deliveryProof(u, issueId));
   }
@@ -2654,6 +2721,9 @@ export class DemoApi implements Api {
   }
   purStep(id: string, action: Parameters<Api['purStep']>[1], body: Parameters<Api['purStep']>[2]) {
     return this.write<unknown>('purStep', [id, action, body]);
+  }
+  purLinkItemSku(stockItemId: string, skuId: string | null, reason: string) {
+    return this.write<unknown>('purLinkItemSku', [stockItemId, skuId, reason]);
   }
   addPurSupplier(companyId: string, input: Parameters<Api['addPurSupplier']>[1]) {
     return this.write<unknown>('addPurSupplier', [companyId, input]);
@@ -2675,6 +2745,12 @@ export class DemoApi implements Api {
   }
   decideUniformRequest(id: string, action: Parameters<Api['decideUniformRequest']>[1], input: Parameters<Api['decideUniformRequest']>[2]) {
     return this.write<unknown>('decideUniformRequest', [id, action, input]);
+  }
+  setGoodwillPrice(itemId: string, input: Parameters<Api['setGoodwillPrice']>[1]) {
+    return this.write<unknown>('setGoodwillPrice', [itemId, input]);
+  }
+  decideGoodwillSale(itemId: string, input: Parameters<Api['decideGoodwillSale']>[1]) {
+    return this.write<unknown>('decideGoodwillSale', [itemId, input]);
   }
   ceoInstructions() {
     return this.read((s, u) => s.ceoInstructions(u));
@@ -2747,6 +2823,15 @@ export class DemoApi implements Api {
   }
   renewalStep(id: string, action: Parameters<Api['renewalStep']>[1], body: Parameters<Api['renewalStep']>[2] = {}) {
     return this.write<unknown>('renewalStep', [id, action, body]);
+  }
+  openCorpFiling(input: { companyId: string; title: string; dueOn: string; basis: string }) {
+    return this.write<unknown>('openCorpFiling', [input]);
+  }
+  corpFilingExecChoices() {
+    return this.read((s, u) => s.corpFilingExecChoices(u));
+  }
+  setCorpFilingExec(input: { companyId: string; userId: string | null; reason: string }) {
+    return this.write<unknown>('setCorpFilingExec', [input]);
   }
   corpFilingStep(id: string, action: 'prepare' | 'lodge' | 'receipt', body: { ref?: string; on?: string }) {
     return this.write<unknown>('corpFilingStep', [id, action, body]);
@@ -3043,6 +3128,27 @@ export class DemoApi implements Api {
   finSetSettings(values: Record<string, unknown>, comment: string) {
     return this.write<unknown>('finSetSettings', [values, comment]);
   }
+  finConfirmSettings(comment: string) {
+    return this.write<unknown>('finGapsAct', ['confirm', { comment }]);
+  }
+  finSetBudgetLimit(companyId: string, amount: number | null, comment: string) {
+    return this.write<unknown>('finGapsAct', ['budget', { companyId, amount, comment }]);
+  }
+  finDelegateAm(input: Record<string, unknown>) {
+    return this.write<unknown>('finGapsAct', ['am', input]);
+  }
+  finPayouts(companyId: string) {
+    return this.read((s, u) => s.financePayouts.view(u, companyId));
+  }
+  finPayoutPrepare(input: Record<string, unknown>) {
+    return this.write<unknown>('finGapsAct', ['prepare', input]);
+  }
+  finPayoutRecord(input: Record<string, unknown>) {
+    return this.write<unknown>('finGapsAct', ['record', input]);
+  }
+  finPayoutJournal(companyId: string, input: Record<string, unknown>) {
+    return this.write<unknown>('finGapsAct', ['journal', { ...input, companyId }]);
+  }
   finRequests() {
     return this.read((s, u) => s.financeRequests.list(u));
   }
@@ -3318,6 +3424,18 @@ export class DemoApi implements Api {
   jaBoard() {
     return this.read((s, u) => s.jaBoard(u));
   }
+  opsStandardsDuties() {
+    return this.read((s, u) => s.opsStandardsDuties(u));
+  }
+  jaUploadOptions() {
+    return this.read((s, u) => s.jaUploadOptions(u));
+  }
+  jaUploadPay(input: Parameters<Api['jaUploadPay']>[0]) {
+    return this.write<Awaited<ReturnType<Api['jaUploadPay']>>>('jaUploadPay', [input]);
+  }
+  jaUploadRoster(input: Parameters<Api['jaUploadRoster']>[0]) {
+    return this.write<Awaited<ReturnType<Api['jaUploadRoster']>>>('jaUploadRoster', [input]);
+  }
   companyOffice(companyId: string) {
     return this.read((s, u) => s.companyOffice(u, companyId));
   }
@@ -3447,8 +3565,14 @@ export class DemoApi implements Api {
   decideVehicleRequest(requestId: string, ok: boolean, vehicleId: string | null, note: string) {
     return this.write<unknown>('decideVehicleRequest', [requestId, ok, vehicleId, note]);
   }
-  vehicleOut(vehicleId: string, requestId: string | null, km: number, driver?: string) {
-    return this.write<unknown>('vehicleOut', [vehicleId, requestId, km, driver]);
+  vehicleOut(vehicleId: string, requestId: string | null, km: number, driver?: string, driverUserId?: string | null) {
+    return this.write<unknown>('vehicleOut', [vehicleId, requestId, km, driver, driverUserId ?? null]);
+  }
+  fleetRecords() {
+    return this.read((s, u) => s.fleetRecords(u));
+  }
+  fleetRecordAct(op: 'accident' | 'summons' | 'licence' | 'close' | 'recover', input: Record<string, unknown>, proof: ProofInput[]) {
+    return this.write<unknown>('fleetRecordAct', [op, input, proof]);
   }
   vehicleIn(vehicleId: string, km: number, note: string) {
     return this.write<unknown>('vehicleIn', [vehicleId, km, note]);
@@ -3586,6 +3710,9 @@ export class DemoApi implements Api {
   }
   personDocs(personId: string) {
     return this.read((s, u) => s.personDocs(u, personId));
+  }
+  decideAgeException(personId: string, input: Parameters<Api['decideAgeException']>[1]) {
+    return this.write<unknown>('decideAgeException', [personId, input]);
   }
   uploadHiringDoc(personId: string, kind: Parameters<Api['uploadHiringDoc']>[1], proof: ProofInput[]) {
     return this.write<unknown>('uploadHiringDoc', [personId, kind, proof]);
@@ -3794,10 +3921,22 @@ export class DemoApi implements Api {
   staffLeaveVc() {
     return this.read((s, u) => s.staffLeaveVcSetting(u));
   }
+  recordLeaveVc(id: string, body: VcRecordBody) {
+    return this.write<unknown>('recordVcConsent', ['leave', id, body]);
+  }
+  recordPayVc(id: string, body: VcRecordBody) {
+    return this.write<unknown>('recordVcConsent', ['pay', id, body]);
+  }
+  cosCover() {
+    return this.read((s, u) => s.cosCoverView(u));
+  }
+  setCosCover(body: { item: string; to: string[]; until: string | null; reason: string }) {
+    return this.write<unknown>('setCosCover', [body]);
+  }
   setStaffLeaveVc(body: { on: boolean; reason: string }) {
     return this.write('setStaffLeaveVc', [body]);
   }
-  setApprovalLimits(body: { claimsMax: number | null; purchasesMax: number | null; comment: string }) {
+  setApprovalLimits(body: { claimsMax: number | null; purchasesMax: number | null; onlineBuyMax?: number | null; comment: string }) {
     return this.write('setApprovalLimits', [body]);
   }
   growthMargin() {
@@ -3865,6 +4004,9 @@ export class DemoApi implements Api {
   updateCmsSettings(patch: CmsSettingsPatch) {
     return this.write<unknown>('updateCmsSettings', [patch]);
   }
+  uploadCmsRoster(input: { fileName: string; rows: Record<string, string>[] }) {
+    return this.write<Awaited<ReturnType<Api['uploadCmsRoster']>>>('uploadCmsRoster', [input]);
+  }
   planCmsRoster(days: number) {
     return this.write<unknown>('planCmsRoster', [days]);
   }
@@ -3879,6 +4021,9 @@ export class DemoApi implements Api {
   }
   cmsSeatClockOut(shiftId: string, note: string) {
     return this.write<unknown>('cmsSeatClockOut', [shiftId, note]);
+  }
+  replaceCmsSeat(shiftId: string, staff: string, reason: string) {
+    return this.write<unknown>('replaceCmsSeat', [shiftId, staff, reason]);
   }
   releaseCmsSeat(shiftId: string, reason: string) {
     return this.write<unknown>('releaseCmsSeat', [shiftId, reason]);
@@ -4107,6 +4252,13 @@ export class DemoApi implements Api {
   }
   groupMonthAct(op: string, input: Record<string, unknown>) {
     return ['board', 'reportView', 'registers', 'acctTracker', 'ryg', 'duties', 'dutyKpi', 'calendar'].includes(op) ? this.read((s, u) => s.groupMonthAct(u, op, input)) : this.write<unknown>('groupMonthAct', [op, input]);
+  }
+  autoReportAct(op: string, input: Record<string, unknown>) {
+    // Opening the list may make the month's reports, so it is a write.
+    return ['view', 'download', 'layouts'].includes(op) ? this.read((s, u) => s.autoReportAct(u, op, input)) : this.write<unknown>('autoReportAct', [op, input]);
+  }
+  fwGapsAct(op: string, input: Record<string, unknown>) {
+    return FW_GAP_READS.includes(op) ? this.read((s, u) => s.fwGapsAct(u, op, input)) : this.write<unknown>('fwGapsAct', [op, input]);
   }
   registerAct(op: string, input: Record<string, unknown>) {
     return ['board', 'list', 'rentalMonth'].includes(op) ? this.read((s, u) => s.registerAct(u, op, input)) : this.write<unknown>('registerAct', [op, input]);
@@ -4511,6 +4663,9 @@ export class DemoApi implements Api {
   }
   amExtras() {
     return this.read((s, u) => s.amExtras.board(u));
+  }
+  amToday() {
+    return this.read((s, u) => s.assetToday(u));
   }
   amExtrasAct(area: string, action: string, id: string, body: Record<string, unknown>) {
     return this.write<unknown>('amExtrasAct', [area, action, id, body]);

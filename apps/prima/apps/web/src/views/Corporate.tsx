@@ -122,8 +122,14 @@ export function CorporateView() {
         }
       >
         <p className="notice" data-tone="info">
-          Test data. Deadlines follow the Companies Act 2016 and are for the secretaries to confirm.
+          Prima opens each company's file, its annual return and financial statements 90 days before they are due, and its audit at each year end, from the
+          company record. Deadlines follow the Companies Act 2016 and are for the secretaries to confirm.
         </p>
+        {data.cover && (
+          <p className="notice" data-tone="warn">
+            The Deputy Chief of Staff is on approved leave today, so you stand in for Corporate Admin. Each step you take says so in the audit trail.
+          </p>
+        )}
       </PageHead>
       <Stats>
         <Stat
@@ -255,9 +261,31 @@ function AuditLegalOnly({ data }: { data: NonNullable<Awaited<ReturnType<typeof 
 /** The filings list (P107: a searchable table; the steps and forms open in a drawer). Open filings first, by due date. */
 function Filings({ data, onAdd }: { data: CorpBoard; onAdd: () => void }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  // B7 (Fauzan, 23 Nov 2026): Corporate Admin opens a filing Prima does not open by itself.
+  const [opening, setOpening] = useState(false);
   const open = data.filings.find((f) => f.filing.id === openId);
   return (
-    <Card title="SSM filings" sub="Every filing with the date it falls due. Open one to record its next step." flush>
+    <Card
+      title="SSM filings"
+      sub="Every filing with the date it falls due. Open one to record its next step."
+      flush
+      actions={
+        data.canOpenFiling.length > 0 ? (
+          <button className="btn btn-sm" aria-expanded={opening} onClick={() => setOpening(!opening)}>
+            {opening ? 'Close' : 'Open another filing'}
+          </button>
+        ) : undefined
+      }
+    >
+      {opening && (
+        <Drawer
+          title="Open another filing"
+          sub="A filing Prima does not open by itself: a change of address, a new charge, anything else."
+          onClose={() => setOpening(false)}
+        >
+          <OpenFiling data={data} done={() => setOpening(false)} />
+        </Drawer>
+      )}
       <DataTable
         label="SSM filings"
         stateKey="board.corporate.filings"
@@ -269,7 +297,7 @@ function Filings({ data, onAdd }: { data: CorpBoard; onAdd: () => void }) {
         searchText={(r) => r.filing.basis}
         onView={(r) => setOpenId(r.filing.id)}
         rowTone={(r) => (r.tone === 'crit' ? 'crit' : r.tone === 'warn' ? 'warn' : undefined)}
-        actions={(r) => [{ label: r.canWork && r.filing.status !== 'acknowledged' ? 'Next step' : 'Open', onClick: () => setOpenId(r.filing.id) }]}
+        actions={(r) => [{ label: (r.can.prepare || r.can.lodge || r.can.receipt) && r.filing.status !== 'acknowledged' ? 'Next step' : 'Open', onClick: () => setOpenId(r.filing.id) }]}
         empty={
           <Empty
             title="Nothing open."
@@ -307,6 +335,13 @@ const FILING_COLUMNS: DtColumn<FilingRow>[] = [
         r.filing.prepared && !r.filing.lodged ? `prepared by ${r.filing.prepared.by}` : '',
         r.filing.lodged ? `lodged ${dateLabel(r.filing.lodged.on)} (${r.filing.lodged.ref})${r.lodgedLate ? ', late' : ''}` : '',
         r.filing.receipt ? `receipt ${r.filing.receipt.ref}` : '',
+        // B3: the financial statements are ready to circulate once that year's audit is signed.
+        r.fs && r.filing.status !== 'acknowledged' && r.filing.status !== 'lodged'
+          ? r.fs.auditSigned
+            ? `audit signed ${dateLabel(r.fs.auditSignedOn!)}: ready to circulate`
+            : 'audit not signed yet'
+          : '',
+        r.filing.openedBy ? `opened by ${r.filing.openedBy.by}` : '',
       ]
         .filter(Boolean)
         .join(' · '),
@@ -322,12 +357,68 @@ const FILING_FILTERS: DtFilter<FilingRow>[] = [
   { id: 'kind', label: 'Type', value: (r) => r.filing.kind, optionLabel: (k) => FILING_KIND[k as CorpFilingKind] ?? k },
 ];
 
+/** B7: Corporate Admin opens a filing Prima does not open by itself (a change of address, a new charge, anything else). */
+function OpenFiling({ data, done }: { data: CorpBoard; done: () => void }) {
+  const act = useAction();
+  const choices = data.companies.filter((c) => data.canOpenFiling.includes(c.profile.companyId));
+  const [companyId, setCompanyId] = useState(choices[0]?.profile.companyId ?? '');
+  const [title, setTitle] = useState('');
+  const [dueOn, setDueOn] = useState('');
+  const [basis, setBasis] = useState('');
+  return (
+    <div className="gv-stack-sm" aria-label="Open another filing">
+      <label className="field">
+        <span className="label">Company</span>
+        <Select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          {choices.map((c) => (
+            <option key={c.profile.companyId} value={c.profile.companyId}>
+              {c.companyName}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <label className="field">
+        <span className="label">What must be filed</span>
+        <input className="input" aria-label="What must be filed" value={title} placeholder="For example: change of registered address" onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <label className="field">
+        <span className="label">Due date</span>
+        <input className="input" type="date" aria-label="Due date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} />
+      </label>
+      <label className="field">
+        <span className="label">Legal basis or reason for the date</span>
+        <input
+          className="input"
+          aria-label="Legal basis or reason for the date"
+          value={basis}
+          placeholder="For example: Companies Act 2016 s.46, within 14 days"
+          onChange={(e) => setBasis(e.target.value)}
+        />
+      </label>
+      <ErrorNotice error={act.error} />
+      <div className="gv-form-foot">
+        <button
+          className="btn btn-primary"
+          disabled={act.busy || !companyId || title.trim().length < 3 || !dueOn || !basis.trim()}
+          onClick={() => act.run(() => api.openCorpFiling({ companyId, title, dueOn, basis }), 'Filing opened.').then((r) => r && done())}
+        >
+          Open the filing
+        </button>
+        <button className="btn btn-ghost" onClick={done}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function FilingLine({ f: row }: { f: FilingRow }) {
   const act = useAction();
   const [ref, setRef] = useState('');
   const f = row.filing;
-  // Head office Corporate Admin (the Deputy Chief of Staff) and the owner record filings; the company and the secretary view them.
-  const works = row.canWork;
+  // Corporate Admin and the filing executive record every step; the company secretary firm keys in its lodgement and
+  // the SSM receipt (Fauzan, 23 Nov 2026); the company views.
+  const works = row.can.prepare || row.can.lodge || row.can.receipt;
   const order = ['open', 'prepared', 'lodged', 'acknowledged'] as const;
   const at = order.indexOf(f.status);
   const st = (i: number): StepState => (at > i ? 'done' : at === i ? 'now' : 'todo');
@@ -348,9 +439,13 @@ function FilingLine({ f: row }: { f: FilingRow }) {
             {f.prepared && !f.lodged ? ` · prepared by ${f.prepared.by}` : ''}
             {f.lodged ? ` · lodged ${dateLabel(f.lodged.on)} (${f.lodged.ref})${row.lodgedLate ? ', late' : ''}` : ''}
             {f.receipt ? ` · receipt ${f.receipt.ref}` : ''}
+            {f.openedBy ? ` · opened by ${f.openedBy.by}` : ''}
           </div>
         </div>
         <div className="gv-item-state">
+          {row.fs && f.status !== 'acknowledged' && f.status !== 'lodged' && (
+            <Chip tone={row.fs.auditSigned ? 'ok' : 'neutral'}>{row.fs.auditSigned ? `Audit signed ${dateLabel(row.fs.auditSignedOn!)}: ready to circulate` : 'Audit not signed yet'}</Chip>
+          )}
           <Chip tone={row.tone}>{row.label}</Chip>
         </div>
       </div>
@@ -363,14 +458,8 @@ function FilingLine({ f: row }: { f: FilingRow }) {
       />
       {works && f.status !== 'acknowledged' && (
         <div className="gv-box">
-          {f.status === 'open' ? (
-            <div className="gv-btns">
-              <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.corpFilingStep(f.id, 'prepare', {}), 'Marked prepared.')}>
-                Papers ready for the secretary
-              </button>
-            </div>
-          ) : (
-            <div className="gv-inline">
+          <div className="gv-inline">
+            {(f.status !== 'open' || (row.role === 'secretary' && row.can.lodge)) && (
               <input
                 className="input"
                 aria-label="Reference"
@@ -378,26 +467,31 @@ function FilingLine({ f: row }: { f: FilingRow }) {
                 value={ref}
                 onChange={(e) => setRef(e.target.value)}
               />
-              {f.status === 'prepared' && (
-                <button
-                  className="btn btn-sm btn-primary"
-                  disabled={act.busy || !ref.trim()}
-                  onClick={() => act.run(() => api.corpFilingStep(f.id, 'lodge', { ref }), 'Lodgement recorded.')}
-                >
-                  Secretary lodged it
-                </button>
-              )}
-              {f.status === 'lodged' && (
-                <button
-                  className="btn btn-sm btn-primary"
-                  disabled={act.busy || !ref.trim()}
-                  onClick={() => act.run(() => api.corpFilingStep(f.id, 'receipt', { ref }), 'SSM receipt recorded.')}
-                >
-                  Record SSM receipt
-                </button>
-              )}
-            </div>
-          )}
+            )}
+            {row.can.prepare && (
+              <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.corpFilingStep(f.id, 'prepare', {}), 'Marked prepared.')}>
+                Papers ready for the secretary
+              </button>
+            )}
+            {row.can.lodge && f.status !== 'lodged' && (row.role === 'secretary' || f.status === 'prepared') && (
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={act.busy || !ref.trim()}
+                onClick={() => act.run(() => api.corpFilingStep(f.id, 'lodge', { ref }), 'Lodgement recorded.')}
+              >
+                Secretary lodged it
+              </button>
+            )}
+            {row.can.receipt && (
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={act.busy || !ref.trim()}
+                onClick={() => act.run(() => api.corpFilingStep(f.id, 'receipt', { ref }), 'SSM receipt recorded.')}
+              >
+                Record SSM receipt
+              </button>
+            )}
+          </div>
           <ErrorNotice error={act.error} />
         </div>
       )}
@@ -737,15 +831,33 @@ function FilingForm({ companies, onDone }: { companies: CorpBoard['canFile']; on
   );
 }
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 type CompanyRow = CorpBoard['companies'][number];
+// Director Office and company secretary gaps (Fauzan, 23 Nov 2026): a missing SSM number, incorporation date, secretary
+// firm or auditor says so (no annual return can be opened without the incorporation date); the filing executive shows.
 const COMPANY_COLUMNS: DtColumn<CompanyRow>[] = [
   { id: 'name', label: 'Company', value: (c) => c.companyName, render: (c) => <strong>{c.companyName}</strong>, phone: 'title' },
-  { id: 'reg', label: 'Registration', value: (c) => c.profile.regNo, render: (c) => <span className="mono small">{c.profile.regNo}</span>, phone: 'sub' },
-  { id: 'inc', label: 'Incorporated', value: (c) => c.profile.incorporatedOn, sort: 'date', hideBelow: 1100 },
-  { id: 'fye', label: 'Year end month', value: (c) => c.profile.fyeMonth, hideBelow: 1200 },
-  { id: 'sec', label: 'Secretary', value: (c) => c.profile.secretaryFirm },
-  { id: 'aud', label: 'Auditor', value: (c) => c.profile.auditor },
+  {
+    id: 'reg',
+    label: 'Registration',
+    value: (c) => c.profile.regNo,
+    render: (c) => (c.profile.regNo ? <span className="mono small">{c.profile.regNo}</span> : <span className="muted small">SSM number not keyed in</span>),
+    phone: 'sub',
+  },
+  {
+    id: 'inc',
+    label: 'Incorporated',
+    value: (c) => c.profile.incorporatedOn,
+    sort: 'date',
+    render: (c) => (c.profile.incorporatedOn ? dateLabel(c.profile.incorporatedOn) : <span className="muted small">Not keyed in (no annual return can be opened)</span>),
+    hideBelow: 1100,
+  },
+  { id: 'fye', label: 'Year ends', value: (c) => MONTHS[(c.profile.fyeMonth || 12) - 1], hideBelow: 1200 },
+  { id: 'sec', label: 'Secretary', value: (c) => c.profile.secretaryFirm || 'Secretary firm not keyed in' },
+  { id: 'aud', label: 'Auditor', value: (c) => c.profile.auditor || 'Auditor not keyed in' },
   { id: 'dir', label: 'Directors', value: (c) => c.profile.directors.length, sort: 'number' },
+  { id: 'filer', label: 'Filing executive', value: (c) => c.filingExec?.name ?? '', hideBelow: 1280 },
   { id: 'open', label: 'Filings', value: (c) => c.open, sort: 'number', align: 'left', render: (c) => <Chip tone={c.worst}>{c.open ? `${c.open} open` : 'In order'}</Chip> },
 ];
 const COMPANY_FILTERS: DtFilter<CompanyRow>[] = [
@@ -754,12 +866,90 @@ const COMPANY_FILTERS: DtFilter<CompanyRow>[] = [
 ];
 
 function Companies({ data }: { data: CorpBoard }) {
+  const [naming, setNaming] = useState(false);
   return (
-    <Card title="Companies" sub={`${data.companies.length} compan${data.companies.length === 1 ? 'y' : 'ies'}`} flush>
+    <Card
+      title="Companies"
+      sub={`${data.companies.length} compan${data.companies.length === 1 ? 'y' : 'ies'}`}
+      flush
+      actions={
+        data.canNameFiler ? (
+          <button className="btn btn-sm" aria-expanded={naming} onClick={() => setNaming(!naming)}>
+            {naming ? 'Close' : 'Name the filing executive'}
+          </button>
+        ) : undefined
+      }
+    >
+      {naming && (
+        <Drawer
+          title="Name the filing executive"
+          sub="One Chief of Staff office executive records filing steps (papers ready, lodged, SSM receipt)."
+          onClose={() => setNaming(false)}
+        >
+          <FilingExecForm data={data} done={() => setNaming(false)} />
+        </Drawer>
+      )}
       {!data.companies.length && <Empty title="No companies." />}
       {data.companies.length > 0 && (
         <DataTable details label="Companies" stateKey="board.corporate.companies" rows={data.companies} rowKey={(c) => c.profile.id} columns={COMPANY_COLUMNS} filters={COMPANY_FILTERS} />
       )}
     </Card>
+  );
+}
+
+/** D1 (Fauzan, 23 Nov 2026): the Deputy Chief of Staff names a Chief of Staff office executive to record filing steps. */
+function FilingExecForm({ data, done }: { data: CorpBoard; done: () => void }) {
+  const people = useLoad(() => api.corpFilingExecChoices(), []);
+  const act = useAction();
+  const [companyId, setCompanyId] = useState('all');
+  const [userId, setUserId] = useState('');
+  const [reason, setReason] = useState('');
+  return (
+    <div className="gv-stack-sm" aria-label="Name the filing executive">
+      <p className="muted small">
+        Name one Chief of Staff office executive to record filing steps (papers ready, lodged, SSM receipt). They never approve a change or check a company
+        file, and they need a company access line for each company.
+      </p>
+      <label className="field">
+        <span className="label">Company</span>
+        <Select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          <option value="all">Every company</option>
+          {data.companies.map((c) => (
+            <option key={c.profile.companyId} value={c.profile.companyId}>
+              {c.companyName}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <label className="field">
+        <span className="label">Filing executive</span>
+        <Select className="select" aria-label="Filing executive" value={userId} onChange={(e) => setUserId(e.target.value)}>
+          <option value="">Nobody (take the name off)</option>
+          {(people.data ?? []).map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+              {p.title ? `, ${p.title}` : ''}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <label className="field">
+        <span className="label">Reason</span>
+        <input className="input" aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+      </label>
+      <ErrorNotice error={act.error ?? people.error} />
+      <div className="gv-form-foot">
+        <button
+          className="btn btn-primary"
+          disabled={act.busy || !reason.trim()}
+          onClick={() => act.run(async () => { await api.setCorpFilingExec({ companyId, userId: userId || null, reason }); return true; }, 'Saved.').then((r) => r && done())}
+        >
+          Save
+        </button>
+        <button className="btn btn-ghost" onClick={done}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }

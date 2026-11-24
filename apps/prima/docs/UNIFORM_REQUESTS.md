@@ -3,7 +3,7 @@
 Fauzan, 11 Nov 2026: "Create button from om to need uniform. Let the om collect signature as the shared device or guard
 app still not available."
 
-Status: draft PR. Not merged, migrated or deployed. The table is in a proposed module that the CEO-run migration installs.
+Status: on main (source only). Not migrated or deployed: the table is in the off-list module `uniform-requests-v1`, which Fauzan runs later with the others.
 
 ## Site supplies requests (Part T, 13 Nov 2026)
 
@@ -60,6 +60,8 @@ single-guard request stays as it is; the queue here does not show supplies reque
 
 ## Not covered
 
-- Uniforms counted in the newer item register (`Items and equipment`) are not yet added to this count; the two stores are
-  still separate.
+- The two stores now share one allowance (23 Nov 2026, Goodwill study gap 7): uniform suits a guard had in the item
+  register (`Items and equipment`: handed over, past pieces a manager entered, and paid pieces) in the last 12 months
+  each count as one of every worn item here, times how many of the item one suit holds. Where the item register module
+  is not installed, nothing is added. The item register's own suit count does not yet read the Goodwill store.
 - Private-side (Sasa Team) OMs do not ask here, because only Goodwill holds stock.

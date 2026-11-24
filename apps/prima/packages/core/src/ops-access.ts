@@ -16,12 +16,71 @@ export function onOpsSide(user: Pick<User, 'opsSector'>, sector: Site['sector'] 
   return !user.opsSector || user.opsSector === (sector ?? 'private');
 }
 
-export function isOgm(user: User): boolean {
+/** The OGM's own job (one person). Use isOgm for what the OGM may do: the Deputy OGM stands in for it. */
+export function isOgmByJob(user: User): boolean {
   return user.role === 'pwvsb_officer' && user.department === 'operations' && user.opsTier === 'ogm';
 }
 
-export function isOpsDirector(user: User): boolean {
+/**
+ * The Deputy OGM (Fauzan, 23 Nov 2026, decision card: "Full stand-in, any time"): the operations officer the CEO or the
+ * HR Director names deputy of Goodwill Empire in the org chart (unit c_goodwill; module org-lines-v1). The deputy may do
+ * every OGM step at any time. Every step still names the person who did it, and nobody approves their own request.
+ * A system feed, a closed account or a deputy role past its last day stands in for nothing.
+ */
+export function isDeputyOgm(user: User): boolean {
+  return (
+    user.role === 'pwvsb_officer' &&
+    user.department === 'operations' &&
+    user.opsTier !== 'ogm' &&
+    !user.integration &&
+    !user.accessClosedFrom &&
+    (user.deputyOf ?? []).includes(`c_${GOV_OPS_COMPANY_ID}`)
+  );
+}
+
+/** Whoever may act as the OGM: the OGM, or the Deputy OGM standing in. */
+export function isOgm(user: User): boolean {
+  return isOgmByJob(user) || isDeputyOgm(user);
+}
+
+/** The Operations Director's own job (one person). Use isOpsDirector for what the OD may do: the deputy stands in. */
+export function isOpsDirectorByJob(user: User): boolean {
   return user.role === 'pwvsb_officer' && user.department === 'operations' && user.opsTier === 'ops_director';
+}
+
+/**
+ * The Deputy Operations Director (Fauzan, 23 Nov 2026, decision card: "Yes, full stand-in any time"): the operations
+ * officer the CEO or the HR Director names deputy of Sasa Team in the org chart (unit c_sasateam; module org-lines-v1).
+ * The deputy may do every Operations Director step at any time, the same as the Deputy OGM for Goodwill. Every step
+ * still names the person who did it, and nobody approves their own request. A system feed, a closed account or a
+ * deputy role past its last day stands in for nothing.
+ */
+export function isDeputyOpsDirector(user: User): boolean {
+  return (
+    user.role === 'pwvsb_officer' &&
+    user.department === 'operations' &&
+    user.opsTier !== 'ops_director' &&
+    user.opsTier !== 'ogm' &&
+    !user.integration &&
+    !user.accessClosedFrom &&
+    (user.deputyOf ?? []).includes(`c_${PRIVATE_OPS_COMPANY_ID}`)
+  );
+}
+
+/** Whoever works as the Operations Director (private sites only): the OD, or the Deputy OD standing in. */
+export function isOpsDirector(user: User): boolean {
+  return isOpsDirectorByJob(user) || isDeputyOpsDirector(user);
+}
+
+/**
+ * Who may take an Operations Director decision on a private-side item (Fauzan, 23 Nov 2026: "Let coo cover also"): the
+ * OD, the Deputy OD, or the COO covering. The COO keeps the COO's own wider view; this only lets the COO take the OD's
+ * approval steps so private work does not wait. Every step names who did it, with the reason the step asks for, and
+ * nobody approves their own request.
+ */
+export function actsAsOpsDirector(user: User): boolean {
+  if (isOpsDirector(user)) return true;
+  return user.role === 'pwvsb_officer' && user.opsTier === 'coo' && !user.integration && !user.accessClosedFrom;
 }
 
 function sideOm(u: User, sector: 'government' | 'private', today: IsoDate): boolean {
@@ -100,7 +159,7 @@ export function inGovOpsRollout(u: User): boolean {
   if (u.integration || u.role !== 'pwvsb_officer') return false;
   if (u.department === 'procurement') return true;
   if (u.department !== 'operations') return false;
-  return u.opsTier === 'ogm' || ((u.opsTier === 'om' || u.opsTier === 'regional') && onOpsSide(u, 'government'));
+  return isOgm(u) || ((u.opsTier === 'om' || u.opsTier === 'regional') && onOpsSide(u, 'government'));
 }
 registerRollout('gov_ops', 'Government Operations (Goodwill Empire) and Procurement & Inventory', inGovOpsRollout);
 
@@ -110,7 +169,7 @@ registerRollout('gov_ops', 'Government Operations (Goodwill Empire) and Procurem
  */
 export function inPrivateOpsRollout(u: User): boolean {
   if (u.integration || u.role !== 'pwvsb_officer' || u.department !== 'operations') return false;
-  return u.opsTier === 'ops_director' || ((u.opsTier === 'om' || u.opsTier === 'regional') && onOpsSide(u, 'private'));
+  return isOpsDirector(u) || ((u.opsTier === 'om' || u.opsTier === 'regional') && onOpsSide(u, 'private'));
 }
 registerRollout('private_ops', 'Private Operations (Sasa Team)', inPrivateOpsRollout);
 

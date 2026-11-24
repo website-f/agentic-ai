@@ -50,7 +50,7 @@ const step = (name, ok, detail = '') => { results.push({ name, ok, detail }); co
     step('the site is filled from Prima\'s own list', (await p.getByLabel('Site', { exact: true }).inputValue()) === 'st-sasa-011');
     const item = await p.getByLabel('Item 1', { exact: true }).locator('option:checked').innerText().catch(() => '');
     step('"seluar saiz 32" is read as the store\'s trousers size 32, quantity 5', /trousers/i.test(item) && /32/.test(item) && (await p.getByLabel('Quantity 1', { exact: true }).inputValue()) === '5', item);
-    step('each filled box says where it came from', (await p.getByText('(from your words)').count()) >= 2);
+    step('each filled box says where it came from', (await p.getByText('From your words', { exact: true }).count()) >= 2);
     step('nothing is sent before Send', (await p.getByText('Sent.', { exact: false }).count()) === 0);
     await shot('01-filled');
     // Send without the receiving OM: the same check as the request screen.

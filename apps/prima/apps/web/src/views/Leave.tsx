@@ -6,6 +6,7 @@ import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoa
 import { ProofPicker } from './Proof';
 import { Person } from '../kit';
 import { DataTable } from '../DataTable';
+import { VcRecordForm } from './VcRecord';
 
 
 
@@ -125,6 +126,7 @@ export function LeavePanel({
 function LeaveRow({ r }: { r: LeaveList["rows"][number] }) {
   const [note, setNote] = useState("");
   const [open, setOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
   const act = useAction();
   const q = r.request;
   const consent = !!r.hrApproval;
@@ -177,6 +179,16 @@ function LeaveRow({ r }: { r: LeaveList["rows"][number] }) {
           )}
         </div>
       </div>
+      {r.canRecordVc && !recording && !open && (
+        <div>
+          <button className="btn btn-sm" onClick={() => setRecording(true)}>
+            Record the Vice Chairman's answer
+          </button>
+        </div>
+      )}
+      {r.canRecordVc && recording && (
+        <VcRecordForm refText={`${r.person.staffNo} leave ${q.from}`} send={(body) => api.recordLeaveVc(q.id, body)} onClose={() => setRecording(false)} />
+      )}
       {r.canDecide && !open && (
         <div>
           <button className="btn btn-sm" onClick={() => setOpen(true)}>

@@ -34,8 +34,8 @@ import { SopHelp } from "../sop/SopHelp";
 
 /**
  * Asset Management (Fauzan, 26 Oct 2026): 450 rental units, every non-electronic asset, 2 resorts, 6 orchards and the
- * training facility. A working model, on mock data, of what the Asset Management system's developer should build; its
- * real data will come to Prima by API. No group company sees it: only the Asset Management team, group leadership and
+ * training facility. Since 5 Nov 2026 (audit decision 3) Prima is the Asset Management system itself: the team keys
+ * in, uploads or loads its records here; an outside system, if any, is only compared on the Old records check tab. No group company sees it: only the Asset Management team, group leadership and
  * the finance staff who oversee it.
  */
 
@@ -62,7 +62,7 @@ const TABS: [Tab, string][] = [
   ["assets", "Assets"],
   ["books", "Depreciation and disposal"],
   ["properties", "Resorts, orchards, training"],
-  ["check", "System check"],
+  ["check", "Old records check"],
   ["buy", "Purchases"],
   ["office", "Pejabat (offices)"],
   ["homes", "Rumah sewa (rental homes)"],
@@ -118,7 +118,7 @@ export function AssetsView() {
     <div className="page bz-am-page">
       <PageHead
         title="Asset Management"
-        sub="The group's rental units, office furniture and fittings, resorts, orchards and training facility. Seen only by the Asset Management team, group leadership and the finance staff who oversee it. Test version on made-up data: the Asset Management system will send the real figures."
+        sub="The group's rental units, office furniture and fittings, resorts, orchards and training facility. Seen only by the Asset Management team, group leadership and the finance staff who oversee it. Prima is the Asset Management system: the team keys in, uploads or loads its records here. Until real records are loaded, the figures are made-up test data."
         actions={
           <>
             <SopHelp id="equip" />
@@ -170,6 +170,7 @@ export function AssetsView() {
       {data.can.approveLetters && data.lateUpdates.length > 0 && (
         <LateUpdates data={data} />
       )}
+      <AssetToday />
       <FwHostelPanel />
       <ShortStaysPanel />
       <div
@@ -330,7 +331,17 @@ function Watch({ label, n, tone }: { label: string; n: number; tone: Tone }) {
   );
 }
 
+type RentalLink = { unitId: string; rentalStatus: string; unpaidMonths: number; owes: number; arrearsCase: string | null; stamped: boolean | null };
+const RENTAL_STATUS_LABEL: Record<string, string> = { KOSONG: "Kosong (empty)", TELAH_DISEWA: "Telah disewa (let)" };
+
 function Units({ data }: { data: AmBoard }) {
+  // Homes handled in Rumah sewa show its status here too (23 Nov 2026), so the two screens never give two answers.
+  const { data: links } = useLoad(
+    () =>
+      (api.amRentalAct("unitLinks", {}) as Promise<{ installed: boolean; units: RentalLink[] }>).catch(() => ({ installed: false, units: [] as RentalLink[] })),
+    [],
+  );
+  const linkOf = new Map((links?.units ?? []).map((l) => [l.unitId, l]));
   const [type, setType] = useState("");
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
@@ -423,6 +434,15 @@ function Units({ data }: { data: AmBoard }) {
                   </div>
                 </div>
               </div>
+              {linkOf.get(u.id) && (
+                <div className="bz-note" style={{ margin: "2px 0 6px" }}>
+                  Rumah sewa: {RENTAL_STATUS_LABEL[linkOf.get(u.id)!.rentalStatus] ?? linkOf.get(u.id)!.rentalStatus.replace(/_/g, " ").toLowerCase()}
+                  {linkOf.get(u.id)!.unpaidMonths ? ` · ${linkOf.get(u.id)!.unpaidMonths} month(s) unpaid, ${rm(linkOf.get(u.id)!.owes)}` : ""}
+                  {linkOf.get(u.id)!.arrearsCase ? ` · arrears case ${linkOf.get(u.id)!.arrearsCase}` : ""}
+                  {linkOf.get(u.id)!.stamped === false ? " · not stamped yet" : ""}
+                  <span className="muted"> (Rumah sewa is the record for this home)</span>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -569,6 +589,11 @@ function MonthlyRent({ data }: { data: AmBoard }) {
   const paid = rows.reduce((n, r) => n + Math.min(r.m.paid, r.m.amount), 0);
   return (
     <>
+      <p className="bz-note">
+        For a home handled in Rumah sewa (rental homes), Rumah sewa is the record: Finance confirms its rent from the bank
+        there, and cash is not taken for homes. This tab is the older unit ledger; until the owner decides which ledger
+        rules, use it for commercial, industrial and land units.
+      </p>
       <Stats>
         <Stat
           label="Collected"
@@ -2001,8 +2026,8 @@ function RentCheck() {
   if (!data) return <Loading what="the rent check" />;
   return (
     <Card
-      title="Asset Management system against Prima"
-      sub={`${data.fromSystem} of ${data.units} units sent by the system · ${data.notFromSystem} not sent yet`}
+      title="Old records against Prima"
+      sub={`${data.fromSystem} of ${data.units} units with an old record · ${data.notFromSystem} without`}
       actions={
         data.differences.length > 0 ? (
           <Chip tone="warn">{data.differences.length} differences</Chip>
@@ -2015,7 +2040,7 @@ function RentCheck() {
           title={
             data.fromSystem
               ? "No differences."
-              : "The Asset Management system is not connected yet, so there is nothing to compare."
+              : "No old records have been loaded to compare. Prima is the record; this check is only for moving old records in."
           }
         />
       )}
@@ -2061,11 +2086,11 @@ const BUY_STATE: Record<string, { label: string; tone: Tone }> = {
 
 /** Furniture and fittings purchases: the team asks with a reason; the FD (up to the limit) or the COO decides with a reason. */
 function Purchases({ data }: { data: AmBoard }) {
-  const empty = { description: "", category: "FURNITURE" as const, qty: 1, estCost: 0, location: "", ownerEntity: "", reason: "" };
-  const [form, setForm] = useState<{ description: string; category: "FURNITURE" | "FITTING" | "RENOVATION" | "OTHER"; qty: number; estCost: number; location: string; ownerEntity: string; reason: string }>(empty);
+  const empty = { description: "", category: "FURNITURE" as const, qty: 1, estCost: 0, location: "", ownerEntity: "", reason: "", forUse: "" };
+  const [form, setForm] = useState<{ description: string; category: "FURNITURE" | "FITTING" | "RENOVATION" | "OTHER"; qty: number; estCost: number; location: string; ownerEntity: string; reason: string; forUse: string }>(empty);
   const [why, setWhy] = useState<Record<string, string>>({});
   const { run, busy, error } = useAction();
-  const ready = form.description.trim() && form.location.trim() && form.ownerEntity.trim() && form.reason.trim().length >= 3 && form.qty > 0 && form.estCost > 0;
+  const ready = form.forUse && form.forUse !== "OFFICE" && form.description.trim() && form.location.trim() && form.ownerEntity.trim() && form.reason.trim().length >= 3 && form.qty > 0 && form.estCost > 0;
   const waiting = data.purchases.filter((a) => a.status === "buy_requested").length;
   return (
     <div className="bz-am-buy">
@@ -2128,9 +2153,24 @@ function Purchases({ data }: { data: AmBoard }) {
           })}
         </ul>
       </Card>
-      <Card title="Ask to buy" sub="The Asset Management team asks. Once bought, the request becomes the asset in the register.">
+      <Card title="Ask to buy" sub="For Asset Management's own places and spare stock. Once bought, the request becomes the asset in the register. A company office buys through Beli baru on the office assets screen.">
         <div className="bz-form">
           <ErrorNotice error={error} />
+          <label className="field bz-span">
+            <span className="label">For</span>
+            <Select className="select" aria-label="For" value={form.forUse} onChange={(e) => setForm({ ...form, forUse: e.target.value })}>
+              <option value="">For…</option>
+              <option value="RESORT">Resort</option>
+              <option value="HOMESTAY">Homestay</option>
+              <option value="RENTAL_HOME">Rental home</option>
+              <option value="HOSTEL">Hostel</option>
+              <option value="TRAINING">Training centre</option>
+              <option value="ORCHARD">Orchard</option>
+              <option value="SPARE">Spare pool</option>
+              <option value="OFFICE">Company office (use Beli baru)</option>
+            </Select>
+            {form.forUse === "OFFICE" && <span className="bz-note">Company offices buy through Beli baru on the office assets screen.</span>}
+          </label>
           <label className="field bz-span">
             <span className="label">What to buy</span>
             <input className="input" placeholder="What to buy" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
@@ -2403,5 +2443,50 @@ function ReceiveBought({ id, approved, busy, run }: { id: string; approved: numb
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Needs attention today (department check, 23 Nov 2026): Asset Management staff have no home board, so their own
+ * to-do items from rental homes, office jobs, short stays, contractors, meters, statutory jobs, resorts and harvest
+ * show here. Group leaders see their own items on their home instead.
+ */
+function AssetToday() {
+  const { data } = useLoad(() => api.amToday().catch(() => []), []);
+  const [all, setAll] = useState(false);
+  if (!data || data.length === 0) return null;
+  const shown = all ? data : data.slice(0, 8);
+  return (
+    <Card
+      title="Needs attention today"
+      actions={<span className="bz-count">{data.length} item{data.length === 1 ? "" : "s"} for you</span>}
+      footer={
+        data.length > 8 ? (
+          <button className="btn btn-sm" onClick={() => setAll(!all)}>
+            {all ? "Show fewer" : `Show all ${data.length}`}
+          </button>
+        ) : undefined
+      }
+      flush
+    >
+      <ul className="bz-rows">
+        {shown.map((x, i) => {
+          const tone: Tone = x.tone === "crit" ? "crit" : x.tone === "warn" ? "warn" : "info";
+          return (
+            <li key={i}>
+              <div className="bz-row" data-tone={edge(tone)}>
+                <div className="bz-row-main">
+                  <span className="bz-row-title">{x.title}</span>
+                  <span className="bz-row-meta">{x.detail}</span>
+                </div>
+                <div className="bz-row-side">
+                  <Chip tone={tone}>{x.tag}</Chip>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }

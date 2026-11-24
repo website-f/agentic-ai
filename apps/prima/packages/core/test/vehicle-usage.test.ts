@@ -98,6 +98,11 @@ describe('transport usage', () => {
     const rq = await svc.requestVehicle(cm, { purpose: 'Synthetic site visit', from: myt(TODAY, '10:30'), to: myt(TODAY, '17:00') });
     await svc.decideVehicleRequest(transport, rq.id, true, 'veh-arsh-1', 'Vehicle available for approved visit');
     await expect(svc.recordFuel(cm, 'veh-arsh-1', fill({ at: myt(TODAY, '09:59') }), RECEIPT)).rejects.toThrow(/Transport department or the driver/);
+    // The seed's insurance has lapsed: it goes out only once renewed (Transport check, 23 Nov 2026).
+    await expect(svc.vehicleOut(transport, 'veh-arsh-1', rq.id, 151_900)).rejects.toThrow(/Insurance expired/);
+    await svc.recordVehicleWork(transport, 'veh-arsh-1', { kind: 'RENEWAL', renewal: 'INSURANCE', nextDue: '2027-11-03' }, [
+      { kind: 'document', name: 'cover-note.pdf', data: 'data:application/pdf;base64,JVBERi0xLjcK' },
+    ]);
     await svc.vehicleOut(transport, 'veh-arsh-1', rq.id, 151_900);
     await expect(svc.recordFuel(cm, 'veh-arsh-1', fill({ at: myt('2026-11-04', '10:00') }), RECEIPT)).rejects.toThrow(/before the vehicle went out/);
     const r = await svc.recordFuel(cm, 'veh-arsh-1', fill({ at: myt(TODAY, '10:00'), driver: 'Someone else' }), RECEIPT);

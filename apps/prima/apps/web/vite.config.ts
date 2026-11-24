@@ -96,6 +96,10 @@ export default defineConfig(({ command, mode }) => (checkApiUrl(command, mode), 
     alias: { '@prima/core': fileURLToPath(new URL('../../packages/core/src/index.ts', import.meta.url)) },
   },
   define: { __DEMO__: JSON.stringify(mode === 'demo') },
+  // Keep class static fields as written (every current phone browser has them; iOS 14.1+). Rewritten, they read as
+  // work done on loading, which made the bundler keep the whole server-side business code in the phone app although
+  // the app never runs it (whole-app review: 9.6 MB down to 1.5 MB for the first download, 23 Nov 2026).
+  esbuild: { supported: { 'class-static-field': true } },
   build: {
     outDir: mode === 'demo' ? 'dist-demo' : 'dist',
     chunkSizeWarningLimit: 2000,

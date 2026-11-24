@@ -37,7 +37,7 @@ deduction, purchase or tax filing.
 | Handover confirmed by the person | `issue` sets `pendingAck`; only that person confirms or disputes in their own sign-in. |
 | Site check moves nothing | `observe` records an event; wrong place or serial mismatch opens a case. |
 | Repair, replacement, size swap | Repair out/back via quarantine. Replacement is a new ID linked both ways. |
-| Loss and disposal | Reported, then a manager who did not open the case decides; `writeOff: finance_to_decide`. Never a pay deduction. |
+| Loss and disposal | Reported, then a manager who did not open the case decides; `writeOff: finance_to_decide`. No automatic pay deduction; if the manager who decides finds negligence or misuse, the store's damage charge rule (Part U, U-X12) applies, with HR's review before the pay run (Fauzan, 23 Nov 2026, D4). |
 | Counts | Snapshot at the start; not scanned = "not found yet" case; items moved after the start are listed separately; nothing is adjusted. |
 | Concurrency and double taps | Every write carries a request id (same id + same change = first result; different change = refused); per-item locks; version checks. |
 | SQL outbox | `ItemSyncJob` per book, document type, source and revision, with payload hash. Always `not_ready` with reasons. No sending code exists. |
@@ -130,3 +130,11 @@ record per device. See `docs/IT_POLICIES_MERDEKA.md`.
   register unit keeps the register's `dispose` case.
 - A confirmed loss or damage records its cause. Negligence or misuse decided by the manager becomes a damage charge,
   which HR reviews (U-X12). This replaces "never charged" for company item damage only.
+
+## Link with the store (D4, Fauzan 23 Nov 2026)
+
+The store (Procurement) stays the record for quantities and money. The Inventory Manager links a store item to a
+serial item type here ("Link to item register" on the store's Stock list). From then on, each good unit received on a
+purchase gets its own item register ID automatically, starting in quarantine at the buying company's store, waiting to
+be checked. IT devices are not linked: IT registers them under Merdeka Network. Losses that should be charged follow
+the store's Part U charge rule, never an automatic deduction.

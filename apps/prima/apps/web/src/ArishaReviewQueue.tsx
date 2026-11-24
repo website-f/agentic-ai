@@ -37,6 +37,9 @@ export function ArishaReviewQueue({ user, companies }: { user: User; companies: 
     } catch { if (current === generation.current) setError('Could not load draft reviews. Please refresh.'); }
     finally { inFlight.current = false; if (current === generation.current) setBusy(false); }
   };
+  // Shown only to people who prepare Finance papers or who have drafts waiting (whole-app review, 23 Nov 2026): for
+  // everyone else the always-on "Draft reviews" button took a row at the top of every phone screen for nothing.
+  // (P129: the office's P80 check above already asks once whether drafts wait, so "visible" covers upstream's hasDrafts.)
   const close = () => { generation.current++; setOpen(false); setRows([]); setPapers([]); setCompanyId(''); setPaperKey(''); setError(''); setNote(''); setBusy(false); };
   const act = async (row: Review, action: 'commit' | 'return' | 'resubmit') => {
     if (inFlight.current) return;
@@ -75,7 +78,7 @@ export function ArishaReviewQueue({ user, companies }: { user: User; companies: 
     } catch { if (current === generation.current) setError('Submission was not confirmed. Refresh the queue before retrying.'); }
     finally { inFlight.current = false; if (current === generation.current) setBusy(false); }
   };
-  if (!visible) return null;
+  if (!open && !visible && !arishaMayPrepareFinance(user)) return null;
   return <section aria-label="Draft reviews" className="draft-queue" data-open={open}>
     <button className="btn btn-sm" aria-expanded={open} onClick={() => { if (open) close(); else { setOpen(true); void refresh(); } }}><span className="hide-sm">Draft reviews</span><span className="show-sm">Drafts</span> {open ? '−' : '+'}</button>
     {open && <div className="draft-queue-panel">

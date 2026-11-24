@@ -6,7 +6,7 @@
 // What comes in is what the pay run lets the preparer key in by hand: allowances and other one-off pay, deductions with
 // their reason, and the PCB. Days, hours, advances and pay in a file are compared with Prima's own figures and shown,
 // never written: those are fixed at the attendance, leave or advance record (core guard-pay-import.ts).
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircleIcon, DownloadSimpleIcon, FileArrowUpIcon } from '@phosphor-icons/react';
 import {
   GUARD_PAY_IMPORT_FIELDS,
@@ -34,6 +34,7 @@ import { Select } from '../SearchSelect';
 import { Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, useAction, useLoad } from '../ui';
 import { AddImportMenu } from './AddImportMenu';
+import { useScreenUploader } from '../upload-handlers';
 import { sheetsOf } from './ImportDrawer';
 import '../styles/import.css';
 
@@ -62,7 +63,23 @@ function targetsOf(data: GuardPayBoard): { targets: Target[]; prepares: boolean 
 /** Add and Import at the top of Guard pay. Nothing shows for someone who prepares no company's run. */
 export function GuardPayAddImport({ data }: { data: GuardPayBoard }) {
   const [open, setOpen] = useState<'add' | 'import' | null>(null);
+  const [handed, setHanded] = useState<File | undefined>(undefined);
   const { targets, prepares } = targetsOf(data);
+  // P129: the toolbar's Upload on Guard pay goes straight to this import, with the file already chosen.
+  useScreenUploader('guardpay', {
+    key: 'guard-pay-file',
+    label: 'Guard pay lines: allowances, deductions and PCB',
+    detail: 'The file is read on this device, its columns are matched to the guards, every row is checked against the draft pay run, and nothing is saved until you press Save.',
+    unavailable: !prepares
+      ? 'Only the person the Company Manager names to prepare the run (Prepared by, in the By company table) loads pay lines.'
+      : !targets.length
+        ? 'There is no draft pay run yet. Prepare the month first (By company table), then upload its allowances, deductions and PCB.'
+        : null,
+    open: (f) => {
+      setHanded(f);
+      setOpen('import');
+    },
+  });
   // Not the named preparer: say who gets Add and Import instead of showing nothing.
   if (!prepares)
     return (
@@ -78,7 +95,16 @@ export function GuardPayAddImport({ data }: { data: GuardPayBoard }) {
         entries={[{ key: 'guard-pay-line', label: 'Allowance, deduction or PCB for one guard', onAdd: () => setOpen('add') }, { key: 'guard-pay-file', label: 'Allowances, deductions and PCB from a file', onImport: () => setOpen('import') }]}
       />
       {open === 'add' && <AddDrawer targets={targets} onClose={() => setOpen(null)} />}
-      {open === 'import' && <GuardPayImportDrawer targets={targets} onClose={() => setOpen(null)} />}
+      {open === 'import' && (
+        <GuardPayImportDrawer
+          targets={targets}
+          initialFile={handed}
+          onClose={() => {
+            setOpen(null);
+            setHanded(undefined);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -428,7 +454,7 @@ function remember(header: string[], mapping: string[]) {
 type Step = 'file' | 'map' | 'check' | 'done';
 const STEPS: Step[] = ['file', 'map', 'check', 'done'];
 
-function GuardPayImportDrawer({ targets, onClose }: { targets: Target[]; onClose: () => void }) {
+function GuardPayImportDrawer({ targets, initialFile, onClose }: { targets: Target[]; initialFile?: File; onClose: () => void }) {
   const act = useAction();
   const fields = GUARD_PAY_IMPORT_FIELDS;
   const [runId, setRunId] = useState(targets[0]?.id ?? '');
@@ -497,6 +523,14 @@ function GuardPayImportDrawer({ targets, onClose }: { targets: Target[]; onClose
     if (f.size > GUARD_PAY_IMPORT_RULE.maxFileBytes) return setError(errOf('The file is too big. Keep only the sheet with the guards, then choose it again.'));
     void load(() => readGuardPayFile(f), f.name);
   };
+  // P129: a file handed over from the toolbar's Upload is read at once (the person chose it there).
+  const handedRead = useRef(false);
+  useEffect(() => {
+    if (!initialFile || handedRead.current || !runId) return;
+    handedRead.current = true;
+    readFile(initialFile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile, runId]);
 
   const fieldOf = (k: string) => fields.find((f) => f.key === k);
   const used = new Set(mapping.filter(Boolean));

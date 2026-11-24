@@ -229,3 +229,25 @@ entered by Arms Control in the app, not in code.
 **Tests.** Mock: `packages/core/test/arms-policies.test.ts` (17) and the updated `special-ops-4b-4h.test.ts` (22).
 PostgreSQL: `apps/api/test/arms-policies-pg.test.ts` (walls, inserts outside the wall refused, append-only, no delete,
 grants), run apart from the mocks.
+
+## Transport check gaps (Fauzan, 23 Nov 2026: "Do the gap")
+
+Study note: "Transport and fleet check" (Claude Doc, 23 Nov 2026). Built from main `b3176a0`:
+
+1. **OGM sees the board.** Transport runs under the OGM and the COO oversees. The OGM and the Deputy OGM now get the full Vehicles board, read only, like the COO.
+2. **No self-approval.** Nobody decides their own vehicle request. A Transport person's own request goes to the OGM.
+3. **Consent cannot be skipped.** A vehicle with a dashcam or health monitor goes out only to a driver chosen from the staff list, so the PDPA consent is checked. A typed name is refused.
+4. **No expired vehicle on the road.** A vehicle cannot be logged out while its road tax or insurance has expired.
+5. **Do today.** Transport gets one Do today list on the Vehicles screen: reminders, bookings waiting, driver hours, summonses due, licences ending and open accidents. The OGM and the COO see only what is expired, overdue or open after an accident. The COO also gets these on Home.
+6. **Company-car mileage.** Each trip out and in now keeps the driver and the km. A company-car mileage claim is checked against the km logged that day for that person. With no logged trip it still goes to the Chief of Staff.
+7. **Accidents.** Transport, or the driver of the vehicle out with them, reports an accident with photos, the place, police report and insurer claim numbers. Transport closes it as settled with proof.
+8. **Summonses and driver licences.** Transport records a summons (JPJ, PDRM, AES, council). Prima links it to whoever had the vehicle out at that time. It is closed as paid, appealed or cancelled with proof. Transport files each driver's licence (classes, expiry, copy). A vehicle cannot go out to a driver whose licence on file has expired. The company pays a summons on time and recovers it from that driver (D2 below).
+
+**Database module:** `db/modules/fleet-records-v1.sql` (new table `prima.fleet_records`, group and company wall, no delete, only status, outcome, added files and added history may change). Not on the release list. Until it runs, the three new tabs say Not installed, and vehicles still go out with no licence check.
+
+**Fauzan's decisions (23 Nov 2026, "Follow your recommend"):**
+- D1: 90 km/h, at most 8 hours driving a day, a 30 minute break after 4 hours (rule FLEET-DRIVING, Policy).
+- D2: the driver at the wheel pays a summons. The company pays it on time, then Transport records the recovery: the driver paid back (receipt), HR deducts with the driver's signed consent, or the company bears it with a reason (rule FLEET-SUMMONS).
+- D3: the Head of Transport named in the org chart decides bookings; the OGM stands in at any time; other Transport staff log trips, fill-ups and records. Until a head is named, any Transport person decides (never their own).
+- D4: a vehicle 10 years from first registration or past 300,000 km is flagged to the COO for a replacement review (rule FLEET-REPLACE). The vehicle form has "First registered on".
+- D5: the tracker feed stays off until a brand is chosen.

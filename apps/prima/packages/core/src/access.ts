@@ -78,41 +78,30 @@ export type Action =
 const COMPANY_ROLE_ACTIONS: Record<User['role'], Action[]> = {
   director: [],
   pwvsb_officer: [],
+  // Fauzan, 23 Nov 2026: "Company also monitor what happen with operation or hr of its own company, while they dont do
+  // it, but they see it." The company office sees its own company's operations and HR (rosters, attendance, cases,
+  // guard profiles and pay) and does not run them: Operations and HR do. It still raises a case it hears of, and keeps
+  // its own company work (quotations, licences, office requests). Arms stay with the licensed company's head.
+  // Not the company any more: roster edit and publish, attendance lock and follow-up, case updates, patrols and site
+  // visits (Operations), and keeping guard HR files (HR).
   company_manager: [
     'view',
-    'roster.edit',
-    'roster.publish',
-    'attendance.lock',
     'case.raise',
-    'case.update',
+    // Sign-off points the owner gave the company earlier stay: it confirms a case is closed (25 Oct 2026), decides
+    // discipline with a reason (25 Oct 2026) and authorises leave before HR decides (3 Nov 2026).
     'case.close',
+    'attendance.discipline',
+    'leave.request',
     'commercial.view',
     'commercial.prepare',
     'commercial.approve',
     'arms.view',
     'arms.handle',
-    'site.patrol',
     'insurance.view',
-    'attendance.followup',
-    'attendance.discipline',
-    'site.visit',
     'hr.profile',
     'hr.pay',
-    'leave.request',
   ],
-  admin_exec: [
-    'view',
-    'roster.edit',
-    'case.raise',
-    'case.update',
-    'commercial.view',
-    'commercial.prepare',
-    'insurance.view',
-    'attendance.followup',
-    'hr.profile',
-    'hr.pay',
-    'leave.request',
-  ],
+  admin_exec: ['view', 'case.raise', 'commercial.view', 'commercial.prepare', 'insurance.view', 'hr.profile', 'hr.pay'],
   supervisor: [
     'view',
     'roster.edit',
@@ -453,10 +442,15 @@ export function seesStaffIds(user: User): boolean {
   return (user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user) || user.opsTier === 'ceo';
 }
 
+/** A Finance team member, or the Account Manager under the Finance Director (Fauzan, 23 Nov 2026). */
+export function isFinanceStaff(user: User): boolean {
+  return user.department === 'finance' && (user.financeTeam != null || !!user.financeAccountManager);
+}
+
 /** HR database wall: full salary accounts. The same people, plus Finance. */
 export function seesStaffAccounts(user: User): boolean {
   if (user.integration) return false;
-  return seesStaffIds(user) || user.leadership === 'finance_director' || (user.department === 'finance' && user.financeTeam != null);
+  return seesStaffIds(user) || user.leadership === 'finance_director' || isFinanceStaff(user);
 }
 
 /**
@@ -479,7 +473,7 @@ export function readsStatutoryForPayroll(user: User): boolean {
   if (user.integration || user.role === 'guard' || user.role === 'site_device') return false;
   if ((user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user) ||
       (user.role === 'pwvsb_officer' && user.opsTier === 'coo')) return false;
-  return user.leadership === 'finance_director' || (user.department === 'finance' && user.financeTeam != null);
+  return user.leadership === 'finance_director' || isFinanceStaff(user);
 }
 
 export type DataWall =
@@ -643,6 +637,10 @@ export function seesCorporate(user: User): boolean {
   if (user.integration) return false;
   if (user.role === 'company_manager' || user.role === 'admin_exec') return true;
   if (isGroupLeader(user) || isCompanySecretary(user)) return true;
+  // D1 (Fauzan, 23 Nov 2026): Corporate Admin sits in the Chief of Staff office; the executive the Deputy names records
+  // filing steps, so the office passes the corporate wall. The service still shows each one only the companies they are
+  // named for, and their company access lines still apply.
+  if (user.role === 'pwvsb_officer' && user.department === 'chief_of_staff') return true;
   return user.department === 'legal' || !!actRole(user);
 }
 

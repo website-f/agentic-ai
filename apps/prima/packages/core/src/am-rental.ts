@@ -171,6 +171,14 @@ export class RentalService {
   async installed() {
     return !this.store.hasTable || (await this.store.hasTable('amRentalRecs'));
   }
+  /**
+   * Is this home handled in Rumah sewa (department check D1/D2, Fauzan 23 Nov 2026: homes use Rumah sewa only)?
+   * True once Rumah sewa holds any record for the unit; the older unit ledger then takes no rent and opens no letting file.
+   */
+  async handles(unitId: Id): Promise<boolean> {
+    if (!(await this.installed())) return false;
+    return (await this.all()).some((r) => r.unitId === unitId);
+  }
   private async need() {
     if (!(await this.installed())) throw new BadRequest('Rental home records are not installed in this database yet (module am-rental-v1, run by the CEO).');
   }
@@ -301,6 +309,8 @@ export class RentalService {
     switch (op) {
       case 'board':
         return this.board(user);
+      case 'unitLinks':
+        return this.unitLinks(user);
       case 'export':
         return this.exportCsv(user, i);
       case 'setSettings':
@@ -2279,6 +2289,29 @@ export class RentalService {
   // =================================================================================================================
   // Board, home items and the Excel export (V32, V48, V63, V68, V73, V77, V84, V89)
   // =================================================================================================================
+
+  /**
+   * The Rumah sewa status of each home, for the Units tab (department check, 23 Nov 2026, gap 5). Units and Monthly rent
+   * read the older unit ledger; a home handled in Rumah sewa shows its Rumah sewa status, unpaid months and open
+   * arrears case beside it, so the two never look like two answers. Read-only; same viewers as the Rumah sewa board.
+   */
+  async unitLinks(user: User) {
+    if (!this.sees(user) && !this.finance(user) && !this.chairVc(user)) throw new AccessDenied('view', '(Asset Management, its overseers and Finance)');
+    if (!(await this.installed())) return { installed: false, units: [] as { unitId: Id; rentalStatus: string; unpaidMonths: number; owes: number; arrearsCase: string | null; stamped: boolean | null }[] };
+    const today = this.today();
+    const all = await this.all();
+    const withRecs = new Set(all.map((r) => r.unitId).filter(Boolean) as Id[]);
+    const units = (await this.store.list('amUnits', {})).filter((u) => u.type === 'RESIDENTIAL' && !u.office && withRecs.has(u.id));
+    const out = await Promise.all(
+      units.map(async (u) => {
+        const l = all.find((r) => r.kind === 'listing' && r.unitId === u.id && r.status !== 'CLOSED') ?? null;
+        const months = await this.tenantUnpaidMonths(u, today);
+        const a = all.find((r) => r.kind === 'arrears' && r.unitId === u.id && r.status !== 'CLOSED') ?? null;
+        return { unitId: u.id, rentalStatus: l?.status ?? (u.tenancy ? 'TELAH_DISEWA' : 'KOSONG'), unpaidMonths: months.length, owes: m2(months.reduce((n, k) => n + k.owes, 0)), arrearsCase: a ? `${a.ref} (${a.status})` : null, stamped: u.tenancy?.stamped ?? null };
+      }),
+    );
+    return { installed: true, units: out };
+  }
 
   async board(user: User) {
     if (!this.sees(user) && !this.finance(user) && !this.chairVc(user)) throw new AccessDenied('view', '(Asset Management, its overseers and Finance)');

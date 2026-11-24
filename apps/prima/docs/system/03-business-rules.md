@@ -90,7 +90,7 @@ The **COO may step in** and accept or return anyone's work, with a reason, only 
   fully resolved. If a level does not act within 15/60/240/1440 minutes (P1/P2/P3/P4, *proposed*), the next level is
   alerted. Above the Regional OM only big matters, by decision: OGM (government) or Operations Director (private), COO,
   CEO.
-- **Clients**: a visit or meeting every 30 days, the monthly report by the 7th, the invoice sent with proof within 10
+- **Clients**: a visit or meeting every 30 days, the monthly report by the 10th, the invoice sent with proof within 10
   days after month end, satisfaction rated every 90 days with who gave it (all *proposed* except the invoice rule).
 - **Contracts**: a signed contract or letter of award opens mobilisation against 12 workstreams. Critical items block
   go-live; others may be risk-accepted for up to 30 days. Go-live needs the Site Ready-to-Operate Certificate, then

@@ -16,7 +16,8 @@ Status: draft for review. Not merged, not migrated, not deployed. Synthetic data
 - **Rule OFFICE-TEAM.** One head and 2 to 8 executives. No head or fewer than 2 executives is critical; more than one
   head, or more than 8 executives, is a warning. A company with no office accounts entered yet is Unknown, never green.
 - **Desks (rule OFFICE-DESK).** The company's work is split into six desks: Guards, attendance and roster; Clients,
-  contracts and billing; Tenders and quotations; Licences, insurance and compliance; Cases and incidents; Office,
+  contracts and billing; Quotations and Marketing bids (renamed 23 Nov 2026: Marketing prepares and lodges every tender, the office
+  answers bid notices, approves the price and prepares its own quotations); Licences, insurance and compliance; Cases and incidents; Office,
   purchases and claims. The head gives each desk an owner and a backup. Only the company's own head may do this
   (V12: the company controls company matters). Every change is audited with the before and after names.
 - **Fair first split.** Until the head saves a split, the screen suggests one: desks go round the executives, and each
@@ -71,11 +72,11 @@ monitor and manage them and delegate staff to do their work.
 - **Exact scope (Arisha main review, 3 Nov 2026).** Intended, from Fauzan's "monitor and manage this also. And delegate
   staff to do the work": on the run company, each person of the running office has **exactly** the rights their own office
   role has in their own company, no more and no less. Concretely:
-  - Company Manager or GM: view, roster edit and publish, attendance lock and follow-up, discipline records, cases
-    (raise, update, close), site patrol and visits, insurance view, arms view and handling, **HR** guard profiles and pay,
-    staff leave requests, **commercial** view, prepare and approve quotations, and desk sharing for the run company's office.
-  - Admin executive (no branch): view, roster edit, cases (raise, update), insurance view, attendance follow-up, **HR**
-    guard profiles and pay, leave requests, **commercial** view and prepare. Not approve, not desks.
+  - Company Manager or GM (as changed 23 Nov 2026, below): view, raise cases, close cases, decide discipline with a reason,
+    authorise leave, insurance view, arms view and handling, **HR** guard profiles and pay (seen, not kept),
+    **commercial** view, prepare and approve quotations, and desk sharing for the run company's office.
+  - Admin executive (no branch): view, raise cases, insurance view, **HR** guard profiles and pay (seen, not kept),
+    **commercial** view and prepare. Not approve, not desks.
   - Not widened: branch managers, supervisors, guards, site devices, group staff and system feeds; leave decisions and
     group HR monitoring stay with their own owners. The database wall is per company, so these service rules are what
     separate HR pay from other screens.
@@ -103,6 +104,36 @@ monitor and manage them and delegate staff to do their work.
 - **Before the module is applied** no company is run by another office, every office works only for its own company,
   and the setting is refused with a plain message. Fauzan approved this module on 3 Nov 2026
   ("Yes, via the release path"); it is installed only through the release path after the combined review.
+
+## The company watches operations and HR (Fauzan, 23 Nov 2026)
+
+Fauzan, 23 Nov 2026: "Company also monitor what happen with operation or hr of its own company, while they dont do it,
+but they see it. Some company manager hold 2 or three company under it also." Decision card the same day: "Watch, keep
+sign-offs".
+
+- **Seen, not done.** The head and executives still open their company's rosters, attendance, absences, cases, guard
+  profiles and pay. They no longer edit or publish rosters, lock attendance, follow up absences or send replacements,
+  work site case steps, patrol or visit sites (Operations and the site supervisor do), or keep guard HR files and upload
+  hiring papers (HR does; it already kept office staff files since 1 Nov 2026).
+- **Sign-offs kept.** The head still closes a case once it is fully resolved, decides discipline with a reason, authorises
+  leave before HR or the OM decides, asks for and confirms police help, and approves quotations and Marketing bids.
+  Executives keep raising cases and preparing quotations.
+- **The company's own cases.** A case with no site (a client's billing complaint, a letter) is still worked by the office;
+  nobody closes a case they resolved.
+- **Two or three companies.** A head who runs two or three companies uses "Companies run by another office" above: the
+  Chief of Staff links each one (one level only); the head and executives then see and sign off for each, the same way.
+- Code: `COMPANY_ROLE_ACTIONS` in `packages/core/src/access.ts`, `canKeepHrFile` and `updateCase` in
+  `packages/core/src/service.ts`. Tests: `packages/core/test/company-admin-gaps.test.ts`.
+
+## Office requests: executives prepare, the head checks and sends (Fauzan, 23 Nov 2026)
+
+- An admin executive (not a branch manager) prepares an office supplies, utilities or rent request on Requests, with the
+  bill or quotation attached, and sends it to the company head (status "With the company head").
+- The head checks it and sends it to the Chief of Staff with a comment ("Check and send"), or sends it back to the
+  executive with the reason. The head cannot reject it and never checks their own. A request the head keys in
+  goes straight to the Chief of Staff, as before. Then the Chief of Staff and the COO decide, unchanged.
+- Executives see only their company's office requests, never an Operations Manager's claim. No database change: the new
+  step lives in the request's JSON (`status: head_check`, `headCheck`).
 
 ## Sign-in (rollout, draft)
 

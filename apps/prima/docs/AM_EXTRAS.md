@@ -39,3 +39,45 @@ All numbers are proposed: the 30-day CIDB warning, low rating under 3, advert wi
 ## Links to other work
 
 PR #82 (BQ and quotes) still takes the contractor name as free text. Once both PRs are in, quotes can be limited to approved contractors.
+
+## Department check gaps (Fauzan, 23 Nov 2026: "Do the gap")
+
+- **Needs attention today.** Asset Management staff have no home board, so the top of the Asset Management screen now
+  lists their own items: contractors whose CIDB registration has ended or is ending, statutory planned jobs due or
+  overdue (BOMBA, DOSH lift, septic), meters not read or using far more than usual, MOTAC registration and house rules,
+  resort holds lapsed and bookings past their dates, harvest flags and credit sales unpaid over 30 days, plus the
+  existing rental-home, office-job and short-stay items. The Asset Director also sees contractors and tenancy offers
+  waiting for approval. Finance sees resort and harvest money to confirm in the bank. Route `GET /assets/today`
+  (`assetToday`); it adds no authority and each source checks the person.
+- **Work KPIs** now also time office repairs (check 1 office hour, quotes 2 office hours after the check, the repair
+  against its set days) and the answer to a staff house stay request (10 minutes), from each record's own history.
+  Approvals are never timed. Rental homes keep their own clocks on Rumah sewa.
+- **Quotes only from approved contractors.** Once the contractors list holds anyone, a BQ quote and its award need a
+  contractor on the list who is approved for use; one waiting, suspended or blacklisted is refused, and the award checks
+  again. The quote form offers the approved names.
+- **Wording.** The screen no longer says an outside Asset Management system will send the figures; Prima is the system.
+  The old "System check" tab is now "Old records check", used only while old records are moved in.
+- **Units and Rumah sewa.** A home that has Rumah sewa records shows its Rumah sewa status, unpaid months, open arrears
+  case and stamping on the Units tab (`unitLinks`), and Monthly rent says Rumah sewa is the record for those homes.
+- No new database module.
+
+## Department check decisions D1-D8 (Fauzan, 23 Nov 2026: "Do what you recommend")
+
+- **D1, D2 Homes use Rumah sewa only.** Once a home has any Rumah sewa record, the older unit ledger refuses its rent
+  ("record the rent there, where Finance confirms it from the bank"), it leaves Finding tenants, and no older letting
+  file opens for it. Offices, commercial lots and land keep the older ledger; moving them is a later step.
+- **D3 One approval ladder.** Every Asset Management award (BQ jobs) and office repair: the Asset Director, the Vice
+  Chairman's consent above RM5,000 and the CEO above RM50,000. The COO decides only in the Director's place when the
+  Director worked on it. The separate COO step on large BQs and VOs is retired; VOs keep the CEO and Chairman consent.
+- **D4 Purchases tab for Asset Management stock only.** Each request says what it is for (resort, homestay, rental
+  home, hostel, training centre, orchard, spare pool). A company office purchase is refused with a pointer to Beli baru.
+- **D5 Numbers confirmed.** The AM-BQ and AM-EXTRAS figures are policy, confirmed 23 Nov 2026.
+- **D6 Training centre bookings.** The training centre is booked on the resort desk (hostel rooms and halls). The Asset
+  Director sets its rooms and rates; a group company's course is a group booking billed to that company. No MOTAC flags.
+- **D7** Nothing to build until after the learning period (18 Jan 2027).
+- **D8 Acting Asset Director.** An approved delegation line in force today, leave cover or emergency, for the post
+  "Asset Director", naming an Asset Management team member, gives that person the Director's approvals for those dates
+  only. They see "You are acting Asset Director" on the screen; the CEO, COO and Chief of Staff see who is acting on
+  their homes. Nobody approves what they keyed or worked on. This is the only delegation line that carries approval
+  rights; the others stay records. The delegation register needs its existing module `central-admin-delegations-v1` (on the release list).
+- No new database module for D1-D8.

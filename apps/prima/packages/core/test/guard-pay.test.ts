@@ -16,7 +16,8 @@ import {
   type Person,
   type Shift,
 } from '../src';
-import { guardPayPrep } from './guard-pay-preparer';
+import { guardPayPrep } from './guard-pay-preparer';import { preparePayout } from './payout-helper';
+
 
 // Prima's own guard pay run (Fauzan, 5 Nov 2026). Synthetic data only: made-up people, placeholder formula amounts.
 const TODAY = '2026-11-05';
@@ -270,13 +271,14 @@ describe('guard pay run: the company prepares, the COO approves, Finance pays', 
     const { svc, ds } = fresh();
     const prep = await guardPayPrep(svc);
     const coo = await svc.user('u-coo');
-    const fin = await svc.user('u-fin-t1-lead');
+    const fin = await svc.user('u-fd');
     const guard = await svc.user('u-guard-sasa-1');
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****9999' };
     const run = await svc.prepareGuardPay(prep, 'co-sasa', '2026-10', []);
     expect(run.trial).toBe(false);
     await svc.guardPayStep(prep, run.id, 'submit');
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Approved' });
+    await preparePayout(svc, 'guard_pay', run.id);
     await expect(svc.guardPayStep(fin, run.id, 'pay', { bankRef: 'B1' })).rejects.toThrow(/PCB/);
     const paid = await svc.guardPayStep(fin, run.id, 'pay', { bankRef: 'M2U-GUARD-1', pcbChecked: true, paidOn: '2026-11-05' });
     expect(paid.stage).toBe('paid');
@@ -558,7 +560,7 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
     RULES.guardPayroll.value.primaPays = true;
     const { svc, ds } = fresh();
     const prep = await guardPayPrep(svc), doa = await svc.user('u-pwvsb-doa');
-    const ceo = await svc.user(CEO), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
+    const ceo = await svc.user(CEO), coo = await svc.user('u-coo'), fin = await svc.user('u-fd');
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****9999' };
     const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10', []);
     const guard = run.lines.find(l => l.net > 100)!;
@@ -665,7 +667,7 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
     const cos = await svc.user('u-cos');
     const ceo = await svc.user(CEO);
     const coo = await svc.user('u-coo');
-    const fin = await svc.user('u-fin-t1-lead');
+    const fin = await svc.user('u-fd');
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****9999' };
     const board = await svc.guardLoans(hr, { companyId: 'co-sasa' });
     const guardId = board.guards[0].id;
@@ -689,6 +691,7 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
     expect(approved.status).toBe('approved');
     expect(approved.financeNotices.at(-1)!.text).toMatch(/Finance: ready to pay out/);
     await expect(svc.payOutGuardLoan(hr, rec.id, { bankRef: 'B1' })).rejects.toBeInstanceOf(AccessDenied);
+    await preparePayout(svc, 'guard_loan', rec.id);
     await svc.payOutGuardLoan(fin, rec.id, { bankRef: 'LOAN-BANK-1', paidOn: '2026-11-05' });
     const finBoard = await svc.guardLoans(fin, { companyId: 'co-sasa' });
     expect(finBoard.totals.owed).toBe(600);
@@ -705,6 +708,7 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
     // A paid month takes the repayment off the record.
     await svc.guardPayStep(prep, run.id, 'submit');
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Approved' });
+    await preparePayout(svc, 'guard_pay', run.id);
     await svc.guardPayStep(fin, run.id, 'pay', { bankRef: 'M2U-1', pcbChecked: true, paidOn: '2026-11-05' });
     // The SQL journal still balances with the repayment in it.
     const sqlFile = await svc.guardPayExport(fin, run.id, 'sql');

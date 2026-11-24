@@ -22,6 +22,7 @@ import { liveItRows } from "./it-cleanup-guards";
 import { ItProcurementService } from "./it-procurement";
 import { ItCorrectionService } from "./it-corrections";
 import { rentalFinanceActor } from "./rental-corrections";
+import { companyItRentals, itFromHr, merdekaFinanceMember } from "./it-gaps";
 import { RentalCorrectionService } from "./rental-corrections";
 import { effectiveRentalBills } from "./rental-corrections";
 import { assertOriginalRentalPayable } from "./rental-corrections";
@@ -58,7 +59,7 @@ import { SharedLoginService } from "./shared-logins";
 import { SHARED_LOGIN_PLACE_LABEL, TENDER_LOGIN_KINDS, mayBeOnSharedLogin } from "./shared-logins";
 import { HrListService } from "./hr-lists";
 import { PaperConsentService } from "./paper-consent";
-import { FwMoveService } from "./fw-moves";
+import { FwMoveService, addWorkingDaysExcept } from "./fw-moves";
 import { ShortStayService } from "./short-stays";
 import { GROUP_EMPLOYER_ID } from "./access";
 import { IT_COMPANY_ID } from "./access";
@@ -74,6 +75,9 @@ import { canSeePerson } from "./access";
 import { hasOwnStaffRecord } from "./access";
 import { isActHead } from "./access";
 import { isGroupLeader } from "./access";
+import { isFinanceStaff } from "./access";
+import { FinancePayoutsService } from "./finance-payouts";
+import { finPayoutHomeItems } from "./finance-payouts";
 import { isHrDirector } from "./access";
 import { tenantCompanyIds } from "./access";
 import { isGroupRole } from "./access";
@@ -101,7 +105,7 @@ import { isForeign } from "./access";
 import { sha256Hex } from "./audit";
 import { verifyChain } from "./audit";
 import { hrKeeps } from "./hr";
-import { isHrAdmin } from "./hr";
+import { isHrAdmin, isChiefOfStaff, cosActs, COS_COVER_ITEMS, COS_COVER_KEYS, coverKindOf, cosCoverInForce, vcRecorder, type CosCoverItem, type CosCoverRow, type CosCoverTo } from "./hr";
 import { staffClockUser } from "./hr";
 import { staffPayRole } from "./hr";
 import { staffPayStepper } from "./hr";
@@ -127,7 +131,7 @@ import { holidayDates } from "./hr-leave";
 import { holidayYearCheck } from "./hr-leave";
 import { officeLeaveDays } from "./hr-leave";
 import { withOverride } from "./hr-leave";
-import { workingDayDeadlines } from "./hr-leave";
+import { workingDayDeadlines, workingHourDeadlines } from "./hr-leave";
 import { ADVERT_CHANNELS } from "./hr-job-adverts";
 import { advertChannelState } from "./hr-job-adverts";
 import { advertFacts } from "./hr-job-adverts";
@@ -170,7 +174,7 @@ import { checkAssignment } from "./checks";
 import { checkRequirement } from "./checks";
 import { csgDeadline } from "./checks";
 import { credentialStatus } from "./checks";
-import { deployability } from "./checks";
+import { deployability, hasSignedAgreement } from "./checks";
 import { distanceM } from "./checks";
 import { evaluateClockIn } from "./checks";
 import { evaluateClockOut } from "./checks";
@@ -241,6 +245,7 @@ import type { PublicHolidayDay } from "./public-holidays";
 import type { PublicHolidayList } from "./public-holidays";
 import { CLIENT_OFFBOARD_STEPS } from "./clients";
 import { CLIENT_ONBOARD_STEPS } from "./clients";
+import { PDPA_COVER_NOTE, PdpaOfficerService, pdpaActs } from "./pdpa-officer";
 import { CLIENT_VIA } from "./clients";
 import { CLIENT_LOST_REASON } from "./crm";
 import { CLIENT_PERSON_ROLE } from "./crm";
@@ -343,7 +348,8 @@ import type { GuardPayLine } from "./guard-pay";
 import type { GuardPayRun } from "./guard-pay";
 import type { GuardPayPreparerEntry } from "./types";
 import { emptyStandIn, isCashCeo, isFinanceDirector, standInView, type CashStandIn } from "./cash-stand-in";
-import { itPurchaseRequest } from "./purchase";
+import { itPurchaseRequest, lastPaidFor, nextPurRef, purOrderLate, purOrderPdfLines, supplierRecord } from "./purchase";
+import { simplePdf } from "./simple-pdf";
 import { itTenderClock } from "./it-tender";
 import { itTenderTimeline } from "./it-tender";
 import { planDues } from "./it-plan";
@@ -406,7 +412,7 @@ import type { GiftEntry } from "./types";
 import type { GrcObligation } from "./types";
 import type { OshAssessment } from "./types";
 import type { WhistleReport } from "./types";
-import type { PurRequest } from "./types";
+import type { PurRequest, PurTier } from "./types";
 import type { PurSupplier } from "./types";
 import type { PurCategory } from "./types";
 import type { StockIssue } from "./types";
@@ -422,18 +428,21 @@ import type { CorpFiling } from "./types";
 import type { ItPurchase } from "./types";
 import type { ItAssetKind } from "./types";
 import type { ItAsset } from "./types";
+import type { ItOnboarding } from "./types";
 import type { ItRentalBill } from "./types";
 import type { ItTicket } from "./types";
 import type { ItTicketCategory, ItTicketPriority } from "./types";
 import { ItPolicyService } from "./it-policy-service";
+import type { ItPolicyRec } from "./it-policy-service";
 import { ArmsPolicyService } from "./arms-policy-service";
 import { OfficeAmService } from "./office-am-service";
 import { KdnRenewalService } from "./kdn-renewal";
 import { ToolboxService } from "./toolbox-service";
 import { GroupMonthService } from "./group-month-service";
 import { DutyRegisterService } from "./duty-registers";
+import { FwGapsService, fwLevyFor, fwLevyShare } from "./fw-gaps";
 import { SiteSuppliesService } from "./site-supplies";
-import { InventoryControlService } from "./inventory-control";
+import { InventoryControlService, reorderSuggestion } from "./inventory-control";
 import { RentalService } from "./am-rental";
 import { IT_TICKET_CATEGORIES, IT_TICKET_PRIORITIES, claimItPoNote, claimSoftwareNote, itServiceReport, rootCauseRequired, securityPriority, ticketConfirmState, ticketDuplicateOf, ticketResponse } from "./it-policies";
 import type { ItJob } from "./types";
@@ -484,6 +493,7 @@ import type { ExpenseRequest } from "./types";
 import type { OfficeCategory } from "./types";
 import type { CertBody } from "./types";
 import type { VehicleRequest } from "./types";
+import type { FleetRecord, FleetRecordKind } from "./types";
 import type { ClaimVehicle } from "./types";
 import type { Hostel } from "./types";
 import type { HostelBill } from "./types";
@@ -517,6 +527,7 @@ import type { EscalationLevel } from "./types";
 import type { EvidenceDoc } from "./types";
 import type { LeaveKind } from "./types";
 import type { LeaveRequest } from "./types";
+import type { VcConsentRecord } from "./types";
 import type { EvidencePhoto } from "./types";
 import type { EvidencePlace } from "./types";
 import type { EvidenceTime } from "./types";
@@ -666,6 +677,7 @@ import { finActor } from "./finance";
 import { isLead } from "./finance";
 import { isFinCoo } from "./finance";
 import { finPackItems } from "./finance";
+import { finSupplierBillsUnposted } from "./finance";
 import { FinanceKpiService } from "./finance-kpi";
 import { FinanceRequestService } from "./finance-requests";
 import { FinanceTeamsService } from "./finance-teams";
@@ -695,6 +707,8 @@ import type { ReceiptReader } from "./receipts";
 import type { ReceiptWallet } from "./receipts";
 import { approvalReason } from "./central-admin";
 import { isCompanySecretary } from "./central-admin";
+import { unitHeadsOf } from "./unit-heads";
+import { corpProfileFromCompany, dueYearlyAudit, dueYearlyFilings, fsReadiness } from "./corp-year";
 import { isCorpAdminOwner } from "./central-admin";
 import { seesCorporate } from "./access";
 import { seesLegal } from "./access";
@@ -721,6 +735,9 @@ import { driverHours } from "./special-ops";
 import { endorsedReturn } from "./special-ops";
 import { importStepBlocked } from "./special-ops";
 import { holdsArmsWall } from "./special-ops";
+import { keepsVault } from "./special-ops";
+import { decidesForArmsControl } from "./special-ops";
+import { ARMS_MANAGER_ONLY } from "./special-ops";
 import { isBuyRequest } from "./special-ops";
 import { isTradeKind } from "./special-ops";
 import { onRegister } from "./special-ops";
@@ -764,6 +781,7 @@ import { clientRoleOf as clientRoleOfUser } from "./ops-access";
 import { isGovOm as isGovOmUser } from "./ops-access";
 import { isOgm as isOgmUser } from "./ops-access";
 import { isOpsDirector as isOpsDirectorUser } from "./ops-access";
+import { actsAsOpsDirector as actsAsOpsDirectorUser } from "./ops-access";
 import { isPrivateOm as isPrivateOmUser } from "./ops-access";
 import { managementFeeBillScope } from "./ops-access";
 import { onOpsSide } from "./ops-access";
@@ -949,6 +967,7 @@ import type { TenderOpportunityEntry } from "./types";
 import type { TenderOpportunityKind } from "./types";
 import { alertItem } from "./alerts";
 import { inAppAlerts } from "./alerts";
+import { AutoReportService } from "./auto-report-service";
 import type { AlertItem } from "./alerts";
 import { judgeFaceFrames } from "./face";
 import type { FaceFrame } from "./face";
@@ -1014,6 +1033,7 @@ import { pastRates } from "./am-bq";
 import { routeCeiling } from "./am-bq";
 import type { AmBq } from "./types";
 import type { AmBqAward } from "./types";
+import { awardTurnedDown } from "./am-bq";
 import type { AmBqBrief } from "./types";
 import type { AmBqLine } from "./types";
 import type { AmBqStep } from "./types";
@@ -1390,9 +1410,11 @@ const SHIFT_PATTERN_TIMES: Record<Post['shiftStructure'], [string, string][]> = 
 };
 /** Other staff: the HR Admin, then the HR Director (Chief of Staff or Deputy, Fauzan 27 Oct 2026), then the Director Office. */
 const OFFICE_LEAVE_LADDER: ('HR' | 'HR_DIRECTOR' | 'DIRECTOR')[] = ['HR', 'HR_DIRECTOR', 'DIRECTOR'];
+/** B1: how the Vice Chairman gave his answer, in words for records and audit lines. */
+export const VC_HOW: Record<VcConsentRecord['how'], string> = { app: 'message', call: 'phone call', meeting: 'meeting', letter: 'letter' };
 const OFFICE_LEAVE_LABEL: Record<(typeof OFFICE_LEAVE_LADDER)[number], string> = {
   HR: 'HR Admin',
-  HR_DIRECTOR: 'HR Director (Chief of Staff)',
+  HR_DIRECTOR: 'HR Director (Chief of Staff or Deputy)',
   DIRECTOR: 'Director Office',
 };
 export const EVIDENCE_PLACE_LABEL: Record<EvidencePlace, string> = { on_site: 'At the site', away: 'Away from the site', weak_gps: 'GPS too weak to confirm' };
@@ -1512,6 +1534,7 @@ export type HomeTone = 'ok' | 'warn' | 'crit' | 'neutral' | 'info';
 
 export type HomeView =
   | 'home'
+  | 'reports'
   | 'archive'
   | 'data-cleanup'
   | 'payreq'
@@ -1572,7 +1595,7 @@ export interface HomeLink {
   tenderId?: Id;
   companyId?: Id;
   /** Finance only: the tab and the Checks section the item opens on. */
-  tab?: 'checks' | 'payments' | 'close' | 'dashboard' | 'summary' | 'sites';
+  tab?: 'checks' | 'payments' | 'close' | 'dashboard' | 'summary' | 'sites' | 'settings';
   section?: FinCheckSection;
 }
 export interface HomeTile {
@@ -1611,6 +1634,12 @@ export const GUARANTEE_LABEL: Record<InsuranceGuarantee['kind'], string> = {
   INSURANCE_GUARANTEE: 'Insurance guarantee',
 };
 const GUARANTEE_RANK = { lapsed: 0, extend: 1, release: 2, short: 3, ok: 4, released: 5 } as const;
+
+/** Company secretary context (D1, 23 Nov 2026): whether the Deputy Chief of Staff is on approved leave, and every company file. */
+interface CorpCtx {
+  dcosAway: boolean;
+  profiles: CorpProfile[];
+}
 
 /** The Director Office Administrator sets the tender protocol; the Director may too (Fauzan, 25 Oct 2026). */
 function isDoa(user: User): boolean {
@@ -1847,6 +1876,11 @@ function unseenCooNotices(list: CooNotice[] | undefined, userId: Id): CooNotice[
  */
 // Read lazily: items.ts and service.ts import each other through finance.ts, so UNIFORM_RULE may not be defined yet
 // when this module first loads (the IT workflow metrics tests load finance.ts first).
+/** A sale price at or below what the unit cost the store is not profitable (Fauzan, 23 Nov 2026). Unknown cost: no check. */
+export function goodwillBelowCost(salePrice: number | null | undefined, unitCost: number | null | undefined): boolean {
+  return salePrice != null && unitCost != null && unitCost > 0 && salePrice <= unitCost;
+}
+
 export const UNIFORM_REQUEST_RULE = {
   get freePerYear() { return UNIFORM_RULE.maxPerYear; },
   get paidMaxPerYear() { return UNIFORM_RULE.paidMaxPerYear; },
@@ -1857,6 +1891,8 @@ export const UNIFORM_REQUEST_RULE = {
 
 /** P122 (speed): outside the class, so the class has no load-time work and a browser build can leave it out. */
 const ROSTER_STATUSES: ReadonlySet<string> = new Set(Object.keys(ROSTER_STATUS_LABEL));
+/** What an Asset Management purchase is for (D4). OFFICE is refused with a pointer to Beli baru. */
+export const AM_BUY_FOR = ['RESORT', 'HOMESTAY', 'RENTAL_HOME', 'HOSTEL', 'TRAINING', 'ORCHARD', 'SPARE', 'OFFICE'] as const;
 
 export class PrimaService {
   constructor(
@@ -1935,7 +1971,35 @@ export class PrimaService {
     const u = await this.store.get('users', userId);
     if (!u) throw new NotFound('User');
     if (accessClosed(u, this.today())) throw new AccessClosed(u.accessClosedFrom!);
-    return withRunCompanies(u, await this.store.list('companyRunLinks'));
+    return this.withActingAssetDirector(withRunCompanies(u, await this.store.list('companyRunLinks')));
+  }
+
+  /**
+   * D8 (Asset Management department check, Fauzan 23 Nov 2026 "Do what you recommend"): an acting Asset Director.
+   * An approved delegation line in force today, LEAVE_COVER or EMERGENCY, for the post "Asset Director", naming a
+   * member of the Asset Management team as the one who acts, gives that person the Director's approvals for those dates
+   * only. This is the one place a delegation line carries approval rights; every other line stays a record. The usual
+   * checks still apply: nobody approves what they keyed or worked on, and every step names the person who took it.
+   */
+  private async withActingAssetDirector(u: User): Promise<User> {
+    if (u.assetRole === 'director' || u.integration || u.role !== 'pwvsb_officer' || u.department !== 'asset') return u;
+    const d = await this.actingAssetDirectorLine(u.id);
+    return d ? { ...u, assetRole: 'director', actingAssetDirector: { holderName: d.holderName, to: d.to } } : u;
+  }
+
+  private async actingAssetDirectorLine(userId: Id): Promise<Delegation | null> {
+    const all = await this.delegationsIfInstalled().catch(() => null);
+    if (!all?.length) return null;
+    const today = this.today();
+    return (
+      all.find(
+        (d) =>
+          d.delegateId === userId &&
+          (d.kind === 'LEAVE_COVER' || d.kind === 'EMERGENCY') &&
+          /^\s*(acting\s+)?asset\s+director\s*$/i.test(d.post) &&
+          this.delegationState(d, today) === 'active',
+      ) ?? null
+    );
   }
 
   /** Arms Control sees arms matters only (Fauzan, 25 Oct 2026): not rosters, guards, sites lists or general dashboards. */
@@ -2176,7 +2240,8 @@ export class PrimaService {
   private async opsSiteScope(user: User, companyId: Id): Promise<(s: Site) => boolean> {
     if (user.role !== 'pwvsb_officer' || user.department !== 'operations') return () => true;
     const tier = user.opsTier;
-    if (tier === 'ops_director') return (s) => (s.sector ?? 'private') === 'private';
+    if (isOgmUser(user)) return (s) => s.sector === 'government';
+    if (isOpsDirectorUser(user)) return (s) => (s.sector ?? 'private') === 'private';
     if (tier === 'ogm') return (s) => s.sector === 'government';
     if (tier !== 'om' && tier !== 'regional') return () => true;
     const states = new Set(tier === 'om' ? (user.areaStates ?? []) : this.opsRegions(user).flatMap((r) => r.states));
@@ -2329,6 +2394,8 @@ export class PrimaService {
           deployable: !isBlocked(f),
           blockers: f.filter((x) => x.level === 'block').length,
           warnings: f.filter((x) => x.level === 'warn').length,
+          /** Signed employment agreement uploaded (rule GUARD-AGREEMENT); office staff are checked by HR elsewhere. */
+          agreement: p.role === 'office' ? null : hasSignedAgreement(p),
         };
       });
   }
@@ -2470,7 +2537,6 @@ export class PrimaService {
 
   /** Who decides a guard's leave, and where an unanswered request has moved to (guards: each working day; office: each 12 hours). */
   private async leaveLadder(q: LeaveRequest, p: Person, ctx: Awaited<ReturnType<PrimaService['ladderContext']>>) {
-    const every = RULES.leaveEscalate.value * 3_600_000;
     // A JV branch's own staff: the Branch Manager runs their HR and decides their leave; the company and central HR take
     // the data and monitor (Fauzan, 4 Nov 2026). With no Branch Manager on record, or for the manager's own leave, the
     // usual ladder applies so nobody is left without a decider.
@@ -2507,23 +2573,30 @@ export class PrimaService {
         deciderIds: [jvManager.id] as Id[] | null,
       };
     if (p.role === 'office') {
-      // HR's 12-hour clock starts once the Company Manager has authorised it (Fauzan, 3 Nov 2026).
+      // HR's clock starts once the Company Manager has authorised it (Fauzan, 3 Nov 2026). D2 (Fauzan, 23 Nov 2026):
+      // it counts working hours (8.30 to 5.30, Monday to Friday, public holidays not counted), 12 per level.
       const from = q.managerAuthorised?.at ?? q.requestedAt;
-      const waitedHr = Math.max(0, toMs(q.decidedAt ?? this.now()) - toMs(from));
-      const step = Math.min(OFFICE_LEAVE_LADDER.length - 1, Math.max(0, Math.floor(waitedHr / every)));
+      // D3 (Fauzan, 23 Nov 2026): leave of HR's own staff starts with the HR Director, so HR never decides for its own team.
+      const hrOwn = this.isHrStaffPerson(p.id, ctx.users);
+      const first = hrOwn ? 1 : 0;
+      const deadlines = workingHourDeadlines(from, await this.holidaysFor(p), RULES.leaveEscalate.value, OFFICE_LEAVE_LADDER.length - 1 - first);
+      const until = toMs(q.decidedAt ?? this.now());
+      const step = first + deadlines.filter((d) => toMs(d) <= until).length;
       const level = OFFICE_LEAVE_LADDER[step];
+      // B2 (Fauzan, 23 Nov 2026): the HR Director step names the Chief of Staff and the Deputy, who both decide.
       const who =
         level === 'HR'
-          ? ctx.users.find((u) => u.department === 'hr')
+          ? ctx.users.filter((u) => u.role === 'pwvsb_officer' && u.department === 'hr' && u.personId !== p.id).map((u) => u.name)
           : level === 'HR_DIRECTOR'
-            ? ctx.users.find((u) => u.leadership === 'cos')
-            : ctx.users.find((u) => u.role === 'director');
+            ? ctx.users.filter((u) => isHrDirector(u) && u.personId !== p.id).map((u) => u.name)
+            : ctx.users.filter((u) => u.role === 'director').slice(0, 1).map((u) => u.name);
       return {
         office: true,
+        hrOwn,
         level,
-        label: OFFICE_LEAVE_LABEL[level],
-        person: who?.name ?? 'Not assigned',
-        nextAt: step < OFFICE_LEAVE_LADDER.length - 1 ? fromMs(toMs(from) + (step + 1) * every) : null,
+        label: hrOwn && level === 'HR_DIRECTOR' ? `${OFFICE_LEAVE_LABEL[level]}: HR staff's own leave` : OFFICE_LEAVE_LABEL[level],
+        person: who.length ? who.join(' or ') : 'Not assigned',
+        nextAt: step < OFFICE_LEAVE_LADDER.length - 1 ? deadlines[step - first] : null,
         state: '',
         sector: 'private' as const,
         jvBranchId: null as Id | null,
@@ -2564,6 +2637,11 @@ export class PrimaService {
   }
 
   /** The OM for the guard's area or anyone above may decide, at any time; the Director Office always. */
+  /** D3: whether a person is on HR's own staff (the HR Administrator's team), whose leave and claims the HR Director decides. */
+  private isHrStaffPerson(personId: Id, users: User[]): boolean {
+    return users.some((u) => u.personId === personId && isHrAdmin(u));
+  }
+
   private canDecideLeave(
     user: User,
     q: LeaveRequest,
@@ -2581,13 +2659,19 @@ export class PrimaService {
     // Staff leave HR has approved waits for the Vice Chairman's consent (Fauzan, 1 Nov 2026); nobody else acts on it,
     // and never the person who approved it for HR.
     if (lad.office && q.hrApproval) return this.consentsForVc(user) && q.hrApproval.byId !== user.id;
+    // D3 (Fauzan, 23 Nov 2026): leave of HR's own staff goes to the HR Director (Chief of Staff or Deputy), never to HR.
+    const hrOwn = 'hrOwn' in lad && lad.hrOwn;
     // PWVSB's own staff: central HR, then the Director Office.
-    if (isCentralEmployer(q.companyId)) return user.role === 'director' || isHrDirector(user) || (user.role === 'pwvsb_officer' && user.department === 'hr');
+    if (isCentralEmployer(q.companyId)) return user.role === 'director' || isHrDirector(user) || (!hrOwn && user.role === 'pwvsb_officer' && user.department === 'hr');
     if (!can(user, grants, this.today(), 'leave.decide', q.companyId)) return false;
     if (user.role === 'director') return true;
     // Other staff: the HR Admin or the HR Director (Chief of Staff or Deputy). Guards and officers: the OM or higher, never HR.
-    if (lad.office) return user.department === 'hr' || isHrDirector(user);
+    if (lad.office) return (!hrOwn && user.department === 'hr') || isHrDirector(user);
     if (user.department !== 'operations') return false;
+    // The Deputy OGM stands in for the OGM (Fauzan, 23 Nov 2026).
+    if (isOgmUser(user) && lad.sector === 'government') return true;
+    // The Deputy Operations Director stands in for the OD (Fauzan, 23 Nov 2026).
+    if (isOpsDirectorUser(user) && lad.sector !== 'government') return true;
     switch (user.opsTier) {
       case 'om':
         return (user.areaStates ?? []).includes(lad.state) && onOpsSide(user, lad.sector);
@@ -2824,6 +2908,9 @@ export class PrimaService {
         /** Office staff leave: approving needs a comment, and HR's approval waits for the Vice Chairman's consent. */
         staffLeave: lad.office,
         canDecide,
+        // B1: HR records the Vice Chairman's answer when he gives it outside Prima.
+        canRecordVc:
+          q.status === 'pending' && lad.office && !!q.hrApproval && vcRecorder(user) && q.hrApproval.byId !== user.id && user.personId !== q.personId,
         mine:
           canDecide &&
           (vcStage ||
@@ -2859,7 +2946,7 @@ export class PrimaService {
    * Approve or reject a request (OM or higher for guards and officers, HR administrator or higher for other staff). Approving checks the balance under the Employment Act; approving a
    * reason for an absence, sick leave or hospitalisation needs a document, and excuses the absences it covers.
    */
-  async decideLeave(user: User, id: Id, approve: boolean, note: string) {
+  async decideLeave(user: User, id: Id, approve: boolean, note: string, vc?: { how?: unknown; givenOn?: unknown; note?: unknown; proof?: ProofInput[] }) {
     // Lookup only locates the quota lock; authority and balances are re-read inside the transaction.
     const initial = await this.store.get('leaveRequests', id);
     if (!initial) throw new NotFound('Leave request');
@@ -2873,11 +2960,11 @@ export class PrimaService {
         throw new BadRequest('Leave request changed or already moved on. Reload before deciding.');
       const locked = new PrimaService(tx, this.clock, this.tenderReader, this.minutesReader);
       locked.pins = this.pins;
-      return locked.decideLeaveLocked(user, id, approve, note);
+      return locked.decideLeaveLocked(user, id, approve, note, vc);
     });
   }
 
-  private async decideLeaveLocked(user: User, id: Id, approve: boolean, note: string) {
+  private async decideLeaveLocked(user: User, id: Id, approve: boolean, note: string, vc?: { how?: unknown; givenOn?: unknown; note?: unknown; proof?: ProofInput[] }) {
     const q = await this.store.get('leaveRequests', id);
     if (!q) throw new NotFound('Leave request');
     if (q.status !== 'pending') throw new BadRequest('This request has already been decided.');
@@ -2886,7 +2973,15 @@ export class PrimaService {
     const ctx = await this.ladderContext();
     const lad = await this.leaveLadder(q, p, ctx);
     const cmStage = this.managerStage(q, lad, ctx.users);
-    if (!this.canDecideLeave(user, q, lad, g, cmStage)) throw new AccessDenied('leave.decide', q.companyId);
+    // B1 (Fauzan, 23 Nov 2026): HR records the Vice Chairman's answer, given by message, call, meeting or letter.
+    let vcRec: ReturnType<PrimaService['vcRecordInput']> | null = null;
+    if (vc) {
+      if (!vcRecorder(user)) throw new AccessDenied('leave.decide', q.companyId);
+      if (!(lad.office && q.hrApproval)) throw new BadRequest("This request is not waiting for the Vice Chairman's consent.");
+      if (user.personId === q.personId) throw new BadRequest('Someone else records the consent to your own leave.');
+      if (q.hrApproval.byId === user.id) throw new BadRequest("You approved this leave for HR, so someone else records the Vice Chairman's answer.");
+      vcRec = this.vcRecordInput(user, vc, q.companyId, q.hrApproval.at);
+    } else if (!this.canDecideLeave(user, q, lad, g, cmStage)) throw new AccessDenied('leave.decide', q.companyId);
     const text = (note ?? '').trim();
     if (!approve && text.length < 3) throw new BadRequest('Say why the request is rejected.');
     if (approve) requireApprovalReason(text);
@@ -2958,12 +3053,16 @@ export class PrimaService {
         )
       : [];
     return (async (tx: Store) => {
+      const vcRecord: VcConsentRecord | null = vcRec
+        ? { how: vcRec.how, givenOn: vcRec.givenOn, consent: approve, recordedBy: user.name, recordedById: user.id, recordedAt: at, proofIds: await this.saveProof(tx, vcRec.rec), note: vcRec.note }
+        : null;
       const updated = await tx.update('leaveRequests', q.id, {
         status: approve ? 'approved' : 'rejected',
         ...(medicalPolicy ? { medicalPolicy } : {}),
-        decidedBy: user.name,
+        decidedBy: vcRecord ? `Vice Chairman (recorded by ${user.name})` : user.name,
         decidedAt: at,
         decisionNote: text || null,
+        ...(vcRecord ? { vcRecord } : {}),
       });
       let n = (await tx.list('attendanceFollowUps', { companyId: q.companyId })).length;
       for (const i of issues) {
@@ -2998,7 +3097,13 @@ export class PrimaService {
         entityId: p.id,
         summary: `${LEAVE_LABEL[q.kind]} ${q.from} to ${q.to} for ${p.staffNo} ${
           vcStage
-            ? `${approve ? 'consented' : 'refused'} by ${this.pilotApproves(user) ? 'the CEO for the Vice Chairman (pilot)' : 'the Vice Chairman'} after HR's approval`
+            ? `${approve ? 'consented' : 'refused'} by ${
+                vcRecord
+                  ? `the Vice Chairman by ${VC_HOW[vcRecord.how]} on ${vcRecord.givenOn}, recorded by ${user.name} with ${vcRecord.proofIds.length} file(s)`
+                  : this.pilotApproves(user)
+                    ? 'the CEO for the Vice Chairman (pilot)'
+                    : 'the Vice Chairman'
+              } after HR's approval`
             : `${approve ? 'approved' : 'rejected'} at ${lad.label} level`
         }${issues.length ? `; ${issues.length} absence(s) excused` : ''}${text ? `. ${text}` : ''}`,
       });
@@ -3273,7 +3378,8 @@ export class PrimaService {
     // Office staff (Fauzan, 1 Nov 2026): the HR department governs their HR file in every company; the company only
     // monitors it. Guards and officers stay with their company (they come from the JA Group app).
     if (person.role === 'office') return user.department === 'hr';
-    if (user.role === 'company_manager' || user.role === 'admin_exec') return true;
+    // Guards and officers too (Fauzan, 23 Nov 2026): HR keeps the file; the company sees it and does not change it.
+    if (user.role === 'company_manager' || user.role === 'admin_exec') return false;
     return user.department === 'hr' || (user.department === 'fwm' && user.fwmRole !== 'despatch');
   }
 
@@ -4564,6 +4670,10 @@ export class PrimaService {
     if (!c.siteId || !can(user, ctx.grants, ctx.today, 'view', c.companyId, c.siteId)) return null;
     if (user.role === 'director') return 'CEO';
     if (user.role === 'supervisor' && user.siteIds.includes(c.siteId)) return user.opsTier === 'patrol' ? 'PATROL' : 'OFFICER';
+    // The Deputy OGM stands in for the OGM at government sites (Fauzan, 23 Nov 2026).
+    if (isOgmUser(user) && ctx.sectorOf(c.siteId) === 'government') return 'HEAD';
+    // The Deputy Operations Director stands in for the OD at private sites (Fauzan, 23 Nov 2026).
+    if (isOpsDirectorUser(user) && ctx.sectorOf(c.siteId) === 'private') return 'HEAD';
     if (user.role !== 'pwvsb_officer' || !user.opsTier) return null;
     const st = ctx.stateOf(c.siteId);
     switch (user.opsTier) {
@@ -5149,7 +5259,10 @@ export class PrimaService {
     const c = await this.store.get('cases', caseId);
     if (!c) throw new NotFound('Case');
     const g = await this.grants();
-    assertCan(user, g, this.today(), action === 'close' ? 'case.close' : 'case.update', c.companyId, c.siteId);
+    // A company case with no site (a billing complaint, a client letter) is the company's own work; site cases are
+    // worked by Operations and the company watches, confirms and closes (Fauzan, 23 Nov 2026).
+    const ownCompanyCase = !c.siteId && action !== 'close' && (user.role === 'company_manager' || user.role === 'admin_exec') && can(user, g, this.today(), 'case.raise', c.companyId);
+    if (!ownCompanyCase) assertCan(user, g, this.today(), action === 'close' ? 'case.close' : 'case.update', c.companyId, c.siteId);
     // Police help moves only through its own steps: Arms Control assigns and records, the company confirms.
     if (c.policeHelp && action !== 'note') throw new BadRequest('Police help requests move through their own steps on the Police help screen.');
     const next: Record<typeof action, Case['status']> = {
@@ -5634,6 +5747,7 @@ export class PrimaService {
       // The CEO's Finance approvals go to Do today on the executive home instead.
       ...(user.opsTier === 'ceo' ? [] : await this.finance.home(user)),
       ...(finActor(user) ? await this.financeControls.home(user) : []),
+      ...(finActor(user) ? await finPayoutHomeItems(this.financePayouts, this.finance, this.store, user, this.today()).catch(() => []) : []),
       ...(finActor(user) ? await this.financeSqlPosting.home(user).catch(() => []) : []),
       // The COO approves payments for the departments he monitors (Fauzan, 1 Nov 2026).
       ...(await this.finance.cooHome(user)),
@@ -5667,9 +5781,13 @@ export class PrimaService {
       ...(await this.archive.homeItems(user).catch(() => [])),
       ...(await this.dataCleanup.homeItems(user).catch(() => [])),
       ...(await this.sharedLogins.homeItems(user).catch(() => [])),
+      // D3 (Fauzan, 23 Nov 2026): the Chief of Staff carries the PDPA officer's breaches and requests while the officer is away.
+      ...(await this.pdpaOfficer.homeItems(user).catch(() => [])),
       // Part P: hostel moves and needs (FWM, OM) and short stays (Asset Management, Finance, staff applicants).
       ...(await this.fwMoves.homeItems(user).catch(() => [])),
       ...(await this.shortStays.homeItems(user).catch(() => [])),
+      // Asset Management extras: contractors, meters, statutory jobs, resorts, harvest (department check, 23 Nov 2026).
+      ...(await this.amExtras.homeItems(user).catch(() => [])),
       ...(await this.corpHome(user)),
       ...(await this.companyFileHome(user)),
       ...(await this.legalFlagHome(user)),
@@ -5694,6 +5812,8 @@ export class PrimaService {
       ...(await this.holidayHome(user)),
       // The CEO's VO consents go on Do today in the executive view below.
       ...(user.opsTier === 'ceo' ? [] : await this.amHome(user)),
+      // Transport check (23 Nov 2026): the COO oversees Transport and is told what is expired, overdue or after an accident.
+      ...(user.opsTier === 'coo' ? await this.fleetToday(user).catch(() => []) : []),
     );
     const digest = this.financeDigest(todo.filter((t) => t.tag === 'Finance'));
     if (digest) todo.unshift(digest);
@@ -5780,6 +5900,28 @@ export class PrimaService {
           go: { view: 'claims' as const },
         })),
       );
+      // D3 (Fauzan, 23 Nov 2026): the HR Director checks the claims of HR's own staff.
+      const hrOwn = (await this.staffClaims(user).catch(() => null))?.queue.filter((r) => r.canHr) ?? [];
+      if (hrOwn.length)
+        todo.unshift({
+          tone: 'warn' as const,
+          tag: 'Claims',
+          title: `${hrOwn.length} claim${hrOwn.length === 1 ? '' : 's'} from HR's own staff to check`,
+          detail: hrOwn.map((r) => `${r.claim.personName} RM${r.claim.allowed.toFixed(2)}`).join(', '),
+          go: { view: 'claims' as const },
+        });
+    }
+    // D1 (Fauzan, 23 Nov 2026): the Deputy or the HR Administrator covering for the Chief of Staff sees the office requests.
+    if (user.leadership !== 'cos' && coverKindOf(user) && (await this.cosActsFor(user, 'office_requests')).acts) {
+      const ex = (await this.store.list('expenseRequests', {})).filter((e) => e.kind === 'OFFICE' && e.status === 'submitted' && e.userId !== user.id);
+      if (ex.length)
+        todo.unshift({
+          tone: 'warn' as const,
+          tag: 'Office request',
+          title: `${ex.length} office request${ex.length === 1 ? '' : 's'} to approve for the Chief of Staff`,
+          detail: `RM${ex.reduce((n, e) => n + e.total, 0).toFixed(2)} in all; then each goes to the COO`,
+          go: { view: 'requests' as const },
+        });
     }
     return {
       title: 'Group today',
@@ -6039,6 +6181,8 @@ export class PrimaService {
     const attAlerts = await this.attendanceIssues([companyId], today, today);
     const todo: HomeItem[] = [
       ...attendanceHomeItems(attAlerts, companyId),
+      // FWM check B2 (23 Nov 2026): this company's hostel certificates due within 90 days.
+      ...(await this.fwGaps.homeItems(user).catch(() => [] as HomeItem[])),
       ...armsLate.map((o) => ({
         tone: 'crit' as const,
         tag: 'Arms',
@@ -6476,7 +6620,7 @@ export class PrimaService {
     const region = regionId ? regions.find((r) => r.id === regionId) : regions[0];
     if (!region) throw new AccessDenied('ops.region', regionId ?? '(none)');
     const sector: Site['sector'] | null =
-      user.opsTier === 'ops_director' ? 'private' : user.opsTier === 'ogm' ? 'government' : (user.opsSector ?? null);
+      isOpsDirectorUser(user) ? 'private' : isOgmUser(user) ? 'government' : (user.opsSector ?? null);
     const companies = (await this.visibleCompanies(user)).filter((c) => can(user, g, today, 'ops.region', c.id));
     if (companies.length === 0) throw new AccessDenied('ops.region', '(any)');
     const inRegion = (state: string) => region.states.includes(state);
@@ -8042,13 +8186,21 @@ export class PrimaService {
 
   /** Change the CMS parameters. Staffing never goes below 1 Head Control and 1 Monitor Officer (CMS-STAFFING). */
   /** C7 (Fauzan, 11 Nov 2026: "start once we find RFID tags"): whether the vault RFID scan is compulsory. Off by default. */
-  private async armsRfidRequired(): Promise<boolean> {
-    return (await this.cmsSettingsRow()).armsRfidRequired?.at(-1)?.on ?? RULES.armsRfid.value.scanRequired;
+  private async armsRfidRequired(vaultId?: Id | null): Promise<boolean> {
+    const all = (await this.cmsSettingsRow()).armsRfidRequired?.at(-1)?.on ?? RULES.armsRfid.value.scanRequired;
+    if (all || !vaultId || !RULES.armsRfidPerVault.value.onceAllTagged) return all;
+    // D2 (Fauzan, 23 Nov 2026): the scan is compulsory at a vault once every firearm on its register is tagged.
+    return this.vaultFullyTagged(vaultId);
+  }
+  private async vaultFullyTagged(vaultId: Id): Promise<boolean> {
+    const held = (await this.store.list('firearms', { vaultId })).filter((f) => onRegister(f) && !f.depositedWithPolice && f.ownership !== 'TRADE');
+    return held.length > 0 && held.every((f) => !!f.rfidTag);
   }
 
   /** C7: Arms Control makes the vault RFID scan compulsory, or optional again, with a reason. */
   async setArmsRfidRequired(user: User, input: { on?: unknown; reason?: unknown }) {
     if (user.integration || !canRunCms(user)) throw new AccessDenied('arms.view', '(Arms Control sets the RFID scan)');
+    await this.armsManagerOnly(user);
     if (typeof input.on !== 'boolean') throw new BadRequest('Choose compulsory or optional.');
     const on = input.on;
     const reason = typeof input.reason === 'string' ? input.reason.trim().slice(0, 300) : '';
@@ -8162,6 +8314,7 @@ export class PrimaService {
 
   async updateCmsSettings(user: User, patch: Partial<Omit<CmsSettings, 'id' | 'updatedAt' | 'updatedBy'>>) {
     if (!canRunCms(user)) throw new AccessDenied('arms.view', '(CMS settings)');
+    await this.armsManagerOnly(user);
     const before = await this.cmsSettingsRow();
     const next: CmsSettings = { ...before };
     const changes: string[] = [];
@@ -8492,24 +8645,49 @@ export class PrimaService {
   }
 
   /** One company's vaults, firearms, open issues and armed shifts that need a firearm now. */
+  /** D1 (23 Nov 2026): Arms Control decisions are the Arms Control Manager's; the Assistant prepares them. */
+  private async armsManagerOnly(user: User): Promise<void> {
+    if (!decidesForArmsControl(user, await this.store.list('users'))) throw new AccessDenied('arms.view', `(${ARMS_MANAGER_ONLY})`);
+  }
+  /** Whether this person takes the Arms Control decisions (shown on screens so the Assistant sees who decides). */
+  async armsManagerDecides(user: User): Promise<boolean> {
+    return canRunCms(user) && decidesForArmsControl(user, await this.store.list('users'));
+  }
+
+  /** B1 (23 Nov 2026): the companies where this person keeps a vault (Amra or written authorisation) without a company-wide arms right. */
+  async keptVaultCompanyIds(user: User): Promise<Id[]> {
+    if (user.integration || isGroupRole(user) || !user.personId || !user.companyIds.length) return [];
+    const g = await this.grants();
+    const today = this.today();
+    const ids = user.companyIds.filter((c) => !can(user, g, today, 'arms.view', c));
+    if (!ids.length) return [];
+    const vaults = await this.store.list('vaults', { companyId: ids });
+    return [...new Set(vaults.filter((v) => keepsVault(user, v)).map((v) => v.companyId))];
+  }
+
   async arms(user: User, companyId: Id) {
     const g = await this.grants();
     const today = this.today();
     const now = this.now();
-    assertCan(user, g, today, 'arms.view', companyId);
+    // B1 (23 Nov 2026): the Amra or a person on a vault's written authorised list, with no company-wide arms right,
+    // sees only the vaults they keep, the firearms in them and the movements through them.
+    const kept = can(user, g, today, 'arms.view', companyId)
+      ? null
+      : new Set((await this.store.list('vaults', { companyId })).filter((v) => keepsVault(user, v)).map((v) => v.id));
+    if (kept && !kept.size) assertCan(user, g, today, 'arms.view', companyId);
     // CMS and Arms Control may see a company's arms without seeing the rest of the company (bug found 27 Oct 2026).
     const company = (await this.store.get('companies', companyId)) ?? (await this.company(user, companyId));
     // A supervisor or patrolling officer sees only the arms of the people and sites they look after (Fauzan, 26 Oct
     // 2026): movements at their sites, the firearms out with those people, and safes at their sites.
-    const mine = user.role === 'supervisor' ? new Set(user.siteIds) : null;
+    const mine = !kept && user.role === 'supervisor' ? new Set(user.siteIds) : null;
     const allMovements = await this.store.list('armsMovements', { companyId });
-    const movements = mine ? allMovements.filter((m) => mine.has(m.siteId)) : allMovements;
-    const vaults = (await this.store.list('vaults', { companyId })).filter((v) => !mine || (!!v.siteId && mine.has(v.siteId)));
+    const movements = kept ? allMovements.filter((m) => kept.has(m.vaultId)) : mine ? allMovements.filter((m) => mine.has(m.siteId)) : allMovements;
+    const vaults = (await this.store.list('vaults', { companyId })).filter((v) => (kept ? kept.has(v.id) : !mine || (!!v.siteId && mine.has(v.siteId))));
     const vaultIds = new Set(vaults.map((v) => v.id));
     const outHere = new Set(movements.map((m) => m.firearmId));
     const firearms = (await this.store.list('firearms', { companyId }))
       .map(withoutSerial)
-      .filter((f) => !mine || vaultIds.has(f.vaultId) || outHere.has(f.id))
+      .filter((f) => (!mine && !kept) || vaultIds.has(f.vaultId) || outHere.has(f.id))
       .sort((a, b) => a.tag.localeCompare(b.tag));
     const people = new Map((await this.store.list('people', { companyId })).map((p) => [p.id, p]));
     const sites = new Map((await this.store.list('sites', { companyId })).map((s) => [s.id, s]));
@@ -8562,14 +8740,14 @@ export class PrimaService {
       recent,
       needIssue,
       // Armed jobs (staff login retest, 27 Oct 2026: the company could not see, plan or update its own armed jobs).
-      jobs: mine
+      jobs: mine || kept
         ? []
         : (await this.store.list('armedJobs', { companyId }))
             .filter((j) => toMs(j.end) >= nowMs - 7 * 86_400_000)
             .sort((a, b) => a.start.localeCompare(b.start))
             .map((j) => ({ job: j, crewNames: j.crew.map((id) => people.get(id)?.name ?? '?') })),
       homeState: vaults.find((v) => (v.kind ?? 'COMPANY_ARMOURY') === 'COMPANY_ARMOURY')?.state ?? null,
-      crewChoices: mine
+      crewChoices: mine || kept
         ? []
         : (await this.store.list('credentials', { companyId, type: 'FIREARM_PERMIT' }))
             .filter((c) => !c.expiresOn || c.expiresOn >= today)
@@ -8581,7 +8759,7 @@ export class PrimaService {
             .map((p) => ({ id: p.id, name: p.name, staffNo: p.staffNo })),
       // Arms requests (review 2 Nov 2026): the company raises them, authorises them and corrects what Arms Control sends
       // back, on its own screen. A supervisor sees none (they see only their own sites' arms).
-      requests: mine
+      requests: mine || kept
         ? []
         : (await this.store.list('armsRequests', { companyId }))
             .filter((r) => r.state !== 'closed' || toMs(r.updatedAt) >= nowMs - 30 * 86_400_000)
@@ -8589,8 +8767,9 @@ export class PrimaService {
             .map((r) => ({ request: r, last: (r.log ?? []).at(-1) ?? null, mine: r.raisedById ? r.raisedById === user.id : r.raisedBy === user.name })),
       requestSteps: ARMS_REQUEST_STEPS,
       can: {
-        handle: can(user, g, today, 'arms.handle', companyId),
-        raise: !mine && can(user, g, today, 'arms.handle', companyId),
+        handle: !!kept || can(user, g, today, 'arms.handle', companyId),
+        keeper: !!kept,
+        raise: !mine && !kept && can(user, g, today, 'arms.handle', companyId),
         authorise: (user.role === 'company_manager' || user.role === 'director') && can(user, g, today, 'arms.handle', companyId),
       },
     };
@@ -8732,10 +8911,12 @@ export class PrimaService {
     if (!shift || !shift.personId) throw new NotFound('Shift');
     const g = await this.grants();
     const today = this.today();
-    assertCan(user, g, today, 'arms.handle', shift.companyId, shift.siteId);
     const firearm = await this.store.get('firearms', input.firearmId);
+    // The vault's Amra or a person on its written authorised list may issue there (B1, 23 Nov 2026).
+    const keeperVault = firearm ? await this.store.get('vaults', firearm.vaultId) : null;
+    if (!(keeperVault && keeperVault.companyId === shift.companyId && keepsVault(user, keeperVault))) assertCan(user, g, today, 'arms.handle', shift.companyId, shift.siteId);
     if (!firearm) throw new NotFound('Firearm');
-    const vault = await this.store.get('vaults', firearm.vaultId);
+    const vault = keeperVault;
     const site = await this.store.get('sites', shift.siteId);
     const person = await this.store.get('people', shift.personId);
     if (!vault || !site || !person) throw new NotFound('Record');
@@ -8752,11 +8933,12 @@ export class PrimaService {
       site,
       shift,
       issuer: user.name,
+      issuerPersonId: user.personId ?? null,
       witness: w.name,
       today,
       firearmBusy: open,
       rfidScan: input.rfidScan,
-      scanRequired: await this.armsRfidRequired(),
+      scanRequired: await this.armsRfidRequired(vault.id),
       policy: await this.armsPolicy.issueFindings(firearm, vault, person, site, today),
     });
     if (isBlocked(findings)) throw new RuleBlocked(findings);
@@ -8806,7 +8988,8 @@ export class PrimaService {
     if (!m) throw new NotFound('Movement');
     const g = await this.grants();
     const today = this.today();
-    assertCan(user, g, today, 'arms.handle', m.companyId, m.siteId);
+    const backTo = await this.store.get('vaults', m.vaultId);
+    if (!(backTo && keepsVault(user, backTo))) assertCan(user, g, today, 'arms.handle', m.companyId, m.siteId);
     if (m.returnedAt) throw new BadRequest('This firearm is already back in the vault.');
     if (!Number.isInteger(input.roundsReturned) || input.roundsReturned < 0) throw new BadRequest('Count the rounds returned.');
     const w = await this.witnessOf(m.companyId, input.witness, [user.personId, m.personId]);
@@ -8822,7 +9005,7 @@ export class PrimaService {
           ruleId: 'ARMS-RFID',
         },
       ]);
-    if (!scan && (await this.armsRfidRequired())) throw new BadRequest(`Scan ${firearm.tag}’s RFID tag to receive it.`);
+    if (!scan && (await this.armsRfidRequired(m.vaultId))) throw new BadRequest(`Scan ${firearm.tag}’s RFID tag to receive it.`);
     const person = await this.store.get('people', m.personId);
     const at = this.now();
     const short = m.rounds - input.roundsReturned;
@@ -8895,7 +9078,7 @@ export class PrimaService {
     const v = await this.store.get('vaults', vaultId);
     if (!v) throw new NotFound('Vault');
     const g = await this.grants();
-    assertCan(user, g, this.today(), 'arms.handle', v.companyId);
+    if (!keepsVault(user, v)) assertCan(user, g, this.today(), 'arms.handle', v.companyId);
     if (!Number.isInteger(input.counted) || input.counted < 0) throw new BadRequest('Enter the number of firearms counted.');
     const w = await this.witnessOf(v.companyId, input.witness, [user.personId]);
     const witnessName = `${w.name} (${w.staffNo})`;
@@ -9038,6 +9221,19 @@ export class PrimaService {
     return due < this.today() ? ('missing' as const) : ('not_due' as const);
   }
 
+  /**
+   * B5 (Fauzan, 23 Nov 2026; the pilot is over, every company is in scope): a company is on the app when it has an open
+   * company manager or admin executive sign-in, so a report it owes shows missing or late, never unknown. A company with
+   * nobody signed in yet still shows unknown, never compliant.
+   */
+  private async companiesOnApp(): Promise<Set<Id>> {
+    const today = this.today();
+    const out = new Set<Id>();
+    for (const u of await this.store.list('users', {}))
+      if (!u.integration && (u.role === 'company_manager' || u.role === 'admin_exec') && !accessClosed(u, today)) for (const c of u.companyIds) out.add(c);
+    return out;
+  }
+
   /** The reports this user must send, and for the Director Office every company's and department's reports. */
   async reports(user: User) {
     const today = this.today();
@@ -9081,13 +9277,14 @@ export class PrimaService {
     // The Director Office's board: the last due period of every report, from every sender.
     const board = isDoa(user) || user.opsTier === 'ceo' || user.opsTier === 'coo';
     const companies = board ? await this.store.list('companies', { id: visibleCompanyIds(user, g, today) }) : [];
+    const onApp = board ? await this.companiesOnApp() : new Set<Id>();
     const all = board
       ? defs.map((def) => {
           const periods = reportPeriods(def, today, 4);
           const last = periods.find((p) => p.due < today) ?? periods[periods.length - 1];
           const senders =
             def.from === 'company'
-              ? companies.map((c) => ({ key: c.id, name: c.name, onApp: !!c.isPilot, match: (s: ReportSubmission) => s.companyId === c.id }))
+              ? companies.map((c) => ({ key: c.id, name: c.name, onApp: onApp.has(c.id), match: (s: ReportSubmission) => s.companyId === c.id }))
               : [
                   {
                     key: def.department!,
@@ -9109,8 +9306,8 @@ export class PrimaService {
           };
         })
       : null;
-    // The Director Office Administrator sets the list (staff login retest, 27 Oct 2026: the list could not be changed).
-    const canEdit = isDoa(user);
+    // The Director Office Administrator and the CEO set the list (D2, Fauzan 23 Nov 2026).
+    const canEdit = await this.mayEditReportList(user);
     return {
       mine,
       board: all,
@@ -9189,8 +9386,23 @@ export class PrimaService {
   }
 
   /** The Director Office Administrator sets which reports are due, from whom and when. */
+  /**
+   * D2 (Fauzan, 23 Nov 2026): only the Director Office Administrator (the head of the Director Office) and the CEO
+   * change the list of reports due; everyone else only sends. Until a head of the Director Office is named on the
+   * organisation chart, the Director Office's own staff keep it (the office is the Administrator).
+   */
+  private async mayEditReportList(user: User): Promise<boolean> {
+    if (user.integration) return false;
+    if (user.opsTier === 'ceo') return true;
+    if (user.role !== 'pwvsb_officer' || user.department !== 'director_office') return false;
+    if (unitHeadsOf(user).includes('d_director_office')) return true;
+    const today = this.today();
+    const named = (await this.store.list('users', {})).some((u) => !accessClosed(u, today) && unitHeadsOf(u).includes('d_director_office'));
+    return !named;
+  }
+
   async setReportDefs(user: User, defs: ReportDef[], note: string) {
-    if (!isDoa(user)) throw new AccessDenied('view', '(report list)');
+    if (!(await this.mayEditReportList(user))) throw new AccessDenied('view', '(report list: the Director Office Administrator and the CEO change it)');
     if (!Array.isArray(defs) || defs.length > 40) throw new BadRequest('Up to 40 reports.');
     const ids = new Set<string>();
     const clean = defs.map((d, i) => {
@@ -11440,6 +11652,8 @@ export class PrimaService {
         costFlags: q.costCheck?.reasons ?? [],
       })),
       reader: { name: this.tenderReader.name, readsFiles: this.tenderReader.readsFiles },
+      // B4 (23 Nov 2026): once the Marketing desk has started, the Director Office only monitors bids.
+      marketingDeskOn: marketingDeskOn(await this.tenderProtocolRow(), this.today()),
     };
   }
 
@@ -12249,6 +12463,11 @@ export class PrimaService {
     return this.fwmRoleOf(user) === 'staff' || isOwnerAdmin(user);
   }
 
+  /** FWM check gaps (23 Nov 2026): the same roles for the exit, absconding, quota and caseload service. */
+  fwRoleFor(user: User) {
+    return this.fwmRoleOf(user);
+  }
+
   private fwLevelOf(user: User): FwLevel | null {
     if (user.department === 'fwm') return 'FWM';
     if (user.department === 'chief_of_staff') return 'CHIEF_OF_STAFF';
@@ -12332,6 +12551,9 @@ export class PrimaService {
       // Missing papers first (Unknown is never green), then the nearest deadline.
       items.sort((a, b) => (a.daysLeft ?? -9999) - (b.daysLeft ?? -9999));
     }
+    // Rule FWM-CASELOAD (23 Nov 2026): the FWM Executive who owns each company's workers.
+    const owners = seeBoard ? await this.fwGaps.caseload(ids).catch(() => new Map<Id, { execId: Id; execName: string }>()) : new Map<Id, { execId: Id; execName: string }>();
+    for (const it of items) Object.assign(it, { owner: owners.get(it.person.companyId) ?? null });
     const year10 = seeBoard
       ? foreign
           // P83: a joining date not recorded yet has no service plan (never an invalid date).
@@ -12436,6 +12658,8 @@ export class PrimaService {
         ceo: count((i) => !!i.stage?.alerted.includes('CEO') && !i.stage.paused),
         submitted: count((i) => !!i.stage?.paused),
         forMe: count((i) => i.forMe && !i.stage?.paused),
+        /** On the ladder for companies this FWM Executive owns (rule FWM-CASELOAD). */
+        mine: count((i) => owners.get(i.person.companyId)?.execId === user.id),
         /** Acknowledgements more than 1 working day late (rule FWM-ACK). */
         ackLate: count((i) => i.acksOwed.some((a) => a.late)),
         /** Mine to acknowledge now. */
@@ -12465,7 +12689,7 @@ export class PrimaService {
   }
 
   /** FWM records a renewal submitted with its receipt; the reminder ladder pauses until the new date is on record. */
-  async submitFwRenewal(user: User, personId: Id, paper: FwPaper, input: { submittedOn: IsoDate; channel: string; note?: string }, proof: ProofInput[]) {
+  async submitFwRenewal(user: User, personId: Id, paper: FwPaper, input: { submittedOn: IsoDate; channel: string; note?: string; levy?: { amount: number; paidOn: IsoDate; ref: string } | null }, proof: ProofInput[]) {
     if (!this.fwmMaker(user)) throw new AccessDenied('hr.pay', '(foreign worker renewals)');
     const person = await this.fwmWorker(user, personId);
     if (!FW_PAPER_LABEL[paper]) throw new BadRequest('Choose the paper.');
@@ -12478,6 +12702,16 @@ export class PrimaService {
     if (existing.some((r) => r.paper === paper && r.expiresOn === cred.expiresOn)) throw new BadRequest('This renewal is already recorded.');
     const rec = this.proofRecords(user, person.companyId, null, proof, {}, { documentsOnly: true });
     if (!rec.docs.length) throw new BadRequest('Attach the receipt or submission slip.');
+    let levy: { amount: number; paidOn: IsoDate; ref: string } | null = null;
+    if (input.levy && (input.levy.amount || input.levy.ref)) {
+      if (paper !== 'PLKS_PERMIT') throw new BadRequest('The levy is recorded on the work permit (PLKS) renewal.');
+      const amount = Number(input.levy.amount);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) throw new BadRequest('Give the levy paid in RM.');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.levy.paidOn ?? '') || input.levy.paidOn > this.today()) throw new BadRequest('Give the date the levy was paid.');
+      const ref = String(input.levy.ref ?? '').trim().slice(0, 60);
+      if (ref.length < 3) throw new BadRequest('Give the levy receipt or FWCMS payment reference.');
+      levy = { amount: Math.round(amount * 100) / 100, paidOn: input.levy.paidOn, ref };
+    }
     const at = this.now();
     const id = `fwr-${person.id}-${paper.toLowerCase()}-${cred.expiresOn}`;
     return this.store.transaction(async (tx) => {
@@ -12497,6 +12731,8 @@ export class PrimaService {
         note: (input.note ?? '').trim().slice(0, 300),
         by: user.name,
         at,
+        // Rule FWM-LEVY (23 Nov 2026): the levy paid with a work permit renewal; the receipt is the renewal receipt.
+        levy: levy ? { ...levy, docIds, by: user.name, at } : null,
       };
       await tx.insert('fwRenewals', r);
       await tx.audit({
@@ -12654,6 +12890,8 @@ export class PrimaService {
     if (ref.startsWith('fwc-') && role !== 'staff' && role !== 'escalation') throw new AccessDenied('view', '(foreign worker welfare papers)');
     // Recruitment papers (agency licence, embassy letter, passport page, signed contract) likewise.
     if (ref.startsWith('fwr-') && role !== 'staff' && role !== 'escalation') throw new AccessDenied('view', '(foreign worker recruitment papers)');
+    // FWM check gaps (23 Nov 2026): exit files, absconding reports and quota letters stay with FWM and the group leaders.
+    if (/^fw[xaq]-/.test(ref) && role !== 'staff' && role !== 'escalation') throw new AccessDenied('view', '(foreign worker exit, absconding and quota papers)');
     const ids = visibleCompanyIds(user, await this.grants(), this.today());
     return (await this.store.list('evidenceDocs', { companyId: ids })).filter((d) => d.fwmId === ref);
   }
@@ -15243,7 +15481,7 @@ export class PrimaService {
     // Part P2: the OM sees the hostels of his own sites' workers, never bills or utility charges.
     if (!user.integration && user.opsTier === 'om') return 'om';
     if (user.role === 'company_manager' || user.role === 'admin_exec') return 'company';
-    if (user.opsTier === 'ops_director' || user.opsTier === 'ogm') return 'sector';
+    if (isOpsDirectorUser(user) || isOgmUser(user)) return 'sector';
     if (user.opsTier === 'coo') return 'coo';
     if (user.department === 'hr') return 'hr';
     if (isGroupLeader(user)) return 'leader';
@@ -15347,7 +15585,7 @@ export class PrimaService {
                 request: (role === 'company' || isOwnerAdmin(user)) && (b.status === 'due' || b.status === 'returned'),
                 check: role === 'fwm' && b.status === 'requested',
                 approve:
-                  (role === 'sector' && b.status === 'fwm_checked' && (h.sector === 'government' ? user.opsTier === 'ogm' : user.opsTier === 'ops_director')) ||
+                  (role === 'sector' && b.status === 'fwm_checked' && (h.sector === 'government' ? isOgmUser(user) : isOpsDirectorUser(user))) ||
                   (role === 'coo' && b.status === 'sector_approved'),
                 slip: role === 'company' && b.status === 'coo_approved',
               },
@@ -15562,7 +15800,7 @@ export class PrimaService {
     const role = this.hostelRoleOf(user);
     const sectorTier = hostel.sector === 'government' ? 'ogm' : 'ops_director';
     let field: 'sectorApproval' | 'cooApproval';
-    if (bill.status === 'fwm_checked' && role === 'sector' && user.opsTier === sectorTier) field = 'sectorApproval';
+    if (bill.status === 'fwm_checked' && role === 'sector' && (sectorTier === 'ogm' ? isOgmUser(user) : isOpsDirectorUser(user))) field = 'sectorApproval';
     else if (bill.status === 'sector_approved' && role === 'coo') field = 'cooApproval';
     else throw new AccessDenied('commercial.approve', bill.companyId);
     if (!ok && (note ?? '').trim().length < 3) throw new BadRequest('Say why it is sent back.');
@@ -15855,7 +16093,19 @@ export class PrimaService {
 
   /** Office to the place and back, from the furthest location ping that day; the car tracker is not connected yet. */
   private async systemKm(user: User, date: IsoDate, vehicle: ClaimVehicle): Promise<number | null> {
-    if (vehicle === 'COMPANY_CAR') return null;
+    // A company car: the km logged out and in by Transport for this person's trips that day (Transport check, 23 Nov
+    // 2026). With no logged trip the claim still goes to the Chief of Staff.
+    if (vehicle === 'COMPANY_CAR') {
+      let km = 0;
+      let found = false;
+      for (const v of await this.store.list('vehicles', {}))
+        for (const e of v.log)
+          if (e.trip?.kind === 'in' && e.trip.driverUserId === user.id && dateOf(e.trip.outAt) === date && typeof e.trip.km === 'number') {
+            km += e.trip.km;
+            found = true;
+          }
+      return found ? km : null;
+    }
     const clocks = (await this.store.list('staffClocks', { userId: user.id })).filter((c) => dateOf(c.in.receivedAt) === date && c.in.lat !== null);
     let far = 0;
     for (const c of clocks) {
@@ -15967,7 +16217,7 @@ export class PrimaService {
       const cosReasons: string[] = [];
       if (!usedTrip) cosReasons.push('Trip not approved before it was made');
       if (kmSystem === null)
-        cosReasons.push(t.vehicle === 'COMPANY_CAR' ? 'Car tracker not connected yet, so the km cannot be checked' : 'No location that day to check the km');
+        cosReasons.push(t.vehicle === 'COMPANY_CAR' ? 'No company-car trip logged out and in by Transport that day, so the km cannot be checked' : 'No location that day to check the km');
       else if (Math.abs(kmClaimed - kmSystem) > kmSystem * r.kmTolerance)
         cosReasons.push(`Claimed ${kmClaimed} km, system ${kmSystem} km: more than 10% apart`);
       const mileage = Math.round(kmClaimed * rate.perKm * 100) / 100;
@@ -16041,6 +16291,11 @@ export class PrimaService {
     });
   }
 
+  /** D3: a claim made by one of HR's own staff (the HR Administrator's team). */
+  private claimByHrStaff(c: StaffClaim, users: User[]): boolean {
+    return users.some((u) => u.id === c.userId && isHrAdmin(u));
+  }
+
   private needsCos(c: StaffClaim): boolean {
     return !!c.travel?.cosReasons.length && !c.cosApproval;
   }
@@ -16065,6 +16320,9 @@ export class PrimaService {
     const headOf = (await this.store.list('staffClaims', {})).filter((c) => (c.headIds ?? []).includes(user.id));
     const all = role || payer ? await this.store.list('staffClaims', { companyId: tenantCompanyIds(user, await this.grants(), today) }) : headOf;
     const itBuys = all.some((c) => c.kind === 'IT_EQUIPMENT') ? await this.store.list('itPurchases', {}).catch(() => []) : [];
+    // D3 (Fauzan, 23 Nov 2026): the HR Director checks the claims of HR's own staff, never an HR colleague.
+    const claimUsers = role ? await this.store.list('users', {}) : [];
+    const hrOwnClaim = (c: StaffClaim) => this.claimByHrStaff(c, claimUsers);
     const rows = all
       .filter((c) => c.userId !== user.id)
       .sort(
@@ -16086,11 +16344,13 @@ export class PrimaService {
                   ? 'Company head'
                   : 'COO'
                 : c.headIds?.length && !c.headCheck
-                  ? 'HR and the company head'
-                  : 'HR',
+                  ? `${hrOwnClaim(c) ? 'The HR Director' : 'HR'} and the company head`
+                  : hrOwnClaim(c)
+                    ? "HR Director (HR staff's own claim)"
+                    : 'HR',
         canHead: this.claimHeadMay(user, c),
         canCos: role === 'cos' && c.status === 'submitted' && this.needsCos(c),
-        canHr: role === 'hr' && (c.status === 'submitted' || c.status === 'cos_approved') && !this.needsCos(c),
+        canHr: (hrOwnClaim(c) ? role === 'cos' : role === 'hr') && (c.status === 'submitted' || c.status === 'cos_approved') && !this.needsCos(c),
         canCoo: role === 'coo' && c.status === 'hr_checked' && !(c.headIds?.length && !c.headCheck),
         // Finance pays once the COO approves; the Finance Director in the pilot (Fauzan, 28 Oct 2026).
         canPay: this.pilotPays(user) && c.status === 'approved' && !c.paid,
@@ -16239,9 +16499,15 @@ export class PrimaService {
   }
 
   async hrDecideClaim(user: User, claimId: Id, ok: boolean, note: string) {
-    if (this.claimRoleOf(user) !== 'hr') throw new AccessDenied('hr.monitor', '(staff claims)');
+    const role = this.claimRoleOf(user);
+    if (role !== 'hr' && role !== 'cos') throw new AccessDenied('hr.monitor', '(staff claims)');
     const c = await this.store.get('staffClaims', claimId);
     if (!c) throw new NotFound('Claim');
+    // D3 (Fauzan, 23 Nov 2026): HR's own staff's claims are checked by the HR Director (Chief of Staff or Deputy); HR
+    // checks everyone else's. The CEO standing in as Chief of Staff in the pilot checks as the HR Director too.
+    const hrOwn = this.claimByHrStaff(c, await this.store.list('users', {}));
+    if (hrOwn && role !== 'cos') throw new BadRequest("This claim is from HR's own staff: the Chief of Staff or the Deputy checks it.");
+    if (!hrOwn && role !== 'hr') throw new AccessDenied('hr.monitor', '(staff claims)');
     if (ok && (await this.claimItPoProblem(c))) throw new BadRequest(`${await this.claimItPoProblem(c)}: an IT item is paid back only against an approved IT purchase.`);
     if (c.userId === user.id) throw new BadRequest('Another person decides your own claim.');
     if (c.status !== 'submitted' && c.status !== 'cos_approved') throw new BadRequest('This claim is already decided.');
@@ -16266,7 +16532,11 @@ export class PrimaService {
         entityId: c.id,
         summary:
           `${c.personName} ${c.kind.toLowerCase()} claim ${c.date}, RM${c.allowed.toFixed(2)}: ${
-            ok ? (final ? `checked by HR; approved within the CEO's limit of RM${lim!.toFixed(2)}` : within ? 'checked by HR, to the company head' : 'checked by HR, to the COO') : 'rejected by HR'
+            ok
+              ? final
+                ? `checked by ${hrOwn ? 'the HR Director' : 'HR'}; approved within the CEO's limit of RM${lim!.toFixed(2)}`
+                : `checked by ${hrOwn ? 'the HR Director' : 'HR'}, to the ${within ? 'company head' : 'COO'}`
+              : `rejected by ${hrOwn ? 'the HR Director' : 'HR'}`
           }. ${step.note}`.trim(),
       });
       return updated;
@@ -16303,9 +16573,10 @@ export class PrimaService {
   }
 
   /** Finance pays an approved claim and records the reference; the Finance Director is the focal point in the pilot (Fauzan, 28 Oct 2026). */
-  async financePayClaim(user: User, claimId: Id, ref: string) {
-    const fd = user.role === 'pwvsb_officer' && (user.leadership === 'finance_director' || (user.department === 'finance' && user.financeRole === 'leader'));
-    if (!fd) throw new AccessDenied('view', '(Finance pays approved claims)');
+  async financePayClaim(user: User, claimId: Id, ref: string, paidOn?: IsoDate) {
+    // D2 (Fauzan, 23 Nov 2026): a Finance person prepares the payment, and another at team leader level (the company's
+    // team leader, an Account Manager the FD delegated as leader, the FD or the CEO) records it paid.
+    if (!finActor(user)) throw new AccessDenied('view', '(Finance pays approved claims)');
     const c = await this.store.get('staffClaims', claimId);
     if (!c) throw new NotFound('Claim');
     if (c.userId === user.id) throw new BadRequest('Another person pays your own claim.');
@@ -16314,7 +16585,10 @@ export class PrimaService {
     const reference = (ref ?? '').trim().slice(0, 120);
     if (reference.length < 3) throw new BadRequest('Give the payment reference.');
     const at = this.now();
+    const on = paidOn ?? this.today();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(on) || on > this.today()) throw new BadRequest('Give the date the bank paid.');
     return this.store.transaction(async (tx) => {
+      await this.financePayouts.recordPaid(tx, user, 'staff_claim', c.id, reference, on);
       const updated = await tx.update('staffClaims', c.id, { paid: { by: user.name, userId: user.id, at, ref: reference } });
       await tx.audit({
         at,
@@ -16588,6 +16862,9 @@ export class PrimaService {
     const step = steps.find((s) => s.key === key);
     if (!step) throw new NotFound('Step');
     if (step.doneAt) throw new BadRequest('Already done.');
+    // B3 (Fauzan, 23 Nov 2026): only the PDPA officer closes the client's PDPA step, on the PDPA screen.
+    if (phase === 'onboarding' && key === 'pdpa')
+      throw new BadRequest("The PDPA officer closes this step on the PDPA screen, from the client's signed consent or with the reason none is needed.");
     const rec = proof.length ? this.proofRecords(user, a.companyId, null, proof, {}, { documentsOnly: true }) : { docs: [] };
     if (['contract', 'notice', 'handover'].includes(key) && !rec.docs.length) throw new BadRequest('Attach the signed paper.');
     const docs = rec.docs.map((d) => ({ ...d, caption: d.caption || `${a.name}: ${step.label}` }));
@@ -16934,12 +17211,16 @@ export class PrimaService {
 
   // ---------- Operation claims and office requests (Fauzan, 26 Oct 2026) ----------
 
-  private expenseRoleOf(user: User): { om: boolean; cm: boolean; cos: boolean; coo: boolean; monitor: boolean } {
+  private async expenseRoleOf(user: User): Promise<{ om: boolean; cm: boolean; exec: boolean; cos: boolean; coo: boolean; monitor: boolean }> {
     const officer = user.role === 'pwvsb_officer';
     return {
       om: officer && user.department === 'operations' && user.opsTier === 'om',
       cm: user.role === 'company_manager',
-      cos: (officer && user.leadership === 'cos') || this.pilotApproves(user),
+      // Company admin D1 (Fauzan, 23 Nov 2026): the company's admin executives (not branch managers) prepare office
+      // requests; the company head checks and sends each one to the Chief of Staff.
+      exec: user.role === 'admin_exec' && !user.branchId && !user.integration,
+      // D1 (Fauzan, 23 Nov 2026): the Deputy or the HR Administrator acts for the Chief of Staff when covering.
+      cos: (await this.cosActsFor(user, 'office_requests')).acts || this.pilotApproves(user),
       coo: officer && user.opsTier === 'coo',
       monitor: isGroupLeader(user),
     };
@@ -16947,16 +17228,17 @@ export class PrimaService {
 
   private async expenseScope(user: User): Promise<ExpenseRequest[]> {
     const all = await this.store.list('expenseRequests', {});
-    const r = this.expenseRoleOf(user);
+    const r = await this.expenseRoleOf(user);
     if (r.monitor || r.coo || r.cos) return all;
     if (r.cm) return all.filter((e) => user.companyIds.includes(e.companyId));
+    if (r.exec) return all.filter((e) => e.kind === 'OFFICE' && user.companyIds.includes(e.companyId));
     if (r.om) return all.filter((e) => e.userId === user.id);
     return [];
   }
 
   async expenseBoard(user: User) {
-    const r = this.expenseRoleOf(user);
-    if (!r.om && !r.cm && !r.cos && !r.coo && !r.monitor) throw new AccessDenied('view', '(claims and requests)');
+    const r = await this.expenseRoleOf(user);
+    if (!r.om && !r.cm && !r.exec && !r.cos && !r.coo && !r.monitor) throw new AccessDenied('view', '(claims and requests)');
     const companies = await this.store.list('companies', {});
     const rows = (await this.expenseScope(user))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -16967,28 +17249,35 @@ export class PrimaService {
         canEdit: e.userId === user.id && (e.status === 'draft' || e.status === 'returned'),
         canCos: r.cos && e.kind === 'OFFICE' && e.status === 'submitted',
         canCoo: r.coo && ((e.kind === 'OPS_CLAIM' && e.status === 'submitted') || (e.kind === 'OFFICE' && e.status === 'cos_approved')),
+        canHead: this.expenseHeadChecks(user, r, e),
       }));
     // P78: the owner may draft either kind for any company it sees; the Chief of Staff and COO still decide, never on
     // their own request (decideExpense).
     const owner = isOwnerAdmin(user);
     const omCompanies = r.om || owner ? visibleCompanyIds(user, await this.grants(), this.today()) : [];
     return {
-      can: { opsClaim: r.om || owner, office: r.cm || owner },
+      can: { opsClaim: r.om || owner, office: r.cm || r.exec || owner, sendOffice: r.cm || owner },
       companies: (r.om || owner ? omCompanies : user.companyIds).map((id) => ({ id, name: companies.find((c) => c.id === id)?.name ?? id })),
       requests: rows,
-      waiting: rows.filter((x) => x.canCos || x.canCoo).length,
+      waiting: rows.filter((x) => x.canCos || x.canCoo || x.canHead).length,
     };
   }
 
+  /** The company head checks an office request an executive prepared (never their own) before it goes to the Chief of Staff. */
+  private expenseHeadChecks(user: User, r: { cm: boolean }, e: ExpenseRequest): boolean {
+    return r.cm && e.kind === 'OFFICE' && e.status === 'head_check' && e.userId !== user.id && user.companyIds.includes(e.companyId);
+  }
+
   private expenseWaitingOn(e: ExpenseRequest): string | null {
-    if (e.status === 'draft') return e.kind === 'OPS_CLAIM' ? 'Operations Manager to submit' : 'Company manager to submit';
+    if (e.status === 'draft') return e.kind === 'OPS_CLAIM' ? 'Operations Manager to submit' : `${e.requestedBy} to send`;
+    if (e.status === 'head_check') return 'Company head to check and send';
     if (e.status === 'returned') return 'Requester to fix and resubmit';
     if (e.status === 'submitted') return e.kind === 'OPS_CLAIM' ? 'COO' : 'Chief of Staff';
     if (e.status === 'cos_approved') return 'COO';
     return null;
   }
 
-  /** The Operations Manager drafts the month's operation claim; the company manager drafts an office request. */
+  /** The Operations Manager drafts the month's operation claim; the company manager or an admin executive drafts an office request. */
   async saveExpense(
     user: User,
     input: {
@@ -17002,10 +17291,10 @@ export class PrimaService {
     },
     proof: ProofInput[] = [],
   ) {
-    const r = this.expenseRoleOf(user);
+    const r = await this.expenseRoleOf(user);
     const owner = isOwnerAdmin(user);
     if (input.kind === 'OPS_CLAIM' && !r.om && !owner) throw new AccessDenied('view', '(only an Operations Manager makes operation claims)');
-    if (input.kind === 'OFFICE' && !r.cm && !owner) throw new AccessDenied('view', '(only the company manager requests office needs)');
+    if (input.kind === 'OFFICE' && !r.cm && !r.exec && !owner) throw new AccessDenied('view', '(only the company office requests office needs)');
     const companies = input.kind === 'OPS_CLAIM' || owner ? visibleCompanyIds(user, await this.grants(), this.today()) : user.companyIds;
     if (!companies.includes(input.companyId)) throw new AccessDenied('view', input.companyId);
     if (!/^\d{4}-\d{2}$/.test(input.period)) throw new BadRequest('Give the month as YYYY-MM.');
@@ -17081,7 +17370,22 @@ export class PrimaService {
     if (e.status !== 'draft' && e.status !== 'returned') throw new BadRequest('Already submitted.');
     if (!e.docIds.length) throw new BadRequest('Attach the receipts, quotation or bill first.');
     const at = this.now();
+    // An executive's office request goes to the company head first (company admin D1, Fauzan, 23 Nov 2026).
+    const toHead = e.kind === 'OFFICE' && !(await this.expenseRoleOf(user)).cm && !isOwnerAdmin(user);
     return this.store.transaction(async (tx) => {
+      if (toHead) {
+        const updated = await tx.update('expenseRequests', e.id, { status: 'head_check', headCheck: null });
+        await tx.audit({
+          at,
+          actor: user.name,
+          companyId: e.companyId,
+          action: 'expense.prepare',
+          entity: 'expense',
+          entityId: e.id,
+          summary: `Office request ${e.period} RM${e.total.toFixed(2)} prepared for the company head to check and send.`,
+        });
+        return updated;
+      }
       const updated = await tx.update('expenseRequests', e.id, { status: 'submitted', submittedAt: at });
       await tx.audit({
         at,
@@ -17098,13 +17402,15 @@ export class PrimaService {
 
   /** The Chief of Staff approves office requests; the COO approves operation claims and gives the final approval on office requests. */
   async decideExpense(user: User, id: Id, decision: 'approve' | 'return' | 'reject', note: string) {
-    const r = this.expenseRoleOf(user);
+    const r = await this.expenseRoleOf(user);
     const e = await this.store.get('expenseRequests', id);
     if (!e) throw new NotFound('Request');
     const asCos = r.cos && e.kind === 'OFFICE' && e.status === 'submitted';
     const asCoo = r.coo && ((e.kind === 'OPS_CLAIM' && e.status === 'submitted') || (e.kind === 'OFFICE' && e.status === 'cos_approved'));
-    if (!asCos && !asCoo) throw new AccessDenied('view', '(not yours to decide now)');
+    const asHead = this.expenseHeadChecks(user, r, e);
+    if (!asCos && !asCoo && !asHead) throw new AccessDenied('view', '(not yours to decide now)');
     if (e.userId === user.id) throw new BadRequest('Another person decides your own request.');
+    if (asHead && decision === 'reject') throw new BadRequest('Send it back to the preparer with the reason instead.');
     const text = String(note ?? '')
       .trim()
       .slice(0, 300);
@@ -17113,8 +17419,11 @@ export class PrimaService {
     if (decision === 'approve' && !text) throw new BadRequest('Give a reason for approving, even a short one.');
     const at = this.now();
     const step = { userId: user.id, by: user.name, at, note: text };
-    const patch: Partial<ExpenseRequest> =
-      decision === 'return'
+    const patch: Partial<ExpenseRequest> = asHead
+      ? decision === 'return'
+        ? { status: 'returned', returned: step, headCheck: null }
+        : { status: 'submitted', submittedAt: at, headCheck: step }
+      : decision === 'return'
         ? { status: 'returned', returned: step, cosApproval: null }
         : decision === 'reject'
           ? { status: 'rejected', ...(asCos ? { cosApproval: step } : { cooDecision: step }) }
@@ -17130,7 +17439,7 @@ export class PrimaService {
         action: `expense.${decision}`,
         entity: 'expense',
         entityId: e.id,
-        summary: `${e.kind === 'OPS_CLAIM' ? 'Operation claim' : 'Office request'} ${e.period} RM${e.total.toFixed(2)}: ${decision === 'approve' ? (asCos ? 'approved by the Chief of Staff, to the COO' : 'approved by the COO') : decision === 'return' ? 'sent back' : 'rejected'}${text ? ` (${text})` : ''}.`,
+        summary: `${e.kind === 'OPS_CLAIM' ? 'Operation claim' : 'Office request'} ${e.period} RM${e.total.toFixed(2)}: ${decision === 'approve' ? (asHead ? 'checked by the company head, sent to the Chief of Staff' : asCos ? 'approved by the Chief of Staff, to the COO' : 'approved by the COO') : decision === 'return' ? 'sent back' : 'rejected'}${text ? ` (${text})` : ''}.`,
       });
       return updated;
     });
@@ -17151,6 +17460,8 @@ export class PrimaService {
   private fleetRoleOf(user: User): 'transport' | 'cms' | 'pdpa' | 'leader' | 'staff' | null {
     if (user.role === 'pwvsb_officer' && user.department === 'transport') return 'transport';
     if (isGroupLeader(user)) return 'leader';
+    // Transport runs under the OGM, the COO oversees (Fauzan, 23 Nov 2026): the OGM and the Deputy OGM see the full board.
+    if (isOgmUser(user)) return 'leader';
     if (user.role === 'pwvsb_officer' && user.department === 'cms') return 'cms';
     if (user.role === 'pwvsb_officer' && user.department === 'pdpa') return 'pdpa';
     if (user.role === 'guard' || user.role === 'supervisor' || user.role === 'site_device' || user.opsTier === 'patrol') return null;
@@ -17264,10 +17575,49 @@ export class PrimaService {
           : [],
       board: role === 'staff' || role === 'pdpa' ? [] : rows,
       reminders,
-      requests: full ? requests : [],
+      // fromTransport: a Transport person's own request, which the OGM decides (Transport check, 23 Nov 2026).
+      requests: full ? await this.withRequesterDept(requests) : [],
       mine: requests.filter((r) => r.userId === user.id),
       consentNeeded,
+      // Transport check (23 Nov 2026): Transport's Do today, and the staff it may pick as a driver with their licence state.
+      today: full ? await this.fleetToday(user) : [],
+      ogm: isOgmUser(user),
+      // D3: whether this person decides bookings (the named Head of Transport, or the OGM standing in).
+      decidesBookings: await this.decidesBookings(user),
+      // The vehicle out with this person now, so they can report an accident in it.
+      myVehicle: (() => {
+        const v = vehicles.find((x) => x.out?.driverUserId === user.id);
+        return v ? { id: v.id, plate: v.plate, model: v.model } : null;
+      })(),
+      drivers: role === 'transport' ? await this.fleetDrivers() : [],
     };
+  }
+
+  private async withRequesterDept(requests: VehicleRequest[]) {
+    const dept = new Map<Id, string | null>();
+    for (const r of requests)
+      if (!dept.has(r.userId)) dept.set(r.userId, (await this.store.get('users', r.userId).catch(() => null))?.department ?? null);
+    return requests.map((r) => ({ ...r, fromTransport: dept.get(r.userId) === 'transport' }));
+  }
+
+  /** Staff accounts Transport may name as a driver, with the licence on file (expiry only; the copy stays on its record). */
+  private async fleetDrivers() {
+    const users = (await this.store.list('users', {}).catch(() => [] as User[])).filter(
+      (u) => !u.integration && !u.accessClosedFrom && u.role !== 'guard' && u.role !== 'site_device' && u.opsTier !== 'patrol' && u.personId,
+    );
+    const lic = (await this.fleetRecordsReady()) ? (await this.store.list('fleetRecords', {})).filter((r) => r.kind === 'LICENCE' && r.status === 'open') : [];
+    const today = this.today();
+    return users
+      .map((u) => {
+        const l = lic.filter((r) => r.driverUserId === u.id).sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))[0];
+        return {
+          userId: u.id,
+          name: u.name,
+          licence: l ? { classes: l.classes ?? [], expiresOn: l.expiresOn ?? null, expired: !!l.expiresOn && l.expiresOn < today } : null,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 2000);
   }
 
   async requestVehicle(user: User, input: { vehicleId?: Id | null; purpose: string; from: IsoDateTime; to: IsoDateTime }) {
@@ -17308,9 +17658,13 @@ export class PrimaService {
 
   /** The Transport head approves (choosing the vehicle) or rejects a request. */
   async decideVehicleRequest(user: User, requestId: Id, ok: boolean, vehicleId: Id | null, note: string) {
-    this.requireTransport(user);
     const rq = await this.store.get('vehicleRequests', requestId);
     if (!rq) throw new NotFound('Vehicle request');
+    // Nobody decides their own request; a Transport person's own request goes to the OGM (Transport check, 23 Nov 2026).
+    if (rq.userId === user.id) throw new BadRequest('You cannot decide your own vehicle request. Another Transport person or the OGM decides it.');
+    // D3 (Fauzan, 23 Nov 2026): the named Head of Transport decides bookings and the OGM stands in; until a head is named
+    // in the org chart, any Transport person decides (never their own).
+    if (!(await this.decidesBookings(user))) throw new AccessDenied('view', '(only the Head of Transport, or the OGM standing in, decides vehicle requests)');
     if (rq.status !== 'requested') throw new BadRequest('Already decided.');
     const text = String(note ?? '')
       .trim()
@@ -17346,23 +17700,49 @@ export class PrimaService {
     });
   }
 
+  /** The Head of Transport named in the org chart, or any Transport person while none is named; the OGM always stands in. */
+  private async decidesBookings(user: User): Promise<boolean> {
+    if (user.integration || user.accessClosedFrom) return false;
+    if (isOgmUser(user)) return true;
+    if (this.fleetRoleOf(user) !== 'transport') return false;
+    if (unitHeadsOf(user).includes('d_transport')) return true;
+    const users = await this.store.list('users', {}).catch(() => [] as User[]);
+    return !users.some((u) => u.id !== user.id && !u.accessClosedFrom && unitHeadsOf(u).includes('d_transport'));
+  }
+
   /**
    * The Transport head logs a vehicle out (with the odometer) against an approved request. A vehicle with a dashcam or
    * health monitor goes out only to a driver whose monitoring consent the PDPA officer has filed.
    */
-  async vehicleOut(user: User, vehicleId: Id, requestId: Id | null, km: number, driverName?: string) {
+  async vehicleOut(user: User, vehicleId: Id, requestId: Id | null, km: number, driverName?: string, pickedDriverUserId?: Id | null) {
     this.requireTransport(user);
     const v = await this.store.get('vehicles', vehicleId);
     if (!v) throw new NotFound('Vehicle');
     if (v.out) throw new BadRequest(`Already out with ${v.out.driver}.`);
+    // No vehicle on the road with road tax or insurance expired (Transport check, 23 Nov 2026).
+    const today = this.today();
+    for (const k of ['ROAD_TAX', 'INSURANCE'] as const) {
+      const due = v.renewals[k];
+      if (due && due < today)
+        throw new BadRequest(`${k === 'ROAD_TAX' ? 'Road tax' : 'Insurance'} expired on ${due}. Record the renewal with its receipt before the vehicle goes out.`);
+    }
     const odo = Math.round(Number(km));
     if (!(odo >= v.odometerKm)) throw new BadRequest(`The odometer cannot be below ${v.odometerKm} km.`);
     let rq: VehicleRequest | null = null;
     if (requestId) {
       rq = (await this.store.get('vehicleRequests', requestId)) ?? null;
       if (!rq || rq.status !== 'approved' || rq.vehicleId !== v.id) throw new BadRequest('That request is not approved for this vehicle.');
-    } else if (!String(driverName ?? '').trim()) throw new BadRequest('Name the driver, or choose the approved request.');
-    const driverUserId = rq?.userId ?? null;
+    } else if (!String(driverName ?? '').trim() && !pickedDriverUserId) throw new BadRequest('Name the driver, or choose the approved request.');
+    let picked: User | null = null;
+    if (!rq && pickedDriverUserId) {
+      picked = (await this.store.get('users', pickedDriverUserId)) ?? null;
+      if (!picked || picked.integration || picked.accessClosedFrom) throw new BadRequest('Choose a driver who has a staff account.');
+    }
+    const driverUserId = rq?.userId ?? picked?.id ?? null;
+    // A vehicle that records the driver goes out only to a named staff account with consent on file, never to a typed name.
+    if ((v.dashcam || v.healthMonitor) && !driverUserId)
+      throw new BadRequest('This vehicle records the driver (dashcam or health). Choose the driver from the staff list so the consent can be checked.');
+    if (driverUserId) await this.requireValidLicence(driverUserId, today);
     if ((v.dashcam || v.healthMonitor) && driverUserId) {
       const du = await this.store.get('users', driverUserId);
       const person = du?.personId ? await this.store.get('people', du.personId) : null;
@@ -17370,12 +17750,15 @@ export class PrimaService {
         throw new BadRequest("This vehicle records the driver (dashcam or health). The PDPA officer must file the driver's consent first.");
     }
     const at = this.now();
-    const driver = rq?.name ?? String(driverName).trim().slice(0, 80);
+    const driver = rq?.name ?? picked?.name ?? String(driverName).trim().slice(0, 80);
     return this.store.transaction(async (tx) => {
       const updated = await tx.update('vehicles', v.id, {
         out: { requestId: rq?.id ?? null, driver, driverUserId, at, km: odo },
         odometerKm: odo,
-        log: [...v.log, { at, by: user.name, what: `Out to ${driver} at ${odo} km${rq ? ` (${rq.purpose})` : ''}`, docId: null }],
+        log: [
+          ...v.log,
+          { at, by: user.name, what: `Out to ${driver} at ${odo} km${rq ? ` (${rq.purpose})` : ''}`, docId: null, trip: { kind: 'out', driver, driverUserId, outAt: at } },
+        ],
       });
       if (rq) await tx.update('vehicleRequests', rq.id, { status: 'out' });
       await tx.audit({
@@ -17406,7 +17789,16 @@ export class PrimaService {
       const updated = await tx.update('vehicles', v.id, {
         out: null,
         odometerKm: odo,
-        log: [...v.log, { at, by: user.name, what: `In from ${v.out!.driver} at ${odo} km (${odo - v.out!.km} km)${text ? `: ${text}` : ''}`, docId: null }],
+        log: [
+          ...v.log,
+          {
+            at,
+            by: user.name,
+            what: `In from ${v.out!.driver} at ${odo} km (${odo - v.out!.km} km)${text ? `: ${text}` : ''}`,
+            docId: null,
+            trip: { kind: 'in', driver: v.out!.driver, driverUserId: v.out!.driverUserId, outAt: v.out!.at, km: odo - v.out!.km },
+          },
+        ],
       });
       if (v.out!.requestId) await tx.update('vehicleRequests', v.out!.requestId, { status: 'returned' });
       await tx.audit({
@@ -17504,6 +17896,322 @@ export class PrimaService {
     });
   }
 
+  // ---------- Accidents, summonses, driver licences and Transport's Do today (Transport check, 23 Nov 2026) ----------
+
+  private async fleetRecordsReady(): Promise<boolean> {
+    return !this.store.hasTable || (await this.store.hasTable('fleetRecords'));
+  }
+
+  private async requireFleetRecords() {
+    if (!(await this.fleetRecordsReady()))
+      throw new BadRequest('Accidents, summonses and driver licences are not installed in this database yet (module fleet-records-v1).');
+  }
+
+  /** The driver's newest licence copy on file, if any. */
+  private async licenceOf(driverUserId: Id): Promise<FleetRecord | null> {
+    if (!(await this.fleetRecordsReady())) return null;
+    const all = (await this.store.list('fleetRecords', {})).filter((r) => r.kind === 'LICENCE' && r.driverUserId === driverUserId && r.status === 'open');
+    return all.sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))[0] ?? null;
+  }
+
+  /** A vehicle never goes out to a driver whose licence on file has expired (no licence on file shows on the board). */
+  private async requireValidLicence(driverUserId: Id, today: IsoDate) {
+    const lic = await this.licenceOf(driverUserId);
+    if (lic?.expiresOn && lic.expiresOn < today)
+      throw new BadRequest(`${lic.driver ?? 'This driver'}'s driving licence expired on ${lic.expiresOn}. File the renewed licence first.`);
+  }
+
+  /** Who had the vehicle at a moment, from the trips logged out and in. */
+  private driverAt(v: Vehicle, at: IsoDateTime): { driver: string; driverUserId: Id | null } | null {
+    let cur: { driver: string; driverUserId: Id | null } | null = null;
+    for (const e of v.log) {
+      if (!e.trip || e.at > at) continue;
+      cur = e.trip.kind === 'out' ? { driver: e.trip.driver, driverUserId: e.trip.driverUserId } : null;
+    }
+    return cur;
+  }
+
+  /** What each role may see: Transport, the OGM and leaders all; anyone else only records where they are the driver. */
+  async fleetRecords(user: User) {
+    const role = this.fleetRoleOf(user);
+    if (!role) throw new AccessDenied('view', '(fleet)');
+    if (!(await this.fleetRecordsReady())) return { installed: false as const, records: [] as FleetRecord[] };
+    const full = role === 'transport' || role === 'leader';
+    const all = (await this.store.list('fleetRecords', {})).sort((a, b) => b.at.localeCompare(a.at));
+    return { installed: true as const, records: full ? all : all.filter((r) => r.driverUserId === user.id) };
+  }
+
+  private fleetRecordId(kind: FleetRecordKind) {
+    return `flt-${kind.toLowerCase()}-${toMs(this.now()).toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  /**
+   * One door for accidents, summonses and licences: op = accident | summons | licence | close. Transport records
+   * them; a driver may report an accident in the vehicle out with them. Every step carries proof or a reason.
+   */
+  async fleetRecordAct(user: User, op: string, b: Record<string, unknown>, proof: ProofInput[]) {
+    await this.requireFleetRecords();
+    const role = this.fleetRoleOf(user);
+    if (!role) throw new AccessDenied('view', '(fleet)');
+    const txt = (k: string, max: number) => String(b[k] ?? '').trim().slice(0, max);
+    const at = this.now();
+    const today = this.today();
+    const hist = (what: string) => ({ at, by: user.name, byId: user.id, what });
+
+    if (op === 'close') {
+      if (role !== 'transport') throw new AccessDenied('view', '(only Transport closes a record)');
+      const r = await this.store.get('fleetRecords', txt('id', 120));
+      if (!r) throw new NotFound('Record');
+      if (r.status !== 'open') throw new BadRequest('Already closed.');
+      if (r.kind === 'LICENCE') throw new BadRequest('A licence is replaced by filing the new one, not closed.');
+      const outcome = (['PAID', 'APPEALED', 'CANCELLED', 'SETTLED'] as const).find((x) => x === b.outcome);
+      if (!outcome) throw new BadRequest('Pick how it ended.');
+      if (r.kind === 'ACCIDENT' && outcome !== 'SETTLED') throw new BadRequest('An accident is closed as settled.');
+      if (r.kind === 'SUMMONS' && outcome === 'SETTLED') throw new BadRequest('A summons is paid, appealed or cancelled.');
+      const note = txt('note', 300);
+      if (note.length < 3) throw new BadRequest('Say how it ended (a comment).');
+      const rec = this.proofRecords(user, r.companyId, null, proof, {}, { documentsOnly: true });
+      if (!rec.docs.length) throw new BadRequest(outcome === 'PAID' ? 'Attach the payment receipt.' : 'Attach the letter or the insurer’s or workshop’s paper.');
+      return this.store.transaction(async (tx) => {
+        await this.saveProof(tx, rec);
+        const updated = await tx.update('fleetRecords', r.id, {
+          status: 'closed',
+          outcome,
+          docIds: [...r.docIds, ...rec.docs.map((d) => d.id)],
+          history: [...r.history, hist(`Closed (${outcome.toLowerCase()}): ${note}`)],
+        });
+        await tx.audit({ at, actor: user.name, companyId: r.companyId, action: 'fleet.record_close', entity: 'fleet_record', entityId: r.id, summary: `${r.kind.toLowerCase()} ${r.plate ?? r.driver ?? ''} closed: ${outcome.toLowerCase()}.` });
+        return updated;
+      });
+    }
+
+    if (op === 'recover') {
+      // D2 (Fauzan, 23 Nov 2026, rule FLEET-SUMMONS): the driver at the wheel pays. Deduction only with written consent.
+      if (role !== 'transport') throw new AccessDenied('view', '(only Transport records how a summons is recovered)');
+      const r = await this.store.get('fleetRecords', txt('id', 120));
+      if (!r || r.kind !== 'SUMMONS') throw new NotFound('Summons');
+      if (r.status !== 'closed' || r.outcome !== 'PAID') throw new BadRequest('Record the summons as paid first.');
+      if (r.recovery) throw new BadRequest('Already recorded how it is recovered.');
+      const how = (['DRIVER_PAID', 'DEDUCT', 'COMPANY_BEARS'] as const).find((x) => x === b.how);
+      if (!how) throw new BadRequest('Pick how it is recovered.');
+      const note = txt('note', 300);
+      if (note.length < 3) throw new BadRequest('Add a comment.');
+      const amount = b.amountRm == null || b.amountRm === '' ? (r.amountRm ?? null) : Number(b.amountRm);
+      if (how !== 'COMPANY_BEARS' && !(amount !== null && amount > 0 && amount < 100_000)) throw new BadRequest('Give the amount recovered.');
+      if (how !== 'COMPANY_BEARS' && !r.driverUserId) throw new BadRequest('No driver was logged out at that time, so the company bears it.');
+      const rec = this.proofRecords(user, r.companyId, null, proof, {}, { documentsOnly: true });
+      if (how === 'DEDUCT' && !rec.docs.length) throw new BadRequest("Attach the driver's signed consent to the deduction. Without it, HR cannot deduct.");
+      if (how === 'DRIVER_PAID' && !rec.docs.length) throw new BadRequest('Attach the receipt of the driver paying it back.');
+      const recovery = { how, amountRm: how === 'COMPANY_BEARS' ? null : Math.round(amount! * 100) / 100, note, docId: rec.docs[0]?.id ?? null, by: user.name, at };
+      const label = how === 'DRIVER_PAID' ? 'driver paid it back' : how === 'DEDUCT' ? `HR to deduct RM${recovery.amountRm!.toFixed(2)} with the driver's signed consent` : 'company bears it';
+      return this.store.transaction(async (tx) => {
+        if (rec.docs.length) await this.saveProof(tx, rec);
+        const updated = await tx.update('fleetRecords', r.id, {
+          recovery,
+          docIds: [...r.docIds, ...rec.docs.map((d) => d.id)],
+          history: [...r.history, hist(`Recovery: ${label}. ${note}`)],
+        });
+        await tx.audit({ at, actor: user.name, companyId: r.companyId, action: 'fleet.summons_recovery', entity: 'fleet_record', entityId: r.id, summary: `${r.issuer} ${r.ref}: ${label}.` });
+        return updated;
+      });
+    }
+
+    if (op === 'licence') {
+      if (role !== 'transport') throw new AccessDenied('view', '(only Transport files driver licences)');
+      const du = await this.store.get('users', txt('driverUserId', 120));
+      if (!du || du.integration) throw new BadRequest('Choose the driver from the staff list.');
+      const classes = (Array.isArray(b.classes) ? b.classes : String(b.classes ?? '').split(/[\s,]+/))
+        .map((x) => String(x).trim().toUpperCase().slice(0, 6))
+        .filter((x) => /^[A-Z0-9]{1,6}$/.test(x))
+        .slice(0, 10);
+      if (!classes.length) throw new BadRequest('Give the licence classes, for example D or B2 D.');
+      const expiresOn = txt('expiresOn', 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn)) throw new BadRequest('Give the licence expiry date.');
+      const companyId = (du.companyIds ?? [])[0] ?? GROUP_EMPLOYER_ID;
+      const rec = this.proofRecords(user, companyId, null, proof, {}, { documentsOnly: true });
+      if (!rec.docs.length) throw new BadRequest('Attach a copy of the licence.');
+      const docs = rec.docs.map((d) => ({ ...d, caption: d.caption || 'Driving licence' }));
+      const old = await this.licenceOf(du.id);
+      const row: FleetRecord = {
+        id: this.fleetRecordId('LICENCE'),
+        kind: 'LICENCE',
+        companyId,
+        vehicleId: null,
+        plate: null,
+        driverUserId: du.id,
+        driver: du.name,
+        at,
+        classes,
+        expiresOn,
+        docIds: docs.map((d) => d.id),
+        status: 'open',
+        outcome: null,
+        history: [hist(`Licence ${classes.join(' ')} filed, expires ${expiresOn}`)],
+        by: user.name,
+        byId: user.id,
+        recordedAt: at,
+      };
+      return this.store.transaction(async (tx) => {
+        await this.saveProof(tx, { photos: [], docs });
+        await tx.insert('fleetRecords', row);
+        if (old) await tx.update('fleetRecords', old.id, { status: 'closed', outcome: 'REPLACED', history: [...old.history, hist('Replaced by a newer licence copy')] });
+        await tx.audit({ at, actor: user.name, companyId, action: 'fleet.licence', entity: 'fleet_record', entityId: row.id, summary: `${du.name}: driving licence ${classes.join(' ')} filed, expires ${expiresOn}.` });
+        return row;
+      });
+    }
+
+    if (op !== 'accident' && op !== 'summons') throw new BadRequest('Unknown step.');
+    const v = await this.store.get('vehicles', txt('vehicleId', 60));
+    if (!v) throw new NotFound('Vehicle');
+    const when = txt('at', 40);
+    if (!when || Number.isNaN(toMs(when))) throw new BadRequest('Give the date and time it happened.');
+    if (toMs(when) > toMs(at) + 600_000) throw new BadRequest('That time has not come yet.');
+    // A driver may report an accident in the vehicle out with them; everything else is Transport's.
+    const ownTrip = v.out?.driverUserId === user.id;
+    if (role !== 'transport' && !(op === 'accident' && ownTrip)) throw new AccessDenied('view', '(only Transport, or the driver of the vehicle out with them)');
+    const who = this.driverAt(v, when) ?? (v.out && v.out.at <= when ? { driver: v.out.driver, driverUserId: v.out.driverUserId } : null);
+    const rec = this.proofRecords(user, v.companyId, null, proof, {}, { documentsOnly: true });
+    const base = {
+      companyId: v.companyId,
+      vehicleId: v.id,
+      plate: v.plate,
+      driverUserId: who?.driverUserId ?? null,
+      driver: who?.driver ?? null,
+      at: when,
+      docIds: rec.docs.map((d) => d.id),
+      status: 'open' as const,
+      outcome: null,
+      by: user.name,
+      byId: user.id,
+      recordedAt: at,
+    };
+    let row: FleetRecord;
+    if (op === 'accident') {
+      const place = txt('place', 160);
+      const what = txt('what', 600);
+      if (place.length < 3 || what.length < 5) throw new BadRequest('Say where it happened and what happened.');
+      if (!rec.docs.length) throw new BadRequest('Attach photos of the damage or the scene (as images or a PDF).');
+      row = {
+        ...base,
+        id: this.fleetRecordId('ACCIDENT'),
+        kind: 'ACCIDENT',
+        place,
+        what,
+        injured: b.injured === true,
+        policeReport: txt('policeReport', 60) || null,
+        insurerClaim: txt('insurerClaim', 60) || null,
+        history: [hist(`Accident reported at ${place}`)],
+      };
+    } else {
+      const issuer = (['JPJ', 'PDRM', 'AES', 'COUNCIL', 'OTHER'] as const).find((x) => x === b.issuer);
+      if (!issuer) throw new BadRequest('Pick who issued the summons.');
+      const ref = txt('ref', 60);
+      if (ref.length < 3) throw new BadRequest('Give the summons number.');
+      const what = txt('what', 300);
+      if (what.length < 3) throw new BadRequest('Say what the offence is.');
+      const amount = b.amountRm == null || b.amountRm === '' ? null : Number(b.amountRm);
+      if (amount !== null && !(amount >= 0 && amount < 100_000)) throw new BadRequest('The amount must be a number.');
+      const dueOn = txt('dueOn', 10) || null;
+      if (dueOn && !/^\d{4}-\d{2}-\d{2}$/.test(dueOn)) throw new BadRequest('Give the pay-by date as a date.');
+      const dup = (await this.store.list('fleetRecords', {})).find((r) => r.kind === 'SUMMONS' && r.ref === ref && r.issuer === issuer);
+      if (dup) throw new BadRequest(`Summons ${ref} is already recorded (${dup.plate}).`);
+      if (!rec.docs.length) throw new BadRequest('Attach the summons or a screenshot of it.');
+      row = {
+        ...base,
+        id: this.fleetRecordId('SUMMONS'),
+        kind: 'SUMMONS',
+        issuer,
+        ref,
+        what,
+        place: txt('place', 160),
+        amountRm: amount === null ? null : Math.round(amount * 100) / 100,
+        dueOn,
+        history: [hist(`Summons ${issuer} ${ref} recorded; ${who ? `driver at the time: ${who.driver}` : 'no driver logged out at that time'}`)],
+      };
+    }
+    return this.store.transaction(async (tx) => {
+      await this.saveProof(tx, rec);
+      await tx.insert('fleetRecords', row);
+      const days = daysBetween(dateOf(when), today);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: v.companyId,
+        action: op === 'accident' ? 'fleet.accident' : 'fleet.summons',
+        entity: 'fleet_record',
+        entityId: row.id,
+        summary: `${v.plate}: ${op} ${days > 0 ? `of ${dateOf(when)} ` : ''}recorded${row.driver ? `, driver ${row.driver}` : ''}.`,
+      });
+      return row;
+    });
+  }
+
+  /**
+   * Transport's Do today (Transport check, 23 Nov 2026): reminders, driver alerts, bookings waiting, summonses, licences
+   * and accidents in one list. The OGM and the COO see only what is expired, overdue or open after an accident.
+   */
+  async fleetToday(user: User): Promise<HomeItem[]> {
+    const role = this.fleetRoleOf(user);
+    if (role !== 'transport' && role !== 'leader') return [];
+    const transport = role === 'transport';
+    const watch = transport || isOgmUser(user) || user.opsTier === 'coo';
+    if (!watch) return [];
+    const today = this.today();
+    const go = { view: 'fleet' as const };
+    const items: HomeItem[] = [];
+    const vehicles = await this.store.list('vehicles', {});
+    for (const v of vehicles)
+      for (const r of this.fleetReminders(v))
+        if (transport || r.days < 0) items.push({ tone: r.tone, tag: 'Vehicle', title: `${v.plate}: ${r.what}`, detail: `Due ${r.due}`, go });
+    const requests = (await this.store.list('vehicleRequests', {})).filter((x) => x.status === 'requested' && x.userId !== user.id);
+    const users = new Map<Id, User | null>();
+    const decides = await this.decidesBookings(user);
+    for (const rq of requests) {
+      if (!users.has(rq.userId)) users.set(rq.userId, (await this.store.get('users', rq.userId).catch(() => null)) ?? null);
+      const fromTransport = users.get(rq.userId)?.department === 'transport';
+      // The head decides every booking; the OGM is told of Transport staff's own, and stands in for the rest from the board.
+      if ((transport && decides) || (fromTransport && isOgmUser(user)))
+        items.push({ tone: 'warn', tag: 'Booking', title: `${rq.name}: ${rq.purpose}`, detail: `${rq.from.slice(0, 16).replace('T', ' ')} to ${rq.to.slice(0, 16).replace('T', ' ')}; approve or reject`, go });
+    }
+    // D4 (rule FLEET-REPLACE): 10 years from registration or past 300,000 km goes to the COO for a replacement review.
+    const rp = RULES.fleetReplace.value;
+    for (const v of vehicles) {
+      const years = v.registeredOn ? daysBetween(v.registeredOn, today) / 365.25 : 0;
+      if (years >= rp.ageYears || v.odometerKm >= rp.odometerKm)
+        items.push({
+          tone: 'info',
+          tag: 'Replacement',
+          title: `${v.plate}: review for replacement`,
+          detail: `${years >= rp.ageYears ? `${Math.floor(years)} years old` : ''}${years >= rp.ageYears && v.odometerKm >= rp.odometerKm ? ', ' : ''}${v.odometerKm >= rp.odometerKm ? `${v.odometerKm.toLocaleString()} km` : ''}; the COO decides`,
+          go,
+        });
+    }
+    const board = await this.transportBoard(user).catch(() => null);
+    for (const a of board?.alerts ?? []) if (transport || a.tone === 'crit') items.push({ tone: a.tone, tag: 'Driver', title: a.title, detail: a.detail, go });
+    if (await this.fleetRecordsReady()) {
+      for (const r of await this.store.list('fleetRecords', {})) {
+        // D2 (rule FLEET-SUMMONS): a summons the company paid is recovered from the driver at the wheel.
+        if (r.kind === 'SUMMONS' && r.status === 'closed' && r.outcome === 'PAID' && r.driverUserId && !r.recovery && transport)
+          items.push({ tone: 'warn', tag: 'Summons', title: `${r.driver}: recover ${r.issuer} ${r.ref}${r.amountRm != null ? ` RM${r.amountRm.toFixed(2)}` : ''}`, detail: 'The company paid it; the driver pays it back, or HR deducts it with the driver\'s signed consent', go });
+        if (r.status !== 'open') continue;
+        if (r.kind === 'ACCIDENT')
+          items.push({ tone: r.injured ? 'crit' : 'warn', tag: 'Accident', title: `${r.plate}: accident ${dateOf(r.at)}${r.injured ? ', someone hurt' : ''}`, detail: `${r.place}${r.driver ? `, driver ${r.driver}` : ''}; close it when the repair and insurer claim are settled`, go });
+        if (r.kind === 'SUMMONS' && r.dueOn) {
+          const d = daysBetween(today, r.dueOn);
+          if (d <= 7 && (transport || d < 0))
+            items.push({ tone: d < 0 ? 'crit' : 'warn', tag: 'Summons', title: `${r.plate}: ${r.issuer} ${r.ref} ${d < 0 ? 'overdue' : 'due'} ${r.dueOn}`, detail: `${r.what}${r.amountRm != null ? `, RM${r.amountRm.toFixed(2)}` : ''}${r.driver ? `, driver ${r.driver}` : ''}`, go });
+        }
+        if (r.kind === 'LICENCE' && r.expiresOn) {
+          const d = daysBetween(today, r.expiresOn);
+          if (d <= RULES.fleetReminders.value.renewalDays && (transport || d < 0))
+            items.push({ tone: d < 0 ? 'crit' : 'warn', tag: 'Licence', title: `${r.driver}: driving licence ${d < 0 ? 'expired' : 'expires'} ${r.expiresOn}`, detail: 'File the renewed licence; an expired licence cannot take a vehicle out', go });
+        }
+      }
+    }
+    const rank = { crit: 0, warn: 1, info: 2, neutral: 3, ok: 4 } as const;
+    return items.sort((a, b) => rank[a.tone] - rank[b.tone]);
+  }
+
   // ---------- PDPA (Fauzan, 26 Oct 2026) ----------
 
   /** The PDPA officer runs every personal data matter; the Operations Director and group leadership monitor. */
@@ -17517,6 +18225,19 @@ export class PrimaService {
    */
   private pdpaMaker(user: User): boolean {
     return this.pdpaRoleOf(user) === 'officer' || isOwnerAdmin(user);
+  }
+
+  /**
+   * D3 (Fauzan, 23 Nov 2026): breaches and data requests are acted on by the PDPA officer, or by the Chief of Staff while
+   * the officer is away (no officer on the books, or on approved leave today). The cover shows on every step it takes.
+   */
+  private async pdpaActor(user: User, what: string): Promise<'officer' | 'cover'> {
+    const by = await pdpaActs(this.store, user, this.today());
+    // P78: the owner, as master administrator, logs requests and opens cases as the officer would; working them on
+    // (verifying, answering, closing) stays with the PDPA officer or the Chief of Staff covering.
+    if (!by && isOwnerAdmin(user) && (what === 'logs data requests' || what === 'opens PDPA cases')) return 'officer';
+    if (!by) throw new AccessDenied('view', `(only the PDPA officer ${what}; the Chief of Staff acts only while the PDPA officer is away)`);
+    return by;
   }
 
   /** Breach clocks: the Commissioner within 72 hours of finding it; the people within 7 days of that, if harm is significant. */
@@ -17546,6 +18267,8 @@ export class PrimaService {
     const late = open.filter((c) => c.clock && (c.clock.commissionerLate || c.clock.subjectsLate));
     return {
       role,
+      /** D3: who may act on breaches here: the officer, or the Chief of Staff while covering. */
+      acts: await pdpaActs(this.store, user, this.today()),
       rules: { commissionerHours: RULES.pdpaBreach.value.commissionerHours, subjectsDays: RULES.pdpaBreach.value.subjectsDays, keepYears: settings.keepYears },
       settings: {
         enabled: settings.enabled,
@@ -17554,7 +18277,8 @@ export class PrimaService {
         updatedBy: settings.updatedBy,
         updatedAt: settings.updatedAt,
         history: settings.history,
-        canSwitch: !user.integration && user.leadership === 'cos',
+        // D1 (Fauzan, 23 Nov 2026): the Deputy switches it while covering for the Chief of Staff.
+        canSwitch: (await this.cosActsFor(user, 'pdpa_switch')).acts,
         canSetKeep: (!user.integration && user.leadership === 'cos') || role === 'officer',
       },
       canAdd: this.pdpaMaker(user),
@@ -17608,6 +18332,7 @@ export class PrimaService {
     return {
       role,
       canAdd: this.pdpaMaker(user),
+      acts: await pdpaActs(this.store, user, this.today()),
       rule,
       dpos: dpoRows,
       requests: reqRows,
@@ -17667,7 +18392,7 @@ export class PrimaService {
     user: User,
     input: { companyId: Id; kind: PdpaRequest['kind']; subjectName: string; subjectKind: PdpaRequest['subjectKind']; detail: string; receivedOn: IsoDate },
   ) {
-    if (!this.pdpaMaker(user)) throw new AccessDenied('view', '(the PDPA officer logs data requests)');
+    const by = await this.pdpaActor(user, 'logs data requests');
     const kind = (['ACCESS', 'CORRECTION', 'PORTABILITY', 'WITHDRAW_CONSENT', 'OBJECTION'] as const).find((k) => k === input.kind);
     if (!kind) throw new BadRequest('Choose the kind of request.');
     const subjectName = (input.subjectName ?? '').trim().slice(0, 100);
@@ -17700,7 +18425,7 @@ export class PrimaService {
         action: 'pdpa.request',
         entity: 'pdpa_request',
         entityId: r.id,
-        summary: `${r.ref} ${kind.toLowerCase()} request logged, due ${r.dueOn}.`,
+        summary: `${r.ref} ${kind.toLowerCase()} request logged, due ${r.dueOn}.${by === 'cover' ? ` (${PDPA_COVER_NOTE})` : ''}`,
       });
       return r;
     });
@@ -17708,7 +18433,7 @@ export class PrimaService {
 
   /** Verify identity first; answer, or refuse only on a ground the Act allows. */
   async pdpaRequestStep(user: User, id: Id, action: 'verify' | 'done' | 'refuse', note: string) {
-    if (this.pdpaRoleOf(user) !== 'officer') throw new AccessDenied('view', '(the PDPA officer handles data requests)');
+    const by = await this.pdpaActor(user, 'handles data requests');
     const r = await this.store.get('pdpaRequests', id);
     if (!r) throw new NotFound('Request');
     if (r.status !== 'open') throw new BadRequest('This request is closed.');
@@ -17734,7 +18459,7 @@ export class PrimaService {
         action: `pdpa.request.${action}`,
         entity: 'pdpa_request',
         entityId: id,
-        summary: `${r.ref} ${action}${text ? `: ${text}` : ''}.`,
+        summary: `${r.ref} ${action}${text ? `: ${text}` : ''}.${by === 'cover' ? ` (${PDPA_COVER_NOTE})` : ''}`,
       });
       return (await tx.get('pdpaRequests', id))!;
     });
@@ -17759,8 +18484,9 @@ export class PrimaService {
       cause?: string;
     },
   ) {
-    if (!this.pdpaMaker(user)) throw new AccessDenied('view', '(only the PDPA officer opens PDPA cases)');
+    const by = await this.pdpaActor(user, 'opens PDPA cases');
     if (!['BREACH', 'CLIENT_CONSENT', 'SOCIAL'].includes(input.kind)) throw new BadRequest('Choose breach, client consent or social media.');
+    if (by === 'cover' && input.kind !== 'BREACH') throw new AccessDenied('view', '(while covering, the Chief of Staff acts on breaches only)');
     const companyId = input.companyId || GROUP_EMPLOYER_ID;
     if (companyId !== GROUP_EMPLOYER_ID && !(await this.store.get('companies', companyId))) throw new NotFound('Company');
     const title = String(input.title ?? '').trim();
@@ -17775,7 +18501,7 @@ export class PrimaService {
       detail: String(input.detail ?? '')
         .trim()
         .slice(0, 2000),
-      openedBy: user.name,
+      openedBy: by === 'cover' ? `${user.name} (${PDPA_COVER_NOTE})` : user.name,
       openedAt: at,
       status: 'open',
       steps: [],
@@ -17818,7 +18544,7 @@ export class PrimaService {
         action: 'pdpa.open',
         entity: 'pdpa_case',
         entityId: c.id,
-        summary: `PDPA ${input.kind.toLowerCase().replace('_', ' ')}: ${c.title}.`,
+        summary: `PDPA ${input.kind.toLowerCase().replace('_', ' ')}: ${c.title}.${by === 'cover' ? ` (${PDPA_COVER_NOTE})` : ''}`,
       });
       return c;
     });
@@ -17835,9 +18561,10 @@ export class PrimaService {
     note: string,
     proof: ProofInput[] = [],
   ) {
-    if (this.pdpaRoleOf(user) !== 'officer') throw new AccessDenied('view', '(only the PDPA officer updates PDPA cases)');
+    const by = await this.pdpaActor(user, 'updates PDPA cases');
     const c = await this.store.get('pdpaCases', caseId);
     if (!c) throw new NotFound('PDPA case');
+    if (by === 'cover' && c.kind !== 'BREACH') throw new AccessDenied('view', '(while covering, the Chief of Staff acts on breaches only)');
     if (c.status === 'closed') throw new BadRequest('This case is closed.');
     const text = String(note ?? '')
       .trim()
@@ -17882,7 +18609,7 @@ export class PrimaService {
       consent_refused: 'Client refused',
       close: 'Closed',
     };
-    patch.steps = [...c.steps, { at, by: user.name, what: text ? `${LABEL[step]}: ${text}` : LABEL[step], docId: docs[0]?.id ?? null }];
+    patch.steps = [...c.steps, { at, by: by === 'cover' ? `${user.name} (${PDPA_COVER_NOTE})` : user.name, what: text ? `${LABEL[step]}: ${text}` : LABEL[step], docId: docs[0]?.id ?? null }];
     return this.store.transaction(async (tx) => {
       // Two people (or a double click) on the same case go one after the other; the second must reload.
       await tx.lock?.('pdpaCases', c.id);
@@ -17898,7 +18625,7 @@ export class PrimaService {
         action: 'pdpa.step',
         entity: 'pdpa_case',
         entityId: c.id,
-        summary: `${c.title}: ${LABEL[step].toLowerCase()}.`,
+        summary: `${c.title}: ${LABEL[step].toLowerCase()}.${by === 'cover' ? ` (${PDPA_COVER_NOTE})` : ''}`,
       });
       return updated;
     });
@@ -18266,7 +18993,7 @@ export class PrimaService {
         action: 'memo.publish',
         entity: 'memo',
         entityId: memo.id,
-        summary: `Memo ${memo.ref} to ${to}: ${t}. Read by ${readBy}.${old ? ` Replaces ${old.ref ?? old.id}.` : ''}`,
+        summary: `Memo ${memo.ref} to ${to}${audience === 'STAFF' && !isChiefOfStaff(user) ? ', published for the Chief of Staff' : ''}: ${t}. Read by ${readBy}.${old ? ` Replaces ${old.ref ?? old.id}.` : ''}`,
       });
       return memo;
     });
@@ -18515,6 +19242,8 @@ export class PrimaService {
     // V-X14 (Fauzan, 14 Nov 2026): no cash for rental home rent; the tenant pays cash in at a CDM and hands in the slip.
     // Office rent (Part S-X31) keeps every payment type.
     const home = u.type === 'RESIDENTIAL' && !u.office;
+    // D1 (department check, 23 Nov 2026): a home handled in Rumah sewa takes its rent there, where Finance confirms it from the bank.
+    if (home && (await this.rental.handles(u.id))) throw new BadRequest(`${u.code} is handled in Rumah sewa: record the rent there, where Finance confirms it from the bank.`);
     if (home && (method === 'CASH' || method === 'EWALLET')) throw new BadRequest('Rental homes take no cash rent: the tenant pays by transfer, FPX, cheque, or cash at a CDM with the slip.');
     const slip = method === 'CDM' ? this.itProofs(user, input.slip ?? []) : [];
     if (method === 'CDM' && !slip.length) throw new BadRequest('Attach the CDM slip photo.');
@@ -18819,6 +19548,7 @@ export class PrimaService {
         model: v.model,
         kind: v.kind,
         odometerKm: v.odometerKm,
+        registeredOn: v.registeredOn ?? null,
         roadTax: v.renewals.ROAD_TAX ?? null,
         insurance: v.renewals.INSURANCE ?? null,
         puspakom: v.renewals.PUSPAKOM ?? null,
@@ -19227,6 +19957,7 @@ export class PrimaService {
           model: v.model,
           kind: v.kind,
           odometerKm: v.odometerKm,
+          registeredOn: v.registeredOn || null,
           renewals,
           healthMonitor: v.healthMonitor,
           tracker: v.trackerId ? { id: v.trackerId, lastSeen: null } : null,
@@ -19337,6 +20068,14 @@ export class PrimaService {
           base.rentalMonthly = price('rentalMonthly');
           base.salePrice = price('salePrice');
           base.charge = v.charge || null;
+          // Selling at or below cost waits for the Finance Director (Fauzan, 23 Nov 2026: "unprofit need fd approval").
+          if (was && price('salePrice') !== (was.salePrice ?? null) && goodwillBelowCost(price('salePrice'), was.unitCost ?? null) && !this.canApproveBelowCost(user)) {
+            base.salePrice = was.salePrice ?? null;
+            base.pendingSale = { salePrice: price('salePrice')!, unitCost: was.unitCost!, by: user.name, byId: user.id, at, reason: 'Set on the store item; at or below cost' };
+          } else if (was && price('salePrice') !== (was.salePrice ?? null)) {
+            base.pendingSale = null;
+            base.belowCostOk = goodwillBelowCost(price('salePrice'), was.unitCost ?? null) ? { salePrice: price('salePrice')!, unitCost: was.unitCost!, by: user.name, at, reason: 'Set on the store item' } : null;
+          }
         }
         if (kind === 'stockItem' && !id && Number(v.onHand) > 0)
           base.opening = { qty: Number(v.onHand), by: user.name, byId: user.id, at, confirmed: null };
@@ -19397,7 +20136,7 @@ export class PrimaService {
           const award = cur?.bq?.award;
           if (award?.final && ((v.contractor ?? null) !== cur!.contractor || Number(v.cost ?? NaN) !== cur!.cost))
             throw new BadRequest('This job was awarded through its BQ. The contractor and price can change only through a new award.');
-          const open = award && !award.final && !(award.director && !award.director.approve) && !(award.coo && !award.coo.approve);
+          const open = award && !award.final && !awardTurnedDown(award);
           if (open && ((v.contractor ?? null) !== cur!.contractor || (v.cost ?? null) !== cur!.cost))
             throw new BadRequest('An award is waiting for approval. Change the contractor or price through the BQ.');
         }
@@ -19596,6 +20335,8 @@ export class PrimaService {
             companyName: isCentralEmployer(c.companyId) ? centralStaffName(c.companyId) : (companies.find((x) => x.id === c.companyId)?.name ?? c.companyId),
             mine: !!as,
             as,
+            // B1: HR records the Vice Chairman's answer when he gives it outside Prima.
+            canRecordVc: this.payVcRecordable(user, c, users),
             waitingOn:
               c.status !== 'pending'
                 ? null
@@ -19616,13 +20357,25 @@ export class PrimaService {
    * Verify or reject a pay change (HR Director, then the Vice Chairman's consent; the Vice Chairman alone for the HR
    * Director's own pay) or a salary account change (HR Director and Finance). Every verification needs a comment.
    */
-  async decidePayChange(user: User, id: Id, verify: boolean, note: string) {
+  async decidePayChange(user: User, id: Id, verify: boolean, note: string, vc?: { how?: unknown; givenOn?: unknown; note?: unknown; proof?: ProofInput[] }) {
     const c = await this.store.get('payChanges', id);
     if (!c) throw new NotFound('Pay change');
     if (c.status !== 'pending') throw new BadRequest('This change is already decided.');
     if (c.requestedById === user.id) throw new BadRequest('Someone else must verify a change you asked for.');
     if (user.personId && user.personId === c.personId) throw new BadRequest('Someone else must verify a change to your own pay or account.');
-    const as = this.payCheckRole(user, c, await this.store.list('users', {}));
+    const payUsers = await this.store.list('users', {});
+    // B1 (Fauzan, 23 Nov 2026): HR records the Vice Chairman's answer, given by message, call, meeting or letter.
+    let vcRec: ReturnType<PrimaService['vcRecordInput']> | null = null;
+    if (vc) {
+      if (!this.payVcRecordable(user, c, payUsers))
+        throw new BadRequest(
+          c.hrDirectorCheck?.byId === user.id
+            ? "You verified this change, so someone else records the Vice Chairman's answer."
+            : "This change is not waiting for the Vice Chairman's consent, or it is not yours to record.",
+        );
+      vcRec = this.vcRecordInput(user, vc, c.companyId, c.hrDirectorCheck?.at ?? c.requestedAt);
+    }
+    const as = vcRec ? ('vice_chairman' as const) : this.payCheckRole(user, c, payUsers);
     if (!as)
       throw new AccessDenied(
         'hr.pay',
@@ -19652,9 +20405,18 @@ export class PrimaService {
     const who = {
       hr_director: 'the HR Director',
       finance: 'Finance',
-      vice_chairman: this.pilotApproves(user) ? 'the CEO for the Vice Chairman (pilot)' : 'the Vice Chairman',
+      vice_chairman: vcRec
+        ? `the Vice Chairman by ${VC_HOW[vcRec.how]} on ${vcRec.givenOn} (recorded by ${user.name})`
+        : this.pilotApproves(user)
+          ? 'the CEO for the Vice Chairman (pilot)'
+          : 'the Vice Chairman',
     }[as];
     return this.store.transaction(async (tx) => {
+      if (vcRec) {
+        const vcRecord: VcConsentRecord = { how: vcRec.how, givenOn: vcRec.givenOn, consent: verify, recordedBy: user.name, recordedById: user.id, recordedAt: at, proofIds: await this.saveProof(tx, vcRec.rec), note: vcRec.note };
+        patch = { ...patch, vcRecord, ...(verify ? {} : { decidedBy: `Vice Chairman (recorded by ${user.name})` }) };
+        if (verify) patch = { ...patch, vcConsent: { by: `Vice Chairman (recorded by ${user.name})`, byId: user.id, at, note: text }, decidedBy: `Vice Chairman (recorded by ${user.name})` };
+      }
       const saved = await tx.update('payChanges', id, patch);
       if (done && c.kind === 'BANK') {
         // The full number waits behind the HR wall; a change keyed before the wall still carries it (legacy).
@@ -19922,7 +20684,12 @@ export class PrimaService {
 
   /** The IT board: assets, domains and websites, help requests, onboarding and tender IT parts. */
   async itBoard(user: User) {
-    const role = this.itRoleOf(user);
+    // IT gaps D3 (23 Nov 2026): the Finance team named for Merdeka's IT purchases sees IT's Finance tabs as the FD does.
+    const finTeam =
+      user.department === 'finance' && !user.integration && (!this.store.hasTable || (await this.store.hasTable('itPurchaseFinanceAuthorities')))
+        ? await this.store.get('itPurchaseFinanceAuthorities', 'merdeka').then((a) => a?.financeTeam ?? null, () => null)
+        : null;
+    const role = this.itRoleOf(user) ?? (merdekaFinanceMember(user, finTeam) ? ('finance' as const) : null);
     const today = this.today();
     const now = this.now();
     const hol = await this.itHolidays();
@@ -19950,7 +20717,12 @@ export class PrimaService {
                 ? 'You fixed this yourself, or may have (an older request), so you cannot confirm it.'
                 : null,
       }));
-    if (!role) return { role, mine, rule: RULES.it.value, jobRule: RULES.itJobs.value, holidaysSet: hol.isSet };
+    // IT gaps B3 (23 Nov 2026): a company manager sees the devices the company rents from Merdeka and its bills.
+    const companyRentals =
+      !role && user.role === 'company_manager' && !user.integration
+        ? await Promise.all(user.companyIds.map((cid) => companyItRentals(this.store, cid).catch(() => null))).then((xs) => xs.filter((x) => !!x))
+        : null;
+    if (!role) return { role, mine, rule: RULES.it.value, jobRule: RULES.itJobs.value, holidaysSet: hol.isSet, companyRentals };
     const hrOnly = role === 'hr', finOnly = role === 'finance';
     const [purchases, assets, domains, tickets, onboarding, allTenderTasks, companies, users, jobs, accounts, accessRequests] = await Promise.all([
       hrOnly ? [] : this.store.list('itPurchases', {}),
@@ -20283,7 +21055,19 @@ export class PrimaService {
       onboarding: none(onboardRows, hrOnly || finOnly),
       tenders: tenderRows,
       holidaysSet: hol.isSet,
+      // IT gaps B1 + D1 (23 Nov 2026): new joiners and leavers from HR that IT has not finished.
+      fromHr: hrOnly || finOnly ? [] : await this.itFromHrRows(users, onboarding, live, today),
+      tenderDeskOn: await this.deskOn().catch(() => false),
     };
+  }
+
+  /** B1 + D1: the joiners (approved in Accounts and Access) and leavers (access closed by HR) IT still has work for. */
+  async itFromHrRows(users: User[], onboarding: ItOnboarding[], assets: ItAsset[], today: IsoDate) {
+    const [accountRequests, policyRecs] = await Promise.all([
+      this.store.list('accountRequests', {}).catch(() => [] as import('./accounts-access').AccountRequest[]),
+      this.store.list('itPolicyRecs', {}).then((r) => r as ItPolicyRec[], () => [] as ItPolicyRec[]),
+    ]);
+    return itFromHr({ users, accountRequests, onboarding, assets, policyRecs, today });
   }
 
   /**
@@ -20888,8 +21672,9 @@ export class PrimaService {
       if (note.length < 3) throw new BadRequest('Give a reason of at least 3 characters to approve or reject.');
       const stepKey = role === 'coo' ? 'cooStep' : 'managerStep';
       if (action === 'reject') patch = { status: 'rejected', [stepKey]: { by: user.name, at, note } };
-      // Pilot: Procurement is not on the system yet, so IT gets the quotes itself under the same rule (IT-BUY).
-      else if (RULES.pilot.value.on) patch = { status: 'quoting', managerStep: { by: user.name, at, note }, quotes: [], online: [] };
+      // IT buys its own equipment (Fauzan, 31 Oct 2026; Merdeka IT policy, 13 Nov 2026): IT gets the quotes itself under
+      // IT-BUY, whether or not the old pilot switch is on (IT gaps B2, 23 Nov 2026).
+      else if (RULES.itBuy.value.route === 'it' || RULES.pilot.value.on) patch = { status: 'quoting', managerStep: { by: user.name, at, note }, quotes: [], online: [] };
       else {
         const seq = (await this.store.list('purRequests', { companyId: [p.ownerId] })).length + 1;
         pr = itPurchaseRequest(p, seq, at);
@@ -21778,6 +22563,8 @@ export class PrimaService {
     const role = this.itRoleOf(user);
     // P78: the owner may add a tender they found too; the tender executive and the IT Manager then run it.
     if (role !== 'manager' && user.itRole !== 'lead' && !isOwnerAdmin(user)) throw new BadRequest('The IT Manager (or the IT Lead) adds IT tenders.');
+    // IT gaps D2 (Fauzan, 23 Nov 2026): once Marketing's tender desk is started, every tender comes from Marketing.
+    if (await this.deskOn()) throw new BadRequest('Marketing lodges every tender now. Pass the tender to Marketing; they send the IT part to IT.');
     const exec = (await this.store.get('itSettings', 'it'))?.tenderExecId ?? null;
     if (!exec) throw new BadRequest('Name the IT tender executive first: the IT Executive paired with the IT Manager who does every IT tender.');
     const kind = input.kind === 'quotation' ? 'quotation' : 'tender';
@@ -24075,7 +24862,7 @@ export class PrimaService {
     const r = this.corpRoleOf(user, companyId);
     // Legal matters are need-to-know: the company secretary does not see them; Corporate Admin views (5D decides more).
     if (r === 'secretary') return null;
-    return r === 'control' || r === 'owner' ? 'view' : r;
+    return r === 'control' || r === 'owner' ? 'view' : r === 'filer' ? null : r;
   }
 
   private corpAuditState(a: CorpAudit, today: IsoDate, panel?: string[] | null) {
@@ -25499,8 +26286,24 @@ export class PrimaService {
     if (user.opsTier === 'ceo') return 'ceo';
     if (user.opsTier === 'coo') return 'coo';
     if (user.department === 'finance' || user.leadership === 'finance_director') return 'finance';
-    if (isGroupLeader(user) || user.opsTier === 'ogm' || user.opsTier === 'ops_director') return 'view';
+    if (isGroupLeader(user) || isOgmUser(user) || isOpsDirectorUser(user)) return 'view';
     return null;
+  }
+
+  /** The approval tier a person acts at on a purchase: the Inventory Manager checks before the COO (D1, 23 Nov 2026). */
+  private purTierOf(user: User, companyId: Id): PurTier | null {
+    const role = this.purRoleOf(user, companyId);
+    if (role === 'proc' && user.procRole === 'manager') return 'inventory';
+    return role === 'manager' || role === 'coo' || role === 'ceo' ? role : null;
+  }
+
+  /** D5: an urgent purchase whose quotes and online prices have not all followed yet; overdue after the due date. */
+  private purUrgentOwed(r: PurRequest, today: IsoDate): 'due' | 'overdue' | null {
+    if (!r.urgent || r.status === 'rejected') return null;
+    const rule = RULES.procurement.value;
+    const onlineNeed = r.forOffice ? rule.officeOnlineChecksNeeded : rule.onlineChecksNeeded;
+    if (r.quotes.length >= rule.quotesNeeded && (r.online ?? []).length >= onlineNeed) return null;
+    return today > r.urgent.quotesDue ? 'overdue' : 'due';
   }
 
   private purSupplierState(s: PurSupplier, today: IsoDate): { state: 'approved' | 'review_due' | 'incomplete' | 'blocked'; missing: string[] } {
@@ -25554,23 +26357,34 @@ export class PrimaService {
     };
     const name = (id: Id) => (id === GROUP_EMPLOYER_ID ? 'PWVSB (central)' : id === GOV_OPS_COMPANY_ID ? 'Goodwill Empire (store)' : (companies.find((c) => c.id === id)?.name ?? id));
     const supplierRows = suppliers
-      .map((s) => ({ supplier: s, companyName: name(s.companyId), role: this.purRoleOf(user, s.companyId), ...this.purSupplierState(s, today) }))
+      .map((s) => ({ supplier: s, companyName: name(s.companyId), role: this.purRoleOf(user, s.companyId), ...this.purSupplierState(s, today), record: supplierRecord(s.id, requests, today) }))
       .sort((a, b) => a.companyName.localeCompare(b.companyName) || a.supplier.name.localeCompare(b.supplier.name));
     const reqRows = requests
       .map((r) => {
         const role = this.purRoleOf(user, r.companyId);
         const nextTier = r.status === 'awaiting_approval' ? (r.tiers[r.approvals.length] ?? null) : null;
         const approvedBy = r.approvals.map((a) => a.byId);
-        const canApprove = !!nextTier && nextTier === role && r.raisedById !== user.id && !approvedBy.includes(user.id);
+        const canApprove =
+          !!nextTier &&
+          nextTier === this.purTierOf(user, r.companyId) &&
+          r.raisedById !== user.id &&
+          !approvedBy.includes(user.id) &&
+          !(nextTier === 'inventory' && r.submitted?.byId === user.id);
         const lowest = r.quotes.length ? Math.min(...r.quotes.map((q) => q.amount)) : null;
-        const chosen = r.quotes.find((q) => q.supplierId === r.chosenSupplierId) ?? null;
+        const onlinePick = r.chosenOnline != null ? (r.online ?? [])[r.chosenOnline] ?? null : null;
+        const chosen = onlinePick
+          ? { supplierId: '', amount: onlinePick.amount, ref: onlinePick.ref, by: onlinePick.by, at: onlinePick.at, online: onlinePick.source }
+          : (r.quotes.find((q) => q.supplierId === r.chosenSupplierId) ?? null);
+        const urgentOwed = this.purUrgentOwed(r, today);
         const waiting =
           r.status === 'quoting'
             ? 'Procurement: 3 quotes and the online price'
             : r.status === 'awaiting_approval'
-              ? ({ manager: 'Company manager', coo: 'COO', ceo: 'CEO' } as const)[nextTier!]
+              ? ({ inventory: 'Inventory Manager to check', manager: 'Company manager', coo: 'COO', ceo: 'CEO' } as const)[nextTier!]
               : r.status === 'approved'
-                ? 'Procurement to order'
+                ? onlinePick && !r.onlinePay
+                  ? 'Finance to approve paying the online platform'
+                  : 'Procurement to order'
                 : r.status === 'ordered'
                   ? 'Storekeeper to receive'
                   : r.status === 'received'
@@ -25579,7 +26393,7 @@ export class PrimaService {
                       : 'Finance to match the invoice'
                     : null;
         const tone: 'crit' | 'warn' | 'info' | 'ok' =
-          r.status === 'rejected' ? 'info' : r.match && !r.match.ok ? 'crit' : r.status === 'posted' ? 'ok' : canApprove ? 'warn' : 'info';
+          r.status === 'rejected' ? 'info' : (r.match && !r.match.ok) || purOrderLate(r, today) || urgentOwed === 'overdue' ? 'crit' : r.status === 'posted' && !urgentOwed ? 'ok' : canApprove ? 'warn' : 'info';
         return {
           req: r,
           companyName: name(r.companyId),
@@ -25589,7 +26403,17 @@ export class PrimaService {
           canApprove,
           // Correct and send again after a rejection (Arisha main review round 2): Procurement or the raiser, not the rejecter.
           canReopen: r.status === 'rejected' && (role === 'proc' || r.raisedById === user.id) && r.rejected?.byId !== user.id,
-          canWork: (role === 'proc' && ['quoting', 'approved'].includes(r.status)) || (role === 'store' && r.status === 'ordered'),
+          canWork: (role === 'proc' && (['quoting', 'approved'].includes(r.status) || !!urgentOwed)) || (role === 'store' && r.status === 'ordered'),
+          /** D5: the quotes still owed after an urgent approval ('due' until the date, then 'overdue'). */
+          urgentOwed,
+          /** D5: the CEO sees an urgent purchase the COO approved alone, and marks it seen. */
+          canSeeUrgent: role === 'ceo' && !!r.urgent && !r.urgent.ceoSeen && r.status !== 'rejected' && r.status !== 'awaiting_approval',
+          /** D3: Finance approves paying the online platform before Procurement orders. */
+          canPayOnline: role === 'finance' && r.status === 'approved' && !!onlinePick && !r.onlinePay,
+          /** The supplier's promised date has passed and the goods are not in (23 Nov 2026). */
+          late: purOrderLate(r, today),
+          /** Per line, the last price paid for the same store item, shown beside new quotes (23 Nov 2026). */
+          lastPaid: r.lines.map((l) => lastPaidFor(l.stockItemId, requests, r.id)),
           onlineLowest: r.online?.length ? Math.min(...r.online.map((o) => o.amount)) : null,
           canFinance: role === 'finance' && r.status === 'received',
           paid: r.status === 'posted' ? paidOf(r) : null,
@@ -25612,6 +26436,19 @@ export class PrimaService {
           // Counted with a witness at least monthly; a difference stays visible until explained (insider abuse audit).
           countDue: !i.lastCount || daysBetween(i.lastCount.on, today) > RULES.insiderControls.value.stockCountDays,
           countDiff: i.lastCount ? i.lastCount.counted - i.lastCount.onHand : 0,
+          /**
+           * "Buy more" (23 Nov 2026): the reorder suggestion from usage and supplier lead time, else up to Max, else
+           * nothing (Procurement types the quantity). It only fills the purchase form; nothing is bought by itself.
+           */
+          buyMore:
+            i.onHand <= i.reorderAt && !isKit(i)
+              ? (() => {
+                  const sug = reorderSuggestion(i, issues, requests, today);
+                  if (sug) return { qty: sug.qty, why: `about ${sug.weekly} a week used, ${sug.leadDays} days to arrive` };
+                  if (i.maxAt != null && i.maxAt > i.onHand) return { qty: i.maxAt - i.onHand, why: 'up to the Max level' };
+                  return { qty: null, why: 'no usage or Max yet; type the quantity' };
+                })()
+              : null,
           // The item's life: bought in, in the store, with people, back in the store, damaged, lost or used up.
           life: {
             received: requests
@@ -25644,6 +26481,7 @@ export class PrimaService {
     const billing = allowed.includes(GOV_OPS_COMPANY_ID) && this.purRoleOf(user, GOV_OPS_COMPANY_ID) !== 'store'
       ? [this.goodwillBill(today.slice(0, 7), items, issues, companies), this.goodwillBill(addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7), items, issues, companies)]
       : [];
+    const im = user.department === 'procurement' && user.procRole === 'manager';
     return {
       rule,
       roles,
@@ -25653,6 +26491,24 @@ export class PrimaService {
       supplierFor: allowed.filter((id) => this.purCanAddSupplier(user, id)).map((id) => ({ id, name: name(id) })),
       losses,
       billing,
+      /** D3: the CEO's online buying limit (null: buying from an online platform is off). */
+      onlineBuyMax: (await this.approvalLimitsRow()).onlineBuyMax ?? null,
+      /** D4: the serial item types the Inventory Manager may link store items to (empty for everyone else). */
+      serialSkus: im ? await this.items.serialSkus() : [],
+      canLinkSku: im,
+      /** The Inventory Manager sets Goodwill's prices; the Finance Director (or the CEO) may too (Fauzan, 23 Nov 2026). */
+      canSetGoodwillPrices: this.canSetGoodwillPrices(user) && allowed.includes(GOV_OPS_COMPANY_ID),
+      canApproveBelowCost: this.canApproveBelowCost(user) && allowed.includes(GOV_OPS_COMPANY_ID),
+      /** Goodwill stock by price: on hand x unit cost; items with no cost yet are counted, not guessed. */
+      goodwillStockValue: (() => {
+        const gw = items.filter((i) => i.companyId === GOV_OPS_COMPANY_ID && !(i.kitParts?.length));
+        return {
+          value: Math.round(gw.reduce((n, i) => n + (i.unitCost == null ? 0 : i.onHand * i.unitCost), 0) * 100) / 100,
+          noCost: gw.filter((i) => i.unitCost == null && i.onHand > 0).length,
+          belowCost: gw.filter((i) => goodwillBelowCost(i.salePrice ?? null, i.unitCost ?? null)).length,
+          waiting: gw.filter((i) => !!i.pendingSale).length,
+        };
+      })(),
       suppliers: supplierRows,
       requests: reqRows,
       stock: stockRows,
@@ -25672,7 +26528,8 @@ export class PrimaService {
           ? (await this.store.list('users')).filter((u) => this.isGovOm(u)).map((u) => ({ id: u.id, name: u.name, title: u.title ?? '' }))
           : [],
       kpis: {
-        awaitingMe: reqRows.filter((r) => r.canApprove || r.canFinance).length,
+        awaitingMe: reqRows.filter((r) => r.canApprove || r.canFinance || r.canPayOnline || r.canSeeUrgent).length,
+        urgentOwed: reqRows.filter((r) => r.urgentOwed && r.role === 'proc').length,
         open: reqRows.filter((r) => !['posted', 'rejected'].includes(r.req.status)).length,
         mismatch: reqRows.filter((r) => r.req.match && !r.req.match.ok && r.req.status === 'received').length,
         suppliersNotReady: supplierRows.filter((s) => s.state !== 'approved').length,
@@ -25682,6 +26539,7 @@ export class PrimaService {
         toCollect: toCollect.length,
         lossesToConfirm: losses.length,
         countsDue: stockRows.filter((s) => s.countDue).length,
+        lateOrders: reqRows.filter((r) => r.late).length,
       },
     };
   }
@@ -25707,12 +26565,15 @@ export class PrimaService {
     }));
     if (!lines.length || lines.some((l) => !l.item || !(l.qty > 0 && l.qty <= 10000) || !(l.unitPrice > 0)))
       throw new BadRequest('Each line needs an item, a quantity and an estimated price.');
-    const all = await this.store.list('purRequests', { companyId: [companyId] });
     const at = this.now();
-    const r: PurRequest = {
-      id: `pr-${companyId}-${all.length + 1}-${toMs(at)}`,
+    // Numbered inside the transaction under a per-company lock, from the highest number used (23 Nov 2026: the old
+    // count-based number could repeat when two purchases were raised at the same moment).
+    const make = (all: PurRequest[]): PurRequest => {
+      const ref = nextPurRef(companyId, all);
+      return {
+      id: `pr-${companyId}-${ref.slice(ref.lastIndexOf('-') + 1)}-${toMs(at)}`,
       companyId,
-      ref: `PR-${companyId.replace('co-', '').toUpperCase()}-${String(all.length + 1).padStart(4, '0')}`,
+      ref,
       title,
       category,
       lines,
@@ -25735,8 +26596,11 @@ export class PrimaService {
       match: null,
       posted: null,
       ...(input.forOffice === true ? { forOffice: true } : {}),
+      };
     };
     return this.store.transaction(async (tx) => {
+      await tx.lock?.('purRequests', `pur-seq:${companyId}`);
+      const r = make(await tx.list('purRequests', { companyId: [companyId] }));
       await tx.insert('purRequests', r);
       await tx.audit({
         at,
@@ -25755,8 +26619,13 @@ export class PrimaService {
   async purStep(
     user: User,
     id: Id,
-    action: 'quote' | 'online' | 'submit' | 'approve' | 'reject' | 'reopen' | 'order' | 'receive' | 'invoice' | 'post',
+    action: 'quote' | 'online' | 'submit' | 'approve' | 'reject' | 'reopen' | 'order' | 'receive' | 'invoice' | 'post' | 'pay_online' | 'urgent_seen',
     body: {
+      /** submit (D3): the online listing (its number in the online prices, from 0) chosen instead of a supplier quote. */
+      online?: number;
+      /** submit (D5): the urgent path, with the reason. */
+      urgent?: boolean;
+      urgentReason?: string;
       /** reopen: the corrected title and lines, when the rejection was about what is being bought. */
       title?: string;
       lines?: { item: string; stockItemId: Id | null; qty: number; unitPrice: number }[];
@@ -25765,6 +26634,8 @@ export class PrimaService {
       ref?: string;
       note?: string;
       qty?: number[];
+      /** order: the delivery date the supplier promised. */
+      expectedOn?: string;
       /** receive: per line, damaged and wrong-item pieces with a note (Part T7). */
       condition?: { damaged?: number; wrong?: number; note?: string }[];
       eInvoiceUuid?: string;
@@ -25789,13 +26660,18 @@ export class PrimaService {
     const ref = (body.ref ?? '').trim().slice(0, 60);
     const step = { by: user.name, byId: user.id, at, note };
     let patch: Partial<PurRequest>;
-    let stockAdds: { id: Id; add: number }[] = [];
+    let stockAdds: { id: Id; add: number; cost?: number | null }[] = [];
+    // D4: serial units to give item register IDs when received.
+    let registers: { skuId: Id; count: number; item: string }[] = [];
     let quoteDocs: EvidenceDoc[] = [];
     const wrong = () => new BadRequest(`${r.ref} is ${r.status.replace('_', ' ')}; you cannot ${action} it now.`);
+    // D5: after an urgent approval the missing quotes and online prices still follow (within 3 working days).
+    const late = !!this.purUrgentOwed(r, today) && r.status !== 'quoting';
     if (action === 'quote') {
-      if (role !== 'proc' || r.status !== 'quoting') throw wrong();
+      if (role !== 'proc' || (r.status !== 'quoting' && !late)) throw wrong();
       const s = await this.store.get('purSuppliers', body.supplierId ?? '');
-      if (!s || s.companyId !== r.companyId) throw new BadRequest('Choose one of the company’s suppliers.');
+      // D2 (Fauzan, 23 Nov 2026): one group supplier list for every company; older company lists still count.
+      if (!s || (s.companyId !== r.companyId && s.companyId !== GROUP_EMPLOYER_ID)) throw new BadRequest('Choose a supplier from the group list.');
       const st = this.purSupplierState(s, today);
       if (st.state !== 'approved')
         throw new BadRequest(`${s.name} is not an approved supplier: ${st.state === 'blocked' ? 'blocked' : st.missing.join(', ')}.`);
@@ -25807,7 +26683,7 @@ export class PrimaService {
       if (!quoteDocs.length) throw new BadRequest(`Attach ${s.name}'s quotation (PDF or a scan).`);
       patch = { quotes: [...r.quotes, { supplierId: s.id, amount, ref, by: user.name, at, docIds: quoteDocs.map((d) => d.id) }] };
     } else if (action === 'online') {
-      if (role !== 'proc' || r.status !== 'quoting') throw wrong();
+      if (role !== 'proc' || (r.status !== 'quoting' && !late)) throw wrong();
       const source = (body.source ?? '').trim().slice(0, 60);
       const amount = Math.round(Number(body.amount) * 100) / 100;
       if (!source || !ref || !(amount > 0)) throw new BadRequest('Give the website or marketplace, the link or listing and the price for the same items.');
@@ -25816,48 +26692,75 @@ export class PrimaService {
       patch = { online: [...(r.online ?? []), { source, ref, amount, by: user.name, at, docIds: quoteDocs.map((d) => d.id) }] };
     } else if (action === 'submit') {
       if (role !== 'proc' || r.status !== 'quoting') throw wrong();
-      const chosen = r.quotes.find((q) => q.supplierId === body.supplierId);
-      if (!chosen) throw new BadRequest('Choose the quote to go with.');
-      const amount = Math.max(r.total, chosen.amount);
+      const online = r.online ?? [];
+      const limits = await this.approvalLimitsRow();
+      // D5 (Fauzan, 23 Nov 2026): urgent. The COO approves alone with a reason; the quotes follow within 3 working days.
+      const urgent = body.urgent === true;
+      const urgentReason = (body.urgentReason ?? '').trim().slice(0, 300);
+      if (urgent && urgentReason.length < 3) throw new BadRequest('Say why it is urgent.');
+      // D3 (Fauzan, 23 Nov 2026): an online listing may be the chosen source, up to the CEO's online buying limit.
+      const onlineIdx = body.online == null ? null : Math.round(Number(body.online));
+      const pickOnline = onlineIdx != null ? online[onlineIdx] : undefined;
+      if (onlineIdx != null && !pickOnline) throw new BadRequest('Choose the online listing to buy from.');
+      const chosen = pickOnline ? null : r.quotes.find((q) => q.supplierId === body.supplierId);
+      if (!pickOnline && !chosen) throw new BadRequest('Choose the quote to go with.');
+      const chosenAmount = pickOnline ? pickOnline.amount : chosen!.amount;
+      const amount = Math.max(r.total, chosenAmount);
+      if (pickOnline) {
+        const lim = limits.onlineBuyMax ?? null;
+        if (lim == null) throw new BadRequest('Buying from an online platform is off until the CEO sets the online buying limit.');
+        if (amount > lim) throw new BadRequest(`Buying online is allowed up to RM${lim.toFixed(2)}; this is RM${amount.toFixed(2)}. Choose a supplier quote.`);
+      }
       const need = amount > rule.quotesAbove ? rule.quotesNeeded : 1;
-      if (r.quotes.length < need)
+      if (r.quotes.length < need && !urgent)
         throw new BadRequest(
           `Above RM${rule.quotesAbove.toLocaleString('en-MY')} it needs ${need} quotes from approved suppliers; there ${r.quotes.length === 1 ? 'is' : 'are'} ${r.quotes.length}.`,
         );
-      const lowest = Math.min(...r.quotes.map((q) => q.amount));
-      if (chosen.amount > lowest && !note) throw new BadRequest('The chosen quote is not the lowest; say why.');
-      const online = r.online ?? [];
+      // Lowest of everything priced: the quotes, and the online listings too when buying online.
+      const lowest = Math.min(...r.quotes.map((q) => q.amount), ...(pickOnline ? online.map((o) => o.amount) : []));
+      if (chosenAmount > lowest && !note) throw new BadRequest(pickOnline ? 'The chosen listing is not the lowest price; say why.' : 'The chosen quote is not the lowest; say why.');
       // Part U-X14: an office purchase needs 2 online prices; store and site stock stays 1 (U-X15).
       const onlineNeed = r.forOffice ? rule.officeOnlineChecksNeeded : rule.onlineChecksNeeded;
-      if (online.length < onlineNeed) throw new BadRequest(onlineNeed > 1 ? `An office purchase needs ${onlineNeed} online or marketplace prices for the same items; there ${online.length === 1 ? 'is' : 'are'} ${online.length}.` : 'Check the online and marketplace price for the same items first.');
-      const onlineLow = Math.min(...online.map((o) => o.amount));
-      const dearer = chosen.amount > onlineLow * (1 + rule.onlineTolerancePct / 100);
+      if (online.length < onlineNeed && !urgent) throw new BadRequest(onlineNeed > 1 ? `An office purchase needs ${onlineNeed} online or marketplace prices for the same items; there ${online.length === 1 ? 'is' : 'are'} ${online.length}.` : 'Check the online and marketplace price for the same items first.');
+      const onlineLow = online.length ? Math.min(...online.map((o) => o.amount)) : Infinity;
+      const dearer = !pickOnline && chosenAmount > onlineLow * (1 + rule.onlineTolerancePct / 100);
       const onlineReason = (body.onlineReason ?? '').trim().slice(0, 300);
       if (dearer && !onlineReason)
         throw new BadRequest(`The chosen quote is more than ${rule.onlineTolerancePct}% above the online price (RM${onlineLow.toFixed(2)}); say why.`);
+      // Within the CEO's purchase limit (Fauzan, 3 Nov 2026) the COO approves alone; above it, or with no limit set,
+      // the usual approvers.
+      const lim = limits.purchasesMax;
+      const tiers: PurTier[] = urgent ? ['coo'] : lim != null && amount <= lim ? rule.approvers.filter((a) => a !== 'ceo') : [...rule.approvers];
+      // D1 (Fauzan, 23 Nov 2026): the Inventory Manager checks it before the COO, unless the Inventory Manager raised or
+      // sourced it (no one checks their own) or there is no Inventory Manager yet. Not on the urgent path.
+      if (!urgent) {
+        const ims = (await this.store.list('users')).filter((u) => !u.integration && u.department === 'procurement' && u.procRole === 'manager' && !accessClosed(u, today));
+        const imInvolved = ims.some((u) => u.id === r.raisedById || u.id === user.id);
+        if (ims.length && !imInvolved) tiers.unshift('inventory');
+      }
+      // P78: a purchase the owner raised is approved by the COO, never by its own raiser (maker-checker).
+      const raiser = await this.store.get('users', r.raisedById);
+      if (raiser && isOwnerAdmin(raiser) && tiers.includes('ceo')) {
+        tiers.splice(tiers.indexOf('ceo'), 1);
+        if (!tiers.length) tiers.push('coo');
+      }
       patch = {
         status: 'awaiting_approval',
-        chosenSupplierId: chosen.supplierId,
-        notLowestReason: chosen.amount > lowest ? note : null,
+        submitted: step,
+        chosenSupplierId: chosen ? chosen.supplierId : null,
+        chosenOnline: pickOnline ? onlineIdx : null,
+        notLowestReason: chosenAmount > lowest ? note : null,
         onlineReason: dearer ? onlineReason : null,
-        // Within the CEO's purchase limit (Fauzan, 3 Nov 2026) the COO approves alone; above it, or with no limit set,
-        // the usual approvers.
-        tiers: await (async () => {
-          const lim = (await this.approvalLimitsRow()).purchasesMax;
-          const tiers = lim != null && amount <= lim ? rule.approvers.filter((a) => a !== 'ceo') : [...rule.approvers];
-          // P78: a purchase the owner raised is approved by the COO, never by its own raiser (maker-checker).
-          const raiser = await this.store.get('users', r.raisedById);
-          if (raiser && isOwnerAdmin(raiser)) {
-            const others = tiers.filter((a) => a !== 'ceo');
-            return others.length ? others : (['coo'] as typeof tiers);
-          }
-          return tiers;
-        })(),
+        tiers,
+        urgent: urgent
+          ? { reason: urgentReason, by: user.name, byId: user.id, at, quotesDue: addWorkingDaysExcept(today, rule.urgentQuotesWorkingDays, (await this.itHolidays()).set), ceoSeen: null }
+          : null,
       };
     } else if (action === 'approve' || action === 'reject') {
       const tier = r.status === 'awaiting_approval' ? r.tiers[r.approvals.length] : null;
-      if (!tier || tier !== role) throw wrong();
+      if (!tier || tier !== this.purTierOf(user, r.companyId)) throw wrong();
       if (r.raisedById === user.id) throw new BadRequest('You raised this request, so someone else approves it.');
+      if (tier === 'inventory' && r.submitted?.byId === user.id) throw new BadRequest('You sent this request for approval, so the COO decides it.');
       if (r.approvals.some((a) => a.byId === user.id)) throw new BadRequest('You have already approved this request.');
       if (action === 'reject') {
         if (!note) throw new BadRequest('Say why it is rejected.');
@@ -25919,15 +26822,34 @@ export class PrimaService {
         chosenSupplierId: null,
         notLowestReason: null,
         onlineReason: null,
+        chosenOnline: null,
+        onlinePay: null,
+        urgent: null,
         tiers: [],
         approvals: [],
         rejected: null,
       };
+    } else if (action === 'pay_online') {
+      // D3: Finance approves paying the online platform (the listing screenshot is on the request) before it is ordered.
+      if (role !== 'finance' || r.status !== 'approved' || r.chosenOnline == null || r.onlinePay) throw wrong();
+      if (r.raisedById === user.id || r.submitted?.byId === user.id) throw new BadRequest('You raised or sourced this purchase, so someone else in Finance approves the payment.');
+      requireApprovalReason(note);
+      patch = { onlinePay: step };
+    } else if (action === 'urgent_seen') {
+      // D5: the CEO sees an urgent purchase the COO approved alone.
+      if (role !== 'ceo' || !r.urgent || r.urgent.ceoSeen || r.status === 'awaiting_approval' || r.status === 'rejected') throw wrong();
+      patch = { urgent: { ...r.urgent, ceoSeen: step } };
     } else if (action === 'order') {
       if (role !== 'proc' || r.status !== 'approved') throw wrong();
       if (!ref) throw new BadRequest('Give the purchase order number.');
-      const chosen = r.quotes.find((q) => q.supplierId === r.chosenSupplierId)!;
-      patch = { status: 'ordered', po: { ref, by: user.name, at, amount: chosen.amount } };
+      const pick = r.chosenOnline != null ? (r.online ?? [])[r.chosenOnline] : undefined;
+      if (pick && !r.onlinePay) throw new BadRequest('Finance approves paying the online platform before it is ordered.');
+      const chosen = pick ?? r.quotes.find((q) => q.supplierId === r.chosenSupplierId)!;
+      // The date the supplier promised (23 Nov 2026): a late order is flagged, and the supplier's record shows it.
+      const expectedOn = body.expectedOn ? String(body.expectedOn).slice(0, 10) : null;
+      if (expectedOn && (!/^\d{4}-\d{2}-\d{2}$/.test(expectedOn) || expectedOn < today || expectedOn > addDays(today, 366)))
+        throw new BadRequest('The delivery date must be a date from today up to a year ahead.');
+      patch = { status: 'ordered', po: { ref, by: user.name, at, amount: chosen.amount, expectedOn } };
     } else if (action === 'receive') {
       if (role !== 'store' || r.status !== 'ordered') throw wrong();
       if (r.approvals.some((a) => a.byId === user.id)) throw new BadRequest('Someone who approved the purchase does not receive the goods.');
@@ -25952,10 +26874,22 @@ export class PrimaService {
       const doNo = String(body.ref ?? '').trim().slice(0, 60);
       if (RULES.inventoryControl.value.grnDoRequired && (!doNo || !quoteDocs.length))
         throw new BadRequest("Give the supplier's delivery order (DO) number and attach a photo of the DO.");
-      stockAdds = r.lines.map((l, i) => ({ id: l.stockItemId ?? '', add: bad[i].good })).filter((x) => x.id && x.add > 0);
+      // What each unit cost (Fauzan, 23 Nov 2026: stock by price): the order amount shared over the lines by their value.
+      const est = r.lines.reduce((n, l) => n + l.qty * l.unitPrice, 0);
+      const scale = r.po && est > 0 ? r.po.amount / est : 1;
+      stockAdds = r.lines
+        .map((l, i) => ({ id: l.stockItemId ?? '', add: bad[i].good, cost: l.unitPrice > 0 ? Math.round(l.unitPrice * scale * 100) / 100 : null }))
+        .filter((x) => x.id && x.add > 0);
       // Part U2: no stock comes in while a major count is open (unless the OGM lets one urgent move through).
       for (const a of stockAdds) await this.inventory.assertMovable(r.companyId, a.id, a.add, 'receive');
       for (const a of stockAdds) await this.inventory.assertWeekOpen(r.companyId, this.today());
+      // D4 (Fauzan, 23 Nov 2026): a store item linked to a serial item type gets one item register ID per good unit.
+      for (const a of stockAdds) {
+        const it = await this.store.get('stockItems', a.id);
+        if (!it?.itemSkuId) continue;
+        const sku = await this.items.skuFor(it.itemSkuId);
+        if (sku?.tracking === 'SERIALIZED') registers.push({ skuId: sku.id, count: a.add, item: it.name });
+      }
       const ids = quoteDocs.map((d) => d.id);
       patch = { status: 'received', grn: { ...step, qty, condition: bad, ...(ids.length ? { docIds: ids, doDocIds: ids } : {}), ...(doNo ? { doNo } : {}) } };
     } else if (action === 'invoice') {
@@ -25965,7 +26899,12 @@ export class PrimaService {
       const amount = Math.round(Number(body.amount) * 100) / 100;
       if (!number || !(amount > 0)) throw new BadRequest('Give the invoice number and amount.');
       const notes: string[] = [];
-      if (rule.eInvoiceRequired && !uuid) notes.push('No e-Invoice UUID from MyInvois: ask the supplier for a validated e-Invoice.');
+      // D3: bought on an online platform, the platform's receipt stands in for the supplier's e-Invoice.
+      const online = r.chosenOnline != null;
+      if (online) {
+        if (body.proof?.length) quoteDocs = this.proofRecords(user, r.companyId, null, body.proof, {}, { documentsOnly: true }).docs;
+        if (!quoteDocs.length && !r.receiptDocIds?.length) throw new BadRequest("Attach the online platform's receipt for this order.");
+      } else if (rule.eInvoiceRequired && !uuid) notes.push('No e-Invoice UUID from MyInvois: ask the supplier for a validated e-Invoice.');
       r.lines.forEach((l, i) => {
         if ((r.grn?.qty[i] ?? 0) < l.qty) notes.push(`${l.item}: ordered ${l.qty}, received ${r.grn?.qty[i] ?? 0}.`);
         const c = r.grn?.condition?.[i];
@@ -25974,7 +26913,11 @@ export class PrimaService {
       const po = r.po!.amount;
       if (Math.abs(amount - po) > (po * rule.matchTolerancePct) / 100)
         notes.push(`Invoice RM${amount.toFixed(2)} differs from the order RM${po.toFixed(2)} by more than ${rule.matchTolerancePct}%.`);
-      patch = { invoice: { eInvoiceUuid: uuid, number, amount, by: user.name, at }, match: { ok: !notes.length, notes, by: user.name, at } };
+      patch = {
+        invoice: { eInvoiceUuid: uuid, number, amount, by: user.name, at },
+        match: { ok: !notes.length, notes, by: user.name, at },
+        ...(quoteDocs.length ? { receiptDocIds: quoteDocs.map((d) => d.id) } : {}),
+      };
     } else if (action === 'post') {
       if (role !== 'finance' || r.status !== 'received') throw wrong();
       if (!r.match?.ok) throw new BadRequest('The three-way match has not passed; it cannot go into SQL Account.');
@@ -25988,7 +26931,18 @@ export class PrimaService {
       for (const s of stockAdds) {
         await tx.lock?.('stockItems', s.id);
         const it = await tx.get('stockItems', s.id);
-        if (it) await tx.update('stockItems', s.id, { onHand: it.onHand + s.add });
+        if (!it) continue;
+        const cost = s.cost == null ? (it.unitCost ?? null) : it.unitCost == null || it.onHand <= 0 ? s.cost : Math.round(((it.onHand * it.unitCost + s.add * s.cost) / (it.onHand + s.add)) * 100) / 100;
+        await tx.update('stockItems', s.id, {
+          onHand: it.onHand + s.add,
+          ...(s.cost == null ? {} : { unitCost: cost, costSet: { by: user.name, at, reason: `${r.ref} received: ${s.add} at RM${s.cost.toFixed(2)}`, source: 'purchase' as const } }),
+        });
+      }
+      if (registers.length) {
+        const made: Id[] = [];
+        for (const [k, g] of registers.entries())
+          made.push(...(await this.items.registerReceived(tx, user, { skuId: g.skuId, partyId: r.companyId, count: g.count, note: `Received on ${r.ref}${patch.grn?.doNo ? `, DO ${patch.grn.doNo}` : ''}`, requestId: `grn-${id}-${k}`.slice(0, 80) })).map((x) => x.id));
+        if (made.length) await tx.update('purRequests', id, { grn: { ...patch.grn!, itemIds: made } });
       }
       await tx.audit({
         at,
@@ -26018,6 +26972,48 @@ export class PrimaService {
     return this.purRoleOf(user, companyId) === 'proc' || (isOwnerAdmin(user) && !!this.purRoleOf(user, companyId));
   }
 
+  /**
+   * The Purchase Order as a PDF, made from the approved and ordered request (Fauzan, 23 Nov 2026 "Do the gap": the PO was
+   * only a typed number). Read-only: anyone who sees the request may print it; it changes nothing.
+   */
+  async purOrderPdf(user: User, id: Id) {
+    const r = await this.store.get('purRequests', id);
+    if (!r || !this.purRoleOf(user, r.companyId)) throw new NotFound('Purchase request');
+    if (!r.po) throw new BadRequest(`${r.ref} has not been ordered yet; the PO is made when the order is placed.`);
+    const [sup, co] = await Promise.all([r.chosenSupplierId ? this.store.get('purSuppliers', r.chosenSupplierId) : Promise.resolve(undefined), this.store.get('companies', r.companyId)]);
+    const buyer = r.companyId === GROUP_EMPLOYER_ID ? 'PWVSB (central)' : r.companyId === GOV_OPS_COMPANY_ID ? 'Goodwill Empire Sdn Bhd' : (co?.name ?? r.companyId);
+    const pdf = simplePdf(purOrderPdfLines(r, buyer, sup ? { name: sup.name, ssmNo: sup.ssmNo } : null));
+    let bin = '';
+    for (let k = 0; k < pdf.length; k += 0x8000) bin += String.fromCharCode(...pdf.subarray(k, k + 0x8000));
+    return { name: `PO_${r.po.ref.replace(/[^A-Za-z0-9-]+/g, '_')}.pdf`, base64: btoa(bin) };
+  }
+
+  /**
+   * D4 (Fauzan, 23 Nov 2026): the Inventory Manager links a store item to a serial item type in the item register, so
+   * each unit received gets its own ID. The store stays the record for quantities and money. Null unlinks.
+   */
+  async purLinkItemSku(user: User, stockItemId: Id, skuId: Id | null, reason: string) {
+    const it = await this.store.get('stockItems', stockItemId);
+    if (!it || !this.purRoleOf(user, it.companyId)) throw new NotFound('Store item');
+    if (this.purRoleOf(user, it.companyId) !== 'proc' || user.procRole !== 'manager') throw new AccessDenied('view', '(the Inventory Manager links store items to the item register)');
+    if (isKit(it)) throw new BadRequest('A set holds no stock of its own; link each part instead.');
+    const why = (reason ?? '').trim().slice(0, 300);
+    if (why.length < 3) throw new BadRequest('Say why the link changes.');
+    if (skuId) {
+      const sku = await this.items.skuFor(skuId);
+      if (!sku) throw new BadRequest('Choose an item type from the item register.');
+      if (sku.tracking !== 'SERIALIZED') throw new BadRequest(`${sku.code} is counted by quantity; only serial item types get an ID per unit.`);
+      if (sku.category === 'it_device') throw new BadRequest('IT devices are registered by IT under Merdeka Network, not through the store.');
+    }
+    if ((it.itemSkuId ?? null) === (skuId || null)) throw new BadRequest('Nothing to change.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.update('stockItems', it.id, { itemSkuId: skuId || null });
+      await tx.audit({ at, actor: user.name, companyId: it.companyId, action: 'store.item_sku', entity: 'stock_item', entityId: it.id, summary: `${it.name}: ${skuId ? `linked to item register type ${skuId}` : 'unlinked from the item register'} (${why})` });
+      return (await tx.get('stockItems', it.id))!;
+    });
+  }
+
   /** The company adds a supplier with its due diligence; Finance verifies the bank account. */
   async addPurSupplier(
     user: User,
@@ -26031,13 +27027,16 @@ export class PrimaService {
     const bankAccount = (input.bankAccount ?? '').replace(/\s/g, '').slice(0, 30);
     if (!name || !ssmNo) throw new BadRequest('Give the supplier name and SSM number.');
     if (!bankName || !/^\d{6,20}$/.test(bankAccount)) throw new BadRequest('Give the bank and a valid account number.');
-    const existing = await this.store.list('purSuppliers', { companyId: [companyId] });
-    if (existing.some((s) => s.ssmNo === ssmNo)) throw new BadRequest('This supplier is already registered for the company.');
+    // D2 (Fauzan, 23 Nov 2026): one group supplier list, checked once by Finance and used by every company. A new
+    // supplier goes on the group list whichever company it is first bought for.
+    const listId = GROUP_EMPLOYER_ID;
+    const existing = await this.store.list('purSuppliers', { companyId: [listId] });
+    if (existing.some((s) => s.ssmNo === ssmNo)) throw new BadRequest('This supplier is already on the group supplier list; every company can use it.');
     const today = this.today();
     const at = this.now();
     const s: PurSupplier = {
-      id: `sup-${companyId}-${existing.length + 1}-${toMs(at)}`,
-      companyId,
+      id: `sup-${listId}-${existing.length + 1}-${toMs(at)}`,
+      companyId: listId,
       name,
       ssmNo,
       categories: (input.categories ?? []).filter((c) => PUR_CATEGORIES.includes(c)),
@@ -26055,11 +27054,11 @@ export class PrimaService {
       await tx.audit({
         at,
         actor: user.name,
-        companyId,
+        companyId: listId,
         action: 'pur.supplier',
         entity: 'pur_supplier',
         entityId: s.id,
-        summary: `Supplier ${name} (${ssmNo}) added.`,
+        summary: `Supplier ${name} (${ssmNo}) added to the group supplier list${companyId !== listId ? ` (first for ${companyId})` : ''}.`,
       });
       return s;
     });
@@ -26236,8 +27235,12 @@ export class PrimaService {
     const from = addMonthsIso(today, -12);
     // Part U-X6b: a CSG/TNG course set is outside the 3 free pieces.
     const mine = issues.filter((i) => i.personId === personId && worn.has(i.itemId) && (!key || keyOf.get(i.itemId) === key) && dateOf(i.issuedAt) > from && !i.course);
-    const last = mine.map((i) => dateOf(i.issuedAt)).sort().pop() ?? null;
-    return { pieces: mine.reduce((n, i) => n + i.qty, 0), last, free: UNIFORM_REQUEST_RULE.freePerYear * (key ? perSuit(items, key) : 1), perSuit: key ? perSuit(items, key) : 1 };
+    // The item register keeps uniforms too (whole suits, Fauzan 6 Nov 2026). Both stores count toward one allowance:
+    // a suit there is one of each worn item here, times how many of the item one suit holds (2 badges).
+    const reg = await this.items.uniformSuitsFor(personId, today);
+    const per = key ? perSuit(items, key) : 1;
+    const last = [...mine.map((i) => dateOf(i.issuedAt)), ...(reg.last ? [reg.last] : [])].sort().pop() ?? null;
+    return { pieces: mine.reduce((n, i) => n + i.qty, 0) + reg.suits * per, last, free: UNIFORM_REQUEST_RULE.freePerYear * per, perSuit: per, fromRegister: reg.suits };
   }
 
 
@@ -26628,7 +27631,7 @@ export class PrimaService {
     const policePhoto = kind === 'stolen' && input.policePhoto?.length ? this.itProofs(user, input.policePhoto.slice(0, 2)) : [];
     const police = kind === 'stolen' ? (input.policeReportNo ?? '').trim().slice(0, 60) : '';
     const word = { lost: 'hilang', stolen: 'dicuri', damaged: 'rosak', not_working: 'tidak berfungsi' }[kind];
-    return this.raiseItTicket(user, {
+    const ticket = await this.raiseItTicket(user, {
       category: 'DEVICE',
       priority: kind === 'lost' || kind === 'stolen' ? 'P2' : 'P3',
       title: `${mine.name} ${word} (${mine.label})`.slice(0, 120),
@@ -26636,6 +27639,11 @@ export class PrimaService {
       contactPhone: input.contactPhone ?? null,
       deviceReport: { assetId: mine.assetId, kind, ...(police ? { policeReportNo: police } : {}), ...(policePhoto.length ? { policePhoto } : {}) },
     });
+    // B4 (Fauzan, 23 Nov 2026): a lost or stolen device may hold personal data, so the PDPA officer is told too and
+    // decides whether it is a breach. The IT request stands even if this note cannot be written.
+    if (kind === 'lost' || kind === 'stolen')
+      await this.pdpaOfficer.noteDevice(user, { ticketRef: ticket.ref, title: `${mine.name} ${kind} (${mine.label})`, companyId: user.companyIds[0] ?? null }).catch(() => null);
+    return ticket;
   }
 
   /** IT sets the register status a lost or stolen report asks for (the register stays IT's to write). */
@@ -26707,15 +27715,45 @@ export class PrimaService {
     }
     const reqs = companyId ? b.requests.filter((r) => r.req.companyId === companyId) : b.requests;
     const items: HomeItem[] = reqs
-      .filter((r) => r.canApprove || r.canFinance)
+      .filter((r) => r.canApprove || r.canFinance || r.canPayOnline)
       .slice(0, 8)
       .map((r) => ({
         tone: r.req.match && !r.req.match.ok ? 'crit' : 'warn',
         tag: 'Purchasing',
         title: `${r.companyName}: ${r.req.ref} ${r.req.title}`,
-        detail: `${r.canApprove ? 'Waiting for your approval' : r.waiting} · RM${(r.chosen?.amount ?? r.req.total).toFixed(2)}`,
+        detail: `${r.canApprove ? (r.nextTier === 'inventory' ? 'Waiting for your check before the COO' : 'Waiting for your approval') : r.canPayOnline ? 'Approve paying the online platform' : r.waiting}${r.req.urgent ? ' · URGENT' : ''} · RM${(r.chosen?.amount ?? r.req.total).toFixed(2)}`,
         go: { view: 'purchasing', companyId: r.req.companyId },
       }));
+    // Procurement's and the store's own work (Fauzan, 23 Nov 2026 "Do the gap": Home showed only approvals).
+    const group = (rows: typeof reqs, tone: HomeItem['tone'], title: (n: number) => string) => {
+      if (!rows.length) return;
+      items.push({
+        tone,
+        tag: 'Purchasing',
+        title: title(rows.length),
+        detail: rows.slice(0, 3).map((r) => `${r.req.ref} ${r.req.title}`).join(' · '),
+        go: { view: 'purchasing', companyId: companyId ?? (new Set(rows.map((r) => r.req.companyId)).size === 1 ? rows[0].req.companyId : undefined) },
+      });
+    };
+    const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+    group(reqs.filter((r) => r.late && (r.role === 'proc' || r.role === 'store')), 'crit', (n) => `${plural(n, 'order is', 'orders are')} past the supplier's delivery date`);
+    group(reqs.filter((r) => r.role === 'proc' && r.urgentOwed === 'overdue'), 'crit', (n) => `${plural(n, 'urgent purchase is', 'urgent purchases are')} past the ${RULES.procurement.value.urgentQuotesWorkingDays} working days for its quotes`);
+    group(reqs.filter((r) => r.role === 'proc' && r.urgentOwed === 'due'), 'warn', (n) => `${plural(n, 'urgent purchase needs', 'urgent purchases need')} the quotes to follow`);
+    group(reqs.filter((r) => r.canSeeUrgent), 'info', (n) => `${plural(n, 'urgent purchase', 'urgent purchases')} the COO approved alone, for you to see`);
+    group(reqs.filter((r) => r.role === 'proc' && r.req.status === 'quoting'), 'warn', (n) => `${plural(n, 'purchase', 'purchases')} to quote and price online`);
+    group(reqs.filter((r) => r.role === 'proc' && r.req.status === 'approved'), 'warn', (n) => `${plural(n, 'approved purchase', 'approved purchases')} to order`);
+    group(reqs.filter((r) => r.canReopen && r.role === 'proc'), 'info', (n) => `${plural(n, 'rejected purchase', 'rejected purchases')} to correct or leave`);
+    group(reqs.filter((r) => r.role === 'store' && r.req.status === 'ordered' && !r.late), 'info', (n) => `${plural(n, 'order', 'orders')} to receive when the goods come`);
+    if (user.department === 'procurement' && user.procRole === 'manager') {
+      const stock = companyId ? b.stock.filter((x) => x.item.companyId === companyId) : b.stock;
+      const low = stock.filter((x) => x.low && !x.item.kitParts?.length);
+      if (low.length)
+        items.push({ tone: 'warn', tag: 'Store', title: `${plural(low.length, 'item is', 'items are')} at or below the reorder level`, detail: low.slice(0, 3).map((x) => `${x.item.name}${x.item.size ? ` ${x.item.size}` : ''} (${x.item.onHand})`).join(' · '), go: { view: 'purchasing', companyId } });
+      const due = stock.filter((x) => x.countDue && !x.item.kitParts?.length);
+      if (due.length) items.push({ tone: 'info', tag: 'Store', title: `${plural(due.length, 'item is', 'items are')} due for a count`, detail: 'Counted with a witness at least monthly.', go: { view: 'purchasing', companyId } });
+      const losses = b.losses.filter((l) => l.canConfirm && (!companyId || l.issue.companyId === companyId));
+      if (losses.length) items.push({ tone: 'warn', tag: 'Store', title: `${plural(losses.length, 'loss or damage', 'losses or damages')} to confirm`, detail: losses.slice(0, 3).map((l) => `${l.itemName}, ${l.issue.personName}`).join(' · '), go: { view: 'purchasing', companyId } });
+    }
     const collect = companyId ? b.toCollect.filter((t) => t.issue.companyId === companyId) : b.toCollect;
     if (collect.length && (b.roles.includes('manager') || b.roles.includes('staff')))
       items.push({
@@ -27324,27 +28362,109 @@ export class PrimaService {
    * executives ('staff') view their own company's filings and supply the papers; the manager still asks for changes and
    * records the company's own board resolution.
    */
-  private corpRoleOf(user: User, companyId: Id): 'owner' | 'manager' | 'staff' | 'control' | 'secretary' | 'view' | null {
+  private corpRoleOf(
+    user: User,
+    companyId: Id,
+    ctx?: CorpCtx,
+  ): 'owner' | 'manager' | 'staff' | 'control' | 'secretary' | 'filer' | 'view' | null {
     if (user.integration) return null;
     if (user.role === 'company_manager' && user.companyIds.includes(companyId)) return 'manager';
     if (user.role === 'admin_exec' && user.companyIds.includes(companyId)) return 'staff';
     if (isCorpAdminOwner(user)) return 'owner';
-    if (user.role === 'pwvsb_officer' && user.leadership === 'cos') return 'control';
+    if (user.role === 'pwvsb_officer' && user.leadership === 'cos') return ctx?.dcosAway ? 'owner' : 'control';
     if (isCompanySecretary(user)) return 'secretary';
+    // D1: the Chief of Staff office executive the Deputy named for this company records its filing steps.
+    if (user.role === 'pwvsb_officer' && user.department === 'chief_of_staff' && ctx?.profiles.some((p) => p.companyId === companyId && p.filingExec?.id === user.id)) return 'filer';
     if (isGroupLeader(user)) return 'view';
     return null;
   }
 
   /** P78: the company manager asks for corporate changes; the owner may too. The Deputy Chief of Staff decides, never their own. */
-  private corpRaises(user: User, companyId: Id): boolean {
-    const role = this.corpRoleOf(user, companyId);
+  private corpRaises(user: User, companyId: Id, ctx?: CorpCtx): boolean {
+    const role = this.corpRoleOf(user, companyId, ctx);
     return role === 'manager' || (!!role && isOwnerAdmin(user));
   }
 
   /** Head office Corporate Admin (the Deputy Chief of Staff) records filings; the owner may too (P78). */
-  private corpFiles(user: User, companyId: Id): boolean {
-    const role = this.corpRoleOf(user, companyId);
+  private corpFiles(user: User, companyId: Id, ctx?: CorpCtx): boolean {
+    const role = this.corpRoleOf(user, companyId, ctx);
     return role === 'owner' || (!!role && isOwnerAdmin(user));
+  }
+
+  /**
+  /**
+   * D1 (Fauzan, 23 Nov 2026): whether the Deputy Chief of Staff is on approved leave today (the Chief of Staff then
+   * stands in for Corporate Admin), and every company file (for the filing executive the Deputy named).
+   */
+  private async corpCtx(): Promise<CorpCtx> {
+    const today = this.today();
+    const users = await this.store.list('users', {});
+    const dcos = users.filter((u) => isCorpAdminOwner(u) && !accessClosed(u, today));
+    let dcosAway = dcos.length > 0;
+    for (const d of dcos) {
+      const leave = d.personId ? await this.store.list('leaveRequests', { personId: d.personId }).catch(() => [] as LeaveRequest[]) : [];
+      if (!leave.some((q) => q.status === 'approved' && q.from <= today && q.to >= today)) dcosAway = false;
+    }
+    const profiles = await this.store.list('corpProfiles', {}).catch(() => [] as CorpProfile[]);
+    return { dcosAway, profiles };
+  }
+
+  /** The words added to the audit line when the Chief of Staff acts while the Deputy is away. */
+  private corpCoverNote(user: User, ctx: CorpCtx) {
+    return ctx.dcosAway && !isCorpAdminOwner(user) && user.leadership === 'cos' ? ' (Chief of Staff standing in for the Deputy Chief of Staff on leave)' : '';
+  }
+
+  /**
+   * B1-B3 (Fauzan, 23 Nov 2026): Prima opens what the year needs by itself, from the company record and the company
+   * file: a company file for every company that has none, each yearly filing 90 days before it is due, and the audit of
+   * each year end. Only opens and reminds; never lodges, signs or files. Runs when Corporate Admin opens the board; a
+   * database that refuses the write leaves the board as it was.
+   */
+  private async ensureCorpYear(user: User, companyIds: Id[], ctx: CorpCtx): Promise<number> {
+    if (!companyIds.length) return 0;
+    const today = this.today();
+    const rule = RULES.corporate.value;
+    try {
+      const [companies, filings, audits] = await Promise.all([
+        this.store.list('companies', { id: companyIds }),
+        this.store.list('corpFilings', { companyId: companyIds }),
+        this.store.list('corpAudits', { companyId: companyIds }).catch(() => [] as CorpAudit[]),
+      ]);
+      const haveFiling = new Set(filings.map((f) => f.id));
+      const haveAudit = new Set(audits.map((a) => a.id));
+      const newProfiles: CorpProfile[] = [];
+      const newFilings: CorpFiling[] = [];
+      const newAudits: CorpAudit[] = [];
+      for (const c of companies) {
+        let p = ctx.profiles.find((x) => x.companyId === c.id);
+        if (!p) {
+          p = corpProfileFromCompany(c);
+          newProfiles.push(p);
+        }
+        newFilings.push(...dueYearlyFilings(p, c, today, haveFiling, rule));
+        const a = dueYearlyAudit(p, c, today, haveAudit, rule);
+        if (a) newAudits.push(a);
+      }
+      if (!newProfiles.length && !newFilings.length && !newAudits.length) return 0;
+      const at = this.now();
+      for (const f of newFilings) f.openedBy = { by: 'Prima', byId: null, at };
+      await this.store.transaction(async (tx) => {
+        for (const p of newProfiles) await tx.insert('corpProfiles', p);
+        for (const f of newFilings) await tx.insert('corpFilings', f);
+        for (const a of newAudits) await tx.insert('corpAudits', a);
+        const byCo = new Map<Id, string[]>();
+        const add = (id: Id, w: string) => byCo.set(id, [...(byCo.get(id) ?? []), w]);
+        for (const p of newProfiles) add(p.companyId, 'company file');
+        for (const f of newFilings) add(f.companyId, `${f.title} (due ${f.dueOn})`);
+        for (const a of newAudits) add(a.companyId, `audit for the year ended ${a.fyEnd}`);
+        for (const [companyId, what] of byCo)
+          await tx.audit({ at, actor: 'Prima', companyId, action: 'corp.year.opened', entity: 'corp_profile', entityId: `cp-${companyId}`, summary: `Opened by Prima for ${user.name}'s board: ${what.join('; ')}.`.slice(0, 900) });
+      });
+      ctx.profiles.push(...newProfiles);
+      return newProfiles.length + newFilings.length + newAudits.length;
+    } catch {
+      return 0;
+    }
   }
 
   private corpFilingState(f: CorpFiling, today: IsoDate) {
@@ -27379,28 +28499,46 @@ export class PrimaService {
   async corpBoard(user: User) {
     const today = this.today();
     const ids = user.role === 'company_manager' || user.role === 'admin_exec' ? user.companyIds : visibleCompanyIds(user, await this.grants(), today);
-    const allowed = ids.filter((id) => this.corpRoleOf(user, id));
-    if (!allowed.length) throw new AccessDenied('view', '(company secretary)');
-    const [profiles, filings, changes, companies] = await Promise.all([
+    const ctx = await this.corpCtx();
+    const allowed = ids.filter((id) => this.corpRoleOf(user, id, ctx));
+    if (!allowed.length) throw new AccessDenied('view', '(company secretary: the company, Corporate Admin, the Chief of Staff, the company secretary firm or the filing executive the Deputy Chief of Staff named)');
+    // B1-B3: Corporate Admin's board opens what the year needs (company files, yearly filings, audits).
+    const opens = allowed.filter((id) => ['owner', 'control', 'filer'].includes(this.corpRoleOf(user, id, ctx) ?? ''));
+    await this.ensureCorpYear(user, opens, ctx);
+    const [profiles, filings, changes, companies, audits] = await Promise.all([
       this.store.list('corpProfiles', { companyId: allowed }),
       this.store.list('corpFilings', { companyId: allowed }),
       this.store.list('corpChanges', { companyId: allowed }),
       this.store.list('companies', { id: allowed }),
+      this.store.list('corpAudits', { companyId: allowed }).catch(() => [] as CorpAudit[]),
     ]);
     const name = (id: Id) => companies.find((c) => c.id === id)?.name ?? id;
     const rank = { crit: 0, warn: 1, info: 2, ok: 3 };
     const filingRows = filings
-      .map((f) => ({
-        filing: f,
-        companyName: name(f.companyId),
-        role: this.corpRoleOf(user, f.companyId),
-        canWork: this.corpFiles(user, f.companyId),
-        ...this.corpFilingState(f, today),
-      }))
+      .map((f) => {
+        const role = this.corpRoleOf(user, f.companyId, ctx);
+        // P78: the owner, as master administrator, records filing steps as Corporate Admin would.
+        const admin = role === 'owner' || role === 'filer' || (!!role && isOwnerAdmin(user));
+        return {
+          filing: f,
+          companyName: name(f.companyId),
+          role,
+          canWork: this.corpFiles(user, f.companyId, ctx),
+          ...this.corpFilingState(f, today),
+          // B3: the financial statements are ready to circulate once that year's audit is signed.
+          fs: fsReadiness(f, audits),
+          // D3: Corporate Admin (and the named filing executive) record every step; the secretary firm keys in its lodgement and receipt.
+          can: {
+            prepare: admin && f.status === 'open',
+            lodge: (admin || role === 'secretary') && (f.status === 'open' || f.status === 'prepared'),
+            receipt: (admin || role === 'secretary') && f.status === 'lodged',
+          },
+        };
+      })
       .sort((a, b) => rank[a.tone] - rank[b.tone] || a.filing.dueOn.localeCompare(b.filing.dueOn));
     const changeRows = changes
       .map((c) => {
-        const role = this.corpRoleOf(user, c.companyId);
+        const role = this.corpRoleOf(user, c.companyId, ctx);
         return {
           change: c,
           companyName: name(c.companyId),
@@ -27415,10 +28553,14 @@ export class PrimaService {
       .sort((a, b) => Number(b.canDecide || b.canRecordBoard) - Number(a.canDecide || a.canRecordBoard) || b.change.at.localeCompare(a.change.at));
     return {
       rule: RULES.corporate.value,
-      roles: [...new Set(allowed.map((id) => this.corpRoleOf(user, id)))],
+      roles: [...new Set(allowed.map((id) => this.corpRoleOf(user, id, ctx)))],
+      cover: ctx.dcosAway && user.leadership === 'cos',
+      // B7: Corporate Admin opens a filing Prima does not open by itself; D1: the Deputy names a filing executive.
+      canOpenFiling: allowed.filter((id) => this.corpRoleOf(user, id, ctx) === 'owner'),
+      canNameFiler: isCorpAdminOwner(user) || (ctx.dcosAway && user.leadership === 'cos'),
       // P78: where this user may ask for a change (the company manager, the owner) and add a filing (Corporate Admin, the owner).
-      canRaise: allowed.filter((id) => this.corpRaises(user, id)).map((id) => ({ id, name: name(id) })),
-      canFile: allowed.filter((id) => this.corpFiles(user, id)).map((id) => ({ id, name: name(id) })),
+      canRaise: allowed.filter((id) => this.corpRaises(user, id, ctx)).map((id) => ({ id, name: name(id) })),
+      canFile: allowed.filter((id) => this.corpFiles(user, id, ctx)).map((id) => ({ id, name: name(id) })),
       kpis: {
         overdue: filingRows.filter((f) => f.tone === 'crit').length,
         dueSoon: filingRows.filter((f) => f.tone === 'warn' && f.filing.status !== 'lodged').length,
@@ -27432,7 +28574,8 @@ export class PrimaService {
         .map((p) => ({
           profile: p,
           companyName: name(p.companyId),
-          role: this.corpRoleOf(user, p.companyId),
+          role: this.corpRoleOf(user, p.companyId, ctx),
+          filingExec: p.filingExec ?? null,
           open: filingRows.filter((f) => f.filing.companyId === p.companyId && f.filing.status !== 'acknowledged').length,
           worst: filingRows.find((f) => f.filing.companyId === p.companyId)?.tone ?? 'ok',
         }))
@@ -27447,9 +28590,21 @@ export class PrimaService {
   async corpFilingStep(user: User, id: Id, action: 'prepare' | 'lodge' | 'receipt', body: { ref?: string; on?: IsoDate } = {}) {
     const f = await this.store.get('corpFilings', id);
     if (!f) throw new NotFound('Filing');
-    const role = this.corpRoleOf(user, f.companyId);
+    const ctx = await this.corpCtx();
+    const role = this.corpRoleOf(user, f.companyId, ctx);
     if (!role) throw new NotFound('Filing');
-    if (!this.corpFiles(user, f.companyId)) throw new AccessDenied('view', '(head office Corporate Admin, the Deputy Chief of Staff, records filings)');
+    // D1 and D3 (Fauzan, 23 Nov 2026): Corporate Admin (the Deputy, or the Chief of Staff while the Deputy is on leave)
+    // and the filing executive the Deputy named record every step; the company secretary firm keys in its own lodgement
+    // and the SSM receipt, and the Deputy may key them in on its behalf.
+    // P78: the owner, as master administrator, may record the steps too.
+    const may = role === 'owner' || role === 'filer' || (role === 'secretary' && action !== 'prepare') || isOwnerAdmin(user);
+    if (!may)
+      throw new AccessDenied(
+        'view',
+        role === 'secretary'
+          ? '(the company secretary firm keys in the lodgement and the SSM receipt; Corporate Admin marks a filing prepared)'
+          : '(Corporate Admin, the filing executive the Deputy Chief of Staff named, or the company secretary firm records filings)',
+      );
     const at = this.now();
     const ref = (body.ref ?? '').trim().slice(0, 60);
     let patch: Partial<CorpFiling>;
@@ -27473,7 +28628,7 @@ export class PrimaService {
         action: `corp.filing.${action}`,
         entity: 'corp_filing',
         entityId: id,
-        summary: `${f.title}: ${action}${ref ? ` (${ref})` : ''}.`,
+        summary: `${f.title}: ${action}${ref ? ` (${ref})` : ''}${role === 'secretary' ? ' by the company secretary firm' : role === 'filer' ? ' by the filing executive' : ''}${this.corpCoverNote(user, ctx)}.`,
       });
       return (await tx.get('corpFilings', id))!;
     });
@@ -27578,9 +28733,11 @@ export class PrimaService {
   async decideCorpChange(user: User, id: Id, decision: 'approve' | 'reject', note: string, clauseRef: string) {
     const c = await this.store.get('corpChanges', id);
     if (!c) throw new NotFound('Change');
-    const role = this.corpRoleOf(user, c.companyId);
-    // The Deputy Chief of Staff alone approves for PWVSB; the Chief of Staff monitors (Fauzan, 2 Nov 2026).
-    if (role !== 'owner') throw new AccessDenied('view', '(the Deputy Chief of Staff approves corporate changes; the Chief of Staff monitors)');
+    const ctx = await this.corpCtx();
+    const role = this.corpRoleOf(user, c.companyId, ctx);
+    // The Deputy Chief of Staff alone approves for PWVSB; the Chief of Staff monitors (Fauzan, 2 Nov 2026) and stands
+    // in while the Deputy is on approved leave (Fauzan, 23 Nov 2026). The filing executive never approves.
+    if (role !== 'owner') throw new AccessDenied('view', '(the Deputy Chief of Staff approves corporate changes, or the Chief of Staff while the Deputy is on leave)');
     if (c.status !== 'awaiting_pwvsb') throw new BadRequest('Already decided.');
     if (c.raisedById === user.id) throw new BadRequest('Someone other than the person who raised this change decides it.');
     const clause = (clauseRef ?? '').trim().slice(0, 120);
@@ -27600,7 +28757,7 @@ export class PrimaService {
         action: `corp.change.${decision}`,
         entity: 'corp_change',
         entityId: id,
-        summary: `${c.title}: PWVSB ${decision === 'approve' ? 'approved' : 'rejected'} under ${clause}${text ? `: ${text}` : ''}.`,
+        summary: `${c.title}: PWVSB ${decision === 'approve' ? 'approved' : 'rejected'} under ${clause}${text ? `: ${text}` : ''}${this.corpCoverNote(user, ctx)}.`,
       });
       return (await tx.get('corpChanges', id))!;
     });
@@ -27610,7 +28767,7 @@ export class PrimaService {
   async recordCorpBoard(user: User, id: Id, resolutionRef: string, effectiveOn: IsoDate) {
     const c = await this.store.get('corpChanges', id);
     if (!c) throw new NotFound('Change');
-    const role = this.corpRoleOf(user, c.companyId);
+    const role = this.corpRoleOf(user, c.companyId, await this.corpCtx());
     if (role !== 'manager' && role !== 'owner' && !(role && isOwnerAdmin(user)))
       throw new AccessDenied('view', '(the company manager or Corporate Admin records the board resolution)');
     if (c.status !== 'approved')
@@ -27658,6 +28815,94 @@ export class PrimaService {
     });
   }
 
+  /**
+   * B7 (Fauzan, 23 Nov 2026): Corporate Admin opens a filing Prima does not open by itself (a change of address, a new
+   * charge, anything else SSM must be told), with what it is, the due date and the legal basis.
+   */
+  async openCorpFiling(user: User, input: { companyId: Id; title: string; dueOn: IsoDate; basis: string }) {
+    const ctx = await this.corpCtx();
+    const role = this.corpRoleOf(user, input.companyId, ctx);
+    if (!role) throw new NotFound('Company');
+    if (role !== 'owner') throw new AccessDenied('view', '(Corporate Admin opens a filing: the Deputy Chief of Staff, or the Chief of Staff while the Deputy is on leave)');
+    const title = String(input.title ?? '').trim().replace(/\s+/g, ' ').slice(0, 120);
+    if (title.length < 3) throw new BadRequest('Say what must be filed with SSM.');
+    if (!isRealDate(input.dueOn)) throw new BadRequest('Give the due date, a real date.');
+    const basis = String(input.basis ?? '').trim().slice(0, 200);
+    if (!basis) throw new BadRequest('Give the legal basis or reason for the due date (for example the section of the Companies Act).');
+    const at = this.now();
+    const f: CorpFiling = {
+      id: `cf-${input.companyId}-other-${toMs(at)}`,
+      companyId: input.companyId,
+      kind: 'OTHER',
+      title,
+      dueOn: input.dueOn,
+      basis,
+      status: 'open',
+      prepared: null,
+      lodged: null,
+      receipt: null,
+      changeId: null,
+      openedBy: { by: user.name, byId: user.id, at },
+    };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('corpFilings', f);
+      await tx.audit({ at, actor: user.name, companyId: f.companyId, action: 'corp.filing.open', entity: 'corp_filing', entityId: f.id, summary: `Opened: ${title}, due ${f.dueOn} (${basis})${this.corpCoverNote(user, ctx)}.` });
+      return f;
+    });
+  }
+
+  /**
+   * D1 (Fauzan, 23 Nov 2026): the Deputy Chief of Staff names one Chief of Staff office executive to record filing steps
+   * for a company, or for every company at once; null takes the name off. The executive records steps only: never
+   * approves a corporate change or checks a company file. They also need a company access line for each company.
+   */
+  async setCorpFilingExec(user: User, input: { companyId: Id | 'all'; userId: Id | null; reason: string }) {
+    const ctx = await this.corpCtx();
+    if (!(isCorpAdminOwner(user) || (ctx.dcosAway && user.leadership === 'cos' && user.role === 'pwvsb_officer')))
+      throw new AccessDenied('view', '(the Deputy Chief of Staff names the filing executive)');
+    const reason = approvalReason(input.reason);
+    if (!reason) throw new BadRequest('Give a reason, even a short one.');
+    let exec: User | null = null;
+    if (input.userId) {
+      exec = (await this.store.get('users', input.userId)) ?? null;
+      if (!exec || exec.integration || exec.role !== 'pwvsb_officer' || exec.department !== 'chief_of_staff' || exec.leadership || accessClosed(exec, this.today()))
+        throw new BadRequest('Choose an open account of a Chief of Staff office executive.');
+      if (exec.id === user.id) throw new BadRequest('Name someone other than yourself.');
+    }
+    const b = await this.corpBoard(user);
+    const ids = b.companies.map((c) => c.profile.companyId).filter((id) => input.companyId === 'all' || id === input.companyId);
+    if (!ids.length) throw new NotFound('Company');
+    const at = this.now();
+    const value = exec ? { id: exec.id, name: exec.name, by: user.name, at } : null;
+    const profiles = await this.store.list('corpProfiles', { companyId: ids });
+    await this.store.transaction(async (tx) => {
+      for (const p of profiles) {
+        await tx.update('corpProfiles', p.id, { filingExec: value });
+        await tx.audit({
+          at,
+          actor: user.name,
+          companyId: p.companyId,
+          action: 'corp.filing_exec',
+          entity: 'corp_profile',
+          entityId: p.id,
+          summary: `${exec ? `${exec.name} named to record filing steps` : 'Filing executive taken off'}: ${reason}${this.corpCoverNote(user, ctx)}.`.slice(0, 900),
+        });
+      }
+    });
+    return { companies: profiles.length, filingExec: value };
+  }
+
+  /** Who the Deputy may name as filing executive: open Chief of Staff office executives (names only). */
+  async corpFilingExecChoices(user: User) {
+    const ctx = await this.corpCtx();
+    if (!(isCorpAdminOwner(user) || (ctx.dcosAway && user.leadership === 'cos'))) throw new AccessDenied('view', '(the Deputy Chief of Staff names the filing executive)');
+    const today = this.today();
+    return (await this.store.list('users', {}))
+      .filter((u) => !u.integration && u.role === 'pwvsb_officer' && u.department === 'chief_of_staff' && !u.leadership && !accessClosed(u, today) && u.id !== user.id)
+      .map((u) => ({ id: u.id, name: u.name, title: u.title ?? '' }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   private async corpHome(user: User, companyId?: Id): Promise<HomeItem[]> {
     let b;
     try {
@@ -27676,8 +28921,8 @@ export class PrimaService {
         detail: c.canDecide ? `Needs PWVSB approval · asked ${c.age} days ago by ${c.change.raisedBy}` : 'PWVSB approved · record the board resolution',
         go: { view: 'corporate', companyId: c.change.companyId },
       }));
-    if (isCorpAdminOwner(user)) {
-      for (const f of filings.filter((x) => x.tone === 'crit' || (x.tone === 'warn' && x.filing.status !== 'lodged')))
+    if (isCorpAdminOwner(user) || b.cover || b.roles.includes('filer')) {
+      for (const f of filings.filter((x) => (x.tone === 'crit' || (x.tone === 'warn' && x.filing.status !== 'lodged')) && (x.role === 'owner' || x.role === 'filer')))
         items.push({
           tone: f.tone === 'crit' ? 'crit' : 'warn',
           tag: 'Company secretary',
@@ -28626,7 +29871,7 @@ export class PrimaService {
     if (user.integration) return null;
     if (user.leadership === 'finance_director' || user.opsTier === 'ceo' || user.leadership === 'chairman' || user.leadership === 'vice_chairman' || isActHead(user))
       return 'lead';
-    if (user.department === 'finance' && user.financeTeam != null) return 'team';
+    if (isFinanceStaff(user)) return 'team';
     return null;
   }
 
@@ -28675,7 +29920,11 @@ export class PrimaService {
       this.store.list('companies', { id: ids }),
       this.store.list('users', {}),
     ]);
-    const rows = all.filter((f) => role === 'lead' || f.team === user.financeTeam);
+    // Supplier bills received but not posted come from Procurement's own records (Fauzan, 23 Nov 2026 "Go"), not a typed count.
+    const purs = ids.length ? await this.store.list('purRequests', { companyId: ids }) : [];
+    const rows = all
+      .filter((f) => role === 'lead' || f.team === user.financeTeam)
+      .map((f) => ({ ...f, posting: { ...f.posting, supplierBillsUnposted: finSupplierBillsUnposted(f.companyId, purs, today.slice(0, 7)).length } }));
     const nameOf = (id: Id) => centralEmployerName(id) ?? companies.find((c) => c.id === id)?.name ?? id;
     const view = rows
       .map((f) => ({ status: f, companyName: nameOf(f.companyId), ...this.finView(f, today, now) }))
@@ -29385,6 +30634,8 @@ export class PrimaService {
         const again = await this.staffPayBlockers(cur, tx);
         if (again.length) throw new BadRequest(again.join(' '));
       }
+      // D2 (Fauzan, 23 Nov 2026): one Finance person prepares the payment, another records it paid.
+      if (action === 'pay') await this.financePayouts.recordPaid(tx, user, 'staff_pay', runId, patch.paid!.bankRef, patch.paid!.paidOn);
       await tx.update('staffPayRuns', runId, patch);
       // Part P24: consented staff stay damage deducted in this run is marked recovered once the run is paid.
       if (action === 'pay') await this.inventory.markChargesRecovered(tx, cur.lines.flatMap((l) => l.recoveryIds ?? []), user);
@@ -29769,6 +31020,460 @@ export class PrimaService {
       });
       return { accepted, rejected };
     });
+  }
+
+  // ---------- Operations standards duties (Fauzan, 23 Nov 2026: "We have done the iso rba pikm sirim. So make sure operation department do what needed") ----------
+
+  /**
+   * What operations must keep doing so the ISO 9001, PIKM/SIRIM and RBA work holds, in one list for the OM, Regional OM,
+   * OGM (or Deputy), Operations Director and the company office, for the sites each covers. Every line reads records
+   * Prima already keeps and links to the screen where the work is done; nothing here is a new form and nothing says a
+   * company "complies". A source that is not installed is listed as not known, never as done.
+   */
+  async opsStandardsDuties(user: User) {
+    const office = user.role === 'company_manager' || user.role === 'admin_exec';
+    const ops = user.role === 'pwvsb_officer' && user.department === 'operations' && !user.integration && (isOgmUser(user) || ['om', 'regional', 'ops_director', 'coo'].includes(user.opsTier ?? ''));
+    if (user.integration || accessClosed(user, this.today()) || (!office && !ops)) throw new AccessDenied('view', '(operations standards duties)');
+    const today = this.today();
+    const g = await this.grants();
+    const visible = visibleCompanyIds(user, g, today);
+    const companies = (await this.store.list('companies', {})).filter((c) => !isCentralEmployer(c.id) && (office ? user.companyIds.includes(c.id) : visible.includes(c.id)));
+    const sites: Site[] = [];
+    for (const c of companies) {
+      const all = await this.store.list('sites', { companyId: [c.id] });
+      if (office) sites.push(...all);
+      else {
+        const inScope = await this.opsSiteScope(user, c.id);
+        sites.push(...all.filter(inScope));
+      }
+    }
+    const siteIds = new Set(sites.map((x) => x.id));
+    const companyIds = [...new Set(sites.map((x) => x.companyId))];
+    const siteName = new Map(sites.map((x) => [x.id, x.name]));
+    const has = async (t: Parameters<NonNullable<Store['hasTable']>>[0]) => !this.store.hasTable || (await this.store.hasTable(t));
+    type Duty = { key: string; refs: string; title: string; how: string; count: number | null; examples: string[]; tone: 'crit' | 'warn' | 'ok' | 'unknown'; go: HomeLink };
+    const duties: Duty[] = [];
+    const add = (d: Omit<Duty, 'tone'> & { tone?: Duty['tone'] }) => duties.push({ ...d, tone: d.tone ?? (d.count === null ? 'unknown' : d.count ? 'warn' : 'ok') });
+
+    // 1. Assignment instructions signed by the client at every site (PIKM 9.5, ISO 8.5.1).
+    const noAi = sites.filter((x) => !x.instructions || !x.instructions.clientSigned);
+    add({ key: 'instructions', refs: 'PIKM 9.5 · ISO 8.5.1', title: 'Sites without client-signed assignment instructions', how: 'Contracts, the site, Assignment instructions: write the post duties and record the client signature. Keep the signed copy at the post.', count: noAi.length, examples: noAi.slice(0, 5).map((x) => x.name), go: { view: 'contracts' } });
+
+    // 2. The roster for the next 7 days, checked against the standards' rules.
+    const people = new Map<Id, Person>();
+    const creds: Credential[] = [];
+    const shifts: Shift[] = [];
+    const end = addDays(today, 6);
+    for (const cid of companyIds) {
+      for (const p of await this.store.list('people', { companyId: [cid] })) people.set(p.id, p);
+      creds.push(...(await this.store.list('credentials', { companyId: [cid] })));
+      shifts.push(...(await this.store.list('shifts', { companyId: [cid] })).filter((x) => x.date >= addDays(today, -6) && x.date <= end && x.status === 'published'));
+    }
+    const siteById = new Map(sites.map((x) => [x.id, x]));
+    const byCode = new Map<string, Set<string>>();
+    for (const sh of shifts) {
+      if (sh.date < today || !sh.personId || !siteIds.has(sh.siteId)) continue;
+      const p = people.get(sh.personId);
+      const site = siteById.get(sh.siteId);
+      if (!p || !site) continue;
+      const others = shifts.filter((o) => o.personId === p.id && o.id !== sh.id);
+      for (const f of checkAssignment({ person: p, credentials: creds.filter((c) => c.personId === p.id), shift: sh, site, otherShifts: others })) {
+        if (!byCode.has(f.code)) byCode.set(f.code, new Set());
+        byCode.get(f.code)!.add(`${p.staffNo} ${p.name}`);
+      }
+    }
+    const roster = (code: string[], refs: string, title: string, how: string, tone?: Duty['tone']) => {
+      const who = new Set(code.flatMap((c) => [...(byCode.get(c) ?? [])]));
+      add({ key: `roster-${code[0]}`, refs, title, how, count: who.size, examples: [...who].slice(0, 5), go: { view: 'roster' }, ...(who.size && tone ? { tone } : {}) });
+    };
+    roster(['RISK_BRIEFING'], 'PIKM 9.4 · ISO 8.5.1', 'Guards rostered at a medium or high risk site with no risk briefing recorded', 'Brief the guard on the site risks before the first shift and record the site briefing on the guard\'s papers.');
+    roster(['MEDICAL_56'], 'PIKM 7.1', 'Guards aged 56 or over rostered with no yearly medical on record', 'Get the medical fitness check done and recorded before deployment.');
+    roster(['NO_AGREEMENT'], 'RBA C.1 · PIKM 7', 'Guards rostered with no signed employment agreement uploaded', 'Ask the company office to upload the signed agreement on the guard\'s HR file.');
+    roster(['OVER_12_HOURS', 'NO_REST_DAY', 'SHORT_REST', 'OVERLAP'], 'RBA A.3 · EA s.59, s.60A', 'Guards rostered over the hours, rest or rest-day limits', 'Change the roster so each guard keeps the daily limit, the rest between shifts and one rest day a week.', 'crit');
+    const blocked = new Set<string>();
+    for (const sh of shifts) {
+      if (sh.date < today || !sh.personId || !siteIds.has(sh.siteId)) continue;
+      const p = people.get(sh.personId);
+      if (p && isBlocked(deployability(p, creds.filter((c) => c.personId === p.id), sh.date, siteById.get(sh.siteId)?.armed ?? false))) blocked.add(`${p.staffNo} ${p.name}`);
+    }
+    add({ key: 'deployable', refs: 'PIKM 7.2, 8 · KDN licence', title: 'Guards rostered who are not allowed to work (KDN card or vetting, CSG, age, permits)', how: 'Replace the guard or get the paper done; HR keeps the credentials.', count: blocked.size, examples: [...blocked].slice(0, 5), go: { view: 'roster' }, ...(blocked.size ? { tone: 'crit' as const } : {}) });
+
+    // 3. Site safety and operations talk in the period (Part X19; ISO 7.3, RBA B.1).
+    if (user.opsTier === 'om' || office) {
+      const t = await this.toolbox.siteTalks(user).catch(() => null);
+      const due = t ? t.rows.filter((r) => r.due && siteIds.has(r.siteId)) : null;
+      add({ key: 'site-talk', refs: 'RBA B.1 · ISO 7.3', title: `Sites with no safety and operations talk in ${t?.days ?? 30} days`, how: 'Meetings, Toolbox, Site talk: record the talk with the stamped photo and head count.', count: due ? due.length : null, examples: (due ?? []).slice(0, 5).map((r) => r.siteName), go: { view: 'meetings' } });
+    }
+
+    // 4. Service faults and client complaints at these sites (ISO 8.7, 10.2).
+    if (await has('qmsNonconformities')) {
+      const faults = (await this.store.list('qmsNonconformities', { companyId: companyIds })).filter((f) => f.status === 'open' && (!f.siteId || siteIds.has(f.siteId)));
+      const cause = faults.filter((f) => (f.serious || f.repeatOf.length) && !f.rootCause);
+      add({ key: 'faults', refs: 'ISO 8.7, 10.2', title: 'Service faults and client complaints still open', how: 'Quality and compliance, Service faults: put it right, tell the client, then close it.', count: faults.length, examples: faults.slice(0, 5).map((f) => (f.siteId ? siteName.get(f.siteId) ?? '' : '') + ' ' + String((f as { what?: string }).what ?? '').slice(0, 60)), go: { view: 'quality' } });
+      if (cause.length) add({ key: 'root-cause', refs: 'ISO 10.2', title: 'Serious or repeated faults waiting for the root cause', how: 'ACT raises the finding; the company manager plans the root cause and fix.', count: cause.length, examples: [], go: { view: 'quality' }, tone: 'crit' });
+    } else add({ key: 'faults', refs: 'ISO 8.7, 10.2', title: 'Service faults and client complaints', how: 'Needs the quality module installed.', count: null, examples: [], go: { view: 'quality' } });
+
+    // 5. Client code inspections: items not right past the fix target (RBA, IWAY and other client codes).
+    if ((await has('clientInspections')) && (await has('clientCodes'))) {
+      const fixDays = RULES.clientCodes.value.inspectionFixDays;
+      const insp = (await this.store.list('clientInspections', { companyId: companyIds })).filter((i) => siteIds.has(i.siteId));
+      const late = insp.filter((i) => addDays(i.date, fixDays) < today && i.lines.some((l) => l.result === 'not_ok' && !l.fix));
+      const codes = (await this.store.list('clientCodes', { companyId: companyIds })).filter((c) => c.status === 'active' && siteIds.has(c.siteId));
+      const never = codes.filter((c) => !insp.some((i) => i.codeId === c.id));
+      add({ key: 'inspections', refs: 'RBA · client codes', title: `Client code inspections with items not fixed in ${fixDays} days`, how: 'Sites, Client needs: fix each item with proof.', count: late.length, examples: late.slice(0, 5).map((i) => siteName.get(i.siteId) ?? ''), go: { view: 'sites' }, ...(late.length ? { tone: 'crit' as const } : {}) });
+      add({ key: 'inspections-never', refs: 'RBA · client codes', title: 'Client codes with no site inspection yet', how: 'Sites, Client needs: do the first inspection on the client\'s form.', count: never.length, examples: never.slice(0, 5).map((c) => c.name), go: { view: 'sites' } });
+    }
+
+    // 6. Clients: visits, monthly report, signed acknowledgement and satisfaction (ISO 9.1.2, OPS-CLIENT-CARE).
+    const accounts = (await this.store.list('clientAccounts', {})).filter((a) => companyIds.includes(a.companyId) && a.stage !== 'ended' && a.siteIds.some((id) => siteIds.has(id)));
+    const visits = companyIds.length ? await this.store.list('siteVisits', { companyId: companyIds }) : [];
+    const issues = accounts.map((a) => ({ a, i: this.clientIssues(a, visits).issues }));
+    const pick = (re: RegExp) => issues.filter((x) => x.i.some((y) => re.test(y.what)));
+    const cv = pick(/visit/i);
+    const cr = pick(/report not sent/i);
+    const ca = pick(/acknowledgement/i);
+    const cs = pick(/rating|satisf/i);
+    const r = RULES.clientCare.value;
+    add({ key: 'client-visit', refs: 'ISO 9.1.2 · PIKM 9', title: `Clients not visited in ${r.visitEveryDays} days`, how: 'Clients, the client: record the visit or meeting.', count: cv.length, examples: cv.slice(0, 5).map((x) => x.a.name), go: { view: 'clients' } });
+    add({ key: 'client-report', refs: 'ISO 9.1.2', title: `Monthly client report not sent (due by the ${r.reportByDay}th)`, how: 'Clients, the client: send the month report.', count: cr.length, examples: cr.slice(0, 5).map((x) => x.a.name), go: { view: 'clients' }, ...(cr.length ? { tone: 'crit' as const } : {}) });
+    add({ key: 'client-ack', refs: 'ISO 9.1.2, 8.5.1', title: `Client's signed acknowledgement and comment not uploaded (due by the ${r.invoiceByDay}th)`, how: 'Clients, the client: upload the signed slip with the comment.', count: ca.length, examples: ca.slice(0, 5).map((x) => x.a.name), go: { view: 'clients' } });
+    add({ key: 'client-rating', refs: 'ISO 9.1.2', title: 'Client satisfaction not asked or low', how: 'Clients, the client: record the client\'s rating and act on a low score.', count: cs.length, examples: cs.slice(0, 5).map((x) => x.a.name), go: { view: 'clients' } });
+
+    // 7. Incidents still open past a day (PIKM 9, ISO 8.7): the case ladder carries them.
+    const cases = (await this.store.list('cases', { companyId: companyIds })).filter((c) => c.status !== 'closed' && c.status !== 'resolved' && siteIds.has(c.siteId ?? '') && c.openedAt < addDays(today, -1));
+    add({ key: 'cases', refs: 'PIKM 9 · ISO 8.7', title: 'Incident cases open more than a day', how: 'Cases: verify, resolve and confirm each with proof.', count: cases.length, examples: cases.slice(0, 5).map((c) => `${c.severity} ${c.title}`.slice(0, 60)), go: { view: 'cases' } });
+
+    const rank = { crit: 0, warn: 1, unknown: 2, ok: 3 };
+    return { sites: sites.length, companies: companyIds.length, duties: duties.sort((a, b) => rank[a.tone] - rank[b.tone]), basis: 'Read from Prima records for the sites you cover. A count of 0 means none found in the records, not that a standard is met; ACT checks the evidence in Quality and compliance.' };
+  }
+
+  // ---------- Age exception, 61 to 65 (Fauzan, 23 Nov 2026, decision "Up to 65 by exception only") ----------
+
+  /**
+   * The HR Director (Chief of Staff or Deputy) or the CEO lets a guard or officer aged 61 to 65 be rostered, with a
+   * reason, until a date at most 12 months away and before the 66th birthday. Only with a valid yearly medical on record.
+   * Never for oneself. Ending it early also needs a reason. Both are audited.
+   */
+  async decideAgeException(user: User, personId: Id, input: { action?: unknown; until?: unknown; reason?: unknown }) {
+    if (user.integration || !(isHrDirector(user) || user.opsTier === 'ceo')) throw new AccessDenied('hr.profile', '(the HR Director or the CEO decides an age exception)');
+    const person = await this.store.get('people', personId);
+    if (!person) throw new NotFound('Person');
+    if (person.role === 'office') throw new BadRequest('Age exceptions are for guards and officers.');
+    if (isOwnRecord(user, person)) throw new AccessDenied('hr.profile', '(nobody decides their own exception)');
+    const reason = String(input.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 10) throw new BadRequest('Give the reason (at least 10 letters).');
+    const today = this.today();
+    const at = this.now();
+    const ex = RULES.ageException.value;
+    if (input.action === 'end') {
+      if (!person.ageException || person.ageException.endedAt) throw new BadRequest('There is no exception in force.');
+      return this.store.transaction(async (tx) => {
+        const updated = await tx.update('people', person.id, { ageException: { ...person.ageException!, endedAt: at, endedBy: user.name, endReason: reason } });
+        await tx.audit({ at, actor: user.name, companyId: person.companyId, action: 'hr.age_exception_end', entity: 'person', entityId: person.id, summary: `Age exception for ${person.staffNo} ended: ${reason}` });
+        return updated;
+      });
+    }
+    const age = ageOn(person.dob, today);
+    if (age <= RULES.maxGuardAge.value) throw new BadRequest(`${person.name} is ${age}; no exception is needed up to ${RULES.maxGuardAge.value}.`);
+    if (age > ex.upToAge) throw new BadRequest(`${person.name} is ${age}. No guard may work over ${ex.upToAge}.`);
+    const until = String(input.until ?? '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(until) || until < today) throw new BadRequest('Give the last day of the exception (today or later).');
+    const maxUntil = addDays(addMonthsIso(today, ex.maxMonths), -1);
+    const [y, m, d] = person.dob.split('-');
+    const lastDay = addDays(`${Number(y) + ex.upToAge + 1}-${m}-${d}`, -1);
+    if (until > maxUntil) throw new BadRequest(`An exception lasts at most ${ex.maxMonths} months (until ${maxUntil}).`);
+    if (until > lastDay) throw new BadRequest(`The exception must end by ${lastDay}, before ${person.name} turns ${ex.upToAge + 1}.`);
+    const med = latestCredentials((await this.store.list('credentials', { companyId: [person.companyId] })).filter((c) => c.personId === person.id)).get('MEDICAL_CHECK');
+    if (!med || !med.expiresOn || med.expiresOn < today) throw new BadRequest('Record a valid yearly medical check first.');
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('people', person.id, { ageException: { until, reason, by: user.name, byId: user.id, at } });
+      await tx.audit({ at, actor: user.name, companyId: person.companyId, action: 'hr.age_exception', entity: 'person', entityId: person.id, summary: `Age exception for ${person.staffNo} (age ${age}) until ${until}: ${reason}` });
+      return updated;
+    });
+  }
+
+  /** Guards and officers over 60 still on the books without an exception in force, for the HR Director and the CEO. */
+  private async ageExceptionHome(user: User): Promise<HomeItem[]> {
+    if (user.integration || !(isHrDirector(user) || user.opsTier === 'ceo')) return [];
+    const today = this.today();
+    const ids = visibleCompanyIds(user, await this.grants(), today).filter((id) => !isCentralEmployer(id));
+    const over: Person[] = [];
+    for (const id of ids)
+      for (const p of await this.store.list('people', { companyId: [id] }))
+        if (p.role !== 'office' && p.status !== 'left' && ageOn(p.dob, today) > RULES.maxGuardAge.value && !(p.ageException && !p.ageException.endedAt && p.ageException.until >= today)) over.push(p);
+    if (!over.length) return [];
+    return [{ tone: 'warn', tag: 'Age', title: `${over.length} guard${over.length > 1 ? 's' : ''} over ${RULES.maxGuardAge.value} with no age exception`, detail: `Up to ${RULES.ageException.value.upToAge} only with a yearly medical and your exception; otherwise they cannot be rostered. ${over.slice(0, 3).map((p) => `${p.staffNo} (${ageOn(p.dob, today)})`).join(', ')}`, go: { view: 'people', companyId: over[0].companyId, personId: over[0].id } }];
+  }
+
+  // ---------- Guard employment agreements (Fauzan, 23 Nov 2026: "Make sure every guard employment aggrement are uploaded") ----------
+
+  /**
+   * Every active guard and officer of each company the person looks after, and whether the signed employment agreement
+   * (and the stamped copy) is uploaded on the HR file. A guard who joined within the grace days (rule GUARD-AGREEMENT)
+   * is listed as new, not yet overdue. The company office sees its own companies; HR, ACT and group leaders see all.
+   */
+  async guardAgreements(user: User, companyId?: Id | null) {
+    if (user.integration || user.role === 'guard' || user.role === 'site_device' || user.role === 'supervisor') throw new AccessDenied('view', companyId ?? '(guard agreements)');
+    const today = this.today();
+    const wide = isGroupLeader(user) || actRole(user) === 'act' || (user.role === 'pwvsb_officer' && user.department === 'hr');
+    const office = user.role === 'company_manager' || user.role === 'admin_exec';
+    if (!wide && !office) throw new AccessDenied('view', companyId ?? '(guard agreements)');
+    const visible = new Set(visibleCompanyIds(user, await this.grants(), today));
+    let companies = (await this.store.list('companies', {})).filter((c) => !isCentralEmployer(c.id) && (wide ? visible.has(c.id) : user.companyIds.includes(c.id)));
+    if (companyId) {
+      companies = companies.filter((c) => c.id === companyId);
+      if (!companies.length) throw new AccessDenied('view', companyId);
+    }
+    const grace = RULES.guardAgreement.value.graceDays;
+    const rows = [];
+    for (const c of companies.sort((a, b) => a.name.localeCompare(b.name))) {
+      const guards = (await this.store.list('people', { companyId: [c.id] })).filter((p) => p.role !== 'office' && p.status !== 'left');
+      const missing = guards
+        .filter((p) => !hasSignedAgreement(p))
+        .map((p) => ({ personId: p.id, staffNo: p.staffNo, name: p.name, hiredOn: p.hiredOn, overdue: addDays(p.hiredOn, grace) <= today }))
+        .sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.hiredOn.localeCompare(b.hiredOn));
+      const stamped = guards.filter((p) => (p.hiringDocs ?? []).some((d) => d.kind === 'AGREEMENT_STAMPED' && d.docIds.length)).length;
+      rows.push({ companyId: c.id, companyName: c.name, guards: guards.length, signed: guards.length - missing.length, stamped, overdue: missing.filter((m) => m.overdue).length, missing: missing.slice(0, 500) });
+    }
+    return { rows, graceDays: grace, rule: RULES.guardAgreement };
+  }
+
+  private async agreementHome(user: User, companyId?: Id): Promise<HomeItem[]> {
+    const office = user.role === 'company_manager' || user.role === 'admin_exec';
+    const leader = isHrDirector(user) || (user.role === 'pwvsb_officer' && user.opsTier === 'coo');
+    if (!office && !leader) return [];
+    const board = await this.guardAgreements(user, office ? (companyId ?? user.companyIds[0] ?? null) : null).catch(() => null);
+    if (!board) return [];
+    const items: HomeItem[] = [];
+    if (office)
+      for (const r of board.rows)
+        if (r.overdue)
+          items.push({
+            tone: 'warn',
+            tag: 'Agreements',
+            title: `${r.overdue} guard${r.overdue > 1 ? 's have' : ' has'} no signed employment agreement uploaded`,
+            detail: `${r.companyName}: ${r.signed} of ${r.guards} on file. Upload on each guard's HR file, or many at once with the file helper.`,
+            go: { view: 'people', companyId: r.companyId },
+          });
+    if (leader) {
+      const short = board.rows.filter((r) => r.overdue);
+      const n = short.reduce((k, r) => k + r.overdue, 0);
+      if (n)
+        items.push({
+          tone: 'info',
+          tag: 'Agreements',
+          title: `${n} guard${n > 1 ? 's' : ''} in ${short.length} compan${short.length > 1 ? 'ies' : 'y'} with no signed employment agreement`,
+          detail: short.slice(0, 3).map((r) => `${r.companyName} ${r.overdue}`).join(', ') + (short.length > 3 ? ' …' : ''),
+          go: { view: 'people', companyId: short[0].companyId },
+        });
+    }
+    return items;
+  }
+
+  // ---------- JA uploads (Fauzan, 23 Nov 2026: "Guard salary upload from ja app. And roaster builder and roaster uploaded from ja app.") ----------
+
+  /**
+   * Who uploads JA files (Fauzan, 23 Nov 2026: "OM uploads both", then "Let company also can upload. Which ever"):
+   * the company office (Company Manager, admin executives) for its own company, or operations: the OM or Regional OM
+   * covering the site (for salary, any site of the company), the OGM for government sites, the Operations Director for
+   * private sites.
+   */
+  private jaCompanyOffice(user: User, companyId: Id): boolean {
+    return (user.role === 'company_manager' || user.role === 'admin_exec') && user.companyIds.includes(companyId);
+  }
+
+  private opsUploader(user: User): boolean {
+    return user.role === 'pwvsb_officer' && user.department === 'operations' && (isOgmUser(user) || ['om', 'regional', 'ops_director'].includes(user.opsTier ?? ''));
+  }
+
+  private async mayUploadJaRoster(user: User, site: Site): Promise<boolean> {
+    if (user.integration || accessClosed(user, this.today())) return false;
+    if (this.jaCompanyOffice(user, site.companyId)) return true;
+    return this.opsUploader(user) && (await this.opsSiteScope(user, site.companyId))(site) && can(user, await this.grants(), this.today(), 'view', site.companyId);
+  }
+
+  private async mayUploadJaPay(user: User, companyId: Id): Promise<boolean> {
+    if (user.integration || accessClosed(user, this.today())) return false;
+    if (this.jaCompanyOffice(user, companyId)) return true;
+    if (!this.opsUploader(user) || !can(user, await this.grants(), this.today(), 'view', companyId)) return false;
+    const inScope = await this.opsSiteScope(user, companyId);
+    return (await this.store.list('sites', { companyId: [companyId] })).some(inScope);
+  }
+
+  /**
+   * Uploads one company's guard salary for a month as worked out in the JA Group app (CSV saved from JA's export, one
+   * line per guard). Each line is kept as that guard's JA pay summary for the month, which the operations salary check,
+   * the site profit and loss and the JA side-by-side read. Prima does not pay from it. A newer upload of the same month
+   * replaces each guard's line; refused lines are listed with their reason, never dropped silently.
+   */
+  async jaUploadPay(user: User, input: { companyId?: unknown; period?: unknown; fileName?: unknown; rows?: unknown }) {
+    const companyId = String(input.companyId ?? '');
+    const company = await this.store.get('companies', companyId);
+    if (!company) throw new BadRequest('Choose the company.');
+    if (!(await this.mayUploadJaPay(user, companyId))) throw new AccessDenied('view', '(the OM covering the company\'s sites, or the company office, uploads the JA salary file)');
+    const period = String(input.period ?? '');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new BadRequest('Choose the month (YYYY-MM).');
+    if (period > this.today().slice(0, 7)) throw new BadRequest('The month cannot be in the future.');
+    const rows = Array.isArray(input.rows) ? input.rows : [];
+    if (!rows.length || rows.length > 5000) throw new BadRequest('The file needs 1 to 5,000 guard lines.');
+    const fileName = String(input.fileName ?? '').trim().slice(0, 120) || 'JA salary file';
+    const people = await this.store.list('people', { companyId: [companyId] });
+    const byNo = new Map(people.map((p) => [p.staffNo.trim().toUpperCase(), p]));
+    const at = this.now();
+    const rejected: { line: number; staffNo: string; reason: string }[] = [];
+    const seen = new Set<string>();
+    const good: { externalId: string; body: JaPaySummary }[] = [];
+    rows.forEach((raw, i) => {
+      const r = (raw ?? {}) as Record<string, unknown>;
+      const staffNo = String(r.staffNo ?? '').trim().toUpperCase();
+      try {
+        if (!staffNo) throw new BadRequest('staff number missing');
+        if (!byNo.has(staffNo)) throw new BadRequest('no guard with this staff number in the company');
+        if (seen.has(staffNo)) throw new BadRequest('staff number appears twice in the file');
+        seen.add(staffNo);
+        const otHours = r.otHours == null || r.otHours === '' ? 0 : Number(r.otHours);
+        const deductions = (['epf', 'socso', 'eis', 'pcb', 'otherDeductions'] as const)
+          .filter((k) => r[k] != null && r[k] !== '' && Number(r[k]) !== 0)
+          .map((k) => ({ kind: k === 'otherDeductions' ? 'Other' : k.toUpperCase(), amount: Number(r[k]) }));
+        const body = jaBody('paySummary', { staffNo, period, basic: Number(r.basic), otHours, otPay: r.otPay == null || r.otPay === '' ? 0 : Number(r.otPay), allowances: r.allowances == null || r.allowances === '' ? 0 : Number(r.allowances), deductions, gross: Number(r.gross), net: Number(r.net), paidOn: r.paidOn || null }) as JaPaySummary;
+        const sum = Math.round((body.gross - body.deductions.reduce((n, d) => n + d.amount, 0)) * 100) / 100;
+        if (body.deductions.length && Math.abs(sum - body.net) > 1) throw new BadRequest(`net RM${body.net.toFixed(2)} is not gross less deductions (RM${sum.toFixed(2)})`);
+        good.push({ externalId: `upload:${period}:${staffNo}`, body });
+      } catch (e) {
+        rejected.push({ line: i + 2, staffNo: staffNo || '(none)', reason: e instanceof BadRequest ? e.message : 'not readable' });
+      }
+    });
+    return this.store.transaction(async (tx) => {
+      for (const g of good) {
+        const id = `ja:paySummary:${companyId}:${g.externalId}`;
+        const old = await tx.get('jaRecords', id);
+        if (old) await tx.update('jaRecords', id, { sourceUpdatedAt: at, receivedAt: at, paySummary: g.body });
+        else await tx.insert('jaRecords', { id, companyId, dataset: 'paySummary', externalId: g.externalId, sourceUpdatedAt: at, receivedAt: at, paySummary: g.body });
+      }
+      const sync: JaSync = {
+        id: `jasync-paySummary-upload-${toMs(at)}-${Math.random().toString(36).slice(2, 8)}`,
+        at,
+        dataset: 'paySummary',
+        received: rows.length,
+        accepted: good.length,
+        rejected: rejected.map((x) => ({ externalId: `line ${x.line} (${x.staffNo})`, reason: x.reason })),
+        covered: [companyId],
+      };
+      await tx.insert('jaSyncs', sync);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'ja.upload_pay',
+        entity: 'ja_sync',
+        entityId: sync.id,
+        summary: `JA salary file "${fileName}" for ${company.name}, ${period}: ${good.length} guard line(s) kept, ${rejected.length} refused. Total net RM${good.reduce((n, g) => n + g.body.net, 0).toFixed(2)}.`,
+      });
+      return { accepted: good.length, rejected, period, companyId, totalNet: Math.round(good.reduce((n, g) => n + g.body.net, 0) * 100) / 100 };
+    });
+  }
+
+  /**
+   * Uploads a site's roster for a month as built in the JA Group app (CSV, one line per guard duty: staff number, date,
+   * start and end time, post). Each line becomes a published duty in Prima, so attendance, the absence alerts, the
+   * no-show step-in, the site profit and loss and CMS read it. The OM or Regional OM covering the site uploads it, or
+   * the OGM (government) or the Operations Director (private). Duties from an earlier upload that are not in the new file
+   * are taken off from today on; past days are never changed.
+   */
+  async jaUploadRoster(user: User, input: { siteId?: unknown; month?: unknown; fileName?: unknown; rows?: unknown }) {
+    const site = await this.store.get('sites', String(input.siteId ?? ''));
+    if (!site) throw new BadRequest('Choose the site.');
+    if (!(await this.mayUploadJaRoster(user, site)))
+      throw new AccessDenied('view', '(the OM covering the site, or the company office, uploads the JA roster)');
+    const month = String(input.month ?? '');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new BadRequest('Choose the month (YYYY-MM).');
+    const rows = Array.isArray(input.rows) ? input.rows : [];
+    if (!rows.length || rows.length > 5000) throw new BadRequest('The file needs 1 to 5,000 duty lines.');
+    const fileName = String(input.fileName ?? '').trim().slice(0, 120) || 'JA roster file';
+    const today = this.today();
+    const [people, posts] = await Promise.all([this.store.list('people', { companyId: [site.companyId] }), this.store.list('posts', { companyId: [site.companyId] })]);
+    const sitePosts = posts.filter((p) => p.siteId === site.id);
+    if (!sitePosts.length) throw new BadRequest('This site has no post yet. Add its posts first.');
+    const byNo = new Map(people.map((p) => [p.staffNo.trim().toUpperCase(), p]));
+    const hhmm = (v: unknown) => {
+      const m = /^(\d{1,2})[:.]?(\d{2})$/.exec(String(v ?? '').trim());
+      if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+      return `${m[1].padStart(2, '0')}:${m[2]}`;
+    };
+    const rejected: { line: number; staffNo: string; reason: string }[] = [];
+    const shifts: Shift[] = [];
+    const busy = new Map<string, { start: number; end: number }[]>();
+    rows.forEach((raw, i) => {
+      const r = (raw ?? {}) as Record<string, unknown>;
+      const staffNo = String(r.staffNo ?? '').trim().toUpperCase();
+      try {
+        const p = byNo.get(staffNo);
+        if (!staffNo || !p) throw new BadRequest('no guard with this staff number in the company');
+        if (p.status !== 'active') throw new BadRequest('the guard is not active');
+        const date = String(r.date ?? '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.slice(0, 7) !== month) throw new BadRequest(`date must be a day in ${month} (YYYY-MM-DD)`);
+        if (date < today) throw new BadRequest('a past day is not changed by an upload');
+        const a = hhmm(r.start);
+        const b = hhmm(r.end);
+        if (!a || !b) throw new BadRequest('start and end must be times like 07:00');
+        const start = myt(date, a);
+        const end = b > a ? myt(date, b) : myt(addDays(date, 1), b);
+        const postName = String(r.post ?? '').trim().toLowerCase();
+        const post = postName ? sitePosts.find((x) => x.name.trim().toLowerCase() === postName) : sitePosts.length === 1 ? sitePosts[0] : undefined;
+        if (!post) throw new BadRequest(postName ? `no post "${String(r.post)}" at this site` : 'name the post (the site has more than one)');
+        const s0 = toMs(start);
+        const e0 = toMs(end);
+        if (e0 - s0 > 16 * 3600_000) throw new BadRequest('a duty longer than 16 hours');
+        const mine = busy.get(p.id) ?? [];
+        if (mine.some((x) => s0 < x.end && e0 > x.start)) throw new BadRequest('overlaps another duty of the same guard in the file');
+        busy.set(p.id, [...mine, { start: s0, end: e0 }]);
+        shifts.push({ id: `jaroster:${site.id}:${date}:${p.id}:${a.replace(':', '')}`, companyId: site.companyId, siteId: site.id, postId: post.id, personId: p.id, date, start, end, status: 'published' });
+      } catch (e) {
+        rejected.push({ line: i + 2, staffNo: staffNo || '(none)', reason: e instanceof BadRequest ? e.message : 'not readable' });
+      }
+    });
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const existing = (await tx.list('shifts', { companyId: [site.companyId] })).filter((x) => x.siteId === site.id && x.id.startsWith('jaroster:') && x.date.slice(0, 7) === month);
+      const keep = new Set(shifts.map((x) => x.id));
+      let removed = 0;
+      for (const old of existing)
+        if (!keep.has(old.id) && old.date >= today && old.status === 'published') {
+          await tx.update('shifts', old.id, { status: 'draft' });
+          removed++;
+        }
+      for (const sh of shifts) {
+        const old = existing.find((x) => x.id === sh.id);
+        if (old) await tx.update('shifts', sh.id, { postId: sh.postId, start: sh.start, end: sh.end, status: 'published' });
+        else await tx.insert('shifts', sh);
+      }
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: site.companyId,
+        action: 'ja.upload_roster',
+        entity: 'site',
+        entityId: site.id,
+        summary: `JA roster "${fileName}" for ${site.name}, ${month}: ${shifts.length} duty line(s) published, ${removed} earlier duty line(s) taken off, ${rejected.length} refused.`,
+      });
+      return { published: shifts.length, removed, rejected, siteId: site.id, month };
+    });
+  }
+
+  /** What a person may upload from JA: the companies for salary files and the sites for rosters. */
+  async jaUploadOptions(user: User) {
+    if (user.integration || user.role === 'site_device' || user.role === 'guard') return { payCompanies: [], rosterSites: [] };
+    const today = this.today();
+    const visible = visibleCompanyIds(user, await this.grants(), today);
+    const companies = (await this.store.list('companies', {})).filter((c) => visible.includes(c.id) || user.companyIds.includes(c.id));
+    const payCompanies: { id: Id; name: string }[] = [];
+    const rosterSites: { id: Id; name: string; companyName: string }[] = [];
+    if (this.opsUploader(user) || companies.some((c) => this.jaCompanyOffice(user, c.id)))
+      for (const c of companies) {
+        if (await this.mayUploadJaPay(user, c.id)) payCompanies.push({ id: c.id, name: c.name });
+        for (const st of await this.store.list('sites', { companyId: [c.id] })) if (await this.mayUploadJaRoster(user, st)) rosterSites.push({ id: st.id, name: st.name, companyName: c.name });
+      }
+    return { payCompanies, rosterSites: rosterSites.sort((a, b) => a.companyName.localeCompare(b.companyName) || a.name.localeCompare(b.name)) };
   }
 
   // ---------- HR Phase 3, slice 3C: public holidays, leave HR gives above the Act, flexible work (Fauzan, 2 Nov 2026) ----------
@@ -33614,7 +35319,7 @@ export class PrimaService {
    * has verified. The CEO sees them while standing in for the Vice Chairman in the pilot.
    */
   private async hrConsentHome(user: User): Promise<HomeItem[]> {
-    if (!this.consentsForVc(user)) return [];
+    if (!this.consentsForVc(user)) return this.hrVcRecordHome(user);
     const leave = (await this.leaveRequests(user, { waiting: 'me' })).rows.filter((r) => r.waitingWith?.level === 'VC');
     const pay = (await this.payChanges(user)).rows.filter((r) => r.mine && r.as === 'vice_chairman');
     const items: HomeItem[] = leave.map((r) => ({
@@ -33632,6 +35337,54 @@ export class PrimaService {
         detail: pay.map((r) => `${r.person?.name ?? r.change.personId} to RM${r.change.to}`).join(', '),
         go: { view: 'hr' },
       });
+    return items;
+  }
+
+  /**
+   * B1 and B2 (Fauzan, 23 Nov 2026): while the Vice Chairman is not on Prima, the Chief of Staff, the Deputy and the HR
+   * Administrator see what waits for his consent and record his answer. Red once it has waited a working day, or when
+   * the leave starts within 2 days. HR also follows staff leave that has moved up past HR to the HR Director.
+   */
+  private async hrVcRecordHome(user: User): Promise<HomeItem[]> {
+    if (!vcRecorder(user)) return [];
+    const now = toMs(this.now());
+    const soon = fromMs(now + 2 * 86_400_000).slice(0, 10);
+    const late = (since: IsoDateTime) => toMs(workingDayDeadlines(since, new Set(), 1)[0]) <= now;
+    const leaveList = await this.leaveRequests(user, {});
+    const leave = leaveList.rows.filter((r) => r.canRecordVc);
+    const pay = (await this.payChanges(user)).rows.filter((r) => r.canRecordVc);
+    const items: HomeItem[] = leave.map((r) => {
+      const red = late(r.hrApproval!.at) || r.request.from <= soon;
+      return {
+        tone: red ? 'crit' : 'warn',
+        tag: 'Vice Chairman consent',
+        title: `${r.person.name}: record the Vice Chairman's answer on ${LEAVE_LABEL[r.request.kind].toLowerCase()}`,
+        detail: `${r.companyName} · from ${r.request.from} · approved by HR (${r.hrApproval?.by ?? 'HR'}). Ask him by message or call, then upload his answer.`,
+        go: { view: 'hr', companyId: r.request.companyId },
+      };
+    });
+    if (pay.length) {
+      const red = pay.some((r) => late(r.change.hrDirectorCheck?.at ?? r.change.requestedAt));
+      items.push({
+        tone: red ? 'crit' : 'warn',
+        tag: 'Vice Chairman consent',
+        title: `${pay.length} salary amount${pay.length === 1 ? '' : 's'}: record the Vice Chairman's answer`,
+        detail: pay.map((r) => `${r.person?.name ?? r.change.personId} to RM${r.change.to}`).join(', '),
+        go: { view: 'hr' },
+      });
+    }
+    // B2: the HR Administrator follows staff leave that has moved up past HR (the HR Director's step and above).
+    if (isHrAdmin(user)) {
+      const up = leaveList.rows.filter((r) => r.staffLeave && r.request.status === 'pending' && !r.hrApproval && !r.managerStage && (r.waitingWith?.level === 'HR_DIRECTOR' || r.waitingWith?.level === 'DIRECTOR'));
+      if (up.length)
+        items.push({
+          tone: 'crit',
+          tag: 'Staff leave',
+          title: `${up.length} staff leave request${up.length === 1 ? '' : 's'} moved up past HR`,
+          detail: up.map((r) => `${r.person.name} (with ${r.waitingWith?.label}${r.waitingWith?.person && r.waitingWith.person !== 'Not assigned' ? `: ${r.waitingWith.person}` : ''})`).join(', '),
+          go: { view: 'hr' },
+        });
+    }
     return items;
   }
 
@@ -33732,8 +35485,8 @@ export class PrimaService {
     if (user.role === 'pwvsb_officer' && user.department === 'operations') {
       if (!(await this.opsSiteScope(user, site.companyId))(site)) return null;
       if (user.opsTier === 'om') return 'om';
-      if (user.opsTier === 'ops_director' && (site.sector ?? 'private') === 'private') return 'ops_director';
-      if (user.opsTier === 'ogm' && site.sector === 'government') return 'ogm';
+      if (isOpsDirectorUser(user) && (site.sector ?? 'private') === 'private') return 'ops_director';
+      if (isOgmUser(user) && site.sector === 'government') return 'ogm';
     }
     if (cov?.areaSupervisorId && cov.areaSupervisorId === user.id) return 'area_supervisor';
     if (user.department === 'audit' && user.actRole) return 'act';
@@ -33997,7 +35750,9 @@ export class PrimaService {
   async rosterStep(user: User, versionId: Id, action: RosterStep['action'], reason: string) {
     const v = await this.store.get('rosterVersions', versionId);
     if (!v) throw new NotFound('Roster');
-    const { site, coverage, role } = await this.rosterSite(user, v.siteId);
+    const { site, coverage, role: seat } = await this.rosterSite(user, v.siteId);
+    // The COO covers the Operations Director's step on a private site (Fauzan, 23 Nov 2026: "Let coo cover also").
+    const role = seat === 'coo' && (site.sector ?? 'private') === 'private' && actsAsOpsDirectorUser(user) ? 'ops_director' : seat;
     if (role !== 'om' && role !== 'area_supervisor' && role !== 'ops_director' && role !== 'ogm') throw new AccessDenied('roster.publish', '(guard roster)');
     if (!['submit', 'verify', 'publish', 'return'].includes(action)) throw new BadRequest('Unknown step.');
     const text = this.rosterReason(reason, 2);
@@ -34415,7 +36170,7 @@ export class PrimaService {
     // prepares; an Operations Manager never does.
     if (user.role === 'admin_exec' && user.opsTier !== 'om' && user.opsTier !== 'regional') return 'company';
     if (user.opsTier === 'coo') return 'coo';
-    if (user.leadership === 'finance_director' || (user.department === 'finance' && user.financeTeam != null)) return 'finance';
+    if (user.leadership === 'finance_director' || isFinanceStaff(user)) return 'finance';
     // The Director Office collects and submits the list of guards to be paid in cash (Fauzan, 6 Nov 2026).
     if (user.role === 'pwvsb_officer' && user.department === 'director_office') return 'doa';
     if (isGroupLeader(user) || user.role === 'company_manager') return 'view';
@@ -34454,6 +36209,9 @@ export class PrimaService {
 
   private async guardPayPreparer(user: User, companyId: Id): Promise<boolean> {
     if (user.integration) return false;
+    // Office P129 (Fitri, 24 Nov 2026): the owner as master administrator prepares like the named preparer (P78, as for
+    // staff payroll). Approving stays with others: nobody approves a run they prepared or submitted.
+    if (isOwnerAdmin(user)) return (await this.guardPayEmployers(user)).includes(companyId);
     if (!(await this.guardPayPreparersOn())) return this.guardPayRoleOf(user) === 'hr';
     if (!user.companyIds.includes(companyId)) return false;
     if (user.role !== 'company_manager' && this.guardPayRoleOf(user) !== 'company') return false;
@@ -35275,6 +37033,8 @@ export class PrimaService {
       throw new BadRequest(`This month is waiting for ${view.waitingOn ?? 'nobody'}; you cannot ${action} it now.`);
     }
     return this.store.transaction(async (tx) => {
+      // D2 (Fauzan, 23 Nov 2026): one Finance person prepares the payment, another records it paid.
+      if (action === 'pay') await this.financePayouts.recordPaid(tx, user, 'guard_pay', runId, patch.paid!.bankRef, patch.paid!.paidOn);
       await tx.update('guardPayRuns', runId, patch);
       // A paid month takes each advance and loan scheme repayment off its record, and Finance is told.
       if (patch.stage === 'paid') {
@@ -35702,8 +37462,9 @@ export class PrimaService {
 
   private advanceRoleOf(user: User): 'om' | 'approver' | 'finance' | 'view' | null {
     if (user.integration) return null;
+    // The Deputy OGM and the Deputy OD approve as the head they stand in for; the COO covers the OD (23 Nov 2026).
+    if (actsAsOpsDirectorUser(user) || isOgmUser(user)) return 'approver';
     if (user.opsTier === 'om' || user.opsTier === 'regional') return 'om';
-    if (user.opsTier === 'ops_director' || user.opsTier === 'ogm') return 'approver';
     const r = this.guardPayRoleOf(user);
     if (r === 'finance') return 'finance';
     if (r) return 'view';
@@ -35769,7 +37530,7 @@ export class PrimaService {
           ...a,
           can: {
             change: role === 'om' && (a.status === 'pending' || a.status === 'approved'),
-            approve: role === 'approver' && a.status === 'pending' && user.opsTier === a.approverTier && !this.advanceOwnWork(a, user.id),
+            approve: role === 'approver' && a.status === 'pending' && (a.approverTier === 'ogm' ? isOgmUser(user) : actsAsOpsDirectorUser(user)) && !this.advanceOwnWork(a, user.id),
             pay: role === 'finance' && a.status === 'approved' && RULES.guardPayroll.value.primaPays,
           },
         })),
@@ -35959,7 +37720,7 @@ export class PrimaService {
         const a = await tx.get('guardPayAdvances', id);
         if (!a || !companies.includes(a.companyId)) throw new NotFound('Advance');
         if (a.status !== 'pending') throw new BadRequest(`${a.staffNo}: this advance is not waiting for approval.`);
-        if (user.opsTier !== a.approverTier) throw new BadRequest(`${a.staffNo}: approved by the ${a.approverTier === 'ogm' ? 'OGM (government site)' : 'Operations Director (private site)'}.`);
+        if (!(a.approverTier === 'ogm' ? isOgmUser(user) : actsAsOpsDirectorUser(user))) throw new BadRequest(`${a.staffNo}: approved by the ${a.approverTier === 'ogm' ? 'OGM (government site)' : 'Operations Director (private site)'}.`);
         if (this.advanceOwnWork(a, user.id)) throw new BadRequest(`${a.staffNo}: you set or changed this advance, so you cannot approve it.`);
         await tx.update('guardPayAdvances', id, { status: 'approved', approvals: [...a.approvals, { by: user.name, byId: user.id, at, note: reason, version: a.version, amount: a.amount, payOn: a.payOn }] });
         await tx.audit({
@@ -35997,6 +37758,7 @@ export class PrimaService {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn) || paidOn > this.today() || paidOn.slice(0, 7) !== a.period) throw new BadRequest(`Give the date the bank paid, within the advance month ${a.period}.`);
     const step = { by: user.name, byId: user.id, at: this.now(), note: '' };
     return this.store.transaction(async (tx) => {
+      await this.financePayouts.recordPaid(tx, user, 'guard_advance', id, bankRef, paidOn);
       await tx.update('guardPayAdvances', id, { status: 'paid', paid: { ...step, bankRef, paidOn } });
       await tx.audit({ at: step.at, actor: user.name, companyId: a.companyId, action: 'guardpay.advance.pay', entity: 'guard_pay_advance', entityId: id, summary: `Advance ${a.period} for ${a.staffNo} RM${a.amount.toFixed(2)} paid, bank reference ${bankRef}.` });
       return (await tx.get('guardPayAdvances', id))!;
@@ -36023,6 +37785,8 @@ export class PrimaService {
   async guardLoans(user: User, input: { companyId?: Id | null } = {}) {
     const role = this.loanRoleOf(user);
     if (!role) throw new AccessDenied('view', '(advances and loans)');
+    // D1 (Fauzan, 23 Nov 2026): the Deputy or the HR Administrator takes the Chief of Staff's step when covering.
+    const coverLoans = role !== 'cos' && role !== 'ceo' && (await this.cosActsFor(user, 'staff_loans')).acts;
     const ids = await this.advanceCompanies(user);
     if (!ids.length) throw new AccessDenied('view', '(any)');
     if (input.companyId && !ids.includes(input.companyId)) throw new AccessDenied('view', input.companyId);
@@ -36049,7 +37813,7 @@ export class PrimaService {
         .map((l) => ({
           ...l,
           can: {
-            cos: role === 'cos' && l.status === 'pending_cos' && l.requested.byId !== user.id,
+            cos: (role === 'cos' || coverLoans) && l.status === 'pending_cos' && l.requested.byId !== user.id,
             ceo: role === 'ceo' && l.status === 'pending_ceo' && l.requested.byId !== user.id && l.cos?.byId !== user.id,
             payOut: role === 'finance' && l.status === 'approved' && RULES.guardPayroll.value.primaPays,
             cancel: role === 'hr' && (l.status === 'pending_cos' || l.status === 'pending_ceo' || l.status === 'approved'),
@@ -36150,7 +37914,9 @@ export class PrimaService {
 
   /** The Chief of Staff, then the CEO, approve or reject with a reason. Nobody decides a record they made or already approved. */
   async decideGuardLoan(user: User, id: Id, body: { decision?: string; note?: string }) {
-    const role = this.loanRoleOf(user);
+    const own = this.loanRoleOf(user);
+    // D1 (Fauzan, 23 Nov 2026): the Deputy or the HR Administrator takes the Chief of Staff's step when covering.
+    const role = own === 'cos' || own === 'ceo' ? own : (await this.cosActsFor(user, 'staff_loans')).acts ? ('cos' as const) : own;
     if (role !== 'cos' && role !== 'ceo') throw new AccessDenied('hr.pay', '(the Chief of Staff and then the CEO approve advances and loans)');
     const note = String(body.note ?? '').trim().slice(0, 300);
     if (note.length < 3) throw new BadRequest('Give a reason or comment with the decision.');
@@ -36164,7 +37930,7 @@ export class PrimaService {
     if (l.requested.byId === user.id || l.cos?.byId === user.id) throw new BadRequest('You recorded or already approved this record, so you cannot decide it.');
     const at = this.now();
     const step = { by: user.name, byId: user.id, at, note };
-    const who = role === 'cos' ? 'Chief of Staff' : 'CEO';
+    const who = role === 'cos' ? (own === 'cos' ? 'Chief of Staff' : `${user.name} for the Chief of Staff`) : 'CEO';
     const text = `${who} ${approve ? 'approved' : 'rejected'} RM${l.amount.toFixed(2)} for ${l.staffNo}: ${note}`;
     const patch: Partial<GuardLoan> = approve
       ? role === 'cos'
@@ -36193,6 +37959,7 @@ export class PrimaService {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn) || paidOn > this.today()) throw new BadRequest('Give the date the bank paid.');
     const at = this.now();
     return this.store.transaction(async (tx) => {
+      await this.financePayouts.recordPaid(tx, user, 'guard_loan', id, bankRef, paidOn);
       await tx.update('guardLoans', id, {
         status: 'paid_out',
         paidOut: { by: user.name, byId: user.id, at, note: '', bankRef, paidOn },
@@ -36764,7 +38531,7 @@ export class PrimaService {
           siteCode: site.code,
           sector: site.sector ?? 'private',
           approver: approverTier === 'ogm' ? 'OGM' : 'Operations Director',
-          canApprove: ready && user.opsTier === approverTier,
+          canApprove: ready && (approverTier === 'ogm' ? isOgmUser(user) : actsAsOpsDirectorUser(user)),
           allowed,
           check,
           peopleWorked: people.get(site.id)?.size ?? 0,
@@ -36794,7 +38561,7 @@ export class PrimaService {
         people: sum((r) => r.allowed.people),
       },
       causes: (Object.keys(SITE_HOURS_CAUSE_LABEL) as SiteHoursCause[]).map((id) => ({ id, label: SITE_HOURS_CAUSE_LABEL[id] })),
-      approverTier: user.opsTier === 'ops_director' || user.opsTier === 'ogm' ? user.opsTier : null,
+      approverTier: isOpsDirectorUser(user) ? ('ops_director' as const) : isOgmUser(user) ? ('ogm' as const) : actsAsOpsDirectorUser(user) ? ('ops_director' as const) : null,
       rule: RULES.siteHours,
     };
   }
@@ -36806,8 +38573,9 @@ export class PrimaService {
     if (!site) throw new NotFound('Site');
     assertCan(user, await this.grants(), this.today(), 'view', site.companyId);
     const tier = siteHoursApproverTier(site);
-    if (user.integration || user.opsTier !== tier)
-      throw new AccessDenied('view', tier === 'ogm' ? '(only the OGM approves extra hours at a government site)' : '(only the Operations Director approves extra hours at a private site)');
+    // The Deputy OD stands in for the OD, and the COO covers (Fauzan, 23 Nov 2026: "Let coo cover also").
+    if (user.integration || (tier === 'ogm' ? !isOgmUser(user) : !actsAsOpsDirectorUser(user)))
+      throw new AccessDenied('view', tier === 'ogm' ? '(only the OGM approves extra hours at a government site)' : '(only the Operations Director, the deputy or the COO approves extra hours at a private site)');
     const month = this.siteHoursMonth(input.month);
     const extra = Math.round(Number(input.extraHours) * 10) / 10;
     if (!Number.isFinite(extra) || extra <= 0 || extra > 20000) throw new BadRequest('Enter the extra hours to approve (more than 0).');
@@ -36851,7 +38619,7 @@ export class PrimaService {
 
   /** Who may set a list (Fauzan, 6 Nov 2026: "Od or ogm. Not om"): the Operations Director or the OGM, for any company and state. */
   private holidaySetter(user: User, _state: string | null): boolean {
-    return !user.integration && (user.opsTier === 'ops_director' || user.opsTier === 'ogm');
+    return !user.integration && (actsAsOpsDirectorUser(user) || isOgmUser(user));
   }
 
   /** Each company's states (from its sites' branches) for the holiday lists. */
@@ -36869,7 +38637,7 @@ export class PrimaService {
   }
 
   private async holidayHome(user: User): Promise<HomeItem[]> {
-    const setter = user.opsTier === 'ops_director' || user.opsTier === 'ogm';
+    const setter = isOpsDirectorUser(user) || isOgmUser(user);
     if (!setter && user.opsTier !== 'ceo') return [];
     if (!(await this.siteHoursOn())) return [];
     const today = this.today();
@@ -36976,7 +38744,7 @@ export class PrimaService {
         reason,
         setBy: user.name,
         setById: user.id,
-        setByTier: user.opsTier === 'ogm' ? 'ogm' : 'ops_director',
+        setByTier: isOgmUser(user) ? 'ogm' : 'ops_director',
         setAt: at,
         replacedBy: null,
         lawFlags: check.flags,
@@ -38156,7 +39924,7 @@ export class PrimaService {
    */
   private canDecideClientReport(user: User, site: Site): boolean {
     const sector = site.sector ?? 'private';
-    return (isOpsDirectorUser(user) && sector === 'private') || (isOgmUser(user) && sector === 'government');
+    return (actsAsOpsDirectorUser(user) && sector === 'private') || (isOgmUser(user) && sector === 'government');
   }
 
   /** The OD or OGM decides, per client code, whether a report of the results goes to the client, and how. */
@@ -40036,6 +41804,28 @@ export class PrimaService {
     return new FinanceControlsService(this.store, this.clock, this.finance);
   }
 
+  /** Salary, claim, advance and loan payouts (Fauzan, 23 Nov 2026): two Finance people, bank statement, payroll journal. */
+  get financePayouts(): FinancePayoutsService {
+    return new FinancePayoutsService(this.store, this.clock, this.finance);
+  }
+
+  /**
+   * D2 (Fauzan, 23 Nov 2026): records a prepared payout paid, through the source's own pay step, so every check of that
+   * step still applies (PCB checked, late pay, cash listings, repayments).
+   */
+  async recordPayout(user: User, input: { source?: unknown; sourceId?: unknown; bankRef?: unknown; paidOn?: unknown; pcbChecked?: unknown }) {
+    const id = typeof input.sourceId === 'string' ? input.sourceId.slice(0, 160) : '';
+    const bankRef = typeof input.bankRef === 'string' ? input.bankRef : '';
+    const paidOn = typeof input.paidOn === 'string' && input.paidOn ? (input.paidOn as IsoDate) : undefined;
+    const body = { bankRef, paidOn, pcbChecked: input.pcbChecked === true };
+    if (input.source === 'staff_pay') return this.staffPayStep(user, id, 'pay', body);
+    if (input.source === 'guard_pay') return this.guardPayStep(user, id, 'pay', body);
+    if (input.source === 'staff_claim') return this.financePayClaim(user, id, bankRef, paidOn);
+    if (input.source === 'guard_advance') return this.payGuardAdvance(user, id, { bankRef, paidOn });
+    if (input.source === 'guard_loan') return this.payOutGuardLoan(user, id, { bankRef, paidOn });
+    throw new BadRequest('Which kind of payout?');
+  }
+
   private async sqlPostingTile(user: User): Promise<HomeTile[]> {
     const a = finActor(user);
     const coo = isFinCoo(user);
@@ -40342,9 +42132,9 @@ export class PrimaService {
     const builtIn = builtInStatTables();
     const ids = await this.staffPayEmployers(user);
     const [fins, companies] = await Promise.all([this.store.list('finStatus', { companyId: ids }), this.store.list('companies', { id: ids })]);
-    const employers = fins
-      .filter((f) => ids.includes(f.companyId))
-      .map((f) => ({ companyId: f.companyId, companyName: f.companyId === GROUP_EMPLOYER_ID ? 'PWVSB (central staff)' : (companies.find((c) => c.id === f.companyId)?.name ?? f.companyId), nos: f.employerNos ?? null }))
+    // Office P129: every employer, with or without a Finance record yet.
+    const employers = this.contribEmployerIds(ids, companies)
+      .map((companyId) => ({ companyId, companyName: companyId === GROUP_EMPLOYER_ID ? 'PWVSB (central staff)' : (companies.find((c) => c.id === companyId)?.name ?? companyId), nos: fins.find((f) => f.companyId === companyId)?.employerNos ?? null }))
       .sort((a, b) => (a.companyId === GROUP_EMPLOYER_ID ? -1 : b.companyId === GROUP_EMPLOYER_ID ? 1 : a.companyName.localeCompare(b.companyName)));
     return {
       employers,
@@ -40461,6 +42251,7 @@ export class PrimaService {
     const nos = { epf: clean(input.epf, 'EPF employer number'), socso: clean(input.socso, 'PERKESO employer code'), lhdnE: clean(input.lhdnE, 'LHDN E number'), hrd: clean(input.hrd, 'HRD Corp number'), set: { by: user.name, byId: user.id, at: this.now() } };
     return this.store.transaction(async (tx) => {
       const rowId = `fin-${companyId}`;
+      await this.openFinRowIn(tx, user, companyId, 'to keep the employer numbers');
       await tx.lock?.('finStatus', rowId);
       const row = await tx.get('finStatus', rowId);
       if (!row) throw new NotFound('Employer');
@@ -40477,19 +42268,56 @@ export class PrimaService {
     return staffPayStepper(user) || isOwnerAdmin(user);
   }
 
+  /** Office P129: the employers of a list of company ids: the companies that exist, and PWVSB for its central staff. */
+  private contribEmployerIds(ids: Id[], companies: { id: Id }[]): Id[] {
+    return [...new Set(ids)].filter((id) => id === GROUP_EMPLOYER_ID || companies.some((c) => c.id === id));
+  }
+
+  /**
+   * Office P129: opens a company's Finance record when it has none yet, the way a management fee does (nothing known:
+   * SQL Account not connected, the group's year end, PWVSB's Finance team), so contribution files and employer numbers
+   * can be kept. Inside the caller's transaction.
+   */
+  private async openFinRowIn(tx: Store, user: User, companyId: Id, why: string): Promise<void> {
+    const rowId = `fin-${companyId}`;
+    if (await tx.get('finStatus', rowId)) return;
+    const pw = (await tx.list('finStatus', { companyId: [GROUP_EMPLOYER_ID] }))[0];
+    const opened: FinStatus = {
+      id: rowId,
+      companyId,
+      team: pw?.team ?? 1,
+      fyEnd: FIN_DEFAULT_YEAR_END,
+      sqlLastAt: null,
+      closedTo: null,
+      banks: [],
+      posting: { period: '', billed: 0, billedPosted: 0, staffPayPaid: false, staffPayPosted: false, guardPayPaid: false, guardPayPosted: false, supplierBillsUnposted: 0 },
+      tests: [],
+      arOver90: 0,
+      apOverdue: 0,
+      audit: [],
+      tax: [],
+    };
+    await tx.insert('finStatus', opened);
+    await tx.audit({ at: this.now(), actor: user.name, companyId: companyId === GROUP_EMPLOYER_ID ? null : companyId, action: 'fin.record_opened', entity: 'fin_status', entityId: rowId, summary: `Finance record opened ${why}. SQL Account not connected yet.` });
+  }
+
   /** The employers this person may make files for, with their PERKESO and EPF numbers, and the records kept (no people rows). */
   async contributionFiles(user: User) {
     if (!this.contribMaker(user)) throw new AccessDenied('hr.pay', '(HR, the Chief of Staff, the COO or Finance make contribution files)');
     const ids = await this.staffPayEmployers(user);
     const [fins, companies] = await Promise.all([this.store.list('finStatus', { companyId: ids }), this.store.list('companies', { id: ids })]);
-    const employers = fins
-      .filter((f) => ids.includes(f.companyId))
-      .map((f) => ({
-        companyId: f.companyId,
-        companyName: f.companyId === GROUP_EMPLOYER_ID ? 'PWVSB (central staff)' : (companies.find((c) => c.id === f.companyId)?.name ?? f.companyId),
-        socso: f.employerNos?.socso ?? null,
-        epf: f.employerNos?.epf ?? null,
-      }))
+    // Office P129: every employer this person may make files for, whether or not it has a Finance record yet (live had
+    // none, so nobody saw an employer). The record is opened when the first file or number is kept.
+    const employers = this.contribEmployerIds(ids, companies)
+      .map((companyId) => {
+        const f = fins.find((x) => x.companyId === companyId);
+        return {
+          companyId,
+          companyName: companyId === GROUP_EMPLOYER_ID ? 'PWVSB (central staff)' : (companies.find((c) => c.id === companyId)?.name ?? companyId),
+          socso: f?.employerNos?.socso ?? null,
+          epf: f?.employerNos?.epf ?? null,
+        };
+      })
       .sort((a, b) => (a.companyId === GROUP_EMPLOYER_ID ? -1 : b.companyId === GROUP_EMPLOYER_ID ? 1 : a.companyName.localeCompare(b.companyName)));
     const records = fins
       .filter((f) => ids.includes(f.companyId))
@@ -40544,6 +42372,7 @@ export class PrimaService {
     };
     return this.store.transaction(async (tx) => {
       const rowId = `fin-${companyId}`;
+      await this.openFinRowIn(tx, user, companyId, 'to keep a contribution file');
       await tx.lock?.('finStatus', rowId);
       const row = await tx.get('finStatus', rowId);
       if (!row) throw new NotFound('Employer');
@@ -40772,8 +42601,9 @@ export class PrimaService {
    * is sent on its own, and the approval chain (Chief of Staff, then COO) is unchanged.
    */
   async prefillOfficeRequest(user: User, input: { companyId: Id; category: 'RENT' | 'UTILITIES'; period?: string }) {
+    const pr = await this.expenseRoleOf(user);
     const owner = isOwnerAdmin(user);
-    if (!this.expenseRoleOf(user).cm && !owner) throw new AccessDenied('view', '(only the company manager requests office needs)');
+    if (!pr.cm && !pr.exec && !owner) throw new AccessDenied('view', '(only the company office requests office needs)');
     if (!(owner ? visibleCompanyIds(user, await this.grants(), this.today()) : user.companyIds).includes(input.companyId)) throw new AccessDenied('view', input.companyId);
     if (input.category !== 'RENT' && input.category !== 'UTILITIES') throw new BadRequest('Rent or utilities.');
     const period = input.period ?? this.today().slice(0, 7);
@@ -40793,7 +42623,8 @@ export class PrimaService {
 
   /** Rent and utilities this month that can be started from last month's, for the company manager's home. */
   private async officePrefillHome(user: User, companyId?: Id): Promise<HomeItem[]> {
-    if (!this.expenseRoleOf(user).cm) return [];
+    const pr = await this.expenseRoleOf(user);
+    if (!pr.cm && !pr.exec) return [];
     const period = this.today().slice(0, 7);
     const all = (await this.store.list('expenseRequests', {})).filter((e) => e.kind === 'OFFICE' && user.companyIds.includes(e.companyId) && (!companyId || e.companyId === companyId));
     const items: HomeItem[] = [];
@@ -41997,6 +43828,10 @@ export class PrimaService {
           !live.some((d) => d.criticalRoleId === c.id && d.kind === 'SUCCESSION') &&
           !c.successors.some((s) => s.readiness === 'ready_now' && !closed.has(s.userId)),
       );
+      // D8 (Asset Management department check, 23 Nov 2026): an acting Asset Director approves in the Director's place.
+      const acting = list.filter((d) => (d.kind === 'LEAVE_COVER' || d.kind === 'EMERGENCY') && /^\s*(acting\s+)?asset\s+director\s*$/i.test(d.post) && this.delegationState(d, today) === 'active' && !closed.has(d.delegateId));
+      for (const d of acting)
+        out.push({ tone: 'info', tag: 'Delegations', title: `${d.delegateName} is acting Asset Director${d.to ? ` until ${d.to}` : ''}`, detail: `For ${d.holderName}: approves in the Director's place, never on their own work.`, go: { view: 'corporate' } });
       if (uncovered.length)
         out.push({ tone: 'info', tag: 'Delegations', title: `${uncovered.length} critical post${uncovered.length === 1 ? '' : 's'} with no cover`, detail: uncovered.slice(0, 3).map((c) => c.post).join(', '), go: { view: 'corporate' } });
     }
@@ -42228,12 +44063,13 @@ export class PrimaService {
     const ids = b.companies.map((c) => c.profile.companyId).filter((id) => !companyId || id === companyId);
     if (companyId && !ids.length) throw new NotFound('Company');
     const [companies, changes] = await Promise.all([this.store.list('companies', { id: ids }), this.store.list('corpChanges', { companyId: ids })]);
+    const ctx = await this.corpCtx();
     return b.companies
       .filter((c) => ids.includes(c.profile.companyId))
       .map((c) => {
         const p = c.profile;
         const co = companies.find((x) => x.id === p.companyId);
-        const role = this.corpRoleOf(user, p.companyId);
+        const role = this.corpRoleOf(user, p.companyId, ctx);
         const raw = this.corpFileFlags(p, changes, today);
         // Common rule (Arisha main review, 2 Nov 2026): routine staff screens carry no legal-discrepancy notices. Staff see
         // an owner still to notify as a task; only the directors' view calls it late, in directorLegalFlags.
@@ -42271,9 +44107,12 @@ export class PrimaService {
       secretaryFirm?: string;
       secretaryLicence?: string;
       auditor?: string;
+      /** B1: the incorporation date (when the company record has none) and the year end month, 1 to 12. */
+      incorporatedOn?: IsoDate;
+      fyeMonth?: number;
     },
   ) {
-    const role = this.corpRoleOf(user, companyId);
+    const role = this.corpRoleOf(user, companyId, await this.corpCtx());
     if (!role) throw new NotFound('Company');
     if (role !== 'manager' && role !== 'owner' && !isOwnerAdmin(user)) throw new AccessDenied('view', '(the Head of Company or Central Admin keeps the company file)');
     const p = (await this.store.list('corpProfiles', { companyId }))[0];
@@ -42327,6 +44166,12 @@ export class PrimaService {
     if (input.secretaryFirm !== undefined) patch.secretaryFirm = text(input.secretaryFirm, 'the company secretary firm');
     if (input.secretaryLicence !== undefined) patch.secretaryLicence = text(input.secretaryLicence, 'the secretary’s licence number', 40);
     if (input.auditor !== undefined) patch.auditor = text(input.auditor, 'the auditor');
+    if (input.incorporatedOn !== undefined) patch.incorporatedOn = date(input.incorporatedOn, 'incorporation', true)!;
+    if (input.fyeMonth !== undefined) {
+      const m = Number(input.fyeMonth);
+      if (!Number.isInteger(m) || m < 1 || m > 12) throw new BadRequest('Choose the month the financial year ends, 1 to 12.');
+      patch.fyeMonth = m;
+    }
     if (!Object.keys(patch).length) throw new BadRequest('Nothing to save.');
     const at = this.now();
     // A resubmission keeps the earlier checks, so the returned differences and who checked them are not lost.
@@ -42432,7 +44277,7 @@ export class PrimaService {
 
   /** The Deputy Chief of Staff checks the draft against the SSM extract: it matches, or the differences go back to the company. */
   async checkCompanyFile(user: User, companyId: Id, input: { ok: boolean; ssmRef: string; mismatches?: string[]; note?: string }) {
-    const role = this.corpRoleOf(user, companyId);
+    const role = this.corpRoleOf(user, companyId, await this.corpCtx());
     if (!role) throw new NotFound('Company');
     if (role !== 'owner') throw new AccessDenied('view', '(the Deputy Chief of Staff checks the company file against SSM)');
     const p = (await this.store.list('corpProfiles', { companyId }))[0];
@@ -43468,6 +45313,7 @@ export class PrimaService {
       case 'return':
         need('arms_review');
         if (!armsControl) throw new AccessDenied('arms.view', '(Arms Control reviews)');
+        await this.armsManagerOnly(user);
         if (action === 'return' && why.length < 3) throw new BadRequest('Say why it is going back.');
         to = action === 'pass' ? 'company_auth' : 'draft';
         break;
@@ -43641,6 +45487,11 @@ export class PrimaService {
         if (v.state === 'APPLYING') throw new BadRequest(`${v.name} is still being applied for. No firearm can be placed in it.`);
         const id = `fa-${r.companyId}-${f.tag.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
         if (await tx.get('firearms', id)) throw new BadRequest(`${f.tag} is already on the register.`);
+        // B5 (23 Nov 2026): checked again when the firearms are created, in case the serial or tag was keyed in elsewhere
+        // after the receiving record (V16: a firearm is registered once).
+        const norm = (x: string | null | undefined) => String(x ?? '').toUpperCase().replace(/[\s:-]+/g, '');
+        const clash = (await tx.list('firearms', {})).find((x) => (!!f.serial && norm(x.serial) === norm(f.serial)) || (!!f.rfidTag && !!x.rfidTag && norm(x.rfidTag) === norm(f.rfidTag)));
+        if (clash) throw new BadRequest(`${f.tag}: serial or RFID tag already recorded on ${clash.tag}. A firearm is registered once.`);
         await tx.insert('firearms', { id, companyId: r.companyId, vaultId: f.vaultId, tag: f.tag, kind: f.kind as Firearm['kind'], serialMasked: `***${f.serial.slice(-3)}`, serial: f.serial, rfidTag: f.rfidTag, status: 'UNDER_INSPECTION', licenceRef: f.licenceRef, licenceExpiresOn: f.licenceExpiresOn, serviceDueOn: null, ownership: 'OPERATIONAL', calibre: d.calibre });
       }
       if (d.firearms.length) out.push(`${d.firearms.length} firearm(s) added from ${buy.grn.ref}, inspected before first issue`);
@@ -44551,8 +46402,12 @@ export class PrimaService {
   }
 
   /** The Asset Management team asks to buy furniture or fittings (it decides on non-electronic assets), with a reason. */
-  async amBuyRequest(user: User, input: { description: string; category: AmAsset['category']; qty: number; estCost: number; location: string; ownerEntity: string; reason: string; hostelId?: Id | null; hostelNeedId?: Id | null; inspectionReason?: string | null }) {
+  async amBuyRequest(user: User, input: { description: string; category: AmAsset['category']; qty: number; estCost: number; location: string; ownerEntity: string; reason: string; hostelId?: Id | null; hostelNeedId?: Id | null; inspectionReason?: string | null; forUse?: string | null }) {
     if (this.amRoleOf(user) !== 'team') throw new AccessDenied('view', '(the Asset Management team asks to buy)');
+    // D4 (department check, 23 Nov 2026): this tab buys for Asset Management's own stock only (resorts, homestays,
+    // rental homes, hostels, training centre, orchards, the spare pool). A company office buys through Beli baru.
+    if (input.forUse != null && !(AM_BUY_FOR as readonly string[]).includes(String(input.forUse))) throw new BadRequest('Say what the purchase is for: resort, homestay, rental home, hostel, training centre, orchard or the spare pool.');
+    if (input.forUse === 'OFFICE') throw new BadRequest('Company offices buy through Beli baru on the office assets screen, not here.');
     // Part P8 (S5 3.4 "no purchase without HQ approval"): a hostel purchase only from an approved need, or from Asset
     // Management's own inspection with a reason. One purchase per need.
     if (input.hostelId) {
@@ -44586,7 +46441,7 @@ export class PrimaService {
       keeper: user.name,
       status: 'buy_requested',
       lastCheckedOn: null,
-      purchase: { reason, qty, estCost: est, askedBy: user.name, askedById: user.id, askedAt: at, decidedBy: null, decidedAt: null, decisionReason: null },
+      purchase: { reason: input.forUse ? `[${String(input.forUse)}] ${reason}`.slice(0, 520) : reason, qty, estCost: est, askedBy: user.name, askedById: user.id, askedAt: at, decidedBy: null, decidedAt: null, decisionReason: null },
       ...(input.hostelId ? { hostelId: input.hostelId, hostelNeedId: input.hostelNeedId ?? null } : {}),
     };
     return this.store.transaction(async (tx) => {
@@ -45899,6 +47754,107 @@ export class PrimaService {
    * It applies from the month chosen (this month by default, last month at the earliest), so earlier months' bills
    * never change. Every change is kept on the company's Finance record and in the audit log.
    */
+  /**
+   * Goodwill's rental and sale prices (Fauzan, 23 Nov 2026: "Inventory set it. But fd can set also"): the Inventory
+   * Manager sets them (on the store item or here); the Finance Director (and the CEO) may set them too.
+   */
+  canSetGoodwillPrices(user: User): boolean {
+    return !user.integration && ((user.department === 'procurement' && user.procRole === 'manager') || canSetManagementFee(user));
+  }
+
+  /** Selling at or below cost needs the Finance Director (Fauzan, 23 Nov 2026: "unprofit need fd approval"); the CEO may too. */
+  canApproveBelowCost(user: User): boolean {
+    return canSetManagementFee(user);
+  }
+
+  /**
+   * Sets one Goodwill store item's monthly rental, sale price and (for opening stock) unit cost, with a reason, audited.
+   * Empty means not set, never guessed. A sale price at or below the unit cost is applied only by the Finance Director
+   * or the CEO; from anyone else it waits for them (pendingSale) and the earlier sale price stays.
+   */
+  async setGoodwillPrice(user: User, itemId: Id, input: { charge?: unknown; rentalMonthly?: unknown; salePrice?: unknown; unitCost?: unknown; reason?: unknown }) {
+    if (!this.canSetGoodwillPrices(user)) throw new AccessDenied('view', '(the Inventory Manager or the Finance Director sets Goodwill prices)');
+    const reason = String(input.reason ?? '').trim().slice(0, 300);
+    if (reason.length < 3) throw new BadRequest('Give the reason for the price.');
+    const money = (v: unknown, what: string): number | null => {
+      if (v == null || v === '') return null;
+      const n = Math.round(Number(v) * 100) / 100;
+      if (!Number.isFinite(n) || n < 0 || n > 1_000_000) throw new BadRequest(`Give the ${what} in ringgit, or leave it empty.`);
+      return n;
+    };
+    const rentalMonthly = money(input.rentalMonthly, 'monthly rental');
+    const salePrice = money(input.salePrice, 'sale price');
+    const costGiven = input.unitCost !== undefined;
+    const unitCostIn = costGiven ? money(input.unitCost, 'unit cost') : null;
+    const charge = input.charge === 'rental' || input.charge === 'sale' ? input.charge : input.charge == null || input.charge === '' ? undefined : null;
+    if (charge === null) throw new BadRequest('Choose rental or sale.');
+    const fd = this.canApproveBelowCost(user);
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('stockItems', itemId);
+      const item = await tx.get('stockItems', itemId);
+      if (!item || item.companyId !== GOV_OPS_COMPANY_ID) throw new NotFound('Goodwill store item');
+      const at = this.now();
+      const unitCost = costGiven ? unitCostIn : (item.unitCost ?? null);
+      const below = goodwillBelowCost(salePrice, unitCost);
+      const held = below && !fd && salePrice !== (item.salePrice ?? null);
+      const next: Partial<StockItem> = {
+        rentalMonthly,
+        salePrice: held ? (item.salePrice ?? null) : salePrice,
+        ...(charge ? { charge } : {}),
+        priceSet: { by: user.name, byId: user.id, at, reason },
+        ...(costGiven ? { unitCost, costSet: { by: user.name, at, reason, source: 'entered' as const } } : {}),
+        pendingSale: held ? { salePrice: salePrice!, unitCost: unitCost!, by: user.name, byId: user.id, at, reason } : null,
+        belowCostOk: below && !held ? (fd ? { salePrice: salePrice!, unitCost: unitCost!, by: user.name, at, reason } : (item.belowCostOk ?? null)) : null,
+      };
+      await tx.update('stockItems', item.id, next as never);
+      const rm = (n: number | null | undefined) => (n == null ? 'not set' : `RM${n.toFixed(2)}`);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: GOV_OPS_COMPANY_ID,
+        action: 'stock.price_set',
+        entity: 'stock_item',
+        entityId: item.id,
+        summary:
+          `${item.name}: rental ${rm(item.rentalMonthly)} -> ${rm(rentalMonthly)} a month, sale ${rm(item.salePrice)} -> ${rm(next.salePrice)}` +
+          `${costGiven ? `, unit cost ${rm(item.unitCost)} -> ${rm(unitCost)}` : ''}${charge ? `, charged as ${charge}` : ''}` +
+          `${held ? `. Sale ${rm(salePrice)} is at or below the cost ${rm(unitCost)}: waiting for the Finance Director` : below ? `. Sale at or below cost, approved by ${user.name}` : ''}. Reason: ${reason}`,
+      });
+      return { ...item, ...next };
+    });
+  }
+
+  /** The Finance Director (or the CEO) approves or refuses a sale price at or below cost, with a reason; never their own. */
+  async decideGoodwillSale(user: User, itemId: Id, input: { approve?: unknown; reason?: unknown }) {
+    if (!this.canApproveBelowCost(user)) throw new AccessDenied('view', '(the Finance Director approves selling at or below cost)');
+    const reason = String(input.reason ?? '').trim().slice(0, 300);
+    if (reason.length < 3) throw new BadRequest('Give the reason for the decision.');
+    const approve = input.approve === true;
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('stockItems', itemId);
+      const item = await tx.get('stockItems', itemId);
+      if (!item || item.companyId !== GOV_OPS_COMPANY_ID) throw new NotFound('Goodwill store item');
+      const p = item.pendingSale;
+      if (!p) throw new BadRequest('No sale price is waiting for approval on this item.');
+      if (p.byId === user.id) throw new BadRequest('You set this price, so someone else decides it.');
+      const at = this.now();
+      const next: Partial<StockItem> = approve
+        ? { salePrice: p.salePrice, pendingSale: null, belowCostOk: { salePrice: p.salePrice, unitCost: p.unitCost, by: user.name, at, reason } }
+        : { pendingSale: null };
+      await tx.update('stockItems', item.id, next as never);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: GOV_OPS_COMPANY_ID,
+        action: approve ? 'stock.below_cost_approved' : 'stock.below_cost_refused',
+        entity: 'stock_item',
+        entityId: item.id,
+        summary: `${item.name}: sale RM${p.salePrice.toFixed(2)} at or below cost RM${p.unitCost.toFixed(2)} (set by ${p.by}) ${approve ? 'approved' : 'refused'}. Reason: ${reason}`,
+      });
+      return { ...item, ...next };
+    });
+  }
+
   async setManagementFee(
     user: User,
     companyId: Id,
@@ -46393,7 +48349,9 @@ export class PrimaService {
    * What Goodwill Empire bills each company for operational items in a month (Fauzan, 2 Nov 2026): the monthly rental
    * for each rented item the company's guard still holds on the last day of the month, and the price of each item sold
    * to them in the month. This is a draft for Finance to invoice; it is not an invoice or a payment. A missing price
-   * is listed as missing, never guessed. Charging rental on the month-end holding is a proposal for Fauzan to confirm.
+   * is listed as missing, never guessed. A rented item still with the guard on the month's last day is billed one month's
+   * rent to the guard's company (Fauzan, 23 Nov 2026, decision card: "Yes, held on last day"; the same rule as Merdeka IT
+   * devices and rented vehicles).
    */
   private goodwillBill(month: string, items: StockItem[], issues: StockIssue[], companies: { id: Id; name: string }[]) {
     const last = addDays(`${addDays(`${month}-28`, 4).slice(0, 7)}-01`, -1);
@@ -47123,6 +49081,7 @@ export class PrimaService {
       this.store.list('reportSubmissions'),
       this.store.list('companies', {}),
     ]);
+    const onAppIds = await this.companiesOnApp();
     const monthly = defs.filter((d) => d.active && d.frequency === 'monthly');
     const review = (defId: string, period: string, department: string | null, companyId: Id | null) => {
       const a = audits
@@ -47216,7 +49175,7 @@ export class PrimaService {
           report: def.name,
           period: p.period,
           due: p.due,
-          status: shown(def, s, this.reportStatus(def, p.due, s, !!c.isPilot)),
+          status: shown(def, s, this.reportStatus(def, p.due, s, onAppIds.has(c.id))),
           sent: s ? { by: s.by, at: s.at, files: s.docIds.length + (s.file ? 1 : 0) } : null,
           form: form(def, s),
           review: review(def.id, p.period, null, c.id),
@@ -47367,6 +49326,8 @@ export class PrimaService {
   get assistant(): AssistantService { return new AssistantService(this.store, () => this.now(), this); }
   /** Shared login list (Fauzan, 23 Nov 2026): the list only, never a password. */
   get sharedLogins(): SharedLoginService { return new SharedLoginService(this.store, () => this.now()); }
+  /** PDPA officer department check (Fauzan, 23 Nov 2026): Do today, inbox, downloads, keep periods, client step. */
+  get pdpaOfficer(): PdpaOfficerService { return new PdpaOfficerService(this.store, () => this.now(), this); }
   /** Part N17: Group HR lists the HR Administrator keys in, versioned by date. */
   get hrLists(): HrListService { return new HrListService(this.store, () => this.now()); }
   /** Part N18: paper PDPA consent for face and location, and the gate that switches them per person. */
@@ -47407,11 +49368,29 @@ export class PrimaService {
   }
   /** Part X: company and department toolbox meetings, registers and the OM's site talks. */
   get toolbox(): ToolboxService { return new ToolboxService(this.store, () => this.now(), this); }
+  /** Monthly reports Prima makes by itself (Fauzan, 23 Nov 2026), made on the 1st, sent by the owner or on the due day. */
+  get autoReports(): AutoReportService { return new AutoReportService(this.store, () => this.now(), this); }
+  /** One door for the monthly report actions; each operation checks its own permission. */
+  async autoReportAct(user: User, op: string, i: Record<string, unknown>) {
+    return this.autoReports.act(user, op, i);
+  }
+  /** Clients whose monthly service report this person sends: the clients they act on (as for recording one by hand). */
+  async autoReportClientsFor(user: User): Promise<ClientAccount[]> {
+    if (user.integration || this.clientRoleOf(user) !== 'act') return [];
+    const out: ClientAccount[] = [];
+    for (const a of await this.clientScope(user)) if (await this.opsCovers(user, a.companyId, a.siteIds)) out.push(a);
+    return out;
+  }
   /** Part Y: the monthly JA Group meeting, accounts report tracker and duty checklists. */
   get groupMonth(): GroupMonthService { return new GroupMonthService(this.store, () => this.now(), this); }
   /** One door for the monthly group meeting actions; each operation checks its own permission. */
   async groupMonthAct(user: User, op: string, i: Record<string, unknown>) {
     return this.groupMonth.act(user, op, i);
+  }
+  /** FWM check gaps (Fauzan, 23 Nov 2026): bulk paper dates, levy, exits, absconding, quotas, caseload, hostel certificates. */
+  get fwGaps(): FwGapsService { return new FwGapsService(this.store, () => this.now(), this); }
+  async fwGapsAct(user: User, op: string, i: Record<string, unknown>) {
+    return this.fwGaps.act(user, op, i);
   }
   /** Part Z: the duty map registers. */
   get dutyRegisters(): DutyRegisterService { return new DutyRegisterService(this.store, () => this.now(), this); }
@@ -47727,16 +49706,18 @@ export class PrimaService {
           })),
       )),
     );
-    // Office requests the company manager still has to send or fix.
-    if (user.role === 'company_manager' || isGroupLeader(user))
+    // Office requests the company office still has to send, fix or check (executives prepare, the head checks and sends).
+    if (user.role === 'company_manager' || (user.role === 'admin_exec' && !user.branchId) || isGroupLeader(user))
       out.push(
-        ...(await this.store.list('expenseRequests', { companyId })).filter((e) => e.kind === 'OFFICE' && (e.status === 'draft' || e.status === 'returned')).map((e) => ({
-          tone: (e.status === 'returned' ? 'warn' : 'neutral') as HomeTone,
-          tag: 'Office request',
-          title: `Office request ${e.period}${e.status === 'returned' ? ' sent back' : ' not sent yet'}`,
-          detail: `RM${e.total.toFixed(2)}`,
-          go: { view: 'requests' as const, companyId },
-        })),
+        ...(await this.store.list('expenseRequests', { companyId }))
+          .filter((e) => e.kind === 'OFFICE' && (e.status === 'draft' || e.status === 'returned' || e.status === 'head_check'))
+          .map((e) => ({
+            tone: (e.status === 'draft' ? 'neutral' : 'warn') as HomeTone,
+            tag: 'Office request',
+            title: `Office request ${e.period}${e.status === 'returned' ? ' sent back' : e.status === 'head_check' ? ` from ${e.requestedBy}: check and send` : ' not sent yet'}`,
+            detail: `RM${e.total.toFixed(2)}`,
+            go: { view: 'requests' as const, companyId },
+          })),
       );
     // Leave the viewer may decide for this company.
     out.push(
@@ -47874,7 +49855,7 @@ export class PrimaService {
    */
   async setCompanyRunBy(user: User, companyId: Id, input: { runByCompanyId: Id | null; reason: string }) {
     // Fauzan, 3 Nov 2026: "cos will set". The CEO, as owner and master admin, keeps the same right.
-    if (!canSetRunBy(user)) throw new AccessDenied('office.desks', '(the Chief of Staff sets which office runs a company)');
+    if (!(await this.mayRunBy(user))) throw new AccessDenied('office.desks', '(the Chief of Staff sets which office runs a company)');
     const reason = typeof input?.reason === 'string' ? input.reason.trim().slice(0, 300) : '';
     if (!reason) throw new BadRequest('Give the reason (for example the board decision or agreement).');
     const parentId = input?.runByCompanyId ?? null;
@@ -47966,6 +49947,8 @@ export class PrimaService {
     rows.sort((a, b) => rank[a.tone] - rank[b.tone] || Number(b.company.isPilot) - Number(a.company.isPilot) || a.company.code.localeCompare(b.company.code));
     return {
       rule: OFFICE_TEAM,
+      // Fauzan, 3 Nov 2026 "cos will set"; D1 (23 Nov 2026): the Deputy too while covering for the Chief of Staff.
+      canSetRunBy: await this.mayRunBy(user),
       totals: {
         companies: rows.length,
         ready: rows.filter((r) => r.tone === 'ok').length,
@@ -50335,7 +52318,11 @@ export class PrimaService {
     else if (user.role === 'supervisor') h = await this.supervisorHome(user);
     else throw new BadRequest('This job has its own board.');
     // Payment requests from the company head (Fauzan, 1 Nov 2026): whoever is next on one is told.
-    h.todo = [...(await this.financeRequests.home(user)), ...(await this.claimNotices(user)), ...(await this.rbaHome(user)), ...h.todo, ...(await this.leaveLapseHome(user))];
+    h.todo = [...(await this.financeRequests.home(user)), ...(await this.claimNotices(user)), ...(await this.rbaHome(user)), ...h.todo, ...(await this.leaveLapseHome(user)), ...(await this.autoReports.homeItems(user))];
+    // Guard employment agreements (Fauzan, 23 Nov 2026): the company office is told daily; the HR Director and COO watch the count.
+    const agreementItems = [...(await this.agreementHome(user, companyId)), ...(await this.ageExceptionHome(user))];
+    if (h.watch) h.watch = [...h.watch, ...agreementItems];
+    else h.todo = [...h.todo, ...agreementItems];
     // Urgent first; within the same urgency keep the order each job lists its work in.
     const rank: Record<HomeTone, number> = { crit: 0, warn: 1, info: 2, neutral: 3, ok: 4 };
     const byUrgency = (items: HomeItem[]) =>
@@ -50505,6 +52492,141 @@ export class PrimaService {
   }
 
   /** B3: is the Vice Chairman's consent on office staff leave asked for? On unless the CEO switched it off. */
+  // ---------- HR gaps of 23 Nov 2026 (Fauzan: "Do the gap") ----------
+
+  /**
+   * B1: checks how the Vice Chairman gave his answer and turns the proof into records. A screenshot of his message, his
+   * letter or the call log is uploaded; a call or meeting with no file needs a written note of when and how.
+   */
+  private vcRecordInput(user: User, input: { how?: unknown; givenOn?: unknown; note?: unknown; proof?: ProofInput[] }, companyId: Id, after: IsoDateTime) {
+    const how = input.how;
+    if (how !== 'app' && how !== 'call' && how !== 'meeting' && how !== 'letter') throw new BadRequest('Say how the Vice Chairman gave his answer: by message, call, meeting or letter.');
+    const givenOn = String(input.givenOn ?? '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(givenOn) || givenOn > this.today()) throw new BadRequest('Give the day the Vice Chairman gave his answer (today or earlier).');
+    if (givenOn < after.slice(0, 10)) throw new BadRequest('The Vice Chairman answers after the step before his, so the day cannot be earlier than that step.');
+    const note = String(input.note ?? '').trim().slice(0, 300);
+    if (note.length < 3) throw new BadRequest('Write what the Vice Chairman said, even a short line.');
+    const rec = this.proofRecords(user, companyId, null, input.proof ?? [], {}, { documentsOnly: true });
+    const files = rec.docs.length;
+    if ((how === 'app' || how === 'letter') && !files) throw new BadRequest(how === 'app' ? 'Upload a screenshot of the Vice Chairman\'s message.' : 'Upload the Vice Chairman\'s letter.');
+    if (!files && note.length < 15) throw new BadRequest('With no file, write when you called or met the Vice Chairman and what he said.');
+    return { how: how as VcConsentRecord['how'], givenOn, note, rec };
+  }
+
+  /**
+   * B1 (Fauzan, 23 Nov 2026: "Vc not in system yet. But when consent needed. Cos or dcos or hr upload the consent given
+   * from what app or call"): the Chief of Staff, the Deputy or the HR Administrator records the Vice Chairman's consent
+   * (or refusal) to staff leave or to a salary amount, with how he gave it and the proof. Never the person whose leave
+   * or pay it is, and never whoever took the step just before, so two people stand behind each consent.
+   */
+  async recordVcConsent(user: User, target: 'leave' | 'pay', id: Id, input: { consent?: unknown; how?: unknown; givenOn?: unknown; note?: unknown; proof?: ProofInput[] }) {
+    if (!vcRecorder(user)) throw new AccessDenied('hr.pay', "(the Chief of Staff, the Deputy or the HR Administrator records the Vice Chairman's answer)");
+    if (typeof input.consent !== 'boolean') throw new BadRequest('Say whether the Vice Chairman consented or refused.');
+    if (target === 'leave') return this.decideLeave(user, id, input.consent, String(input.note ?? ''), input);
+    if (target === 'pay') return this.decidePayChange(user, id, input.consent, String(input.note ?? ''), input);
+    throw new BadRequest('Choose leave or pay.');
+  }
+
+  /** B1: whether this person may record the Vice Chairman's consent on a pay change now. */
+  private payVcRecordable(user: User, c: PayChange, users: User[]): boolean {
+    if (!vcRecorder(user) || c.status !== 'pending' || c.kind === 'BANK') return false;
+    if (c.requestedById === user.id || (user.personId && user.personId === c.personId)) return false;
+    const forDirector = users.some((u) => u.personId === c.personId && isHrDirector(u));
+    if (!forDirector && !c.hrDirectorCheck) return false;
+    return c.hrDirectorCheck?.byId !== user.id;
+  }
+
+  /** D1: the cover rows (empty before module cos-cover-v1 is installed) and whether the Chief of Staff is on approved leave today. */
+  private async cosCoverState(): Promise<{ rows: CosCoverRow[]; cosOnLeave: boolean; today: IsoDate; installed: boolean }> {
+    const today = this.today();
+    const installed = !this.store.hasTable || (await this.store.hasTable('cosCover'));
+    const rows = installed ? await this.store.list('cosCover', {}) : [];
+    const cos = (await this.store.list('users', {})).find((u) => isChiefOfStaff(u) && !accessClosed(u, today));
+    const leave = cos?.personId ? await this.store.list('leaveRequests', { personId: cos.personId }).catch(() => [] as LeaveRequest[]) : [];
+    const cosOnLeave = leave.some((q) => q.status === 'approved' && q.from <= today && q.to >= today);
+    return { rows, cosOnLeave, today, installed };
+  }
+
+  /** D1: whether a user acts for the Chief of Staff on an item today. */
+  private async cosActsFor(user: User, item: CosCoverItem) {
+    if (user.integration) return { acts: false, as: null };
+    if (isChiefOfStaff(user)) return { acts: true, as: 'cos' as const };
+    if (!coverKindOf(user)) return { acts: false, as: null };
+    const st = await this.cosCoverState();
+    return cosActs(user, item, st.rows, st.cosOnLeave, st.today);
+  }
+
+  /** D1: which office runs a company: the Chief of Staff, the CEO, or the Deputy while covering. */
+  private async mayRunBy(user: User): Promise<boolean> {
+    return canSetRunBy(user) || (user.leadership === 'deputy_cos' && (await this.cosActsFor(user, 'office_run_by')).acts);
+  }
+
+  /**
+   * D1 (Fauzan, 23 Nov 2026: "Yes and hr adminstrator. Cos can delegate what needed"): the Chief of Staff cover screen.
+   * The Chief of Staff, the Deputy, the HR Administrator and the CEO see what is handed to whom; only the Chief of Staff
+   * changes it.
+   */
+  async cosCoverView(user: User) {
+    if (user.integration || !(isHrDirector(user) || isHrAdmin(user) || user.opsTier === 'ceo')) throw new AccessDenied('view', '(Chief of Staff cover)');
+    const st = await this.cosCoverState();
+    const mine = coverKindOf(user);
+    return {
+      installed: st.installed,
+      cosOnLeave: st.cosOnLeave,
+      canSet: isChiefOfStaff(user) && st.installed,
+      items: COS_COVER_KEYS.map((item) => {
+        const row = cosCoverInForce(st.rows, item, st.today);
+        return {
+          item,
+          label: COS_COVER_ITEMS[item],
+          /** The HR Administrator cannot open these two screens (group data and PDPA), so only the Deputy can take them. */
+          dcosOnly: item === 'office_run_by' || item === 'pdpa_switch',
+          to: row?.to ?? [],
+          until: row?.until ?? null,
+          reason: row?.reason ?? null,
+          by: row?.by ?? null,
+          at: row?.at ?? null,
+          iAct: mine ? cosActs(user, item, st.rows, st.cosOnLeave, st.today).acts : isChiefOfStaff(user),
+        };
+      }),
+      history: [...st.rows].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 30),
+    };
+  }
+
+  /** D1: the Chief of Staff hands an item to the Deputy and/or the HR Administrator, takes it back, or sets a last day. */
+  async setCosCover(user: User, input: { item?: unknown; to?: unknown; until?: unknown; reason?: unknown }) {
+    if (!isChiefOfStaff(user)) throw new AccessDenied('view', '(only the Chief of Staff hands over their work)');
+    const item = input.item as CosCoverItem;
+    if (!COS_COVER_KEYS.includes(item)) throw new BadRequest('Choose what to hand over.');
+    const to = Array.isArray(input.to) ? [...new Set(input.to.filter((x): x is CosCoverTo => x === 'dcos' || x === 'hr_admin'))] : [];
+    if ((item === 'office_run_by' || item === 'pdpa_switch') && to.includes('hr_admin'))
+      throw new BadRequest('Only the Deputy can take this one: the HR Administrator cannot open that screen.');
+    const until = input.until == null || input.until === '' ? null : String(input.until);
+    if (until !== null && (!/^\d{4}-\d{2}-\d{2}$/.test(until) || until < this.today())) throw new BadRequest('The last day must be today or later, or left empty.');
+    const reason = String(input.reason ?? '').trim().slice(0, 300);
+    if (reason.length < 3) throw new BadRequest('Give the reason, for example "on leave 1 to 5 Dec" or "routine work".');
+    const st = await this.cosCoverState();
+    if (!st.installed) throw new BadRequest('Chief of Staff cover is not installed in this database yet (module cos-cover-v1, run by the CEO).');
+    const cur = cosCoverInForce(st.rows, item, st.today);
+    if (JSON.stringify([...(cur?.to ?? [])].sort()) === JSON.stringify([...to].sort()) && (cur?.until ?? null) === until) throw new BadRequest('Nothing to change.');
+    const at = this.now();
+    const row: CosCoverRow = { id: `cosc-${item}-${toMs(at)}-${globalThis.crypto.randomUUID().slice(0, 8)}`, item, to, until, reason, by: user.name, byId: user.id, at };
+    const who = to.map((x) => (x === 'dcos' ? 'the Deputy Chief of Staff' : 'the HR Administrator')).join(' and ');
+    return this.store.transaction(async (tx) => {
+      await tx.insert('cosCover', row);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: null,
+        action: 'hr.cos_cover',
+        entity: 'cos_cover',
+        entityId: row.id,
+        summary: `${COS_COVER_ITEMS[item]}: ${to.length ? `handed to ${who}${until ? ` until ${until}` : ''}` : 'taken back by the Chief of Staff'}. ${reason}`,
+      });
+      return row;
+    });
+  }
+
   private async staffLeaveVcOn(): Promise<boolean> {
     return (await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`))?.staffLeaveVcConsent?.at(-1)?.on ?? true;
   }
@@ -50541,7 +52663,7 @@ export class PrimaService {
     });
   }
 
-  async setApprovalLimits(user: User, input: { claimsMax?: unknown; purchasesMax?: unknown; comment?: unknown }) {
+  async setApprovalLimits(user: User, input: { claimsMax?: unknown; purchasesMax?: unknown; onlineBuyMax?: unknown; comment?: unknown }) {
     if (user.integration || user.opsTier !== 'ceo') throw new AccessDenied('view', '(only the CEO sets approval limits)');
     const money = (v: unknown, label: string, max: number): number | null => {
       if (v === null || v === undefined || v === '') return null;
@@ -50552,6 +52674,10 @@ export class PrimaService {
     };
     const claimsMax = money(input.claimsMax, 'Staff claims without the COO', 10_000);
     const purchasesMax = money(input.purchasesMax, 'Purchases without the CEO', 1_000_000);
+    // D3 (Fauzan, 23 Nov 2026): the most one purchase may be bought from an online platform; empty turns it off. Left
+    // out of the request, it keeps what is set.
+    const onlineGiven = Object.prototype.hasOwnProperty.call(input, 'onlineBuyMax');
+    const onlineIn = onlineGiven ? money(input.onlineBuyMax, 'Buying from an online platform', 100_000) : undefined;
     const comment = typeof input.comment === 'string' ? input.comment.trim() : '';
     if (comment.length < 3) throw new BadRequest('Say why the limits change.');
     const at = this.now();
@@ -50561,12 +52687,14 @@ export class PrimaService {
       const row = await tx.get('finStatus', id);
       if (!row) throw new NotFound('Group Finance record');
       const cur = row.approvalLimits ?? { claimsMax: null, purchasesMax: null, set: null, history: [] };
-      if (cur.claimsMax === claimsMax && cur.purchasesMax === purchasesMax) throw new BadRequest('Nothing to change.');
+      const onlineBuyMax = onlineIn === undefined ? (cur.onlineBuyMax ?? null) : onlineIn;
+      if (cur.claimsMax === claimsMax && cur.purchasesMax === purchasesMax && (cur.onlineBuyMax ?? null) === onlineBuyMax) throw new BadRequest('Nothing to change.');
       const next: ApprovalLimits = {
         claimsMax,
         purchasesMax,
+        onlineBuyMax,
         set: { by: user.name, byId: user.id, at, comment: comment.slice(0, 300) },
-        history: [...cur.history, { claimsMax: cur.claimsMax, purchasesMax: cur.purchasesMax, set: cur.set }].slice(-50),
+        history: [...cur.history, { claimsMax: cur.claimsMax, purchasesMax: cur.purchasesMax, onlineBuyMax: cur.onlineBuyMax ?? null, set: cur.set }].slice(-50),
       };
       await tx.update('finStatus', id, { approvalLimits: next });
       const rm = (n: number | null) => (n == null ? 'no limit' : `RM${n.toFixed(2)}`);
@@ -50577,7 +52705,7 @@ export class PrimaService {
         action: 'approval.limits.set',
         entity: 'fin_status',
         entityId: id,
-        summary: `Approval limits: staff claims without the COO ${rm(claimsMax)}; purchases without the CEO ${rm(purchasesMax)}. ${comment}`.slice(0, 900),
+        summary: `Approval limits: staff claims without the COO ${rm(claimsMax)}; purchases without the CEO ${rm(purchasesMax)}; buying online ${onlineBuyMax == null ? 'off' : `up to ${rm(onlineBuyMax)}`}. ${comment}`.slice(0, 900),
       });
       return next;
     });
@@ -51040,7 +53168,7 @@ export class PrimaService {
           can: {
             assign: role === 'arms' && (h.step === 'asked' || h.step === 'assigned'),
             outcome: role === 'arms' && h.step === 'assigned',
-            confirm: mineToAnswer && h.step === 'helped' && can(user, g, today, 'case.update', c.companyId),
+            confirm: mineToAnswer && h.step === 'helped' && can(user, g, today, 'case.raise', c.companyId),
             withdraw: mineToAnswer && (h.step === 'asked' || h.step === 'assigned'),
           },
         };
@@ -51158,12 +53286,14 @@ export class PrimaService {
 
   /** Load a police help case for a step, held for the rest of the transaction. */
   private async policeHelpFor(tx: Store, user: User, caseId: Id, role: 'arms' | 'asker') {
-    if (policeHelpRole(user) !== role) throw new AccessDenied(role === 'arms' ? 'arms.view' : 'case.update', '(police help)');
+    // The company asks and confirms (a sign-off it keeps, Fauzan, 23 Nov 2026), so the asker needs case.raise, not case.update.
+    const act = role === 'arms' ? 'arms.view' : 'case.raise';
+    if (policeHelpRole(user) !== role) throw new AccessDenied(act, '(police help)');
     await tx.lock?.('cases', caseId);
     const c = await tx.get('cases', caseId);
     if (!c?.policeHelp) throw new NotFound('Police help request');
     const g = await tx.list('grants');
-    if (!can(user, g, this.today(), role === 'arms' ? 'arms.view' : 'case.update', c.companyId)) throw new AccessDenied(role === 'arms' ? 'arms.view' : 'case.update', c.companyId);
+    if (!can(user, g, this.today(), act, c.companyId)) throw new AccessDenied(act, c.companyId);
     if (role === 'asker' && c.policeHelp.askedById !== user.id && user.role !== 'company_manager')
       throw new AccessDenied('case.update', '(only the person who asked or the company manager)');
     return { c, h: c.policeHelp };
@@ -52517,6 +54647,7 @@ export class PrimaService {
     const months = lastMonths(today, 12);
     const visible = visibleCompanyIds(user, g, today);
     const companies = (await this.store.list('companies', { id: visible })).sort((a, b) => a.name.localeCompare(b.name));
+    const onAppIds = await this.companiesOnApp();
     const defs = (await this.store.list('reportDefs')).filter((d) => d.active);
     const subs = await this.store.list('reportSubmissions');
     // A weekly report belongs to the month its week starts in; a monthly one to its own month.
@@ -52543,7 +54674,7 @@ export class PrimaService {
       const periods = reportPeriods(def, today, def.frequency === 'weekly' ? 54 : 12);
       const from =
         def.from === 'company'
-          ? companies.map((c) => ({ key: c.id, name: c.name, kind: 'company' as const, onApp: !!c.isPilot, match: (x: ReportSubmission) => x.companyId === c.id }))
+          ? companies.map((c) => ({ key: c.id, name: c.name, kind: 'company' as const, onApp: onAppIds.has(c.id), match: (x: ReportSubmission) => x.companyId === c.id }))
           : [
               {
                 key: def.department!,
@@ -53394,6 +55525,8 @@ export class PrimaService {
         await add(() => (f as (u: User) => Promise<HomeItem[]>).call(this, user));
       // Central staff have no Home screen: the shared login reminders (owner, backup, IT) reach them by the bell.
       await add(() => this.sharedLogins.homeItems(user));
+      // Monthly reports Prima made that wait for this person's check (Fauzan, 23 Nov 2026).
+      await add(() => this.autoReports.homeItems(user));
     }
     if (user.department === 'it') await add(() => this.itJobAlertItems(user));
     return items;
@@ -54573,6 +56706,17 @@ export class PrimaService {
       });
     }
     if (input.mode !== 'new') throw new BadRequest('Choose new paper, correction or the JA date.');
+    // A date loaded from FWM's own list (rule FWM-BULK-LOAD) is confirmed by recording the copy with the same dates.
+    if (current?.source === 'list' && current.expiresOn === input.expiresOn && current.issuedOn === input.issuedOn) {
+      const rec = this.proofRecords(user, person.companyId, null, proof, {}, { documentsOnly: true });
+      if (!rec.docs.length) throw new BadRequest(`Attach a copy of the ${label.toLowerCase()}.`);
+      return this.store.transaction(async (tx) => {
+        const docIds = await this.saveProof(tx, { photos: [], docs: rec.docs.map((d) => ({ ...d, fwmId: current.id, caption: d.caption || `${label} copy` })) });
+        const saved = await tx.update('credentials', current.id, { number: number || current.number, source: 'prima', docIds: [...(current.docIds ?? []), ...docIds], recordedBy: user.name, recordedById: user.id, recordedAt: at });
+        await tx.audit({ at, actor: user.name, companyId: person.companyId, action: 'fwm.paper.copy', entity: 'person', entityId: person.id, summary: `${label} for ${person.staffNo}: copy seen for the date loaded from the list (${current.expiresOn})` });
+        return saved;
+      });
+    }
     // A date taken from the JA app has no real issue date (the recording day stands in), so only its expiry is compared.
     if (current && current.source !== 'ja' && current.source !== 'typed' && input.issuedOn <= current.issuedOn) throw new BadRequest(`The paper on record was issued ${current.issuedOn}. A new paper is issued after it; to fix a mistake, use Correct.`);
     if (current?.expiresOn && input.expiresOn <= current.expiresOn) throw new BadRequest(`A renewed paper must expire after ${current.expiresOn}. To fix a mistake, use Correct.`);
@@ -55060,6 +57204,32 @@ export class PrimaService {
     return 'coo';
   }
 
+  /** The next step an award still needs, or null when it is fully approved (D3, 23 Nov 2026). */
+  private amAwardNextStep(award: AmBqAward, adInvolved: boolean): 'director' | 'coo' | 'vc' | 'ceo' | null {
+    const first = adInvolved ? award.coo : award.director;
+    if (!first) return adInvolved ? 'coo' : 'director';
+    if (award.total > RULES.amBq.value.vcAbove && !award.vc) return 'vc';
+    if (award.total > RULES.amBq.value.ceoAbove && !award.ceo) return 'ceo';
+    return null;
+  }
+
+  /** Which step this person takes on the award; nobody who asked it, recorded its quote or decided it before decides. */
+  private async amAwardStep(user: User, bq: AmBq, award: AmBqAward): Promise<'director' | 'coo' | 'vc' | 'ceo'> {
+    if (award.final || awardTurnedDown(award)) throw new BadRequest('There is no award waiting for a decision.');
+    const involved = this.amAwardInvolved(bq, award);
+    if (involved.includes(user.id)) throw new BadRequest('You prepared or recorded part of this award, so another person decides.');
+    const adInvolved = await this.amBqDirectorInvolved(involved);
+    const next = this.amAwardNextStep(award, adInvolved);
+    if (!next) throw new BadRequest('There is no award waiting for a decision.');
+    if ([award.director, award.coo, award.vc, award.ceo].some((x) => x?.byId === user.id)) throw new BadRequest('The same person cannot approve twice.');
+    if (user.integration) throw new AccessDenied('view', '(Asset Management award)');
+    if (next === 'director' && user.assetRole !== 'director') throw new AccessDenied('view', '(the Asset Director decides this award)');
+    if (next === 'coo' && user.opsTier !== 'coo') throw new AccessDenied('view', '(the Asset Director worked on this award, so the COO decides)');
+    if (next === 'vc' && user.leadership !== 'vice_chairman') throw new AccessDenied('view', `(the Vice Chairman consents to an award above RM${RULES.amBq.value.vcAbove.toLocaleString('en-MY')})`);
+    if (next === 'ceo' && user.opsTier !== 'ceo') throw new AccessDenied('view', `(the CEO approves an award above RM${RULES.amBq.value.ceoAbove.toLocaleString('en-MY')})`);
+    return next;
+  }
+
   private async amBqDirectorInvolved(involved: Id[]): Promise<boolean> {
     for (const id of involved) if ((await this.store.get('users', id))?.assetRole === 'director') return true;
     return false;
@@ -55093,7 +57263,6 @@ export class PrimaService {
     const bq = wo.bq ?? null;
     const est = bq ? bqEstimate(bq.lines, bq.contingencyPct ?? 0) : { known: 0, unpriced: 0, contingency: 0, withContingency: 0 };
     const award = bq?.award ?? null;
-    const awardCoo = !!award && award.total > RULES.amBq.value.cooAbove;
     // Who may decide now: the Asset Director first, the COO after them above the limit, and the COO alone when the
     // Asset Director prepared or asked it. Never the person who prepared or asked it.
     const mayDecide = async (involved: Id[], director: AmBqStep | null, coo: AmBqStep | null, cooToo: boolean) => {
@@ -55102,9 +57271,11 @@ export class PrimaService {
       if (!director) return user.assetRole === 'director';
       return director.approve && cooToo && director.byId !== user.id && user.opsTier === 'coo';
     };
-    const decideBq = !!bq && bq.status === 'submitted' && (await mayDecide(this.amBqInvolved(bq), bq.director, bq.coo, bqRoute(bq.estimate, 0).cooToo));
-    const awardOpen = !!award && !award.final && !(award.director && !award.director.approve) && !(award.coo && !award.coo.approve);
-    const decideAwardNow = !!bq && !!award && awardOpen && (await mayDecide(this.amAwardInvolved(bq, award), award.director, award.coo, awardCoo));
+    // D3 (23 Nov 2026): the BQ itself is the Asset Director's (the COO's only when the Director worked on it); the
+    // spending ladder applies to the award.
+    const decideBq = !!bq && bq.status === 'submitted' && (await mayDecide(this.amBqInvolved(bq), bq.director, bq.coo, false));
+    const awardOpen = !!award && !award.final && !awardTurnedDown(award);
+    const decideAwardNow = !!bq && !!award && awardOpen && (await this.amAwardStep(user, bq, award).then(() => true, () => false));
     const voOpen = (bq?.variations ?? []).find((v) => this.amVoOpen(v)) ?? null;
     const voDecide = !!bq && !!voOpen && (await this.amVoStep(user, bq, voOpen).then(() => true, () => false));
     const voNext = bq && voOpen ? (!(await this.amVoApproved(bq, voOpen)) ? 'approval' : !voOpen.ceo ? 'ceo' : 'chairman') : null;
@@ -55325,13 +57496,48 @@ export class PrimaService {
     if (!bq || bq.status !== 'submitted') throw new BadRequest('There is no BQ waiting for a decision.');
     const reason = (note ?? '').trim().slice(0, 300);
     if (!reason) throw new BadRequest(approve ? 'Say why you are approving (a short comment is enough).' : 'Say why the BQ is returned.');
-    const cooToo = bqRoute(bq.estimate, 0).cooToo;
+    const cooToo = false; // D3 (23 Nov 2026): the Asset Director decides the BQ; the spending ladder is on the award.
     const who = await this.amBqApproverStep(user, this.amBqInvolved(bq), bq.director, cooToo, 'BQ');
     const step: AmBqStep = { by: user.name, byId: user.id, at: this.now(), approve, note: reason };
     const next: AmBq = { ...bq, [who]: step };
     if (!approve) next.status = 'returned';
     else if (who === 'coo' || !cooToo) next.status = 'approved';
     return this.amBqWrite(user, wo, next, approve ? 'approve' : 'return', `BQ ${approve ? 'approved' : 'returned'} by ${who === 'coo' ? 'the COO' : 'the Asset Director'}: ${reason}`);
+  }
+
+  /**
+   * Quotes only from approved contractors (department check, 23 Nov 2026, gap 3; planned with the contractors list on
+   * 5 Nov 2026). Once the contractors list is in use (its module installed and at least one contractor on it), a quote
+   * or an award needs a contractor on the list who is approved for use: one waiting for approval, suspended or
+   * blacklisted is refused. Before that, the name stays free text as before.
+   */
+  private async amContractorUsable(name: string) {
+    if ((await this.store.amExtrasReady?.()) === false) return;
+    const list = await this.store.list('amContractors', {}).catch(() => []);
+    if (!list.length) return;
+    const c = list.find((x) => x.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (!c) throw new BadRequest(`${name} is not on the contractors list. Add them on Contractors and have the Asset Director approve them first.`);
+    if (c.status !== 'active') throw new BadRequest(`${c.name} is ${c.status === 'pending' ? 'waiting for the Asset Director\'s approval' : c.status} on the contractors list, so their quote cannot be used.`);
+  }
+
+  /**
+   * "Needs attention today" on the Asset Management screen (department check, 23 Nov 2026, gap 1). Asset Management
+   * staff have no home board, so their own to-do items (rental homes, office jobs, short stays and the extras: CIDB,
+   * meters, statutory jobs, MOTAC, resort holds, harvest) are gathered here. Each source checks the person itself.
+   */
+  async assetToday(user: User) {
+    if (!assetRole(user)) throw new AccessDenied('view', '(Asset Management)');
+    const items = [
+      ...(await this.amExtras.homeItems(user).catch(() => [])),
+      ...(await this.rental.homeItems(user).catch(() => [])),
+      ...(await this.officeAm.homeItems(user).catch(() => [])),
+      ...(await this.shortStays.homeItems(user).catch(() => [])),
+    ] as { tone: string; tag: string; title: string; detail: string }[];
+    // D8: the acting Asset Director sees that they are acting, and until when.
+    if (user.actingAssetDirector)
+      items.unshift({ tone: 'info', tag: 'Asset Management', title: `You are acting Asset Director for ${user.actingAssetDirector.holderName}${user.actingAssetDirector.to ? ` until ${user.actingAssetDirector.to}` : ''}`, detail: 'You approve in the Director\u2019s place, never on work you keyed or worked on. Every step shows your name.' });
+    const rank = (t: string) => (t === 'crit' ? 0 : t === 'warn' ? 1 : 2);
+    return items.map(({ tone, tag, title, detail }) => ({ tone, tag, title, detail })).sort((a, b) => rank(a.tone) - rank(b.tone));
   }
 
   /** Record a contractor's quote against the approved BQ, line by line. */
@@ -55345,7 +57551,7 @@ export class PrimaService {
     const bq = wo.bq;
     if (!bq || bq.status !== 'approved') throw new BadRequest('Quotes are recorded only against an approved BQ.');
     if (wo.status === 'done') throw new BadRequest('The work is already done.');
-    const open = bq.award && !(bq.award.director && !bq.award.director.approve) && !(bq.award.coo && !bq.award.coo.approve);
+    const open = bq.award && !awardTurnedDown(bq.award);
     if (open) throw new BadRequest('An award is already asked or made for this job.');
     const contractor = String(input.contractor ?? '').trim().slice(0, 120);
     const ref = String(input.ref ?? '').trim().slice(0, 40);
@@ -55354,6 +57560,7 @@ export class PrimaService {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.receivedOn ?? '') || input.receivedOn > today) throw new BadRequest('Give the date the quote was received, not in the future.');
     if (input.validUntil != null && !/^\d{4}-\d{2}-\d{2}$/.test(input.validUntil)) throw new BadRequest('Give the valid-until date as a date.');
     if (bq.quotes.some((q) => q.contractor.toLowerCase() === contractor.toLowerCase())) throw new BadRequest(`${contractor} already has a quote on this job.`);
+    await this.amContractorUsable(contractor);
     if (bq.quotes.length >= 12) throw new BadRequest('Up to 12 quotes per job.');
     const seen = new Set<string>();
     const lines = (Array.isArray(input.lines) ? input.lines : []).map((l) => {
@@ -55382,11 +57589,12 @@ export class PrimaService {
     if (!bq || bq.status !== 'approved') throw new BadRequest('The BQ must be approved first.');
     if (wo.status === 'done') throw new BadRequest('The work is already done.');
     const prev = bq.award;
-    if (prev && !(prev.director && !prev.director.approve) && !(prev.coo && !prev.coo.approve)) throw new BadRequest('An award is already asked or made for this job.');
+    if (prev && !awardTurnedDown(prev)) throw new BadRequest('An award is already asked or made for this job.');
     const quote = bq.quotes.find((q) => q.id === quoteId);
     if (!quote) throw new NotFound('Quote');
     const cmp = compareQuotes(bq, rates, today);
     const c = cmp.checks.find((x) => x.quoteId === quoteId)!;
+    await this.amContractorUsable(quote.contractor);
     if (!c.complete) throw new BadRequest(`${quote.contractor} has not priced every BQ line.`);
     if (!c.sumOk) throw new BadRequest(`${quote.contractor}'s lines do not add up to the total on the quote. Ask them to correct it first.`);
     if (c.expired) throw new BadRequest(`${quote.contractor}'s quote is no longer valid. Ask them to confirm the price.`);
@@ -55408,7 +57616,7 @@ export class PrimaService {
     if (role !== 'team') throw new AccessDenied('view', '(the Asset Management team reopens the BQ)');
     const bq = wo.bq;
     const award = bq?.award ?? null;
-    const awardOpen = !!award && !award.final && !(award.director && !award.director.approve) && !(award.coo && !award.coo.approve);
+    const awardOpen = !!award && !award.final && !awardTurnedDown(award);
     if (!bq || bq.status !== 'approved' || award?.final || awardOpen) throw new BadRequest('Only an approved BQ with no award waiting or made can be reopened.');
     const why = (reason ?? '').trim().slice(0, 300);
     if (!why) throw new BadRequest('Say why the BQ is reopened.');
@@ -55431,7 +57639,7 @@ export class PrimaService {
     const waiting = (await this.store.list('amWorkOrders', {})).filter((w) => {
       const bq = w.bq;
       if (!bq) return false;
-      const awardOpen = !!bq.award && !bq.award.final && ![bq.award.director, bq.award.coo].some((s) => s && !s.approve);
+      const awardOpen = !!bq.award && !bq.award.final && !awardTurnedDown(bq.award);
       return bq.status === 'submitted' || awardOpen || (bq.variations ?? []).some((v) => this.amVoOpen(v));
     });
     const items: HomeItem[] = [];
@@ -55461,11 +57669,11 @@ export class PrimaService {
 
   /** Whether the COO must also approve this VO: all VOs together past the rule's % of the award, or the price past the limit. */
   private amVoCooToo(bq: AmBq, vo: Pick<AmVariation, 'id' | 'amount'>): boolean {
-    const r = RULES.amBq.value;
-    const award = bq.award!.total;
-    const others = (bq.variations ?? []).filter((v) => v.final && v.id !== vo.id);
-    const together = Math.abs(others.reduce((n, v) => n + v.amount, 0) + vo.amount);
-    return together > (award * r.voCooPct) / 100 || this.amPriceNow(bq) + vo.amount > r.cooAbove;
+    // D3 (Fauzan, 23 Nov 2026): one ladder for all Asset Management spending; the COO rung is retired. Every VO already
+    // needs the CEO's and the Chairman's consent after the Asset Director (Fauzan, 5 Nov 2026), so nothing is lost.
+    void bq;
+    void vo;
+    return false;
   }
 
   /** A VO still waiting: not final and nobody has turned it down. */
@@ -55604,7 +57812,11 @@ export class PrimaService {
     );
   }
 
-  /** The Asset Director, then the COO above the limit, decides the award. The final approval sets the contractor and price. */
+  /**
+   * The award follows one ladder for all Asset Management spending (D3, Fauzan 23 Nov 2026): the Asset Director (the
+   * COO in the Director's place when the Director worked on it), then the Vice Chairman's consent above AM-BQ vcAbove,
+   * then the CEO above ceoAbove. The final approval sets the contractor and price.
+   */
   async amAwardDecide(user: User, woId: Id, approve: boolean, note: string) {
     const { wo } = await this.amBqContext(user, woId);
     const bq = wo.bq;
@@ -55612,10 +57824,9 @@ export class PrimaService {
     if (!bq || !award || award.final || (award.director && !award.director.approve) || (award.coo && !award.coo.approve)) throw new BadRequest('There is no award waiting for a decision.');
     const reason = (note ?? '').trim().slice(0, 300);
     if (!reason) throw new BadRequest(approve ? 'Say why you are approving (a short comment is enough).' : 'Say why the award is turned down.');
-    const cooToo = award.total > RULES.amBq.value.cooAbove;
-    const who = await this.amBqApproverStep(user, this.amAwardInvolved(bq, award), award.director, cooToo, 'award');
+    const who = await this.amAwardStep(user, bq, award);
     const step: AmBqStep = { by: user.name, byId: user.id, at: this.now(), approve, note: reason };
-    const final = approve && (who === 'coo' || !cooToo);
+    const final = approve && this.amAwardNextStep({ ...award, [who]: step }, await this.amBqDirectorInvolved(this.amAwardInvolved(bq, award))) === null;
     const next: AmBq = { ...bq, award: { ...award, [who]: step, final } };
     const quote = bq.quotes.find((q) => q.id === award.quoteId)!;
     // The final approval sets the contractor and the agreed price on the work order, in the same transaction.
@@ -56096,10 +58307,12 @@ export class PrimaService {
    */
   async setPdpaSettings(user: User, input: { enabled?: boolean; keepYears?: number }, reason: string) {
     const cos = !user.integration && user.leadership === 'cos';
+    // D1 (Fauzan, 23 Nov 2026): the Deputy switches PDPA on or off while covering for the Chief of Staff.
+    const switcher = cos || (input.enabled !== undefined && (await this.cosActsFor(user, 'pdpa_switch')).acts);
     const officer = this.pdpaRoleOf(user) === 'officer';
     const why = String(reason ?? '').trim().slice(0, 300);
     if (why.length < 3) throw new BadRequest('Give the reason for the change.');
-    if (input.enabled !== undefined && !cos) throw new AccessDenied('view', '(only the Chief of Staff switches PDPA on or off)');
+    if (input.enabled !== undefined && !switcher) throw new AccessDenied('view', '(only the Chief of Staff switches PDPA on or off)');
     if (input.keepYears !== undefined && !cos && !officer) throw new AccessDenied('view', '(the PDPA officer or the Chief of Staff sets the keep period)');
     const legal = RULES.pdpaBreachRegister.value.keepYears;
     if (input.keepYears !== undefined && (!Number.isInteger(input.keepYears) || input.keepYears < legal || input.keepYears > 20))
@@ -56427,7 +58640,7 @@ export class PrimaService {
 
   /** The breach register fields: what data, how it happened, and what was done so it does not happen again. */
   async pdpaBreachDetails(user: User, caseId: Id, input: { dataKinds: string; cause: string; remedy: string }) {
-    if (this.pdpaRoleOf(user) !== 'officer') throw new AccessDenied('view', '(only the PDPA officer updates PDPA cases)');
+    const by = await this.pdpaActor(user, 'updates PDPA cases');
     const t = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max);
     const dataKinds = t(input.dataKinds, 300);
     const cause = t(input.cause, 500);
@@ -56451,7 +58664,7 @@ export class PrimaService {
         action: 'pdpa.breach.details',
         entity: 'pdpa_case',
         entityId: c.id,
-        summary: `${c.title}: breach register details recorded.`,
+        summary: `${c.title}: breach register details recorded.${by === 'cover' ? ` (${PDPA_COVER_NOTE})` : ''}`,
       });
       return saved;
     });
@@ -57479,6 +59692,7 @@ export class PrimaService {
     if (!s || s.cancelled) throw new NotFound('CMS seat');
     const own = await this.isCmsSeatHolder(user, s);
     if (!own && !canRunCms(user)) throw new BadRequest('This seat is not yours.');
+    if (!own) await this.armsManagerOnly(user);
     if (!s.clockIn) throw new BadRequest('Not clocked in.');
     if (s.clockOut) throw new BadRequest('Already clocked out.');
     const text = (note ?? '').trim().slice(0, 300);
@@ -57515,6 +59729,103 @@ export class PrimaService {
    * Arms Control takes a person off a seat that has not started (sick, leave, emergency), with the reason. The seat
    * shows as empty, so the roster alert asks for someone else.
    */
+  /**
+   * B4 (Fauzan, 23 Nov 2026): upload a CMS roster from Excel (saved as CSV) instead of keying seat by seat. Each line
+   * names a planned seat (date, start time, post, seat number) and the person; every line goes through the same checks
+   * as the roster screen (qualified post, 12 hours in a row, 6 days in a row, rest setting, approved leave, a seat already
+   * clocked in), in file order. Lines that fail are listed with the reason; nothing is guessed. Plan the days first.
+   */
+  async uploadCmsRoster(user: User, input: { fileName?: unknown; rows?: unknown }) {
+    if (!canRunCms(user)) throw new AccessDenied('arms.view', '(CMS roster)');
+    const rows = Array.isArray(input.rows) ? (input.rows as unknown[]).slice(0, 1000) : [];
+    if (!rows.length) throw new BadRequest('The file has no lines.');
+    const fileName = String(input.fileName ?? 'roster.csv').slice(0, 120);
+    const seats = (await this.store.list('cmsShifts')).filter((x) => !x.cancelled && !x.replacementOf);
+    const postOf = (v: string): CmsPost | null => {
+      const k = v.toLowerCase().replace(/[^a-z]/g, '');
+      if (['hc', 'head', 'headcontrol', 'ketuakawalan'].includes(k)) return 'HEAD_CONTROL';
+      if (['mo', 'monitor', 'monitorofficer', 'pegawaipemantau'].includes(k)) return 'MONITOR_OFFICER';
+      return null;
+    };
+    const rejected: { line: number; staff: string; reason: string }[] = [];
+    let assigned = 0;
+    let line = 1;
+    for (const raw of rows) {
+      line++;
+      const r = (raw ?? {}) as Record<string, unknown>;
+      const t = (k: string) => String(r[k] ?? '').trim();
+      const staff = t('staff');
+      const date = t('date');
+      const start = t('start').padStart(5, '0').slice(0, 5);
+      const post = postOf(t('post'));
+      const seatNo = t('seat') ? Number(t('seat')) : 1;
+      if (!staff && !date && !t('start')) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { rejected.push({ line, staff, reason: 'Date must be YYYY-MM-DD.' }); continue; }
+      if (!/^\d{2}:\d{2}$/.test(start)) { rejected.push({ line, staff, reason: 'Start must be a time like 08:00.' }); continue; }
+      if (!post) { rejected.push({ line, staff, reason: 'Post must be HC (Head Control) or MO (Monitor Officer).' }); continue; }
+      if (!Number.isInteger(seatNo) || seatNo < 1) { rejected.push({ line, staff, reason: 'Seat must be 1, 2, ...' }); continue; }
+      if (!staff) { rejected.push({ line, staff, reason: 'Name the staff member.' }); continue; }
+      const seat = seats.find((x) => x.date === date && x.start.slice(11, 16) === start && x.post === post && x.seat === seatNo);
+      if (!seat) { rejected.push({ line, staff, reason: `No planned ${CMS_POST_LABEL[post]} seat ${seatNo} on ${date} at ${start}. Plan the roster for that day first.` }); continue; }
+      try {
+        await this.assignCmsShift(user, seat.id, staff);
+        assigned++;
+      } catch (e) {
+        rejected.push({ line, staff, reason: e instanceof Error ? e.message : 'Refused.' });
+      }
+    }
+    await this.store.transaction(async (tx) =>
+      tx.audit({ at: this.now(), actor: user.name, companyId: null, action: 'arms.cms_roster', entity: 'cms_roster', entityId: fileName, summary: `CMS roster uploaded from ${fileName}: ${assigned} seat(s) set, ${rejected.length} line(s) refused` }),
+    );
+    return { fileName, assigned, rejected };
+  }
+
+  /**
+   * B3 (Fauzan, 23 Nov 2026): a replacement for the rest of a shift. When the person on a seat has clocked in and then
+   * left (sick, emergency; clocked out early with the reason), Arms Control puts someone else on the rest of that shift.
+   * The first person keeps the hours they worked on their own seat; the replacement gets a new seat from now (or from the
+   * clock-out) to the end of the shift, with the same law and rest checks as any roster entry.
+   */
+  async replaceCmsSeat(user: User, shiftId: Id, staffNameOrId: string, reason: string) {
+    if (!canRunCms(user)) throw new AccessDenied('arms.view', '(CMS roster)');
+    const s = await this.store.get('cmsShifts', shiftId);
+    if (!s || s.cancelled) throw new NotFound('CMS seat');
+    const text = (reason ?? '').trim().slice(0, 300);
+    if (text.length < 3) throw new BadRequest('Say why a replacement is needed.');
+    if (!s.clockIn) throw new BadRequest('Nobody has clocked in on this seat. Put someone on the seat itself.');
+    if (!s.clockOut) throw new BadRequest(`${s.staffName ?? 'The person'} is still clocked in. Clock them out with the reason first.`);
+    const at = this.now();
+    const nowMs = toMs(at);
+    if (toMs(s.end) - nowMs < 15 * 60_000) throw new BadRequest('Less than 15 minutes of this shift is left. The next shift takes over.');
+    const rootId = s.replacementOf ?? s.id;
+    const open = (await this.store.list('cmsShifts', { date: s.date })).filter((x) => !x.cancelled && x.id !== s.id && (x.replacementOf ?? null) === rootId && toMs(x.start) > toMs(s.clockIn!));
+    if (open.length) throw new BadRequest('A replacement seat for the rest of this shift already exists. Use it.');
+    const startMs = Math.max(nowMs, toMs(s.clockOut)) - (Math.max(nowMs, toMs(s.clockOut)) % 60_000);
+    const seatId = `${rootId}-r${fromMs(startMs).slice(11, 16).replace(':', '')}`;
+    const seat: CmsShift = {
+      id: seatId,
+      date: s.date,
+      start: fromMs(startMs),
+      end: s.end,
+      post: s.post,
+      seat: s.seat,
+      staffName: null,
+      clockIn: null,
+      handoverAt: null,
+      handoverNote: null,
+      replacementOf: rootId,
+      replacementReason: text,
+    };
+    await this.store.transaction(async (tx) => {
+      await tx.lock?.('cmsShifts', s.id);
+      if (await tx.get('cmsShifts', seatId)) throw new BadRequest('A replacement seat for the rest of this shift already exists. Use it.');
+      await tx.insert('cmsShifts', seat);
+      await tx.audit({ at, actor: user.name, companyId: null, action: 'arms.cms_roster', entity: 'cms_shift', entityId: seatId, summary: `Replacement ${CMS_POST_LABEL[s.post]} seat ${s.date} ${seat.start.slice(11, 16)}-${s.end.slice(11, 16)} after ${s.staffName ?? 'the first person'} left: ${text}` });
+    });
+    // If the person chosen fails a check, the seat stays on the roster empty (the gap shows) for someone else.
+    return this.assignCmsShift(user, seatId, staffNameOrId);
+  }
+
   async releaseCmsSeat(user: User, shiftId: Id, reason: string) {
     if (!canRunCms(user)) throw new AccessDenied('arms.view', '(CMS roster)');
     const s = await this.store.get('cmsShifts', shiftId);
@@ -58122,7 +60433,7 @@ export class PrimaService {
   private memoAudiencesFor(user: User, ctx: MemoCtx): MemoAudience[] {
     const out: MemoAudience[] = [];
     // P78: the owner, as master administrator, may publish to either audience.
-    if ((user.role === 'pwvsb_officer' && user.leadership === 'cos') || isOwnerAdmin(user)) out.push('STAFF');
+    if (ctx.staffMemo.has(user.id) || isOwnerAdmin(user)) out.push('STAFF');
     if ((user.role === 'pwvsb_officer' && user.opsTier === 'coo') || isOwnerAdmin(user)) out.push('FIELD');
     if (!user.integration && user.role !== 'guard' && user.role !== 'site_device' && ctx.teamOf(user.id).length) out.push('TEAM');
     return out;
@@ -58160,7 +60471,10 @@ export class PrimaService {
       if (!teams.has(managerId)) teams.set(managerId, users.filter((u) => u.id !== managerId && !u.integration && u.role !== 'site_device' && inTeam(managerId, u)));
       return teams.get(managerId)!;
     };
-    return { users, statesOf, inTeam, teamOf };
+    // D1 (Fauzan, 23 Nov 2026): who publishes memos to all staff today, the Chief of Staff or whoever covers for them.
+    const cover = await this.cosCoverState();
+    const staffMemo = new Set(users.filter((u) => cosActs(u, 'staff_memo', cover.rows, cover.cosOnLeave, cover.today).acts).map((u) => u.id));
+    return { users, statesOf, inTeam, teamOf, staffMemo };
   }
 
   /**
@@ -58449,7 +60763,8 @@ export class PrimaService {
     const period = String(input.period ?? '');
     if (!MONTH.test(period)) throw new BadRequest('Give the month as YYYY-MM.');
     const workers = await this.fwStatPlaced(owner, String(input.userCompanyId ?? '').slice(0, 80), input.userBranchId ? String(input.userBranchId).slice(0, 80) : null, period);
-    return workers.map(({ age, ...w }) => ({ ...w, expected: expectedContribution(w.wage, age, period) }));
+    const renewals = await this.store.list('fwRenewals', { companyId: owner });
+    return workers.map(({ age, ...w }) => ({ ...w, expected: expectedContribution(w.wage, age, period), levy: this.fwStatLevy(renewals, w, period) }));
   }
 
   /**
@@ -58527,9 +60842,12 @@ export class PrimaService {
         note,
       };
     });
+    // Rule FWM-LEVY (Fauzan, 23 Nov 2026, D1): the user's share of the levy the owner paid goes on the same debit note.
+    const renewals = await this.store.list('fwRenewals', { companyId: owner });
+    for (const l of lines) l.levy = this.fwStatLevy(renewals, l, period);
     const extra = raw.find((x) => !placed.some((w) => w.personId === String(x?.personId ?? '')));
     if (extra) throw new BadRequest(`${String(extra.personId)} was not placed with that user in ${period}.`);
-    const total = chargeTotal(lines);
+    const total = Math.round((chargeTotal(lines) + lines.reduce((t, l) => t + (l.levy?.charged ?? 0), 0)) * 100) / 100;
     if (total <= 0) throw new BadRequest('The recharge comes to nothing.');
     const [ownerCo, userCo, branch] = await Promise.all([
       this.store.get('companies', owner),
@@ -58579,6 +60897,14 @@ export class PrimaService {
         });
       return (await tx.get('fwStatCharges', `${pairId}-o`))!;
     });
+  }
+
+  /** The levy share for one worker and month: levy / 12 x days used / days in the month (rule FWM-LEVY). */
+  private fwStatLevy(renewals: FwRenewal[], w: { personId: Id; daysUsed: number; daysInMonth: number }, period: string): FwStatLine['levy'] {
+    const hit = fwLevyFor(renewals.filter((r) => r.personId === w.personId), period);
+    if (!hit) return null;
+    const charged = fwLevyShare(hit.yearly, w.daysUsed, w.daysInMonth);
+    return charged > 0 ? { yearly: hit.yearly, renewalId: hit.renewalId, charged } : null;
   }
 
   /** The copy each side keeps (one copy when a branch of the owner company used the worker). */
@@ -59948,7 +62274,7 @@ function fwPaperView(a: {
   // When the two apps differ, count to the earlier date until FWM settles it: never later than either says.
   const counted = primaExpiresOn && ja?.expiresOn ? (ja.expiresOn < primaExpiresOn ? ja.expiresOn : primaExpiresOn) : (primaExpiresOn ?? ja?.expiresOn ?? null);
   const countedFrom: 'prima' | 'ja' | null = !counted ? null : counted === primaExpiresOn ? 'prima' : 'ja';
-  const source: 'prima' | 'ja' | 'typed' | 'sample' | null = c ? (c.source ?? 'sample') : null;
+  const source: 'prima' | 'ja' | 'typed' | 'list' | 'sample' | null = c ? (c.source ?? 'sample') : null;
   const base = {
     paper: a.paper,
     label: FW_PAPER_LABEL[a.paper],
@@ -59992,6 +62318,8 @@ function fwPaperView(a: {
 
 export type FwBoardItem = ReturnType<typeof fwPaperView> & {
   person: { id: Id | null; name: string; staffNo: string; companyId: Id; companyName: string };
+  /** The FWM Executive who owns the company's workers (rule FWM-CASELOAD), when set. */
+  owner?: { execId: Id; execName: string } | null;
   /** In the JA app but not yet in Prima. */
   jaOnly: boolean;
 };
@@ -60012,7 +62340,7 @@ export interface FwWorkerRow {
     number: string | null;
     issuedOn: IsoDate | null;
     expiresOn: IsoDate | null;
-    source: 'prima' | 'ja' | 'typed' | 'sample' | null;
+    source: 'prima' | 'ja' | 'typed' | 'list' | 'sample' | null;
     jaExpiresOn: IsoDate | null;
     datesDiffer: boolean;
   }[];
@@ -60083,6 +62411,8 @@ interface MemoCtx {
   statesOf: (u: User) => Set<string>;
   inTeam: (managerId: Id, u: User) => boolean;
   teamOf: (managerId: Id) => User[];
+  /** D1: who publishes memos to all staff today (the Chief of Staff, or the Deputy or HR Administrator covering). */
+  staffMemo: Set<Id>;
 }
 
 /** Fortnights for regular meetings are counted from this Monday so every series shares the same two-week blocks. */

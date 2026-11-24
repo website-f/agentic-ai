@@ -1,17 +1,89 @@
 {
-  "note": "Agentic Office (P126): Fauzan's off-list modules from main c5268831 (17-23 Nov 2026) that each say 'only with Fauzan's go-ahead'. deploy/prima/prima-setup.cjs runs them, after office-non-release.json, ONLY when PRIMA_PENDING_MODULES=1 is set for that run. accounts-access-v1 goes first (shared-logins and marketing-accounts read prima.acc_companies / replace prima.acc_templates); office-am-buy needs office-am-v1. A module is skipped when its marker holds.",
+  "note": "Agentic Office (P126): Fauzan's off-list modules from main c5268831 (17-23 Nov 2026) that each say 'only with Fauzan's go-ahead'. deploy/prima/prima-setup.cjs runs them, after office-non-release.json, ONLY when PRIMA_PENDING_MODULES=1 is set for that run. accounts-access-v1 goes first (shared-logins and marketing-accounts read prima.acc_companies / replace prima.acc_templates); office-am-buy needs office-am-v1. A module is skipped when its marker holds. P129 (24 Nov 2026): Fauzan's main 329ac72a adds 9 modules (appended, in his checklist order; fin-payments last, run while nobody is paying) and a new office-am-buy-v1 (its marker is now the new function, so it runs again). They wait for the go-ahead like the first 12.",
   "modules": [
-    { "file": "accounts-access-v1.sql", "marker": "to_regclass('prima.account_requests') IS NOT NULL" },
-    { "file": "org-lines-v1.sql", "marker": "to_regclass('prima.org_lines') IS NOT NULL" },
-    { "file": "archive-v1.sql", "marker": "to_regprocedure('prima.archive_files_guard()') IS NOT NULL" },
-    { "file": "assistant-v1.sql", "marker": "to_regprocedure('prima.assistant_memory_guard()') IS NOT NULL" },
-    { "file": "ai-budget-v1.sql", "marker": "to_regclass('prima.ai_spend') IS NOT NULL" },
-    { "file": "shared-logins-v1.sql", "marker": "to_regclass('prima.shared_logins') IS NOT NULL" },
-    { "file": "company-papers-v1.sql", "marker": "to_regclass('prima.company_papers') IS NOT NULL" },
-    { "file": "marketing-accounts-v1.sql", "marker": "EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'prima' AND p.proname = 'acc_templates' AND p.prosrc ILIKE '%marketing%')" },
-    { "file": "m365-usage-v1.sql", "marker": "to_regclass('prima.m365_usage_days') IS NOT NULL" },
-    { "file": "office-am-buy-v1.sql", "marker": "EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'prima' AND p.proname = 'oam_buy_hod')" },
-    { "file": "act-investigation-wall-v1.sql", "marker": "EXISTS (SELECT 1 FROM pg_policy WHERE polname = 'act_investigation_wall' AND polrelid = 'prima.act_audits'::regclass)" },
-    { "file": "act-timings-published-v1.sql", "marker": "EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'prima' AND p.proname = 'act_work_timings')" }
+    {
+      "file": "accounts-access-v1.sql",
+      "marker": "to_regclass('prima.account_requests') IS NOT NULL"
+    },
+    {
+      "file": "org-lines-v1.sql",
+      "marker": "to_regclass('prima.org_lines') IS NOT NULL"
+    },
+    {
+      "file": "archive-v1.sql",
+      "marker": "to_regprocedure('prima.archive_files_guard()') IS NOT NULL"
+    },
+    {
+      "file": "assistant-v1.sql",
+      "marker": "to_regprocedure('prima.assistant_memory_guard()') IS NOT NULL"
+    },
+    {
+      "file": "ai-budget-v1.sql",
+      "marker": "to_regclass('prima.ai_spend') IS NOT NULL"
+    },
+    {
+      "file": "shared-logins-v1.sql",
+      "marker": "to_regclass('prima.shared_logins') IS NOT NULL"
+    },
+    {
+      "file": "company-papers-v1.sql",
+      "marker": "to_regclass('prima.company_papers') IS NOT NULL"
+    },
+    {
+      "file": "marketing-accounts-v1.sql",
+      "marker": "EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'prima' AND p.proname = 'acc_templates' AND p.prosrc ILIKE '%marketing%')"
+    },
+    {
+      "file": "m365-usage-v1.sql",
+      "marker": "to_regclass('prima.m365_usage_days') IS NOT NULL"
+    },
+    {
+      "file": "office-am-buy-v1.sql",
+      "marker": "EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'prima' AND p.proname = 'oam_deputy_od')"
+    },
+    {
+      "file": "act-investigation-wall-v1.sql",
+      "marker": "EXISTS (SELECT 1 FROM pg_policy WHERE polname = 'act_investigation_wall' AND polrelid = 'prima.act_audits'::regclass)"
+    },
+    {
+      "file": "act-timings-published-v1.sql",
+      "marker": "EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'prima' AND p.proname = 'act_work_timings')"
+    },
+    {
+      "file": "finance-account-manager-v1.sql",
+      "marker": "EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'prima' AND p.proname = 'acc_templates' AND p.prosrc ILIKE '%finance_account_manager%')"
+    },
+    {
+      "file": "cos-cover-v1.sql",
+      "marker": "to_regclass('prima.cos_cover') IS NOT NULL"
+    },
+    {
+      "file": "pdpa-officer-v1.sql",
+      "marker": "to_regclass('prima.pdpa_inbox') IS NOT NULL"
+    },
+    {
+      "file": "fw-gaps-v1.sql",
+      "marker": "to_regclass('prima.fw_gap_recs') IS NOT NULL"
+    },
+    {
+      "file": "it-gaps-v1.sql",
+      "marker": "EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'prima' AND p.proname = 'it_company_rentals')"
+    },
+    {
+      "file": "fleet-records-v1.sql",
+      "marker": "to_regclass('prima.fleet_records') IS NOT NULL"
+    },
+    {
+      "file": "auto-reports-v1.sql",
+      "marker": "to_regclass('prima.auto_reports') IS NOT NULL"
+    },
+    {
+      "file": "arms-keeper-v1.sql",
+      "marker": "EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'prima' AND p.proname = 'keeps_vault')"
+    },
+    {
+      "file": "fin-payments-v1.sql",
+      "marker": "to_regclass('prima.fin_payments') IS NOT NULL"
+    }
   ]
 }

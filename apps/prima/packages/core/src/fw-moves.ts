@@ -2,6 +2,7 @@
 // (form BPPS/HOSTEL/FWM/001/2026), hostel needs (form BPPK/HOSTEL/FWM/001/2026), hostel inventory and checks (BRI),
 // damage / loss (BKK), maintenance (BP) and the monthly visit report (BRB). The service checks who may act on every
 // call; the screens only show what the service allows. Made-up data only in tests.
+import { actsAsOpsDirector, isOgm, isOpsDirector } from './ops-access';
 import { AccessDenied, isGroupLeader } from "./access";
 import { BadRequest, NotFound } from "./service";
 import type { PrimaService } from "./service";
@@ -332,7 +333,7 @@ export function fwHostelRole(user: User): FwHostelRole | null {
   if (user.department === 'fwm' && user.fwmRole !== 'despatch') return 'fwm';
   if (user.opsTier === 'om') return 'om';
   if (user.role === 'company_manager' || user.role === 'admin_exec') return 'company';
-  if (user.opsTier === 'ops_director' || user.opsTier === 'ogm') return 'sector';
+  if (isOpsDirector(user) || isOgm(user)) return 'sector';
   if (user.opsTier === 'coo' || user.opsTier === 'ceo') return 'coo';
   if (isGroupLeader(user)) return 'leader';
   if (user.department === 'audit') return 'act';
@@ -812,7 +813,7 @@ export class FwMoveService {
     const role = fwHostelRole(user);
     if (picsDone && !m.steps.fwm && role === 'fwm') out.push('fwm');
     if (m.steps.fwm && !m.steps.hq && user.role === 'company_manager' && user.companyIds.includes(m.newCompanyId)) out.push('hq');
-    const ketua = site.sector === 'government' ? user.opsTier === 'ogm' : user.opsTier === 'ops_director';
+    const ketua = site.sector === 'government' ? isOgm(user) : actsAsOpsDirector(user);
     if (m.steps.fwm && !m.steps.ketua && ketua && (await this.companies(user)).includes(m.newCompanyId)) out.push('ketua');
     return out;
   }
@@ -835,7 +836,7 @@ export class FwMoveService {
     if (role === 'company') return user.companyIds.includes(m.newCompanyId) || user.companyIds.includes(m.companyId);
     if (role === 'sector') {
       const site = await this.siteOf(m.toSiteId);
-      return (site.sector === 'government' ? user.opsTier === 'ogm' : user.opsTier === 'ops_director') && (await this.companies(user)).includes(m.newCompanyId);
+      return (site.sector === 'government' ? isOgm(user) : isOpsDirector(user)) && (await this.companies(user)).includes(m.newCompanyId);
     }
     return false;
   }
@@ -1345,7 +1346,7 @@ export class FwMoveService {
       if (m.status !== 'reported') throw new BadRequest('Not waiting for FWM.');
       patch = { status: m.critical ? 'approved' : 'fwm_checked', fwm: { ...sign, note: txt(input.note, 'FWM report') } };
     } else if (step === 'approve' || step === 'reject') {
-      const ok = m.sector === 'government' ? user.opsTier === 'ogm' : user.opsTier === 'ops_director';
+      const ok = m.sector === 'government' ? isOgm(user) : actsAsOpsDirector(user);
       if (!ok || user.integration) throw new AccessDenied('hr.monitor', m.sector === 'government' ? '(the OGM approves)' : '(the Operations Director approves)');
       if (m.status !== 'fwm_checked') throw new BadRequest('Not waiting for approval.');
       if (m.byId === user.id) throw new BadRequest('You asked for it. Someone else approves.');
@@ -1452,7 +1453,7 @@ export class FwMoveService {
       if (n.status !== 'submitted') throw new BadRequest('Not waiting for FWM.');
       patch = step === 'fwm' ? { status: 'fwm_checked', fwm: sign } : { status: 'returned', returns: [...n.returns, { by: user.name, at, reason: why }] };
     } else {
-      const ok = n.sector === 'government' ? user.opsTier === 'ogm' : user.opsTier === 'ops_director';
+      const ok = n.sector === 'government' ? isOgm(user) : actsAsOpsDirector(user);
       if (!ok || user.integration) throw new AccessDenied('hr.monitor', n.sector === 'government' ? '(the OGM approves)' : '(the Operations Director approves)');
       if (n.status !== 'fwm_checked') throw new BadRequest('FWM verifies first.');
       if (n.raisedById === user.id) throw new BadRequest('You raised it. Someone else approves.');

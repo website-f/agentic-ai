@@ -629,11 +629,15 @@ describe('HR monitoring and arms control', () => {
     const duty = await svc.myDuty(guardUser);
     expect(duty.reminders.every((r) => !/Tell your office/.test(r.text))).toBe(true);
 
-    // The company uploads a hiring paper; operations cannot, and does not see the illness.
-    const cm = await svc.user('u-cm-sasa');
-    const other = ds.people.find((p) => p.companyId === 'co-sasa' && p.role === 'guard' && !p.hiringDocs)!;
+    // HR keeps the file and uploads the hiring paper; the company sees it but does not change it (Fauzan, 23 Nov 2026);
+    // operations cannot, and does not see the illness.
+    const company = await svc.user('u-cm-sasa');
+    const cm = await svc.user('u-pwvsb-hr');
+    const other = ds.people.find((p) => p.companyId === 'co-sasa' && p.role === 'guard' && p.nationality === 'MY' && !p.hiringDocs)!;
+    await expect(svc.uploadHiringDoc(company, other.id, 'AGREEMENT', [proof()])).rejects.toBeInstanceOf(AccessDenied);
     await svc.uploadHiringDoc(cm, other.id, 'AGREEMENT_STAMPED', [proof()]);
-    expect((await svc.guardProfile(cm, other.id)).hiring.items.find((i) => i.kind === 'AGREEMENT_STAMPED')!.done).toBe(true);
+    expect((await svc.guardProfile(company, other.id)).hiring.items.find((i) => i.kind === 'AGREEMENT_STAMPED')!.done).toBe(true);
+    expect((await svc.guardProfile(company, other.id)).hiring.canUpload).toBe(false);
     const om = await svc.user('u-om-klang');
     await expect(svc.uploadHiringDoc(om, other.id, 'AGREEMENT', [proof()])).rejects.toBeInstanceOf(AccessDenied);
     const omView = await svc.guardProfile(om, guardUser.personId!);
@@ -641,7 +645,7 @@ describe('HR monitoring and arms control', () => {
     expect(omView.medical).toBeNull();
 
     // Sick leave needs the illness and clinic as well as the MC.
-    await expect(svc.requestLeave(cm, { personId: other.id, kind: 'SICK', from: TODAY, to: TODAY, reason: 'Fever', proof: [proof()] })).rejects.toThrow(
+    await expect(svc.requestLeave(company, { personId: other.id, kind: 'SICK', from: TODAY, to: TODAY, reason: 'Fever', proof: [proof()] })).rejects.toThrow(
       /illness/,
     );
 
@@ -728,7 +732,8 @@ describe('HR monitoring and arms control', () => {
     await expect(
       svc.issueFirearm(cm, { shiftId: shift.id, firearmId: free.id, rounds: 5, witness: { staffNo: holderP.staffNo, pin: demoPin(holderP.staffNo) } }),
     ).rejects.toThrow(/second person/);
-    const m = await svc.issueFirearm(cm, { shiftId: shift.id, firearmId: free.id, rounds: 5, witness: W });
+    // D2 (23 Nov 2026): every firearm in this vault is tagged, so the scan is compulsory here.
+    const m = await svc.issueFirearm(cm, { shiftId: shift.id, firearmId: free.id, rounds: 5, witness: W, rfidScan: free.rfidTag ?? null });
     expect(m.issueWitness).toContain(W.staffNo);
     expect(ds.firearms.find((f) => f.id === free.id)!.status).toBe('ISSUED');
     // Same firearm cannot go out twice.
@@ -738,7 +743,7 @@ describe('HR monitoring and arms control', () => {
     expect((await svc.armsOverview(arms)).rows.find((r) => r.company.id === 'co-sasa')!.hasDetail).toBe(true);
     await expect(svc.returnFirearm(arms, { movementId: m.id, roundsReturned: 5, witness: W })).rejects.toBeInstanceOf(AccessDenied);
     // A missing round opens a P1 case and leaves the firearm unverified.
-    const r = await svc.returnFirearm(cm, { movementId: m.id, roundsReturned: 4, witness: W });
+    const r = await svc.returnFirearm(cm, { movementId: m.id, roundsReturned: 4, witness: W, rfidScan: free.rfidTag ?? null });
     expect(ds.cases.find((c) => c.ref === r.caseRef)!.severity).toBe('P1');
     expect(ds.firearms.find((f) => f.id === free.id)!.status).toBe('UNVERIFIED');
     expect(verifyChain(ds.audit)).toBeNull();
@@ -988,7 +993,9 @@ describe('Reports to the Director Office (Fauzan, 25 Oct 2026)', () => {
     const doa = await svc.reports(await svc.user('u-pwvsb-doa'));
     const ops = doa.board!.find((b) => b.def.id === 'ops-weekly')!;
     expect(ops.rows.length).toBe(ds.companies.length);
-    expect(ops.rows.filter((r) => r.status === 'unknown').length).toBe(ds.companies.filter((c) => !c.isPilot).length);
+    // B5 (23 Nov 2026): a company is on the app when it has an open company manager or admin executive sign-in.
+    const onApp = new Set(ds.users.filter((u) => (u.role === 'company_manager' || u.role === 'admin_exec') && !u.accessClosedFrom).flatMap((u) => u.companyIds));
+    expect(ops.rows.filter((r) => r.status === 'unknown').length).toBe(ds.companies.filter((c) => !onApp.has(c.id)).length);
     expect(ops.rows.some((r) => r.status === 'on_time' || r.status === 'late')).toBe(true);
     expect(doa.canEdit).toBe(true);
     await expect(svc.setReportDefs(cm, [], 'x')).rejects.toBeInstanceOf(AccessDenied);
@@ -1058,8 +1065,11 @@ describe('Meetings, minutes and deadlines (Fauzan, 25 Oct 2026)', () => {
 describe('service: workflows', () => {
   it('assigns a valid guard, writes audit, and refuses a blocked one', async () => {
     const { svc, ds } = fresh();
-    const cm = await svc.user('u-cm-sasa');
     const target = ds.shifts.find((s) => s.companyId === 'co-sasa' && s.date === addDays(TODAY, 5) && !ds.sites.find((x) => x.id === s.siteId)!.armed)!;
+    // The company watches the roster; the site supervisor (or Operations) assigns (Fauzan, 23 Nov 2026).
+    await expect(svc.assignShift(await svc.user('u-cm-sasa'), target.id, null)).rejects.toBeInstanceOf(AccessDenied);
+    ds.users.find((x) => x.id === 'u-sv-sasa')!.siteIds.push(target.siteId);
+    const cm = await svc.user('u-sv-sasa');
     const { candidates } = await svc.candidates(cm, target.id);
     const ok = candidates.find((c) => !c.blocked)!;
     const before = ds.audit.length;
@@ -1150,7 +1160,9 @@ describe('service: workflows', () => {
     const cm = await svc.user('u-cm-sasa');
     await svc.updateCase(fauzan, c.id, 'acknowledge');
     // A site case is not resolved in one step, and the OM cannot jump in before the lower levels' time is up.
-    await expect(svc.updateCase(cm, c.id, 'resolve', 'Done')).rejects.toThrow(/escalation steps/);
+    // The company watches site cases and only closes them (Fauzan, 23 Nov 2026); the steps go up the operations ladder.
+    await expect(svc.updateCase(cm, c.id, 'resolve', 'Done')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.updateCase(head, c.id, 'resolve', 'Done')).rejects.toThrow(/escalation steps|Not allowed/);
     await expect(svc.signOffCase(om, c.id, 'verified', 'Checked', [proof()])).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.signOffCase(officer, c.id, 'resolved', '', [proof()])).rejects.toThrow(/what was done/);
     await svc.signOffCase(officer, c.id, 'resolved', 'False alarm, guard confirmed safe.', [proof()]);
@@ -1625,9 +1637,15 @@ describe('Attendance alerts to the PIC (Shahirah, 25 Oct 2026)', () => {
     await expect(
       svc.followUpAttendance(await svc.user('u-cms-head'), { shiftId: ns.shiftId, issue: 'NO_SHOW', kind: 'EXCUSED', proof: [proof()], note: 'MC' }),
     ).rejects.toBeInstanceOf(AccessDenied);
-    const cands = await svc.candidates(cm, ns.shiftId!);
+    // The company sees the alert but does not send the replacement: the site supervisor or Operations does (23 Nov 2026).
+    ds.users.find((x) => x.id === 'u-sv-sasa')!.siteIds.push(ns.siteId);
+    const sv = await svc.user('u-sv-sasa');
+    const cands = await svc.candidates(sv, ns.shiftId!);
     const sub = cands.candidates.find((c) => !c.blocked && c.person.id !== ns.personId)!;
-    const r = await svc.followUpAttendance(cm, {
+    await expect(
+      svc.followUpAttendance(cm, { shiftId: ns.shiftId, issue: 'NO_SHOW', kind: 'REPLACEMENT', note: 'Buffer guard', replacementPersonId: sub.person.id }),
+    ).rejects.toBeInstanceOf(AccessDenied);
+    const r = await svc.followUpAttendance(sv, {
       shiftId: ns.shiftId,
       issue: 'NO_SHOW',
       kind: 'REPLACEMENT',
@@ -1679,10 +1697,13 @@ describe('Attendance alerts to the PIC (Shahirah, 25 Oct 2026)', () => {
     expect(a.discipline.some((d) => d.record.shiftId === ns.shiftId && d.record.discipline === 'VERBAL_WARNING')).toBe(true);
     expect(ds.audit.at(-1)!.action).toBe('attendance.discipline');
     // An excuse needs a reason and closes the absence.
-    await expect(svc.followUpAttendance(cm, { shiftId: ns.shiftId, issue: 'NO_SHOW', kind: 'EXCUSED', proof: [proof()], note: '' })).rejects.toBeInstanceOf(
+    // Excusing an absence is operations follow-up (the site supervisor here); the company only watches it (23 Nov 2026).
+    ds.users.find((x) => x.id === 'u-sv-sasa')!.siteIds.push(ns.siteId);
+    const sv = await svc.user('u-sv-sasa');
+    await expect(svc.followUpAttendance(sv, { shiftId: ns.shiftId, issue: 'NO_SHOW', kind: 'EXCUSED', proof: [proof()], note: '' })).rejects.toBeInstanceOf(
       BadRequest,
     );
-    await svc.followUpAttendance(cm, { shiftId: ns.shiftId, issue: 'NO_SHOW', kind: 'EXCUSED', proof: [proof()], note: 'Medical certificate received' });
+    await svc.followUpAttendance(sv, { shiftId: ns.shiftId, issue: 'NO_SHOW', kind: 'EXCUSED', proof: [proof()], note: 'Medical certificate received' });
     expect((await svc.attendanceAlerts(cm, 'co-sasa')).open.some((i) => i.key === ns.key)).toBe(false);
     // Yesterday's seeded records show in the list; another company never sees them.
     expect(a.records.length).toBeGreaterThan(3);
@@ -2089,8 +2110,9 @@ describe('Foreign Worker Management (Fauzan, 26 Oct 2026)', () => {
 
   it('keeps Nepali guards to private-sector sites', async () => {
     const { svc, ds } = fresh();
-    const cm = await svc.user('u-cm-sasa');
     const gov = ds.sites.find((x) => x.companyId === 'co-sasa' && x.sector === 'government')!;
+    ds.users.find((x) => x.id === 'u-sv-sasa')!.siteIds.push(gov.id);
+    const cm = await svc.user('u-sv-sasa');
     const shift = ds.shifts.find((x) => x.siteId === gov.id && x.date > addDays(TODAY, 1))!;
     const np = ds.people.find((p) => p.companyId === 'co-sasa' && p.nationality === 'NP' && p.role === 'guard' && p.status === 'active')!;
     await expect(svc.assignShift(cm, shift.id, np.id)).rejects.toThrow(/private-sector/);
@@ -2487,7 +2509,8 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     expect(c.board.find((v) => v.id === 'veh-arsh-1')!.tracker).toBe('unknown');
     // The request waits; the CM needs consent filed before driving the monitored patrol car.
     const rq = b.requests.find((r) => r.id === 'vr-seed-1')!;
-    await expect(svc.decideVehicleRequest(cm, rq.id, true, 'veh-sasa-1', 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    // The CM asked for it, so the CM cannot decide it (Transport check, 23 Nov 2026: nobody decides their own).
+    await expect(svc.decideVehicleRequest(cm, rq.id, true, 'veh-sasa-1', 'ok')).rejects.toThrow(/own vehicle request/);
     await svc.decideVehicleRequest(head, rq.id, true, 'veh-sasa-1', 'ok');
     await expect(svc.vehicleOut(head, 'veh-sasa-1', rq.id, 84_250)).rejects.toThrow(/PDPA officer must file/);
     const need = (await svc.fleetBoard(pdpa)).consentNeeded;
@@ -2600,7 +2623,12 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     const acct = (await svc.clientBoard(om)).accounts.find((a) => a.stage === 'onboarding')!;
     expect(acct).toBeTruthy();
     await expect(svc.clientContact(cm, acct.id, 'visit', 'Met the PIC')).rejects.toBeInstanceOf(AccessDenied);
-    for (const s of acct.onboarding.filter((x) => !x.doneAt)) await svc.clientStep(om, acct.id, 'onboarding', s.key, 'Done', [proof()]);
+    for (const s of acct.onboarding.filter((x) => !x.doneAt && x.key !== 'pdpa')) await svc.clientStep(om, acct.id, 'onboarding', s.key, 'Done', [proof()]);
+    // B3 (Fauzan, 23 Nov 2026): only the PDPA officer closes the client's PDPA step.
+    if (acct.onboarding.some((x) => x.key === 'pdpa' && !x.doneAt)) {
+      await expect(svc.clientStep(om, acct.id, 'onboarding', 'pdpa', 'Done', [proof()])).rejects.toThrow(/PDPA officer/);
+      await svc.pdpaOfficer.clientStepDone(await svc.user('u-pdpa'), { accountId: acct.id, note: 'No camera or tracker at this client (synthetic)' });
+    }
     expect((await svc.clientBoard(om)).accounts.find((a) => a.id === acct.id)!.stage).toBe('active');
     await expect(svc.clientRating(om, acct.id, 2, '', { from: 'Synthetic PIC', via: 'meeting' })).rejects.toThrow(/unhappy/);
     await svc.clientRating(om, acct.id, 2, 'Late shift change', { from: 'Synthetic PIC', via: 'meeting' });
@@ -2860,6 +2888,9 @@ describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
     const dr = rows.reduce((n, r) => n + Number(r[r.length - 2]), 0);
     const cr = rows.reduce((n, r) => n + Number(r[r.length - 1]), 0);
     expect(Math.abs(dr - cr)).toBeLessThan(0.05);
+    // Fauzan, 23 Nov 2026 (Finance D2): another Finance person prepares the payout before the team leader records it paid.
+    const de = await svc.user('u-fin-t1-de1');
+    await svc.financePayouts.prepare(de, { source: 'staff_pay', sourceId: id('pwvsb'), bankId: (await svc.financePayouts.view(de, 'pwvsb')).banks[0].id });
     await expect(svc.staffPayStep(fin, id('pwvsb'), 'pay', { bankRef: 'X1' })).rejects.toThrow(/PCB/);
     const paid = await svc.staffPayStep(fin, id('pwvsb'), 'pay', { bankRef: 'M2U-TEST-1', pcbChecked: true });
     expect(paid.stage).toBe('paid');
@@ -3138,9 +3169,11 @@ describe('IT department (Fauzan, 27 Oct 2026)', () => {
     const coo = await svc.user('u-coo');
     const ceo = await svc.user('u-fauzan');
     const proc = await svc.user('u-proc-exec');
-    // This route is for after the pilot; during the pilot IT buys with three quotes and Teams approvals (rule IT-BUY).
+    // The Procurement route is kept but no longer the default: since 23 Nov 2026 IT buys its own equipment (IT-BUY route
+    // 'it', IT gaps B2). This test opts into route 'procurement' to keep that path working.
     RULES.pilot.value.on = false;
-    onTestFinished(() => void (RULES.pilot.value.on = true));
+    RULES.itBuy.value.route = 'procurement';
+    onTestFinished(() => void ((RULES.pilot.value.on = true), (RULES.itBuy.value.route = 'it')));
     const sk = await svc.user('u-proc-store1');
     const p = await svc.raiseItPurchase(ex, { ownerId: 'co-sasa', reason: 'New site', items: [{ kind: 'CCTV', description: 'NVR', qty: 2, unitPrice: 1500 }] });
     expect(p.total).toBe(3000);
@@ -3158,6 +3191,7 @@ describe('IT department (Fauzan, 27 Oct 2026)', () => {
       await svc.purStep(proc, pr.id, 'quote', { supplierId: `sup-co-sasa-${k}`, amount, ref: `Q${k}`, proof: [proof()] });
     await svc.purStep(proc, pr.id, 'online', { source: 'Lazada', ref: 'listing', amount: 2950, proof: [proof()] });
     await svc.purStep(proc, pr.id, 'submit', { supplierId: 'sup-co-sasa-2' });
+    await svc.purStep(await svc.user('u-proc-manager'), pr.id, 'approve', { note: 'Stock need checked' });
     await svc.purStep(coo, pr.id, 'approve', { note: 'ok' });
     await svc.purStep(ceo, pr.id, 'approve', { note: 'ok' });
     await svc.purStep(proc, pr.id, 'order', { ref: 'PO-IT-1' });
@@ -3494,7 +3528,10 @@ describe('Procurement and Inventory (V5; Fauzan, 27 Oct 2026)', () => {
     await svc.purStep(ex, r.id, 'online', { source: 'Shopee', ref: 'listing 1', amount: 11000, proof: [proof()] });
     await expect(svc.purStep(ex, r.id, 'submit', { supplierId: 'sup-co-arsh-2' })).rejects.toThrow(/above the online price/);
     const sub = await svc.purStep(ex, r.id, 'submit', { supplierId: 'sup-co-arsh-2', onlineReason: 'Online seller has no SST invoice or warranty' });
-    expect(sub.tiers).toEqual(['coo', 'ceo']);
+    // D1 (Fauzan, 23 Nov 2026): the Inventory Manager checks it before the COO.
+    expect(sub.tiers).toEqual(['inventory', 'coo', 'ceo']);
+    await expect(svc.purStep(coo, r.id, 'approve', { note: 'ok' })).rejects.toThrow(/cannot approve/);
+    await svc.purStep(await svc.user('u-proc-manager'), r.id, 'approve', { note: 'Stock need checked' });
     await expect(svc.purStep(ceo, r.id, 'approve', { note: 'ok' })).rejects.toThrow(/cannot approve/);
     await svc.purStep(coo, r.id, 'approve', { note: 'ok' });
     expect((await svc.purStep(ceo, r.id, 'approve', { note: 'ok' })).status).toBe('approved');
@@ -4790,6 +4827,7 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     for (const k of [1, 2, 3]) await svc.purStep(ex, r.id, 'quote', { supplierId: `sup-co-arsh-${k}`, amount: 900 + k, ref: `Q${k}`, proof: [proof()] });
     await svc.purStep(ex, r.id, 'online', { source: 'Shopee', ref: 'x', amount: 900, proof: [proof()] });
     await svc.purStep(ex, r.id, 'submit', { supplierId: 'sup-co-arsh-1' });
+    await svc.purStep(await svc.user('u-proc-manager'), r.id, 'approve', { note: 'Stock need checked' });
     await svc.purStep(coo, r.id, 'approve', { note: 'ok' });
     await svc.purStep(ceo, r.id, 'approve', { note: 'ok' });
     await svc.purStep(ex, r.id, 'order', { ref: 'PO-9' });
@@ -5307,7 +5345,7 @@ describe('client and contract work goes to the Operations Manager for the area (
     const acct = ds.clientAccounts.find(
       (a) => a.companyId === 'co-sasa' && a.stage === 'onboarding' && a.siteIds.length && ['Selangor', 'Kuala Lumpur'].includes(state(a.siteIds[0])),
     )!;
-    const step = acct.onboarding.find((s) => !s.doneAt && !['contract', 'notice', 'handover'].includes(s.key))!;
+    const step = acct.onboarding.find((s) => !s.doneAt && !['contract', 'notice', 'handover', 'pdpa'].includes(s.key))!;
     expect((await svc.clientBoard(johor)).accounts.find((a) => a.id === acct.id)!.canAct).toBe(false);
     expect((await svc.clientBoard(klang)).accounts.find((a) => a.id === acct.id)!.canAct).toBe(true);
     await expect(svc.clientStep(johor, acct.id, 'onboarding', step.key, 'Done')).rejects.toBeInstanceOf(AccessDenied);

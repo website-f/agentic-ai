@@ -27,8 +27,8 @@ describe('Special Ops 4B-4H (database)', () => {
 
   it('runs an arms request to the legal check and lets PWVSB legal read and clear it, while Finance cannot see it', async () => {
     const f = await db.asUser('u-cm-sasa', async (_svc, _u, store) => (await store.list('firearms', { companyId: 'co-sasa' })).find((x) => x.status === 'IN_VAULT')!);
-    const r = (await db.asUser('u-pwvsb-arms', (svc, u) => svc.raiseArmsRequest(u, { companyId: 'co-sasa', kind: 'DISPOSE', title: 'Dispose of a worn shotgun', note: 'Armourer report', firearmIds: [f.id] }))) as ArmsRequest;
-    await db.asUser('u-pwvsb-arms-asst', (svc, u) => svc.armsRequestStep(u, r.id, 'pass', 'Report attached'));
+    const r = (await db.asUser('u-pwvsb-arms-asst', (svc, u) => svc.raiseArmsRequest(u, { companyId: 'co-sasa', kind: 'DISPOSE', title: 'Dispose of a worn shotgun', note: 'Armourer report', firearmIds: [f.id] }))) as ArmsRequest;
+    await db.asUser('u-pwvsb-arms', (svc, u) => svc.armsRequestStep(u, r.id, 'pass', 'Report attached'));
     await db.asUser('u-cm-sasa', (svc, u) => svc.armsRequestStep(u, r.id, 'authorise', 'Agree'));
     const cleared = await db.asUser('u-legal', (svc, u) => svc.armsRequestStep(u, r.id, 'legal_ok', 'Through a licensed dealer only'));
     assert.equal(cleared.request.state, 'regulator_pending');
@@ -94,7 +94,7 @@ describe('Special Ops 4B-4H (database)', () => {
 
   it('lets the company raise, get back, correct and resubmit an arms request; legal points are for the directors only', async () => {
     const r = (await db.asUser('u-gm-sasa', (svc, u) => svc.raiseArmsRequest(u, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy cartridges (PG test)', note: 'Synthetic', quantity: 800, estCost: 2400 }))) as ArmsRequest;
-    await db.asUser('u-pwvsb-arms-asst', (svc, u) => svc.armsRequestStep(u, r.id, 'return', 'Too many for two sessions'));
+    await db.asUser('u-pwvsb-arms', (svc, u) => svc.armsRequestStep(u, r.id, 'return', 'Too many for two sessions'));
     const screen = await db.asUser('u-gm-sasa', (svc, u) => svc.arms(u, 'co-sasa'));
     const row = screen.requests.find((x) => x.request.id === r.id)!;
     assert.equal(row.request.state, 'draft');

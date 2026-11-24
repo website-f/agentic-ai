@@ -45,6 +45,8 @@ export function RequestsPanel() {
   const [openId, setOpenId] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="data requests" />;
+  // D3: the Chief of Staff logs and answers requests while the PDPA officer is away.
+  const officer = data.acts != null;
   const open = data.requests.find((r) => r.request.id === openId);
   return (
     <section className="panel">
@@ -74,7 +76,7 @@ export function RequestsPanel() {
         searchText={(r) => r.request.detail}
         onRowClick={(r) => setOpenId(r.request.id)}
         rowTone={(r) => (requestState(r)[0] === 'crit' ? 'crit' : requestState(r)[0] === 'warn' ? 'warn' : undefined)}
-        actions={(r) => [{ label: data.role === 'officer' && r.request.status === 'open' ? 'Act' : 'Open', onClick: () => setOpenId(r.request.id) }]}
+        actions={(r) => [{ label: officer && r.request.status === 'open' ? 'Act' : 'Open', onClick: () => setOpenId(r.request.id) }]}
         empty={<div className="empty">No open requests.</div>}
       />
       {open && (
@@ -92,7 +94,7 @@ function RequestLine({ r: row, data }: { r: PdpaRights['requests'][number]; data
   const [idNote, setIdNote] = useState('');
   const [ground, setGround] = useState(data.rule.refusalGrounds[0]);
   const r = row.request;
-  const officer = data.role === 'officer';
+  const officer = data.acts != null;
   const tone = r.status === 'done' ? 'ok' : r.status === 'refused' ? 'info' : row.late ? 'crit' : row.daysLeft <= 5 ? 'warn' : 'info';
   const label = r.status === 'done' ? 'Answered' : r.status === 'refused' ? 'Refused' : row.late ? `${-row.daysLeft} days late` : `${row.daysLeft} days left`;
   return (

@@ -1,3 +1,4 @@
+import { preparePayout } from './payout-helper';
 import { guardPayPrep } from './guard-pay-preparer';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -116,7 +117,7 @@ describe('independent payroll review regressions', () => {
     for (const p of ds.people) if (!p.bank) p.bank={ bank:'Synthetic',accountMasked:'****9999' };
     let now = myt('2026-10-19','10:00');
     const svc=new PrimaService(new MemoryStore(ds), () => now);
-    const om=await svc.user('u-om-klang'), hr=await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), fin=await svc.user('u-fin-t1-lead'), coo=await svc.user('u-coo');
+    const om=await svc.user('u-om-klang'), hr=await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), fin=await svc.user('u-fd'), coo=await svc.user('u-coo');
     const b=await svc.guardAdvances(om,{companyId:'co-arsh'});
     const target=b.choices.guards[0];
     await svc.setGuardAdvances(om,{companyId:'co-arsh',period:'2026-10',basis:'guard',ref:target.id,amount:100,payOn:'2026-10-20',reason:'Synthetic review advance'});
@@ -131,6 +132,7 @@ describe('independent payroll review regressions', () => {
     await svc.guardPayStep(prep,run.id,'submit');
     await svc.guardPayStep(coo,run.id,'approve',{note:'Synthetic review approval'});
     await svc.changeGuardAdvance(om,a.id,{action:'cancel',reason:'Advance never paid'});
+    await preparePayout(svc,'guard_pay',run.id);
     const paid=await svc.guardPayStep(fin,run.id,'pay',{bankRef:'SYNTHETIC-NO-TRANSFER',paidOn:TODAY,pcbChecked:true});
     const cancelled=(await svc.guardAdvances(om,{companyId:'co-arsh',period:'2026-10'})).advances.find(x=>x.id===a.id)!;
     console.log('UNPAID_CANCELLED_ADVANCE',JSON.stringify({runStage:paid.stage,deducted:paid.lines.find(x=>x.personId===target.id)!.advance,advanceStatus:cancelled.status,advancePaid:cancelled.paid}));
@@ -228,7 +230,7 @@ describe('payroll repair boundaries', () => {
     RULES.guardPayroll.value.primaPays = true;
     const { svc, ds } = fresh();
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Synthetic', accountMasked: '****9999' };
-    const hr = await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
+    const hr = await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), coo = await svc.user('u-coo'), fin = await svc.user('u-fd');
     const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     const bad = run.lines.find((l) => l.gross > 1000)!;
     const error = problem === 'missing formula' ? /no pay formula/ : problem === 'ambiguous leave' ? /dates are unclear/ : problem === 'deduction cap' ? /50%/ : /recalculate/;
@@ -255,7 +257,7 @@ describe('payroll repair boundaries', () => {
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Synthetic', accountMasked: '****9999' };
     let now = myt('2026-10-19', '10:00');
     const svc = new PrimaService(new MemoryStore(ds), () => now);
-    const om = await svc.user('u-om-klang'), hr = await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
+    const om = await svc.user('u-om-klang'), hr = await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), coo = await svc.user('u-coo'), fin = await svc.user('u-fd');
     const board = await svc.guardAdvances(om, { companyId: 'co-arsh' });
     const chosen = board.choices.guards.slice(0, 2);
     for (const p of chosen) await svc.setGuardAdvances(om, { companyId: 'co-arsh', period: '2026-10', basis: 'guard', ref: p.id, amount: 100, payOn: '2026-10-20', reason: 'Synthetic advance' });
@@ -265,6 +267,7 @@ describe('payroll repair boundaries', () => {
     const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     expect(run.lines.find((l) => l.personId === advances[0].personId)?.advance).toBe(0);
     await expect(svc.payGuardAdvance(fin, advances[0].id, { bankRef: 'NO-TRANSFER', paidOn: TODAY })).rejects.toThrow(/within the advance month/);
+    await preparePayout(svc, 'guard_advance', advances[0].id);
     await svc.payGuardAdvance(fin, advances[0].id, { bankRef: 'NO-TRANSFER', paidOn: '2026-10-20' });
     await expect(svc.guardPayStep(prep, run.id, 'submit')).rejects.toThrow(/Paid advances have changed/);
     const recalculated = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
@@ -272,6 +275,7 @@ describe('payroll repair boundaries', () => {
     await svc.guardPayStep(prep, run.id, 'submit');
     await expect(svc.payGuardAdvance(fin, advances[1].id, { bankRef: 'NO-TRANSFER', paidOn: '2026-10-20' })).rejects.toThrow(/already submitted or paid/);
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Synthetic approval' });
+    await preparePayout(svc, 'guard_pay', run.id);
     const paid = await svc.guardPayStep(fin, run.id, 'pay', { bankRef: 'NO-TRANSFER', paidOn: TODAY, pcbChecked: true });
     expect(paid.stage).toBe('paid');
     expect(paid.lines.find((l) => l.personId === advances[0].personId)?.advance).toBe(100);
@@ -285,7 +289,7 @@ describe('stale advance recovery snapshots', () => {
     RULES.guardPayroll.value.primaPays = true;
     const { svc, ds } = fresh();
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Synthetic', accountMasked: '****9999' };
-    const hr = await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
+    const hr = await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), coo = await svc.user('u-coo'), fin = await svc.user('u-fd');
     const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     const l = run.lines.find((x) => x.gross > 1000)!;
     l.advance = 100;

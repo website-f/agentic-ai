@@ -285,3 +285,16 @@ Changes need `docker compose up -d egress` (VPS: the deploy script).
 - Only files written to `./out` come back (saved to the company's AI folder).
 - Look: `docker compose logs sandbox`; health `docker compose ps sandbox`. If run code crashed
   it, the container restarts by itself.
+
+## 18. Prima "Old files and data" on this server's disk (P129)
+
+The office server has no Azure storage, so Prima's data and file manager keeps its files in the `prima-archive` folder
+of the office `files` volume (`ARCHIVE_DISK_DIR=/data/prima-archive`, mounted as a volume subpath). The nightly backup
+already takes `/data/files`, so these files are backed up with the office files. The folder must exist and belong to
+the Prima API's user (uid 1000) before `prima-api` starts, once per server:
+
+    docker run --rm -v agentic_files:/f alpine sh -c 'mkdir -p /f/prima-archive && chown 1000:1000 /f/prima-archive'
+
+Each file is written once under a name that holds its fingerprint; Prima checks size and SHA-256 on every opening.
+Photos and proof captured in the app stay in their database rows (FILE_STORE stays off). Empty `PRIMA_ARCHIVE_DISK_DIR=`
+in `.env` switches this off (Upload then only loads lists into records).

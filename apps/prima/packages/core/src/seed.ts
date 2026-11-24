@@ -787,6 +787,9 @@ export function generateDataset(opts: SeedOptions): Dataset {
     staffOtClaims: [],
     warrantyClaims: [],
     companyPapers: [],
+    autoReports: [],
+    autoReportLayouts: [],
+    fleetRecords: [],
     siteCoverage: [],
     rosterVersions: [],
     rosterDays: [],
@@ -870,6 +873,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     tripApprovals: [],
     staffPayRuns: [],
     finStatus: [],
+    finPayments: [],
     arishaDrafts: [],
     itemSkus: [], physicalItems: [], itemLots: [], itemEvents: [], itemMovements: [], itemCases: [], itemCounts: [], itemSyncJobs: [], itemRequests: [], itemSettings: [], itemDocs: [], uniformRecords: [], itemLabelPrints: [], itemSqlBooks: [], itemSyncBatches: [], itemSqlSnapshots: [], itemCounters: [], itemScanDenials: [],
     itImportReviews: [],
@@ -904,7 +908,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     itRentalRates: [],
     itAssetInspections: [],
     itOperationalReceipts: [],
-    itCleanupNominations: [], itCleanupArchives: [], itCleanupReceipts: [], itCleanupPlanBindings: [], orgEvents: [], orgTasks: [], orgNotices: [], orgImports: [], orgImportOks: [], problemReports: [], archiveFiles: [], assistantMemory: [], accountRequests: [], hrLists: [], consentGates: [], fwMoves: [], hostelNeeds: [], hostelRecs: [], stayRequests: [], ssRecs: [], itPolicyRecs: [], armsPolicyRecs: [], officeAmRecs: [], kdnRecs: [], toolboxRecs: [], inventoryRecs: [], amRentalRecs: [], groupMonthRecs: [], dutyRegisterRecs: [], orgLines: [], sharedLogins: [], sharedLoginKinds: [], attendanceImports: [], attendanceDays: [], attendanceMatches: [],
+    itCleanupNominations: [], itCleanupArchives: [], itCleanupReceipts: [], itCleanupPlanBindings: [], orgEvents: [], orgTasks: [], orgNotices: [], orgImports: [], orgImportOks: [], problemReports: [], archiveFiles: [], assistantMemory: [], accountRequests: [], hrLists: [], cosCover: [], consentGates: [], pdpaInbox: [], pdpaPurgeOks: [], fwMoves: [], hostelNeeds: [], hostelRecs: [], stayRequests: [], ssRecs: [], itPolicyRecs: [], armsPolicyRecs: [], officeAmRecs: [], kdnRecs: [], toolboxRecs: [], inventoryRecs: [], amRentalRecs: [], groupMonthRecs: [], dutyRegisterRecs: [], fwGapRecs: [], orgLines: [], sharedLogins: [], sharedLoginKinds: [], attendanceImports: [], attendanceDays: [], attendanceMatches: [],
     itMetricStreams: [], itMetricReceipts: [], itMetricTargets: [], itMetricCalendars: [],
     cleaningSites: [], cleaningDays: [], cleaningStock: [], siteKits: [], dutyPlans: [], guardTerms: [],
     itPurchaseFinanceAuthorities: [], itProcurementPackets: [], itProcurementReceipts: [],
@@ -3189,6 +3193,17 @@ export function generateDataset(opts: SeedOptions): Dataset {
       siteIds: [],
     },
     // Finance (Fauzan, 27 Oct 2026): the Finance Director with 7 teams; team 1 pays staff salaries through the bank. Mock name.
+    // The Account Manager (Fauzan, 23 Nov 2026): below the FD, no team, does what the FD delegates. Mock name.
+    {
+      id: 'u-fin-am',
+      name: 'Finance Account Manager',
+      title: 'Account Manager, Finance (under the Finance Director)',
+      role: 'pwvsb_officer',
+      department: 'finance',
+      financeAccountManager: true,
+      companyIds: [],
+      siteIds: [],
+    },
     {
       id: 'u-fin-t1-lead',
       name: 'Finance Team Leader 1',
@@ -3492,6 +3507,27 @@ export function generateDataset(opts: SeedOptions): Dataset {
       title: 'System: reads the public pages of the tender sites Marketing allowed and lists guarding notices',
       role: 'pwvsb_officer',
       integration: 'tender_watcher',
+      companyIds: [],
+      siteIds: [],
+    },
+    // The monthly report maker (Fauzan, 23 Nov 2026): makes each month's reports on the 1st and sends unsent internal
+    // reports on their due day. It sees a company only through the monitor lines the CEO gives it in the app.
+    {
+      id: 'u-report-maker',
+      name: 'Prima report maker',
+      title: 'System: makes the monthly reports from Prima records and sends unsent internal reports on the due day',
+      role: 'pwvsb_officer',
+      integration: 'report_maker',
+      companyIds: [],
+      siteIds: [],
+    },
+    // The Teams approvals reader (Fauzan, 23 Nov 2026, Finance D5): records Teams results through Prima's checks only.
+    {
+      id: 'u-teams-approvals',
+      name: 'Teams approvals reader',
+      title: 'System: reads payment approvals made in Teams and records them through Prima checks',
+      role: 'pwvsb_officer',
+      integration: 'teams_approvals',
       companyIds: [],
       siteIds: [],
     },
@@ -3812,9 +3848,12 @@ export function generateDataset(opts: SeedOptions): Dataset {
       'u-act-aud2',
       'u-act-enf2',
       'u-proc-exec',
+      // D1 (Fauzan, 23 Nov 2026): the Inventory Manager checks every company's purchase before the COO, so needs the
+      // same company access lines as the executive (synthetic demo grants; real ones are entered in the app).
+      'u-proc-manager',
       'u-proc-store1',
       'u-proc-store2',
-      ...ds.users.filter((u) => u.department === 'finance' && u.financeTeam != null).map((u) => u.id),
+      ...ds.users.filter((u) => u.department === 'finance' && (u.financeTeam != null || u.financeAccountManager)).map((u) => u.id),
     ]) {
       ds.grants.push({
         id: `gr-${userId}-${cid}`,
@@ -3874,6 +3913,15 @@ export function generateDataset(opts: SeedOptions): Dataset {
       companyId: cid,
       scope: 'monitor',
       basis: 'CMS Command Centre app link (system), Special Ops slice 4E, 2 Nov 2026',
+      validFrom: grantFrom,
+      validTo: grantTo,
+    });
+    ds.grants.push({
+      id: `gr-teams-approvals-${cid}`,
+      userId: 'u-teams-approvals',
+      companyId: cid,
+      scope: 'monitor',
+      basis: 'Teams approvals reader (system), Fauzan 23 Nov 2026 Finance D5; reads only while TEAMS_APPROVALS_READ is on',
       validFrom: grantFrom,
       validTo: grantTo,
     });

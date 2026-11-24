@@ -63,7 +63,12 @@ describe('retention clean-up and legal holds (audit P2)', () => {
   });
 
   it('applying deletes exactly the unheld records and keeps the held ones', async () => {
+    // Deleting needs the PDPA officer's weekly OK (module pdpa-officer-v1, 23 Nov 2026).
+    await assert.rejects(purgeRetention(c as never, 'synthetic test', true, NOW), /not installed yet/);
+    await c.query(sql('pdpa-officer-v1.sql'));
+    await c.query('INSERT INTO prima.pdpa_purge_oks (id, data) VALUES ($1, $2)', ['pok-syn', { id: 'pok-syn', okOn: '2026-11-15', validUntil: '2026-11-21', by: 'PDPA officer (synthetic)', at: '2026-11-15T08:00:00+08:00', reason: 'No open legal hold needs these (synthetic)', runs: [] }]);
     const r = await purgeRetention(c as never, 'synthetic test', true, NOW);
+    assert.equal((await c.query(`SELECT jsonb_array_length(data->'runs') AS n FROM prima.pdpa_purge_oks WHERE id = 'pok-syn'`)).rows[0].n, 1);
     assert.equal(r.gate, 2);
     assert.equal(r.videos, 2);
     assert.deepEqual((await c.query('SELECT id FROM prima.gate_entries ORDER BY id')).rows.map((x) => x.id), ['ge-syn-active']);

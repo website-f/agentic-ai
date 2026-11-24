@@ -1,5 +1,6 @@
 import { Select } from '../SearchSelect';
 import { Plan3 } from './FinancePlan3';
+import { Payouts } from './FinancePayouts';
 import { Fragment, useState } from 'react';
 import { FIN_PLAN_LINES, finPayeeFromEInvoice, type FinCheckSection, type FinPlanLine } from '@prima/core';
 import { api, type FinControlArea, type FinControls, type FinDesk } from '../api';
@@ -121,6 +122,7 @@ export function ChecksTab({ desk, target }: { desk: FinDesk; target?: { section?
         <Fragment key={co.companyId}>
           {sec === 'out' && (
             <>
+              <Payouts companyId={co.companyId} />
               <RegularPayments v={data} co={co} />
               <HostelWatch v={data} />
               <DailyCash v={data} co={co} />

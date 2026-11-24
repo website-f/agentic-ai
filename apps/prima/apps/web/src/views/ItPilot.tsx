@@ -478,13 +478,18 @@ export function ItTenders({ data }: { data: ItBoard }) {
         title="IT tenders (eP and government)"
         sub={`${running} running`}
         actions={
-          (manager || data.lead || data.canAddTender) && (
+          (manager || data.lead || data.canAddTender) && !data.tenderDeskOn && (
             <button className="btn btn-sm btn-primary" aria-expanded={form} onClick={() => setForm(!form)} disabled={!data.tenderExec} title={data.tenderExec ? undefined : 'The IT Manager names the tender executive first'}>
               Add a tender found
             </button>
           )
         }
       >
+        {data.tenderDeskOn && (
+          <p className="notice" data-tone="info">
+            Marketing lodges every tender now. When IT spots a tender, pass it to Marketing; the IT part comes back here when Marketing presses "Send the IT part to IT".
+          </p>
+        )}
         <p className="iw-muted">
           Every stage has a target in minutes and its clock starts when the stage before it is done: the earlier the bid is in eP, the better its chances. The
           closing date is only the last line; the bid goes in at least a day before.

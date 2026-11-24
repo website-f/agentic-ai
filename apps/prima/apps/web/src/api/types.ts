@@ -217,6 +217,7 @@ export type MyReceipts = R<'myReceipts'>;
 export type Memos = R<'memos'>;
 export type PdpaBoard = R<'pdpaBoard'>;
 export type FleetBoard = R<'fleetBoard'>;
+export type FleetRecordsView = R<'fleetRecords'>;
 export type VehicleRentals = R<'vehicleRentals'>;
 export type VehicleUsage = R<'vehicleUsage'>;
 export type ClientBoard = R<'clientBoard'>;
@@ -249,6 +250,7 @@ export type StaffPayBoard = R<'staffPayroll'>;
 export type FinBoard = R<'finBoard'>;
 export type FinDesk = Awaited<ReturnType<PrimaService['finance']['desk']>>;
 export type FinSettingsView = Awaited<ReturnType<PrimaService['finance']['settingsView']>>;
+export type FinPayoutsView = Awaited<ReturnType<PrimaService['financePayouts']['view']>>;
 export type FinKpiView = Awaited<ReturnType<PrimaService['financeKpi']['view']>>;
 export type FinRequestList = Awaited<ReturnType<PrimaService['financeRequests']['list']>>;
 export type FinCooDesk = Awaited<ReturnType<PrimaService['finance']['cooDesk']>>;
@@ -497,6 +499,8 @@ export interface Me {
   user: User;
   companies: Company[];
   now: string;
+  /** Companies where this person keeps a vault (its Amra, or on its written authorised list) without a company-wide arms right. */
+  keptVaultCompanyIds?: string[];
   /** What the server's records are (PRIMA_DATA_MODE); an older server sends none, which reads as test data. */
   dataMode?: DataMode;
   /**
@@ -789,6 +793,10 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   setOfficeDesks(companyId: string, desks: OfficeDeskInput[], note: string): Promise<unknown>;
   setCompanyRunBy(companyId: string, runByCompanyId: string | null, reason: string): Promise<unknown>;
   jaBoard(): Promise<JaBoard>;
+  opsStandardsDuties(): Promise<R<'opsStandardsDuties'>>;
+  jaUploadOptions(): Promise<R<'jaUploadOptions'>>;
+  jaUploadPay(input: { companyId: string; period: string; fileName: string; rows: Record<string, string>[] }): Promise<R<'jaUploadPay'>>;
+  jaUploadRoster(input: { siteId: string; month: string; fileName: string; rows: Record<string, string>[] }): Promise<R<'jaUploadRoster'>>;
   jaSwitchBoard(): Promise<JaSwitchBoard>;
   jaSwitchReport(companyId: string, area: string): Promise<JaSwitchReport>;
   jaSwitchAct(companyId: string, area: string, action: 'start' | 'cancel' | 'explain' | 'check' | 'switch' | 'undo', body: Record<string, unknown>): Promise<unknown>;
@@ -963,6 +971,14 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   sharedLogins(): Promise<Awaited<ReturnType<PrimaService['sharedLogins']['board']>>>;
   sharedLoginsLeaver(personId: string): Promise<Awaited<ReturnType<PrimaService['sharedLogins']['leaverList']>>>;
   sharedLoginsAct(action: 'save' | 'changed' | 'close' | 'kind', input: Record<string, unknown>): Promise<unknown>;
+  /** PDPA officer department check (Fauzan, 23 Nov 2026). */
+  pdpaOfficerToday(): Promise<Awaited<ReturnType<PrimaService['pdpaOfficer']['doToday']>>>;
+  pdpaOfficerInbox(): Promise<Awaited<ReturnType<PrimaService['pdpaOfficer']['inbox']>>>;
+  pdpaOfficerDownloads(): Promise<Awaited<ReturnType<PrimaService['pdpaOfficer']['downloads']>>>;
+  pdpaOfficerClientSteps(): Promise<Awaited<ReturnType<PrimaService['pdpaOfficer']['clientSteps']>>>;
+  pdpaOfficerKeep(): Promise<Awaited<ReturnType<PrimaService['pdpaOfficer']['keepList']>>>;
+  pdpaMyAsks(): Promise<Awaited<ReturnType<PrimaService['pdpaOfficer']['myAsks']>>>;
+  pdpaOfficerAct(action: 'ask' | 'handle' | 'client-step' | 'purge-ok', input: Record<string, unknown>): Promise<unknown>;
   reportProblem(input: { what: string; screen: string; photo?: string | null }): Promise<unknown>;
   replyProblem(id: string, text: string): Promise<unknown>;
   amRecordPayment(unitId: string, input: Parameters<PrimaService['amRecordPayment']>[2]): Promise<unknown>;
@@ -1003,12 +1019,14 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   raisePurRequest(companyId: string, input: PurRequestInput): Promise<unknown>;
   purStep(
     id: string,
-    action: 'quote' | 'online' | 'submit' | 'approve' | 'reject' | 'reopen' | 'order' | 'receive' | 'invoice' | 'post',
+    action: 'quote' | 'online' | 'submit' | 'approve' | 'reject' | 'reopen' | 'order' | 'receive' | 'invoice' | 'post' | 'pay_online' | 'urgent_seen',
     body: PurStepBody,
   ): Promise<unknown>;
+  purLinkItemSku(stockItemId: string, skuId: string | null, reason: string): Promise<unknown>;
   myItems(): Promise<MyItems>;
   reportItDevice(input: Parameters<PrimaService['reportItDevice']>[1]): Promise<unknown>;
   deliveryProof(issueId: string): Promise<DeliveryProof>;
+  purOrderPdf(id: string): Promise<{ name: string; base64: string }>;
   confirmMyItem(id: string, received: boolean, note: string): Promise<unknown>;
   addPurSupplier(companyId: string, input: PurSupplierInput): Promise<unknown>;
   purSupplierStep(id: string, action: 'verify_bank' | 'review' | 'coi' | 'abc' | 'block' | 'unblock', note: string): Promise<unknown>;
@@ -1032,7 +1050,12 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   uniformRequests(): Promise<UniformRequests>;
   requestUniform(input: { staffNo: string; stockItemId: string; qty: number; reason: string; guardPays?: { receiptNo: string; amount: number } | null }): Promise<unknown>;
   decideUniformRequest(id: string, action: 'issue' | 'refuse' | 'cancel', input: { note?: string; patrolPersonId?: string }): Promise<unknown>;
+  setGoodwillPrice(itemId: string, input: { charge?: 'rental' | 'sale'; rentalMonthly?: number | null; salePrice?: number | null; unitCost?: number | null; reason: string }): Promise<unknown>;
+  decideGoodwillSale(itemId: string, input: { approve: boolean; reason: string }): Promise<unknown>;
   corpFilingStep(id: string, action: 'prepare' | 'lodge' | 'receipt', body: { ref?: string; on?: string }): Promise<unknown>;
+  openCorpFiling(input: { companyId: string; title: string; dueOn: string; basis: string }): Promise<unknown>;
+  corpFilingExecChoices(): Promise<R<'corpFilingExecChoices'>>;
+  setCorpFilingExec(input: { companyId: string; userId: string | null; reason: string }): Promise<unknown>;
   raiseCorpChange(companyId: string, input: CorpChangeInput): Promise<unknown>;
   addCorpFiling(companyId: string, input: CorpFilingInput): Promise<unknown>;
   decideCorpChange(id: string, decision: 'approve' | 'reject', note: string, clauseRef: string): Promise<unknown>;
@@ -1089,6 +1112,13 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   finCreateRequest(companyId: string, input: Record<string, unknown>): Promise<unknown>;
   finRequestStep(companyId: string, requestId: string, action: FinRequestAction, input: Record<string, unknown>): Promise<unknown>;
   finSetSettings(values: Record<string, unknown>, comment: string, effectiveFrom?: string): Promise<unknown>;
+  finConfirmSettings(comment: string): Promise<unknown>;
+  finSetBudgetLimit(companyId: string, amount: number | null, comment: string): Promise<unknown>;
+  finDelegateAm(input: Record<string, unknown>): Promise<unknown>;
+  finPayouts(companyId: string): Promise<FinPayoutsView>;
+  finPayoutPrepare(input: Record<string, unknown>): Promise<unknown>;
+  finPayoutRecord(input: Record<string, unknown>): Promise<unknown>;
+  finPayoutJournal(companyId: string, input: Record<string, unknown>): Promise<unknown>;
   finCooStep(companyId: string, paymentId: string, action: 'approve' | 'return', input: Record<string, unknown>): Promise<unknown>;
   finControls(companyId: string, billPeriod?: string): Promise<FinControls>;
   finDashboard(): Promise<FinDashboard>;
@@ -1192,7 +1222,9 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   reviewFuel(vehicleId: string, fillId: string, input: FuelReviewInput): Promise<unknown>;
   requestVehicle(input: VehicleRequestInput): Promise<unknown>;
   decideVehicleRequest(requestId: string, ok: boolean, vehicleId: string | null, note: string): Promise<unknown>;
-  vehicleOut(vehicleId: string, requestId: string | null, km: number, driver?: string): Promise<unknown>;
+  vehicleOut(vehicleId: string, requestId: string | null, km: number, driver?: string, driverUserId?: string | null): Promise<unknown>;
+  fleetRecords(): Promise<FleetRecordsView>;
+  fleetRecordAct(op: 'accident' | 'summons' | 'licence' | 'close' | 'recover', input: Record<string, unknown>, proof: ProofInput[]): Promise<unknown>;
   vehicleIn(vehicleId: string, km: number, note: string): Promise<unknown>;
   recordVehicleWork(vehicleId: string, input: VehicleWorkInput, proof: ProofInput[]): Promise<unknown>;
   fileMonitoringConsent(personId: string, proof: ProofInput[]): Promise<unknown>;
@@ -1243,6 +1275,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   bookFwCostCharge(id: string, input: FwCostBookInput, proof: ProofInput[]): Promise<unknown>;
   personDocs(personId: string): Promise<EvidenceDoc[]>;
   uploadHiringDoc(personId: string, kind: HiringDocKind, proof: ProofInput[]): Promise<unknown>;
+  decideAgeException(personId: string, input: { action: 'give' | 'end'; until?: string; reason: string }): Promise<unknown>;
   updateHospitalClaim(leaveId: string, input: HospitalClaimInput, proof: ProofInput[]): Promise<unknown>;
   submitFwRenewal(personId: string, paper: FwPaper, input: FwRenewalInput, proof: ProofInput[]): Promise<unknown>;
   createFwmTask(personId: string, input: FwmTaskInput): Promise<unknown>;
@@ -1367,10 +1400,16 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   growthMargin(): Promise<GrowthMargin>;
   approvalLimits(): Promise<ApprovalLimitsView>;
   staffLeaveVc(): Promise<StaffLeaveVcView>;
+  /** B1 (Fauzan, 23 Nov 2026): HR records the Vice Chairman's answer, with how he gave it and the proof. */
+  recordLeaveVc(id: string, body: VcRecordBody): Promise<unknown>;
+  recordPayVc(id: string, body: VcRecordBody): Promise<unknown>;
+  /** D1 (Fauzan, 23 Nov 2026): what the Chief of Staff hands to the Deputy or the HR Administrator. */
+  cosCover(): Promise<CosCoverView>;
+  setCosCover(body: { item: string; to: string[]; until: string | null; reason: string }): Promise<unknown>;
   setStaffLeaveVc(body: { on: boolean; reason: string }): Promise<unknown>;
   cashStandIn(): Promise<CashStandInView>;
   setCashStandIn(body: Record<string, unknown>): Promise<unknown>;
-  setApprovalLimits(body: { claimsMax: number | null; purchasesMax: number | null; comment: string }): Promise<unknown>;
+  setApprovalLimits(body: { claimsMax: number | null; purchasesMax: number | null; onlineBuyMax?: number | null; comment: string }): Promise<unknown>;
   regionalOps(region?: string): Promise<RegionalOps>;
   govOpsMonitor(month?: string): Promise<GovOpsMonitor>;
   privateOpsMonitor(month?: string): Promise<GovOpsMonitor>;
@@ -1398,11 +1437,13 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   cmsOvertime(period: string): Promise<Awaited<ReturnType<PrimaService['cmsOvertime']>>>;
   approveCmsOvertime(body: { period: string; staffId: string; reason: string }): Promise<unknown>;
   planCmsRoster(days: number): Promise<unknown>;
+  uploadCmsRoster(input: { fileName: string; rows: Record<string, string>[] }): Promise<{ fileName: string; assigned: number; rejected: { line: number; staff: string; reason: string }[] }>;
   recordCmsHandover(shiftId: string, note: string, agree?: boolean): Promise<unknown>;
   giveCmsHandover(shiftId: string, note: string): Promise<unknown>;
   cmsSeatClockIn(shiftId: string): Promise<unknown>;
   cmsSeatClockOut(shiftId: string, note: string): Promise<unknown>;
   releaseCmsSeat(shiftId: string, reason: string): Promise<unknown>;
+  replaceCmsSeat(shiftId: string, staff: string, reason: string): Promise<unknown>;
   logCallback(callId: string, note: string): Promise<unknown>;
   acknowledgeAlarm(id: string): Promise<unknown>;
   cmsDispatches(): Promise<CmsDispatches>;
@@ -1469,7 +1510,11 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   /** Part X: one door for the company and department toolbox meeting steps. */
   toolboxAct(op: string, input: Record<string, unknown>): Promise<unknown>;
   groupMonthAct(op: string, input: Record<string, unknown>): Promise<unknown>;
+  /** Monthly reports Prima makes by itself (Fauzan, 23 Nov 2026). */
+  autoReportAct(op: string, input: Record<string, unknown>): Promise<unknown>;
   registerAct(op: string, input: Record<string, unknown>): Promise<unknown>;
+  /** FWM check gaps (23 Nov 2026): bulk paper dates, levy, exit files, absconding cases, quotas and caseload. */
+  fwGapsAct(op: string, input: Record<string, unknown>): Promise<unknown>;
   /** Part T: one door for the site supplies request steps (KBK, PKK Nepal, PKK Local). */
   siteSuppliesAct(op: string, input: Record<string, unknown>): Promise<unknown>;
   inventoryAct(op: string, input: Record<string, unknown>): Promise<unknown>;
@@ -1566,6 +1611,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   qualityAction(action: string, input: Record<string, unknown>): Promise<unknown>;
   salaryCalcData(): Promise<SalaryCalcData>;
   amExtras(): Promise<AmExtrasBoard>;
+  amToday(): Promise<Awaited<ReturnType<PrimaService['assetToday']>>>;
   /** One step in the Asset Management extras; the server checks who may do it and every field. */
   amExtrasAct(area: string, action: string, id: string, body: Record<string, unknown>): Promise<unknown>;
   qualityOps(opts?: { companyId?: string }): Promise<QmsOpsBoard>;
@@ -1679,6 +1725,14 @@ export type FwStatDraftRow = Awaited<ReturnType<PrimaService['fwStatDraft']>>[nu
 export type AmExtrasBoard = Awaited<ReturnType<PrimaService['amExtras']['board']>>;
 export type QmsOpsBoard = Awaited<ReturnType<PrimaService['qualityOps']['board']>>;
 export type FwmRecruitment = R<'fwmRecruitment'>;
+export type CosCoverView = R<'cosCoverView'>;
+export interface VcRecordBody {
+  consent: boolean;
+  how: 'app' | 'call' | 'meeting' | 'letter';
+  givenOn: string;
+  note: string;
+  proof: import('@prima/core').ProofInput[];
+}
 export interface StaffLeaveVcView {
   on: boolean;
   canSet: boolean;

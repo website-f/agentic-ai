@@ -70,7 +70,8 @@ describe('site man-hours (rule SITE-HOURS)', () => {
     const site = ds.sites.find((s) => s.companyId === 'co-sasa' && s.sector !== 'government')!;
     const input = { siteId: site.id, month: '2026-11', extraHours: 36, cause: 'annual_leave' as const, reason: 'Relief for two guards on annual leave' };
     await expect(svc.approveSiteHours(user(ds, 'u-ogm'), input)).rejects.toThrow(/Operations Director/);
-    await expect(svc.approveSiteHours(user(ds, 'u-coo'), input)).rejects.toThrow(/Not allowed/);
+    // The COO covers the OD (Fauzan, 23 Nov 2026), with a reason like the OD.
+    await expect(svc.approveSiteHours(user(ds, 'u-coo'), { ...input, reason: '' })).rejects.toThrow(/reason/);
     await expect(svc.approveSiteHours(user(ds, 'u-opsdir'), { ...input, reason: '' })).rejects.toThrow(/reason/);
     await expect(svc.approveSiteHours(user(ds, 'u-opsdir'), { ...input, extraHours: 0 })).rejects.toThrow(/extra hours/);
     await expect(svc.approveSiteHours(user(ds, 'u-opsdir'), { ...input, month: '2027-03' })).rejects.toThrow(/month/);
@@ -96,7 +97,7 @@ describe('site man-hours (rule SITE-HOURS)', () => {
     if (guard) await expect(svc.siteHoursBoard(guard)).rejects.toThrow(/Not allowed/);
     const device = ds.users.find((u) => u.role === 'site_device');
     if (device) await expect(svc.siteHoursBoard(device)).rejects.toThrow(/Not allowed/);
-    for (const id of ['u-audit', 'u-coo']) {
+    for (const id of ['u-audit']) {
       const u = ds.users.find((x) => x.id === id);
       if (!u) continue;
       const b = await svc.siteHoursBoard(u, { companyId: 'co-sasa' });

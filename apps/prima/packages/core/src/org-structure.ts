@@ -1,3 +1,4 @@
+import { isOgm, isOpsDirector } from './ops-access';
 import { AccessDenied } from "./access";
 import { accessClosed } from "./access";
 import { isGroupLeader } from "./access";
@@ -119,9 +120,20 @@ export function onOrgChart(u: User, today: IsoDate): boolean {
 }
 
 /** The top of the group: never placed under anyone. */
-/** The OGM delegates any patrolling officer to an OM (Fauzan, 23 Nov 2026: "Any om delegated by ogm"). */
+/**
+ * The OGM delegates any patrolling officer to an OM (Fauzan, 23 Nov 2026: "Any om delegated by ogm"). The Operations
+ * Director does the same on the private side (private operations study, 23 Nov 2026): each head only for officers not
+ * tied to the other side, and only to OMs and Regional OMs of their own side or not tied to a side.
+ */
+function headSide(actor: User): 'government' | 'private' | null {
+  return isOgm(actor) ? 'government' : isOpsDirector(actor) ? 'private' : null;
+}
+function onSide(u: User, side: 'government' | 'private'): boolean {
+  return !u.opsSector || u.opsSector === side;
+}
 function ogmDelegatesPatrol(actor: User, target: User): boolean {
-  return actor.opsTier === 'ogm' && target.opsTier === 'patrol';
+  const side = headSide(actor);
+  return !!side && target.opsTier === 'patrol' && onSide(target, side);
 }
 
 function isTop(u: User): boolean {
@@ -338,7 +350,8 @@ export class OrgStructureService {
     const office = users.filter((u) => u.role !== 'supervisor' || u.opsTier === 'patrol');
     if (setsWholeChart(actor)) return office;
     // The OGM delegates a patrolling officer to any OM or Regional OM (Fauzan, 23 Nov 2026: "Any om delegated by ogm").
-    const oms = actor.opsTier === 'ogm' ? office.filter((u) => u.opsTier === 'om' || u.opsTier === 'regional') : [];
+    const side = headSide(actor);
+    const oms = side ? office.filter((u) => (u.opsTier === 'om' || u.opsTier === 'regional') && onSide(u, side)) : [];
     return office.filter((u) => u.id === actor.id || chainOf(u, users).some((x) => x.id === actor.id) || oms.includes(u));
   }
 
@@ -416,6 +429,14 @@ export class OrgStructureService {
       for (const u of units) if (!u.heads.length && u.members) gaps.push(`${u.label}: no head named (${u.members} staff). Their heads cannot see the team's items until one is named.`);
       for (const p of people) if (p.how === 'assumed') gaps.push(`${p.name} (${p.title}): no line from the job, so the Chief of Staff is shown. Put them under the right head.`);
     }
+    // Sasa Team and Goodwill have separate staff (Fauzan, 2 Nov 2026): an OM or Regional OM not tied to a side works
+    // both sides' sites (private operations study, 23 Nov 2026). Shown to the CEO, the HR Director, the OGM and the
+    // Operations Director; nothing is changed automatically.
+    if (whole || headSide(me)) {
+      for (const u of users)
+        if (u.role === 'pwvsb_officer' && u.department === 'operations' && (u.opsTier === 'om' || u.opsTier === 'regional') && !u.opsSector)
+          gaps.push(`${u.name} (${u.title}): not tied to a side, so they work both government and private sites. Set Government (Goodwill Empire) or Private (Sasa Team) in Accounts and access.`);
+    }
     const choices = installed ? this.managerChoices(me, users) : [];
     return {
       installed,
@@ -453,12 +474,15 @@ export class OrgStructureService {
       if (manager && manager.role === 'supervisor' && manager.opsTier !== 'patrol') throw new BadRequest('A site officer cannot have staff under them.');
       if (!this.reaches(me, target, users))
         throw new AccessDenied('hr.monitor', '(you can move only people in your own line or your unit; ask the HR Director for a move between heads)');
-      if (manager && !setsWholeChart(me) && me.opsTier === 'ogm') {
+      if (manager && !setsWholeChart(me) && headSide(me)) {
         const inMyLine = manager.id === me.id || chainOf(manager, users).some((x) => x.id === me.id);
         const omPick = manager.opsTier === 'om' || manager.opsTier === 'regional';
         // The OGM's delegation covers patrolling officers to OMs; anyone else follows the usual own-line rule.
+        const side = headSide(me)!;
+        if (target.opsTier === 'patrol' && omPick && !onSide(manager, side))
+          throw new AccessDenied('hr.monitor', '(a patrolling officer goes under an OM or a Regional OM of your own side)');
         if (target.opsTier === 'patrol' && !omPick && manager.id !== me.id)
-          throw new AccessDenied('hr.monitor', '(the OGM puts a patrolling officer under an OM or a Regional OM)');
+          throw new AccessDenied('hr.monitor', '(the OGM or the Operations Director puts a patrolling officer under an OM or a Regional OM)');
         if (!inMyLine && omPick && target.opsTier !== 'patrol')
           throw new AccessDenied('hr.monitor', '(you can put people only under yourself or under someone already in your line)');
       }

@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { after, beforeEach, describe, it } from 'node:test';
 import { RULES, generateDataset, myt, type GuardPayRun } from '@prima/core';
+import { preparePayout } from './payout-helper';
 import { Db } from '../src/db';
 import { resetDb } from '../src/reset-db';
 
@@ -98,12 +99,14 @@ describe('payroll repair release gates (actual PostgreSQL)', () => {
     const advance = await approvedAdvance();
     const run = await prepare();
     assert.equal(run.lines.find((l) => l.personId === advance.personId)?.advance, 0);
-    await db.asUser('u-fin-t1-lead', (svc, u) => svc.payGuardAdvance(u, advance.id, { bankRef: 'NO-TRANSFER', paidOn: '2026-10-20' }), clock);
+    await preparePayout(db, 'guard_advance', advance.id, clock);
+    await db.asUser('u-fd', (svc, u) => svc.payGuardAdvance(u, advance.id, { bankRef: 'NO-TRANSFER', paidOn: '2026-10-20' }), clock);
     await assert.rejects(submit(run), /Paid advances have changed/);
     const fresh = await prepare();
     assert.equal(fresh.lines.find((l) => l.personId === advance.personId)?.advance, 100);
     await submit(fresh); await approve(fresh);
-    const paid = await db.asUser('u-fin-t1-lead', (svc, u) => svc.guardPayStep(u, fresh.id, 'pay', { bankRef: 'NO-TRANSFER', paidOn: '2026-11-05', pcbChecked: true }), clock);
+    await preparePayout(db, 'guard_pay', fresh.id, clock);
+    const paid = await db.asUser('u-fd', (svc, u) => svc.guardPayStep(u, fresh.id, 'pay', { bankRef: 'NO-TRANSFER', paidOn: '2026-11-05', pcbChecked: true }), clock);
     assert.equal(paid.stage, 'paid');
     assert.equal(paid.lines.find((l) => l.personId === advance.personId)?.advance, 100);
   });

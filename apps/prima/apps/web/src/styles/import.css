@@ -506,3 +506,50 @@
   width: 100%;
   font-family: inherit;
 }
+
+/* P129: the screen's own importers (Guard pay lines, a salary sheet) offered by Upload, and the preview of a list kept as old data. */
+.up-own {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.up-own h3 {
+  margin: 0;
+  font-weight: 600;
+}
+.up-own-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r);
+  background: var(--surface, transparent);
+}
+.up-own-card[data-off] {
+  border-left-color: var(--line);
+  opacity: 0.85;
+}
+.up-own-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.up-own-card .btn {
+  flex-shrink: 0;
+}
+@media (max-width: 520px) {
+  .up-own-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+.up-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}

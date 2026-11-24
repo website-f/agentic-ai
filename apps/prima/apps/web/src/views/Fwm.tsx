@@ -15,7 +15,7 @@ import {
 import { GroupHistoryPanel, HistoryLookupPanel } from './StaffHistory';
 import { FWM_TASK_LABEL, FW_LEVEL_LABEL, type FwmTaskKind, type FwPaper, type ProofInput, FW_PAPERS } from '@prima/core';
 import { api, type FwmBoard } from '../api';
-import { useRouteTab } from '../App';
+import { useApp, useRouteTab } from '../App';
 import { Avatar, Card, Empty, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
 import { SopHelp } from '../sop/SopHelp';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
@@ -27,6 +27,7 @@ import { FwmRecruitmentPanel } from './FwmRecruitment';
 import { FwAddMenu, NoAddNote } from './FwmAdd';
 import { GuardPhoneCard } from './GuardPhoneOffice';
 import '../styles/hrx.css';
+import { FwBulkLoadPanel, FwCaseloadPanel, FwExitsPanel, FwHostelCertsPanel, FwQuotaPanel, FwTodoPanel, LevyForm } from './FwmGaps';
 
 /**
  * Foreign Worker Management (Fauzan, 26 Oct 2026). FWM renews every foreign worker's papers and sends the OMs dated
@@ -47,9 +48,10 @@ const KINDS: FwmTaskKind[] = ['FOMEMA', 'JIM', 'TNG', 'BIOMETRIC', 'OTHER'];
 const PAPERS: FwPaper[] = FW_PAPERS;
 const PAGE = 100;
 
-const SOURCE: Record<'prima' | 'ja' | 'typed' | 'sample', { label: string; tone: Tone; title: string }> = {
+const SOURCE: Record<'prima' | 'ja' | 'typed' | 'list' | 'sample', { label: string; tone: Tone; title: string }> = {
   prima: { label: 'From the paper', tone: 'ok', title: 'Recorded in Prima from a copy of the paper' },
   typed: { label: 'Typed in', tone: 'warn', title: 'Typed by FWM from an old list or by hand; copy not seen in Prima. Record the paper to attach its copy.' },
+  list: { label: 'From the list, copy not seen', tone: 'warn', title: "Loaded from FWM's own Excel or CSV list; record the copy (New paper received, same dates) to confirm it" },
   ja: { label: 'From JA', tone: 'info', title: 'Date taken from the JA Group app; copy not seen in Prima' },
   sample: { label: 'Sample data', tone: 'unknown', title: 'Sample data from the demo set; record the real paper' },
 };
@@ -81,7 +83,7 @@ const stripe = (t: Tone) => (t === 'crit' || t === 'warn' || t === 'unknown' ? t
 export function FwmView() {
   const { data, error } = useLoad(() => api.fwmBoard(), []);
   // P121: a link may open a tab (#fwm/recruit); 'auto' (or a tab this person does not have) opens their usual first tab.
-  const [tab, setTab] = useRouteTab<'auto' | 'papers' | 'workers' | 'align' | 'year10' | 'tasks' | 'welfare' | 'recruit'>('auto', [
+  const [tab, setTab] = useRouteTab<'auto' | 'papers' | 'workers' | 'align' | 'year10' | 'tasks' | 'welfare' | 'recruit' | 'load' | 'exits' | 'quotas' | 'certs' | 'team'>('auto', [
     'papers',
     'workers',
     'align',
@@ -89,12 +91,18 @@ export function FwmView() {
     'tasks',
     'welfare',
     'recruit',
+    'load',
+    'exits',
+    'quotas',
+    'certs',
+    'team',
   ]);
+  const { me } = useApp();
   const [mine, setMine] = useState(true);
   const [q, setQ] = useState('');
   const [company, setCompany] = useState('');
   const [paper, setPaper] = useState<FwPaper | ''>('');
-  const [only, setOnly] = useState<'' | 'ack' | 'differ' | 'ja'>('');
+  const [only, setOnly] = useState<'' | 'ack' | 'differ' | 'ja' | 'mine' | 'list'>('');
   const [shown, setShown] = useState(PAGE);
   const companies = useMemo(() => {
     const m = new Map<string, string>();
@@ -116,7 +124,22 @@ export function FwmView() {
     );
   const board = data.role !== 'om' && data.role !== 'despatch';
   const align0 = data.alignment;
-  const has = { auto: false, papers: board, workers: data.canWork, align: board && !!align0, year10: board, tasks: true, welfare: board, recruit: board };
+  const has = {
+    auto: false,
+    papers: board,
+    workers: data.canWork,
+    align: board && !!align0,
+    year10: board,
+    tasks: true,
+    welfare: board,
+    recruit: board,
+    // FWM check gaps (Fauzan, 23 Nov 2026).
+    load: data.canWork,
+    exits: data.role !== 'despatch',
+    quotas: board,
+    certs: board,
+    team: data.canWork || data.role === 'escalation',
+  };
   const view = has[tab] ? tab : board ? 'papers' : 'tasks';
   const forMeFirst = data.role === 'escalation' && mine;
   const text = q.trim().toLowerCase();
@@ -128,7 +151,9 @@ export function FwmView() {
       (!text || i.person.name.toLowerCase().includes(text) || i.person.staffNo.toLowerCase().includes(text)) &&
       (only !== 'ack' || i.acksOwed.length > 0) &&
       (only !== 'differ' || i.datesDiffer) &&
-      (only !== 'ja' || i.jaOnly),
+      (only !== 'ja' || i.jaOnly) &&
+      (only !== 'mine' || i.owner?.execId === me.user.id) &&
+      (only !== 'list' || i.source === 'list'),
   );
   const openTasks = data.tasks.filter((t) => t.task.status !== 'accepted').length;
   const tasksFound = text
@@ -159,6 +184,7 @@ export function FwmView() {
         }
       />
       <CooNoticesPanel notices={data.cooNotices} />
+      {data.canWork && <FwTodoPanel />}
       {data.longMc.length > 0 && (
         <Card
           title="Papers to plan while on SOCSO medical leave"
@@ -279,9 +305,40 @@ export function FwmView() {
             Recruitment steps
           </button>
         )}
+        {/* FWM check gaps (Fauzan, 23 Nov 2026). */}
+        {data.canWork && (
+          <button role="tab" aria-selected={view === 'load'} onClick={() => setTab('load')}>
+            Load dates
+          </button>
+        )}
+        {data.role !== 'despatch' && (
+          <button role="tab" aria-selected={view === 'exits'} onClick={() => setTab('exits')}>
+            {board ? 'Leavers and missing' : 'Missing worker'}
+          </button>
+        )}
+        {board && (
+          <button role="tab" aria-selected={view === 'quotas'} onClick={() => setTab('quotas')}>
+            Quotas
+          </button>
+        )}
+        {board && (
+          <button role="tab" aria-selected={view === 'certs'} onClick={() => setTab('certs')}>
+            Hostel certificates
+          </button>
+        )}
+        {(data.canWork || data.role === 'escalation') && (
+          <button role="tab" aria-selected={view === 'team'} onClick={() => setTab('team')}>
+            Who owns which company
+          </button>
+        )}
       </div>
 
       {view === 'welfare' && <FwmWelfarePanel />}
+      {view === 'load' && <FwBulkLoadPanel />}
+      {view === 'exits' && <FwExitsPanel />}
+      {view === 'quotas' && <FwQuotaPanel />}
+      {view === 'certs' && <FwHostelCertsPanel />}
+      {view === 'team' && <FwCaseloadPanel />}
       {view === 'recruit' && <FwmRecruitmentPanel />}
 
       {(view === 'papers' || view === 'year10' || view === 'tasks') && (
@@ -323,6 +380,8 @@ export function FwmView() {
                 <option value="ack">Acknowledgement owed</option>
                 <option value="differ">Prima and JA differ</option>
                 <option value="ja">In JA only</option>
+                <option value="list">From the list, copy not seen</option>
+                {data.canWork && <option value="mine">My companies ({data.counts.mine})</option>}
               </select>
             </>
           )}
@@ -435,7 +494,7 @@ export function FwmView() {
 }
 
 function PaperRow({ i, canWork, canRecord, onAlign }: { i: Item; canWork: boolean; canRecord: boolean; onAlign: () => void }) {
-  const [mode, setMode] = useState<'renew' | 'task' | 'new' | 'ack' | null>(null);
+  const [mode, setMode] = useState<'renew' | 'task' | 'new' | 'ack' | 'levy' | null>(null);
   const act = useAction();
   const personId = i.person.id;
   const tone = stageTone(i);
@@ -490,6 +549,7 @@ function PaperRow({ i, canWork, canRecord, onAlign }: { i: Item; canWork: boolea
               {i.datesDiffer ? ` · counting to the earlier date (${i.countedFrom === 'ja' ? 'JA' : 'Prima'}) until FWM settles it` : ''}
             </span>
           )}
+          {i.owner && <span>FWM owner: {i.owner.execName}</span>}
           {i.stage && !i.stage.paused && <span>Alerted: {i.stage.alerted.map((l) => FW_LEVEL_LABEL[l]).join(', then ')}</span>}
           {i.acks.map((a) => (
             <span key={`${a.level}-${a.at}`}>
@@ -504,6 +564,15 @@ function PaperRow({ i, canWork, canRecord, onAlign }: { i: Item; canWork: boolea
             <span>
               Submitted {dateLabel(i.renewal.submittedOn)} via {i.renewal.channel} by {i.renewal.by}
               {i.renewal.note ? ` · ${i.renewal.note}` : ''}. Record the new paper when it comes.
+              {i.paper === 'PLKS_PERMIT' &&
+                (i.renewal.levy ? (
+                  <span> Levy RM{i.renewal.levy.amount.toFixed(2)} paid {dateLabel(i.renewal.levy.paidOn)} ({i.renewal.levy.ref}).</span>
+                ) : (
+                  <span>
+                    {' '}
+                    <Chip tone="warn">Levy not recorded</Chip>
+                  </span>
+                ))}
             </span>
           )}
           {i.jaSubmitted && i.ja?.renewalSubmittedOn && <span>The JA app says the renewal was submitted on {dateLabel(i.ja.renewalSubmittedOn)}.</span>}
@@ -544,6 +613,11 @@ function PaperRow({ i, canWork, canRecord, onAlign }: { i: Item; canWork: boolea
                 <button className="btn btn-sm" onClick={() => setMode('task')}>
                   Send task to OM
                 </button>
+                {i.paper === 'PLKS_PERMIT' && i.renewal && (
+                  <button className="btn btn-sm" onClick={() => setMode('levy')}>
+                    {i.renewal.levy ? 'Change levy' : 'Record levy paid'}
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -553,6 +627,7 @@ function PaperRow({ i, canWork, canRecord, onAlign }: { i: Item; canWork: boolea
         {mode === 'new' && personId && <PaperForm personId={personId} paper={i.paper} mode="new" onDone={() => setMode(null)} />}
         {mode === 'renew' && personId && <RenewalForm personId={personId} paper={i.paper} onDone={() => setMode(null)} />}
         {mode === 'task' && personId && <TaskForm personId={personId} paper={i.paper} onDone={() => setMode(null)} />}
+        {mode === 'levy' && i.renewal && <LevyForm renewalId={i.renewal.id} changing={!!i.renewal.levy} onDone={() => setMode(null)} />}
       </div>
     </li>
   );
@@ -1038,12 +1113,31 @@ function RenewalForm({ personId, paper, onDone }: { personId: string; paper: FwP
     paper === 'PLKS_PERMIT' ? 'FWCMS' : paper === 'KDN_LETTER' ? 'eSIMS' : paper === 'FOMEMA' ? 'FOMEMA' : paper === 'PASSPORT' ? 'Embassy of Nepal' : 'Insurer',
   );
   const [note, setNote] = useState('');
+  const [levyAmount, setLevyAmount] = useState('');
+  const [levyOn, setLevyOn] = useState(today());
+  const [levyRef, setLevyRef] = useState('');
   const [proof, setProof] = useState<ProofInput[]>([]);
   const act = useAction();
   return (
     <div className="hx-form">
       <h3 className="hx-form-title">Renewal submitted</h3>
       <div className="hx-form-grid">
+        {paper === 'PLKS_PERMIT' && (
+          <>
+            <label className="field">
+              <span className="label">Levy paid (RM)</span>
+              <input className="input" inputMode="decimal" aria-label="Levy paid" placeholder="1850.00" value={levyAmount} onChange={(e) => setLevyAmount(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="label">Levy paid on</span>
+              <input className="input" type="date" aria-label="Levy paid on" value={levyOn} onChange={(e) => setLevyOn(e.target.value)} />
+            </label>
+            <label className="field hx-form-wide">
+              <span className="label">Levy receipt or FWCMS reference</span>
+              <input className="input" aria-label="Levy reference" value={levyRef} onChange={(e) => setLevyRef(e.target.value)} />
+            </label>
+          </>
+        )}
         <label className="field">
           <span className="label">Submitted on</span>
           <input className="input" type="date" aria-label="Submitted on" value={submittedOn} onChange={(e) => setSubmittedOn(e.target.value)} />
@@ -1054,7 +1148,7 @@ function RenewalForm({ personId, paper, onDone }: { personId: string; paper: FwP
         </label>
         <label className="field hx-form-wide">
           <span className="label">Note</span>
-          <input className="input" aria-label="Renewal note" placeholder="Note, such as levy paid" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className="input" aria-label="Renewal note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
       </div>
       <ProofPicker site={null} refText="FWM" items={proof} onChange={setProof} documentsOnly required />
@@ -1065,7 +1159,13 @@ function RenewalForm({ personId, paper, onDone }: { personId: string; paper: FwP
           disabled={act.busy || !proof.length || channel.trim().length < 3}
           onClick={async () => {
             const ok = await act.run(
-              () => api.submitFwRenewal(personId, paper, { submittedOn, channel, note }, proof),
+              () =>
+                api.submitFwRenewal(
+                  personId,
+                  paper,
+                  { submittedOn, channel, note, levy: paper === 'PLKS_PERMIT' && (levyAmount.trim() || levyRef.trim()) ? { amount: Number(levyAmount), paidOn: levyOn, ref: levyRef } : null },
+                  proof,
+                ),
               'Recorded. The reminders pause until the new date is on record.',
             );
             if (ok) onDone();

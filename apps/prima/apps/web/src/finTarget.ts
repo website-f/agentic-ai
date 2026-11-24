@@ -5,7 +5,7 @@ import type { FinCheckSection } from '@prima/core';
  * the company with the work. Read once by the Finance screen when it opens.
  */
 export interface FinTarget {
-  tab: 'checks' | 'payments' | 'close' | 'dashboard' | 'summary' | 'sites';
+  tab: 'checks' | 'payments' | 'close' | 'dashboard' | 'summary' | 'sites' | 'settings';
   section?: FinCheckSection;
   companyId?: string;
 }

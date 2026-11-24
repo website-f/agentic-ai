@@ -18,7 +18,8 @@ describe('Asset Management extras: who sees and who acts', () => {
     expect(team.can.act).toBe(true);
     expect(team.contractors.length).toBeGreaterThan(5);
     expect(team.meters.length).toBeGreaterThan(100);
-    expect(team.resorts.length).toBe(2);
+    // Two resorts plus the training centre (D6, 23 Nov 2026).
+    expect(team.resorts.length).toBe(3);
     const fin = await svc.amExtras.board(await as(svc, 'u-finance-am'));
     expect(fin.can.act).toBe(false);
     expect(fin.can.bank).toBe(true);

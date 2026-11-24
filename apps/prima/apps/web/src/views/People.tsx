@@ -4,8 +4,8 @@ import { FileHelper } from './BulkHelper';
 import { Select } from '../SearchSelect';
 import { useEffect, useMemo, useState } from 'react';
 import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
-import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
-import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts, p91MayImport, staffHistoryRole } from '@prima/core';
+import { CheckCircleIcon, FileXIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
+import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, RULES, ageOn, isGroupLeader, jaOwns, missingStaffFacts, p91MayImport, staffHistoryRole } from '@prima/core';
 import { api, type GuardProfile, type PersonDetail } from '../api';
 import { useApp } from '../App';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Kpi, Loading, dateLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
@@ -86,6 +86,8 @@ export function People({ openPersonId }: { openPersonId?: string }) {
         <ErrorNotice error={error} />
       </div>
     );
+  // Guard employment agreements (Fauzan, 23 Nov 2026): every guard's signed agreement uploaded; the roster warns, never stops duty.
+  const noAgreement = (data ?? []).filter((r) => r.agreement === false).length;
   const blockedCount = (data ?? []).filter((r) => !r.deployable).length;
   const dueCount = (data ?? []).filter((r) => r.deployable && r.warnings).length;
   const okCount = (data ?? []).filter((r) => r.deployable && !r.warnings).length;
@@ -132,6 +134,16 @@ export function People({ openPersonId }: { openPersonId?: string }) {
           <Stat label="Allowed to work" value={okCount} icon={<CheckCircleIcon />} tone={okCount ? 'ok' : 'neutral'} />
           <Stat label="Allowed, papers due" value={dueCount} icon={<WarningIcon />} tone={dueCount ? 'warn' : 'neutral'} />
           <Stat label="Not allowed" value={blockedCount} icon={<ProhibitIcon />} tone={blockedCount ? 'crit' : 'ok'} onClick={() => table.set({ f: { work: 'no' } })} />
+          {noAgreement > 0 && (
+            <Stat
+              label="No agreement"
+              value={noAgreement}
+              icon={<FileXIcon />}
+              tone="warn"
+              note="No signed employment agreement uploaded"
+              onClick={() => table.set({ f: { agreement: 'no' } })}
+            />
+          )}
         </Stats>
       )}
 
@@ -221,6 +233,16 @@ const PEOPLE_FILTERS: DtFilter<PeopleRow>[] = [
   { id: 'role', label: 'Role', value: (r) => r.person.role, optionLabel: (v) => v.replace('_', ' ') },
   { id: 'jobTitle', label: 'Job title', value: (r) => r.person.jobTitle?.trim() || NO_TITLE },
   { id: 'department', label: 'Department', value: (r) => r.person.department?.trim() || '' },
+  // Guard employment agreements (Fauzan, 23 Nov 2026): guards with no signed agreement uploaded (the roster warns, never stops duty).
+  {
+    id: 'agreement',
+    label: 'Agreement',
+    value: (r) => (r.agreement === false ? 'no' : r.agreement === true ? 'yes' : ''),
+    options: [
+      { value: 'no', label: 'No agreement' },
+      { value: 'yes', label: 'Signed agreement uploaded' },
+    ],
+  },
 ];
 
 type Tab = 'work' | 'training' | 'hours' | 'leave' | 'socso' | 'warnings' | 'benefits' | 'history';
@@ -422,6 +444,7 @@ export function WorkTab({ data }: { data: PersonDetail }) {
         </Sec>
       )}
       {'hiring' in data && <HiringChecklist d={data as GuardProfile} />}
+      <AgeExceptionSection data={data} />
       {(data.canSetPin || data.accounts.length > 0) && <AccessSection data={data} />}
       {p.role !== 'office' && (
         <Sec title="Shifts, last and next 7 days">
@@ -983,5 +1006,57 @@ function LeaverSharedLogins({ userId }: { userId: string }) {
       ))}
       <span className="muted">Each owner is told on Home to change the password within 3 working days. If this person is the owner or the backup, IT names a new one.</span>
     </div>
+  );
+}
+
+/**
+ * Age exception (Fauzan, 23 Nov 2026, "Up to 65 by exception only"): a guard or officer aged 61 to 65 works only with a
+ * valid yearly medical and the HR Director's or CEO's exception with a reason. The server checks every rule again.
+ */
+function AgeExceptionSection({ data }: { data: PersonDetail }) {
+  const { me } = useApp();
+  const p = data.person;
+  const act = useAction();
+  const [until, setUntil] = useState('');
+  const [reason, setReason] = useState('');
+  const today = me.now.slice(0, 10);
+  const age = ageOn(p.dob, today);
+  if (p.role === 'office' || age <= RULES.maxGuardAge.value) return null;
+  const ex = (p as typeof p & { ageException?: { until: string; reason: string; by: string; endedAt?: string | null } | null }).ageException;
+  const inForce = !!ex && !ex.endedAt && ex.until >= today;
+  const canDecide = (me.user.role === 'pwvsb_officer' && (me.user.leadership === 'cos' || me.user.leadership === 'deputy_cos')) || me.user.opsTier === 'ceo';
+  const over = age > RULES.ageException.value.upToAge;
+  return (
+    <Sec title={`Age exception (${age})`}>
+      <p className="muted small">
+        Guards may work up to {RULES.maxGuardAge.value}. From 61 to {RULES.ageException.value.upToAge} only with a valid yearly medical and an exception from the HR Director or the CEO, at most{' '}
+        {RULES.ageException.value.maxMonths} months at a time. Over {RULES.ageException.value.upToAge} never.
+      </p>
+      {over ? (
+        <Chip tone="crit">Over {RULES.ageException.value.upToAge}: cannot be rostered</Chip>
+      ) : inForce ? (
+        <div className="small">
+          <Chip tone="warn">Exception until {dateLabel(ex!.until)}</Chip> by {ex!.by}: {ex!.reason}
+        </div>
+      ) : (
+        <Chip tone="crit">No exception in force: cannot be rostered</Chip>
+      )}
+      {canDecide && !over && (
+        <div className="row" style={{ flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+          {!inForce && <input className="input" type="date" value={until} min={today} onChange={(e) => setUntil(e.target.value)} style={{ maxWidth: 170 }} aria-label="Last day of the exception" />}
+          <input className="input" placeholder="Reason (at least 10 letters)" value={reason} onChange={(e) => setReason(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+          {inForce ? (
+            <button className="btn btn-sm" disabled={act.busy || reason.trim().length < 10} onClick={() => act.run(() => api.decideAgeException(p.id, { action: 'end', reason }), 'Exception ended')}>
+              End exception
+            </button>
+          ) : (
+            <button className="btn btn-primary btn-sm" disabled={act.busy || !until || reason.trim().length < 10} onClick={() => act.run(() => api.decideAgeException(p.id, { action: 'give', until, reason }), 'Exception given')}>
+              Give exception
+            </button>
+          )}
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+    </Sec>
   );
 }

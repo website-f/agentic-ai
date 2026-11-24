@@ -747,6 +747,15 @@ services:
       # OFFICE_SIGNING_SECRET, and counts toward the person's daily AI allowance. Empty = Arisha
       # off (unless Azure OpenAI is set up for her: ARISHA_ENABLED and AZURE_OPENAI_*).
       OFFICE_MODEL_URL: ${PRIMA_OFFICE_MODEL_URL-http://api:8501/internal/prima/model}
+      # P129: "Old files and data" keeps its files on this server's disk (no Azure storage here): only the
+      # prima-archive folder of the office's files volume, so the nightly backup takes them with the office files.
+      # The folder must exist and belong to uid 1000 first (deploy: mkdir + chown, see docs/RUNBOOK.md P129).
+      ARCHIVE_DISK_DIR: ${PRIMA_ARCHIVE_DISK_DIR-/data/prima-archive}
+    volumes:
+      - type: volume
+        source: files
+        target: /data/prima-archive
+        volume: { subpath: prima-archive }
     depends_on:
       prima-setup: { condition: service_completed_successfully }
     healthcheck:

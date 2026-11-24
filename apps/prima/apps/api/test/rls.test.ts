@@ -16,6 +16,7 @@ import { linkEntra } from '../src/entra-link';
 import { createHmac, createSign, generateKeyPairSync } from 'node:crypto';
 import type { ExecutionContext } from '@nestjs/common';
 import { addDays, dateOf, myt, verifyChain, type AuditEntry } from '@prima/core';
+import { preparePayout } from './payout-helper';
 
 let proofN = 0;
 /** A unique test document as case proof (rule CASE-PROOF). */
@@ -435,7 +436,8 @@ describe('database company wall', () => {
     assert.ok(board.ammo.length > 0 && board.doors.length > 0 && board.agreements.length > 0 && board.readiness.length > 0);
     const req = board.requests.find((r) => r.request.state === 'arms_review');
     assert.ok(req);
-    const r = await db.asUser('u-pwvsb-arms-asst', (svc, user) => svc.reviewArmsRequest(user, req.request.id, 'pass', 'Papers checked'));
+    // D1 (23 Nov 2026): the Arms Control Manager passes requests.
+    const r = await db.asUser('u-pwvsb-arms', (svc, user) => svc.reviewArmsRequest(user, req.request.id, 'pass', 'Papers checked'));
     assert.equal(r.state, 'company_auth');
     await assert.rejects(
       // Another company's manager: the database hides the row, so the request is simply not found.
@@ -892,9 +894,10 @@ describe('database company wall', () => {
   it('rolls back a blocked change completely', async () => {
     const before = await asApp('co-sasa', 'SELECT count(*)::int AS n FROM prima.audit');
     await assert.rejects(
-      db.asUser('u-cm-sasa', async (svc, user) => {
+      // The site officer assigns; the company only watches the roster (Fauzan, 23 Nov 2026).
+      db.asUser('u-sv-sasa', async (svc, user) => {
         const today = dateOf(svc.now());
-        const shifts = await svc.roster(user, 'st-sasa-001', addDays(today, 2), 1);
+        const shifts = await svc.roster(user, user.siteIds[0], addDays(today, 2), 1);
         return svc.assignShift(user, shifts.shifts[0].id, 'pr-sasa-0012'); // over-age guard
       }),
       /Group policy allows guards up to 60/,
@@ -932,6 +935,7 @@ describe('database company wall', () => {
     // HR Phase 3 (Fauzan, 1 Nov 2026): the Chief of Staff approves, then the COO approves, each with a comment.
     await db.asUser('u-cos', (svc, u) => svc.staffPayStep(u, run.id, 'approve', { note: 'Checked.' }));
     await db.asUser('u-coo', (svc, u) => svc.staffPayStep(u, run.id, 'coo_approve', { note: 'Approved.' }));
+    await preparePayout(db, 'staff_pay', run.id, undefined, 'u-fin-t1-de1');
     const paid = await db.asUser('u-fin-t1-lead', (svc, u) => svc.staffPayStep(u, run.id, 'pay', { bankRef: 'DB-TEST', pcbChecked: true }));
     assert.equal(paid.stage, 'paid');
     const other = await asApp('co-sasa', `SELECT count(*)::int AS n FROM prima.staff_pay_runs WHERE company_id = 'pwvsb'`);

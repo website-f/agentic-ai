@@ -20,6 +20,8 @@ import { OrgController, OrgHealthController } from './org.controller';
 import { SPECIAL_OPS_CONTROLLERS } from './special-ops.controller';
 import { WHATSAPP_CONTROLLERS, WhatsAppRunner } from './whatsapp';
 import { TenderWatcherRunner } from './tender-watcher-online';
+import { AutoReportsRunner } from './auto-reports-online';
+import { TeamsApprovalsRunner } from './teams-approvals-online';
 import { OfflineController } from './offline.controller';
 // Agentic Office: office sign-in/hosting routes, staff check-in by place and the InfoTech attendance PDF reports.
 import { CheckinController } from './checkin.controller';
@@ -33,6 +35,6 @@ const m365 = m365ConnectionsModule();
 
 @Module({
   controllers: [HealthController, AttendanceReportsController, AuthController, CheckinController, OfficeController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers, ...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, RosterController, ...alerts.controllers, DraftHelpController, KeyInController, GuardPhoneOpenController, GuardPhoneController, ...usage.controllers],
-  providers: [Db, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, { provide: AttendanceUploads, useFactory: () => new AttendanceUploads() }, ...jobEmail.providers, ...teamsEvidence.providers, WhatsAppRunner, TenderWatcherRunner, ...m365.providers, ...alerts.providers, ...usage.providers],
+  providers: [Db, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, { provide: AttendanceUploads, useFactory: () => new AttendanceUploads() }, ...jobEmail.providers, ...teamsEvidence.providers, WhatsAppRunner, TenderWatcherRunner, TeamsApprovalsRunner, AutoReportsRunner, ...m365.providers, ...alerts.providers, ...usage.providers],
 })
 export class AppModule {}

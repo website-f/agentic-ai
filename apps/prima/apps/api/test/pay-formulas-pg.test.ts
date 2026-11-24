@@ -93,17 +93,18 @@ describe('pay formulas (database)', () => {
     assert.notEqual(again.id, row.id);
     const seen = await db.asUser('u-coo', async (svc, u) => (await svc.siteHoursBoard(u, { companyId: 'co-sasa' })).rows.find((r) => r.siteId === site.siteId)!);
     assert.ok(seen.check.approvedExtra >= 36);
-    assert.equal(seen.canApprove, false);
+    // The COO covers the Operations Director's step (Fauzan, 23 Nov 2026: "Let coo cover also").
+    assert.equal(seen.canApprove, true);
   });
 
-  it('lets the OGM set a public holiday list through the API; the COO cannot; versions keep the old list', async () => {
+  it('lets the OGM set a public holiday list through the API; the COO covers with a reason; versions keep the old list', async () => {
     const days = [
       ['01-01', "New Year's Day"], ['02-01', 'Federal Territory Day'], ['02-06', 'Chinese New Year (test)'], ['02-07', 'Chinese New Year 2 (test)'],
       ['03-10', 'Hari Raya (test)'], ['03-11', 'Hari Raya 2 (test)'], ['05-01', 'Labour Day'], ['06-07', "Agong's birthday (test)"],
       ['08-31', 'National Day'], ['09-16', 'Malaysia Day'], ['12-25', 'Christmas Day'],
     ].map(([md, label]) => ({ date: `2099-${md}`, label }));
     const input = { companyId: 'co-sasa', year: 2099, state: null, days, reason: 'UAT synthetic list' };
-    await assert.rejects(db.asUser('u-coo', (svc, u) => svc.setPublicHolidays(u, input)), /Not allowed/);
+    await assert.rejects(db.asUser('u-coo', (svc, u) => svc.setPublicHolidays(u, { ...input, reason: '' })), /reason/);
     const v1 = await db.asUser('u-ogm', (svc, u) => svc.setPublicHolidays(u, input));
     const v2 = await db.asUser('u-ogm', (svc, u) => svc.setPublicHolidays(u, { ...input, reason: 'UAT synthetic change' }));
     assert.equal(v2.version, 2);

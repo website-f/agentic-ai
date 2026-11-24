@@ -75,6 +75,8 @@ describe('P78 business: the owner adds and starts, others approve', () => {
     const sent = await svc.purStep(proc, pr.id, 'submit', { supplierId: 'sup-co-sasa-2' });
     expect(sent.tiers).not.toContain('ceo');
     await expect(svc.purStep(owner, pr.id, 'approve', { note: 'ok' })).rejects.toThrow();
+    // P129: upstream D1 (23 Nov 2026): the Inventory Manager checks each purchase before the COO.
+    await svc.purStep(await svc.user('u-proc-manager'), pr.id, 'approve', { note: 'Checked against store use' });
     expect((await svc.purStep(coo, pr.id, 'approve', { note: 'ok' })).status).toBe('approved');
   });
 

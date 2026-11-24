@@ -44,6 +44,14 @@ import { NotFound } from "./service";
 import { RefusedAfterSave } from "./service";
 import type { HomeItem } from "./service";
 import { finRegularExceptions } from "./finance-regular";
+import { finAmActor } from "./finance-payouts";
+import { finSetAmDelegation } from "./finance-payouts";
+import { finSettingsConfirmedNow } from "./finance-payouts";
+import { FIN_CONFIRM_BY } from "./finance-payouts";
+import { FIN_AM_LEVELS } from "./finance-payouts";
+import { FIN_AM_LEVEL_LABEL } from "./finance-payouts";
+import type { FinSettingsConfirmation } from "./finance-payouts";
+import { finPayoutExceptions } from "./finance-payouts";
 import { finRegularForPayment } from "./finance-regular";
 import { finRegularLink } from "./finance-regular";
 import { finCashExceptions } from "./finance-cash";
@@ -76,13 +84,19 @@ export const FIN_ZERO_TESTS = ['FS-01', 'FS-02', 'FS-06'];
  */
 export function inFinanceRollout(user: User): boolean {
   if (user.integration || user.role !== 'pwvsb_officer') return false;
-  return user.leadership === 'finance_director' || (user.department === 'finance' && user.financeTeam != null && !!user.financeRole);
+  return user.leadership === 'finance_director' || (user.department === 'finance' && ((user.financeTeam != null && !!user.financeRole) || !!user.financeAccountManager));
 }
 
 /** What a person may do in Finance. 'viewer' is the Chairman, the Vice Chairman and the ACT head: they look, never act. */
 export interface FinActor {
   kind: 'ceo' | 'director' | 'leader' | 'deputy' | 'data_entry' | 'viewer' | 'coo';
   team: number | null;
+  /**
+   * The Account Manager (Fauzan, 23 Nov 2026): below the FD, doing what the FD delegates. `kind` is the level the FD
+   * delegated (viewer until then) and `companies` the companies delegated (null = every company). Never approves.
+   */
+  am?: boolean;
+  companies?: Id[] | null;
 }
 
 /**
@@ -104,13 +118,22 @@ export function finActor(user: User): FinActor | null {
   if (user.leadership === 'chairman' || user.leadership === 'vice_chairman' || isActHead(user)) return { kind: 'viewer', team: null };
   if (user.department === 'finance' && user.financeTeam != null && user.financeRole)
     return { kind: user.financeRole, team: user.financeTeam };
+  // Without the FD's delegation (read by FinanceDeskService.actorFor) the Account Manager only looks.
+  if (user.department === 'finance' && user.financeAccountManager) return { kind: 'viewer', team: null, am: true, companies: null };
   return null;
+}
+
+/** Whether this company is in the person's Finance scope: their team's, the companies delegated to them, or all. */
+export function finCovers(a: FinActor, f: Pick<FinStatus, 'team' | 'companyId'>): boolean {
+  if (a.companies) return a.companies.includes(f.companyId);
+  return a.team == null || f.team === a.team;
 }
 
 /** The CEO and the Finance Director act on every company; team members act on their own team's companies. */
 export function actsOn(a: FinActor, f: FinStatus): boolean {
   if (a.kind === 'ceo' || a.kind === 'director' || a.kind === 'coo') return true;
   if (a.kind === 'viewer') return false;
+  if (a.am) return finCovers(a, f);
   return a.team === f.team;
 }
 export const isLead = (a: FinActor) => a.kind === 'ceo' || a.kind === 'director';
@@ -689,6 +712,12 @@ export interface FinCloseCheck {
   done: string[];
 }
 
+/** Supplier bills Procurement received in Prima by the period end and not yet posted in SQL Account (real records). */
+export function finSupplierBillsUnposted(companyId: Id, purs: PurRequest[], period: string): PurRequest[] {
+  const end = periodEnd(period);
+  return purs.filter((r) => r.companyId === companyId && r.invoice && r.invoice.at.slice(0, 10) <= end && !r.posted && r.status !== 'posted' && r.status !== 'rejected');
+}
+
 export function finCloseCheck(
   f: FinStatus,
   close: FinClose | null,
@@ -699,6 +728,12 @@ export function finCloseCheck(
   /** PWVSB's Finance row, which holds the group's intercompany balances (Fauzan, 2 Nov 2026). */
   group: FinStatus | null = null,
   nameOf: (id: Id) => string = (x) => x,
+  /**
+   * The company's purchases (Fauzan, 23 Nov 2026 "Go"): a supplier bill received in Prima by the period end and not yet
+   * posted in SQL Account is a close line from the real record. Left out only by older callers, which keep the old
+   * posting count.
+   */
+  purs: PurRequest[] | null = null,
 ): FinCloseCheck {
   const fin = RULES.finance.value;
   const end = periodEnd(period);
@@ -749,14 +784,13 @@ export function finCloseCheck(
     else done.push(`${id} ${t.label} at RM0.00`);
   }
   const raw: { key: string; text: string }[] = [];
+  // B2 (Fauzan, 23 Nov 2026): billing and payroll lines come from Prima's own records, not typed or test figures. Each
+  // contract's invoice is checked by the Money in lines (finMoneyInExceptions); each paid payroll needs its SQL Account
+  // journal number, checked by someone else; each salary, claim, advance or loan payout must be on the bank statement.
+  raw.push(...finPayoutExceptions(f, period));
   const p = f.posting;
-  if (p.period === period) {
-    if (p.billed - p.billedPosted > 0.5)
-      raw.push({ key: 'gap:billed', text: `RM${(p.billed - p.billedPosted).toFixed(2)} billed in Prima not posted as sales invoices` });
-    if (p.staffPayPaid && !p.staffPayPosted) raw.push({ key: 'gap:staffpay', text: 'Staff payroll paid but the journal is not posted' });
-    if (p.guardPayPaid && !p.guardPayPosted) raw.push({ key: 'gap:guardpay', text: 'Guard payroll paid but the journal is not posted' });
-    if (p.supplierBillsUnposted) raw.push({ key: 'gap:supplier', text: `${p.supplierBillsUnposted} supplier bill(s) received but not posted` });
-  }
+  if (purs) raw.push(...finSupplierBillsUnposted(f.companyId, purs, period).map((b) => ({ key: `gap:supplier:${b.id}`, text: `Supplier bill ${b.invoice!.number} (${b.ref}, RM${b.invoice!.amount.toFixed(2)}) received ${b.invoice!.at.slice(0, 10)} but not posted in SQL Account` })));
+  else if (p.period === period && p.supplierBillsUnposted) raw.push({ key: 'gap:supplier', text: `${p.supplierBillsUnposted} supplier bill(s) received but not posted` });
   for (const t of fsTests.filter((x) => !FIN_ZERO_TESTS.includes(x.id))) {
     if (t.na) done.push(`${t.id} ${t.label}: not applicable (${t.na})`);
     else if (t.from === 'intercompany') {
@@ -1194,6 +1228,20 @@ export class FinanceDeskService {
     return a;
   }
 
+  /**
+   * The person's Finance role with the FD's delegation applied (Fauzan, 23 Nov 2026): an Account Manager acts at the
+   * level and on the companies the Finance Director (or the CEO) delegated; everyone else is unchanged.
+   */
+  async actorFor(user: User, store: Store = this.store): Promise<FinActor> {
+    const a = this.actor(user);
+    if (!a.am) return a;
+    return finAmActor(await store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`), user.id);
+  }
+  /** As actorFor, or null for someone outside Finance. */
+  async actorOrNull(user: User, store: Store = this.store): Promise<FinActor | null> {
+    return finActor(user) ? this.actorFor(user, store) : null;
+  }
+
   async companies(user: User): Promise<Id[]> {
     return tenantCompanyIds(user, await this.store.list('grants'), this.today());
   }
@@ -1205,7 +1253,7 @@ export class FinanceDeskService {
 
   /** What is set, by whom, and the defaults, for the Finance settings screen. Every Finance person may read them. */
   async settingsView(user: User) {
-    const a = this.actor(user);
+    const a = await this.actorFor(user);
     const row = await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
     return {
       values: finSettingsOf(row, this.today()),
@@ -1238,13 +1286,35 @@ export class FinanceDeskService {
         : [],
       /** Whether payments may be set to be approved in Teams (the connection is switched on). */
       teamsReady: this.teamsApprovals,
+      /** D3 (Fauzan, 23 Nov 2026): confirmed by the FD or the CEO since the last change? Due 18 January 2027. */
+      confirmed: finSettingsConfirmedNow(row, finSettingsOf(row, this.today())),
+      confirmBy: FIN_CONFIRM_BY,
+      budgetLimits: isLead(a)
+        ? await (async () => {
+            const nameOf = await this.companyNamer();
+            return (await this.store.list('finStatus', { companyId: await this.companies(user) }))
+              .map((f) => ({ companyId: f.companyId, name: nameOf(f.companyId), limit: f.budgetLimit ?? null }))
+              .sort((x, y) => x.name.localeCompare(y.name));
+          })()
+        : [],
+      /** D1 (Fauzan, 23 Nov 2026): the Account Managers and what the FD delegated to each. */
+      accountManagers: isLead(a) || a.am
+        ? (await this.store.list('users'))
+            .filter((u) => u.department === 'finance' && u.financeAccountManager && !u.integration)
+            .filter((u) => isLead(a) || u.id === user.id)
+            .map((u) => {
+              const d = (row?.amDelegations ?? []).find((x) => x.userId === u.id) ?? null;
+              return { userId: u.id, name: u.name, level: d?.level ?? 'view', companies: d?.companies ?? null, set: d?.set ?? null, history: (d?.history ?? []).slice(-5) };
+            })
+        : [],
+      amLevels: FIN_AM_LEVELS.map((l) => ({ level: l, label: FIN_AM_LEVEL_LABEL[l] })),
     };
   }
 
   /** The Finance Director (or the CEO) changes group Finance settings, with a comment; every change is kept. */
   async setSettings(user: User, input: Record<string, unknown>) {
     return this.store.transaction(async (tx) => {
-      const a = this.actor(user);
+      const a = await this.actorFor(user);
       if (!isLead(a)) throw new AccessDenied('view', '(only the Finance Director or the CEO sets Finance settings)');
       const id = `fin-${GROUP_EMPLOYER_ID}`;
       await tx.lock?.('finStatus', id);
@@ -1356,7 +1426,7 @@ export class FinanceDeskService {
    */
   async addBankAccount(user: User, companyId: Id, input: Record<string, unknown>): Promise<FinBankAccount> {
     return this.store.transaction(async (tx) => {
-      const a = this.actor(user);
+      const a = await this.actorFor(user, tx);
       if (!(isLead(a) || a.kind === 'leader')) throw new AccessDenied('view', '(the team leader, the Finance Director or the CEO adds a bank account)');
       const f = await this.row(tx, user, a, companyId);
       const bank = noSecrets(text(input.bank, 'Bank', 2, 60), 'Bank');
@@ -1382,7 +1452,7 @@ export class FinanceDeskService {
    */
   async startBooks(user: User, companyId: Id, input: Record<string, unknown>): Promise<FinStatus> {
     return this.store.transaction(async (tx) => {
-      const a = this.actor(user);
+      const a = await this.actorFor(user, tx);
       if (!isLead(a)) throw new AccessDenied('view', "(the Finance Director or the CEO starts a company's books)");
       if (typeof companyId !== 'string' || companyId.length > 120 || !(await this.companies(user)).includes(companyId)) throw new NotFound('Company');
       const co = await tx.get('companies', companyId);
@@ -1418,13 +1488,56 @@ export class FinanceDeskService {
     });
   }
 
+  /**
+   * D3 (Fauzan, 23 Nov 2026): the Finance Director (or the CEO) confirms the thresholds and due days in force, by
+   * 18 January 2027. A later change to the settings needs a fresh confirmation.
+   */
+  async confirmSettings(user: User, input: { comment?: unknown }) {
+    return this.store.transaction(async (tx) => {
+      const a = await this.actorFor(user, tx);
+      if (!isLead(a)) throw new AccessDenied('view', '(only the Finance Director or the CEO confirms the Finance settings)');
+      const comment = requireComment(input.comment, 'confirm the settings');
+      const id = `fin-${GROUP_EMPLOYER_ID}`;
+      await tx.lock?.('finStatus', id);
+      const row = await tx.get('finStatus', id);
+      if (!row) throw new NotFound('Group Finance settings');
+      const values = finSettingsOf(row, this.today());
+      const entry: FinSettingsConfirmation = { values, sign: { by: user.name, byId: user.id, at: this.now(), comment } };
+      await tx.update('finStatus', id, { settingsConfirmed: [...(row.settingsConfirmed ?? []), entry].slice(-20) });
+      await tx.audit({ at: this.now(), actor: user.name, companyId: null, action: 'finance.settings.confirmed', entity: 'fin_status', entityId: id, summary: `Finance thresholds and due days confirmed as they stand. ${comment}`.slice(0, 900) });
+      return entry;
+    });
+  }
+
+  /** D3: each company's yearly budget limit (spending). A budget above it is approved by the CEO, not the FD. */
+  async setBudgetLimit(user: User, companyId: Id, input: { amount?: unknown; comment?: unknown }) {
+    return this.store.transaction(async (tx) => {
+      const a = await this.actorFor(user, tx);
+      if (!isLead(a)) throw new AccessDenied('view', '(only the Finance Director or the CEO sets a budget limit)');
+      const f = await this.row(tx, user, a, companyId);
+      const comment = requireComment(input.comment, 'set the limit (why this amount)');
+      const raw = input.amount;
+      const amount = raw == null || raw === '' ? null : Number(raw);
+      if (amount != null && (!Number.isFinite(amount) || amount <= 0 || amount > 10_000_000_000)) throw new BadRequest('The limit: an amount in RM above zero, or empty for no limit.');
+      const budgetLimit = amount == null ? null : { amount: Math.round(amount * 100) / 100, set: { by: user.name, byId: user.id, at: this.now(), comment } };
+      await tx.update('finStatus', f.id, { budgetLimit });
+      await this.log(tx, user, f, 'finance.budget.limit', `${amount == null ? 'Budget limit removed' : `Yearly budget limit RM${amount.toFixed(2)}: above it the CEO approves`}. ${comment}`);
+      return budgetLimit;
+    });
+  }
+
+  /** D1: the FD (or the CEO) delegates work to an Account Manager: the level and the companies. */
+  async delegateToAm(user: User, input: { userId?: unknown; level?: unknown; companies?: unknown; comment?: unknown }) {
+    return this.store.transaction((tx) => finSetAmDelegation(tx, this, user, input, this.now()));
+  }
+
   /** Locks and reads one company's finance row, checking the person may act on it. */
   async row(tx: Store, user: User, a: FinActor, companyId: Id): Promise<FinStatus> {
     if (typeof companyId !== 'string' || companyId.length > 120) throw new NotFound('Company books');
     if (!(await this.companies(user)).includes(companyId)) throw new NotFound('Company books');
     await tx.lock?.('finStatus', `fin-${companyId}`);
     const f0 = await tx.get('finStatus', `fin-${companyId}`);
-    if (!f0 || (a.team != null && f0.team !== a.team)) throw new NotFound('Company books');
+    if (!f0 || !finCovers(a, f0)) throw new NotFound('Company books');
     if (!actsOn(a, f0)) throw new AccessDenied('view', '(finance: view only)');
     // Lapsed approvals go back to the preparer by themselves; saved and logged the first time anyone acts on the books.
     const { f, lapsed } = finApplyLapses(f0, this.today(), await this.settings(tx), this.now());
@@ -1462,7 +1575,7 @@ export class FinanceDeskService {
 
   /** Payments, the close and the bank and payment packs for every company the person sees. */
   async desk(user: User) {
-    const a = this.actor(user);
+    const a = await this.actorFor(user);
     const ids = await this.companies(user);
     const [rows, companies, s, contracts] = await Promise.all([this.store.list('finStatus', { companyId: ids }), this.store.list('companies', { id: ids }), this.settings(), ids.length ? this.store.list('contracts', { companyId: ids }) : Promise.resolve([])]);
     const purs = ids.length ? await this.store.list('purRequests', { companyId: ids }) : [];
@@ -1473,7 +1586,7 @@ export class FinanceDeskService {
     const nameOf = (id: Id) => centralEmployerName(id) ?? companies.find((c) => c.id === id)?.name ?? id;
     const group = rows.find((f) => f.companyId === GROUP_EMPLOYER_ID) ?? (await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`));
     const icName = await this.companyNamer();
-    const mine = rows.filter((f) => a.team == null || f.team === a.team);
+    const mine = rows.filter((f) => finCovers(a, f));
     const out = mine
       .map((f0) => {
         const f = finApplyLapses(f0, today, s, now).f;
@@ -1494,7 +1607,7 @@ export class FinanceDeskService {
               return m ? { id: m.id, rule: m.rule, twoAbove: m.twoAbove, approvers: m.people.filter((x) => x.role !== 'portal_maker' && x.userId).map((x) => ({ userId: x.userId!, name: x.name, limit: x.limit })) } : null;
             })(),
           }));
-        const check = finCloseCheck(f, close, period, now, s, contracts.filter((c) => c.companyId === f.companyId), group, icName);
+        const check = finCloseCheck(f, close, period, now, s, contracts.filter((c) => c.companyId === f.companyId), group, icName, purs);
         return {
           companyId: f.companyId,
           companyName: nameOf(f.companyId),
@@ -1567,7 +1680,7 @@ export class FinanceDeskService {
       if (expired && p.needs === 'coo') may.push('return');
       return may;
     }
-    const reviews = isLead(a) || ((a.kind === 'leader' || a.kind === 'deputy') && a.team === f.team);
+    const reviews = isLead(a) || ((a.kind === 'leader' || a.kind === 'deputy') && (a.am ? finCovers(a, f) : a.team === f.team));
     // Standards review (1 Nov 2026): whoever entered or changed the payee's bank details does not review, approve or
     // release payments to that payee (keeping the supplier master apart from paying), and the preparer does not record
     // the release (starting a payment and executing it are kept apart).
@@ -1686,7 +1799,7 @@ export class FinanceDeskService {
   /** Someone in the company's Finance team (or the Finance Director or the CEO) asks for a payment. */
   async createPayment(user: User, companyId: Id, input: FinPaymentInput) {
     return this.store.transaction(async (tx) => {
-      const a = this.actor(user);
+      const a = await this.actorFor(user);
       const f = await this.row(tx, user, a, companyId);
       // A payment for a company head's approved request (Fauzan, 1 Nov 2026): same amount, and what it is for comes from
       // the request, so whoever prepares it cannot choose another approver.
@@ -1760,7 +1873,7 @@ export class FinanceDeskService {
    * due amount from the checked list. Anything that cannot be approved is listed with the reason, the rest go through.
    */
   async approveRegularBatch(user: User, companyId: Id, input: { paymentIds?: unknown; comment?: unknown }) {
-    const a = this.actor(user);
+    const a = await this.actorFor(user);
     if (!isLead(a)) throw new AccessDenied('view', '(the Finance Director or the CEO approves regular payments together)');
     const comment = requireComment(input.comment, 'approve these payments');
     const ids = Array.isArray(input.paymentIds) ? [...new Set(input.paymentIds.filter((x): x is string => typeof x === 'string'))].slice(0, 100) : [];
@@ -1790,7 +1903,7 @@ export class FinanceDeskService {
 
   /** Review, approve, return, resubmit, release or cancel a payment. */
   async paymentStep(user: User, companyId: Id, paymentId: Id, action: FinPaymentAction, input: Record<string, unknown> = {}) {
-    return this.doPaymentStep(user, this.actor(user), companyId, paymentId, action, input);
+    return this.doPaymentStep(user, await this.actorFor(user), companyId, paymentId, action, input);
   }
 
   private async doPaymentStep(user: User, a: FinActor, companyId: Id, paymentId: Id, action: FinPaymentAction, input: Record<string, unknown>) {
@@ -2022,7 +2135,7 @@ export class FinanceDeskService {
 
   async closeStep(user: User, companyId: Id, action: FinCloseAction, input: Record<string, unknown> = {}) {
     return this.store.transaction(async (tx) => {
-      const a = this.actor(user);
+      const a = await this.actorFor(user);
       const f = await this.row(tx, user, a, companyId);
       const period = this.closePeriod();
       if (input.period != null && input.period !== period) throw new BadRequest(`Only ${period} can be closed now.`);
@@ -2033,7 +2146,8 @@ export class FinanceDeskService {
       const contracts = (await tx.list('contracts', { companyId: [f.companyId] })).filter((x) => x.companyId === f.companyId);
       const group = f.companyId === GROUP_EMPLOYER_ID ? f : await tx.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
       const icName = await this.companyNamer(tx);
-      const check = finCloseCheck(f, c, period, this.now(), s, contracts, group, icName);
+      const purs = (await tx.list('purRequests', { companyId: [f.companyId] })).filter((x) => x.companyId === f.companyId);
+      const check = finCloseCheck(f, c, period, this.now(), s, contracts, group, icName, purs);
       check.blockers.push(...(await sqlCloseBlockers(tx, f.companyId)));
       if (!['evidence', 'explain', 'prepare', 'review', 'approve', 'return', 'reopen'].includes(action)) throw new BadRequest('Unknown close action.');
       const may = this.closeMay(user, a, c, check);
@@ -2110,7 +2224,7 @@ export class FinanceDeskService {
       }
       await tx.update('finStatus', f.id, { closes: existing ? closes.map((x) => (x.id === c.id ? next : x)) : [...closes, next] });
       await this.log(tx, user, f, `finance.close.${action}`, `Close ${period}: ${summary}`.slice(0, 900));
-      return { ...next, check: finCloseCheck(f, next, period, this.now(), s, contracts, group, icName) };
+      return { ...next, check: finCloseCheck(f, next, period, this.now(), s, contracts, group, icName, purs) };
     });
   }
 

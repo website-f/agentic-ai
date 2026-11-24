@@ -2,8 +2,11 @@ import { can } from "./access";
 import { isGroupRole } from "./access";
 import { seesArmsDetail } from "./access";
 import { registerRollout } from "./rollouts";
+import { RULES } from "./rules";
+import { unitHeadsOf } from "./unit-heads";
 import { registerWall } from "./walls";
 import type { User } from "./types";
+import type { Vault } from "./types";
 import type { ArmsRequest } from "./types";
 import type { ArmsTradeDetail } from "./types";
 import type { Firearm } from "./types";
@@ -49,6 +52,42 @@ export function holdsCmsWall(user: User): boolean {
 }
 registerWall('arms', holdsArmsWall);
 registerWall('cms', holdsCmsWall);
+
+/**
+ * Vault keepers (Fauzan, 23 Nov 2026, Arms Control check B1): the Amra of a vault, usually an admin executive, issues
+ * and receives firearms there (Fauzan, 25 Oct 2026). An admin executive holds no company-wide arms right, so the keeper
+ * right is per vault: the person named as the vault's Amra, or on its written authorised list (Part R10), may issue,
+ * return and count at that vault only. A company sign-in with a person record holds the database wall `arms_keeper`;
+ * db/modules/arms-keeper-v1.sql then lets it read and write only the rows of the vaults it keeps.
+ */
+export function keepsVault(user: User, vault: Pick<Vault, 'companyId' | 'custodianPersonId' | 'authorisedStaff'>): boolean {
+  if (user.integration || isGroupRole(user) || !user.personId) return false;
+  if (user.role === 'guard' || user.role === 'site_device') return false;
+  if (!user.companyIds.includes(vault.companyId)) return false;
+  if (vault.custodianPersonId && vault.custodianPersonId === user.personId) return true;
+  return (vault.authorisedStaff ?? []).some((a) => !a.removedOn && !!a.personId && a.personId === user.personId);
+}
+export function holdsArmsKeeperWall(user: User): boolean {
+  if (user.integration || isGroupRole(user) || !user.personId) return false;
+  // The company manager and supervisors already hold the arms wall; the keeper wall is for the admin executive.
+  return user.role === 'admin_exec';
+}
+registerWall('arms_keeper', holdsArmsKeeperWall);
+
+/**
+ * Arms Control Manager decides, the Assistant prepares (Fauzan, 23 Nov 2026, Arms Control check D1). The manager is the
+ * person the CEO or the Chief of Staff named head of Arms Control in the organisation chart (unit 'd_arms_control').
+ * Directors keep the power they had. Until anybody is named head, every Arms Control officer keeps it, so nothing is
+ * locked before the chart is filled.
+ */
+export function decidesForArmsControl(user: User, allUsers: readonly User[]): boolean {
+  if (user.integration) return false;
+  if (user.role === 'director') return true;
+  if (user.role !== 'pwvsb_officer' || user.department !== 'arms_control') return false;
+  if (unitHeadsOf(user).includes('d_arms_control')) return true;
+  return !allUsers.some((u) => u.id !== user.id && u.department === 'arms_control' && unitHeadsOf(u).includes('d_arms_control'));
+}
+export const ARMS_MANAGER_ONLY = 'Only the Arms Control Manager decides this; the Assistant prepares it.';
 
 /** A firearm still on the company's register: not lost, and not sold, disposed of or transferred out. */
 export function onRegister(f: Pick<Firearm, 'status'>): boolean {
@@ -185,10 +224,10 @@ export function cmsAlarmKind(kind: string): SiteAlarm['kind'] | null {
 // ---------- 4F: transport ----------
 
 /**
- * JPJ driving hours (plan 4F): at most 8 hours of driving in a day, and a 30 minute break after 4 hours of driving.
- * The speed limit for company vehicles is PROPOSED at 90 km/h until Fauzan sets it.
+ * JPJ driving hours (plan 4F): at most 8 hours of driving in a day, and a 30 minute break after 4 hours of driving;
+ * 90 km/h for company vehicles. Set by Fauzan, 23 Nov 2026 (rule FLEET-DRIVING).
  */
-export const DRIVER_HOURS = { maxDayMin: 8 * 60, maxStretchMin: 4 * 60, breakMin: 30, joinGapMin: 10, speedLimitKmh: 90 } as const;
+export const DRIVER_HOURS = RULES.fleetDriving.value;
 
 /** Driving time in one day, and the longest stretch without a 30 minute break. */
 export function driverHours(periods: { from: IsoDateTime; to: IsoDateTime }[], dayStart: IsoDateTime, dayEnd: IsoDateTime) {

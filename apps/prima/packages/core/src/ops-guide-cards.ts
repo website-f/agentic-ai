@@ -1,5 +1,5 @@
 import { RULES } from "./rules";
-import { canGovOpsMonitor } from "./ops-access";
+import { canGovOpsMonitor, isOgm, isOpsDirector } from "./ops-access";
 import { canIssueGoodwillItems } from "./ops-access";
 import { canPrivateOpsMonitor } from "./ops-access";
 import { canRecordHandover } from "./ops-access";
@@ -146,7 +146,7 @@ export const OPS_GUIDE_CARDS: OpsGuideCard[] = [
     screen: { view: 'mine', name: 'Duty', action: t('Permohonan Pesanan Barang: Minta bekalan untuk tapak, muat tapak, tambah baris, Hantar permohonan.', 'Site supplies: Minta bekalan untuk tapak, load the site, add lines, Hantar permohonan.') },
     allowed: (u) =>
       !u.integration &&
-      (canRecordHandover(u, today()) || u.department === 'procurement' || u.opsTier === 'ogm' || u.opsTier === 'ops_director' || u.role === 'admin_exec'),
+      (canRecordHandover(u, today()) || u.department === 'procurement' || isOgm(u) || isOpsDirector(u) || u.role === 'admin_exec'),
     fields: [
       { key: 'stockItemId', label: 'Item', required: true, format: t('Pilih daripada senarai stor.', 'Choose from the store list.'), example: 'Synthetic floor cleaner' },
       { key: 'qty', label: 'Quantity', required: true, format: t('Nombor bulat, sekurang-kurangnya 1.', 'A whole number, at least 1.'), example: '5' },
@@ -180,7 +180,7 @@ export const OPS_GUIDE_CARDS: OpsGuideCard[] = [
     ),
     who: t('Penjaga stor mengira dengan saksi (no. staf dan PIN); OGM boleh benarkan satu pergerakan segera dengan sebab.', 'A storekeeper counts with a witness (staff number and PIN); the OGM may let one urgent move through with a reason.'),
     screen: { view: 'purchasing', name: 'Purchasing', action: t('Kawalan Inventori: Mula kiraan bulanan / besar, isi fizikal, Selesai dengan saksi.', 'Inventory control: start the monthly or major count, enter physical counts, finish with a witness.') },
-    allowed: (u) => !u.integration && (u.department === 'procurement' || u.opsTier === 'ogm'),
+    allowed: (u) => !u.integration && (u.department === 'procurement' || isOgm(u)),
     fields: [
       { key: 'physical', label: 'Physical count', required: true, format: t('Nombor bulat yang dikira.', 'The whole number counted.'), example: '24' },
       { key: 'reason', label: 'Variance reason', required: false, format: t('Wajib jika berbeza: kurang, hilang, rosak, salah kira, keluar / terima tidak direkod, lain-lain.', 'Needed when different: shortage, lost, damaged, counting error, issue or receipt not recorded, other.'), example: 'shortage' },
@@ -209,7 +209,7 @@ export const OPS_GUIDE_CARDS: OpsGuideCard[] = [
     purpose: t('Satu-satunya cara membetulkan buku stok; laporan bulanan dengan 7 KPI dan "data setakat".', 'The only way to correct the stock book; the monthly report with the 7 KPIs and "data as at".'),
     who: t('Eksekutif Perolehan (Admin); OGM meluluskan pelarasan melebihi RM500 dan menyemak laporan.', 'The Procurement executive (Admin); the OGM approves adjustments above RM500 and reviews the report.'),
     screen: { view: 'purchasing', name: 'Purchasing', action: t('Kawalan Inventori: Laporan varians, Putuskan; Laporan bulanan, Hantar.', 'Inventory control: variance report, Decide; monthly report, Submit.') },
-    allowed: (u) => !u.integration && ((u.department === 'procurement' && u.procRole !== 'storekeeper') || u.opsTier === 'ogm'),
+    allowed: (u) => !u.integration && ((u.department === 'procurement' && u.procRole !== 'storekeeper') || isOgm(u)),
     fields: [
       { key: 'reason', label: 'Reason, evidence and corrective action', required: true, format: t('Teks pendek.', 'Short text.'), example: 'Issue slip found, recorded late' },
       { key: 'cause', label: 'Cause', required: false, format: t('Haus biasa, kemalangan, kecuaian, salah guna, tidak diketahui. Kecuaian atau salah guna = caj pada gaji berikutnya, HR menyemak.', 'Normal wear, accident, negligence, misuse, unknown. Negligence or misuse = a charge on the next pay, HR reviews.'), example: 'WEAR', rule: t('Employment Act 1955 s.24: potongan kerosakan biasanya perlu persetujuan bertulis pekerja.', 'Employment Act 1955 s.24: a damage deduction generally needs the worker\u2019s written agreement.') },
@@ -234,7 +234,7 @@ export const OPS_GUIDE_CARDS: OpsGuideCard[] = [
     purpose: t('Satu kes: permohonan, semakan, penilaian, kelulusan, kaedah, pelaksanaan, bukti, kemas kini, selesai.', 'One case: request, review, assessment, approval, method, execution, evidence, record update, close.'),
     who: t('Penjaga stor (barang stor) atau OM (barang tapak) memohon; eksekutif Perolehan menyemak dan menutup; OGM meluluskan RM1,000 ke atas, jualan dan barang sensitif.', 'A storekeeper (store items) or the OM (site items) asks; the Procurement executive reviews and closes; the OGM approves RM1,000 and above, any sale and sensitive items.'),
     screen: { view: 'purchasing', name: 'Purchasing', action: t('Kawalan Inventori: Mohon pelupusan.', 'Inventory control: Mohon pelupusan.') },
-    allowed: (u) => !u.integration && (u.department === 'procurement' || u.opsTier === 'ogm' || canRecordHandover(u, today())),
+    allowed: (u) => !u.integration && (u.department === 'procurement' || isOgm(u) || canRecordHandover(u, today())),
     fields: [
       { key: 'reason', label: 'Reason', required: true, format: t('Daripada senarai polisi.', 'From the policy list.'), example: 'damaged' },
       { key: 'photo', label: 'Photo', required: false, format: t('Wajib untuk barang rosak atau tidak selamat.', 'Needed for a damaged or unsafe item.'), example: 'photo' },

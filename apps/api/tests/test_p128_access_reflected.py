@@ -59,8 +59,11 @@ def test_the_table_is_prima_menu_rule_as_it_is_now():
         seen |= set(p["views"])
     for j in t["jobs"].values():
         seen |= set(j["views"])
-    # A site device's own screen, and the AI data preview (one named CEO record only).
-    missing = [v for v in modules.ids() if v not in seen and v not in ("device", "it-extraction")]
+    # A site device's own screen, the AI data preview (one named CEO record only) and, P129, HR / IT coordination:
+    # upstream #169 took it off every menu (accounts approved in Accounts and access open the IT checklist instead).
+    missing = [
+        v for v in modules.ids() if v not in seen and v not in ("device", "it-extraction", "hr-it-intake")
+    ]
     assert missing == [], f"screens no Prima account opens: {missing}"
     # Malay names of Prima's jobs come from Prima's own translations.
     assert t["jobs"]["finance_leader"]["label"] == {

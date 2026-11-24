@@ -70,7 +70,8 @@ describe('guard roster desk (Part O screens)', () => {
     await expect(svc.rosterStep(od, v1, 'publish', 'ok')).rejects.toThrow(/Only a submitted roster/);
     await svc.rosterStep(om, v1, 'submit', 'December roster ready');
     await expect(svc.rosterStep(om, v1, 'publish', 'mine')).rejects.toThrow();
-    await expect(svc.rosterStep(coo, v1, 'publish', 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    // The COO may cover the OD's publish (Fauzan, 23 Nov 2026: "Let coo cover also"), with a reason like the OD.
+    await expect(svc.rosterStep(coo, v1, 'publish', '')).rejects.toThrow(/reason/);
     await expect(svc.rosterStep(od, v1, 'publish', '')).rejects.toThrow(/reason/);
     const pub = await svc.rosterStep(od, v1, 'publish', 'Checked against contract');
     expect(pub.status).toBe('published');

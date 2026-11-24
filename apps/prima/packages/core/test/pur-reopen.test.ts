@@ -21,6 +21,7 @@ async function rejected() {
     await svc.purStep(proc, pr.id, 'quote', { supplierId: `sup-co-sasa-${k}`, amount, ref: `Q${k}`, proof: [proof()] });
   await svc.purStep(proc, pr.id, 'online', { source: 'Marketplace', ref: 'listing', amount: 2950, proof: [proof()] });
   await svc.purStep(proc, pr.id, 'submit', { supplierId: 'sup-co-sasa-2' });
+  await svc.purStep(await svc.user('u-proc-manager'), pr.id, 'approve', { note: 'Stock need checked' });
   const r = await svc.purStep(coo, pr.id, 'reject', { note: 'Quantity too high for the sites' });
   expect(r.status).toBe('rejected');
   return { svc, proc, coo, ceo, pr };
@@ -40,6 +41,7 @@ describe('Procurement: correct and resubmit after a rejection', () => {
       await svc.purStep(proc, pr.id, 'quote', { supplierId: `sup-co-sasa-${k}`, amount, ref: `Q${k}b`, proof: [proof()] });
     await svc.purStep(proc, pr.id, 'online', { source: 'Marketplace', ref: 'listing', amount: 1780, proof: [proof()] });
     await svc.purStep(proc, pr.id, 'submit', { supplierId: 'sup-co-sasa-2' });
+    await svc.purStep(await svc.user('u-proc-manager'), pr.id, 'approve', { note: 'Stock need checked' });
     await svc.purStep(coo, pr.id, 'approve', { note: 'Corrected quantity checked' });
     expect((await svc.purStep(ceo, pr.id, 'approve', { note: 'Approved corrected order' })).status).toBe('approved');
   });

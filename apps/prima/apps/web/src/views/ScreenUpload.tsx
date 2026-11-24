@@ -14,6 +14,8 @@ import {
 } from '@prima/core';
 import { api } from '../api';
 import { Chip, Drawer, ErrorNotice, Loading } from '../ui';
+import { DataTable, type DtColumn } from '../DataTable';
+import { onUploadersChange, screenUploaders, type UploadHandler } from '../upload-handlers';
 import { ArchiveUpload } from './Archive';
 import { ImportDrawer, sheetsOf, type ImportStart } from './ImportDrawer';
 import { useRecordKinds } from './RecordForm';
@@ -46,6 +48,13 @@ const FIT: Record<KindFit['level'], [string, 'ok' | 'info' | 'warn' | 'neutral']
   maybe: ['Possible fit', 'info'],
   poor: ['Does not fit', 'neutral'],
 };
+
+/** P129: the screen's own importers (guard pay lines, a salary sheet), kept up to date while the drawer is open. */
+function useUploaders(screen: string): UploadHandler[] {
+  const [list, setList] = useState(() => screenUploaders(screen));
+  useEffect(() => onUploadersChange(() => setList(screenUploaders(screen))), [screen]);
+  return list;
+}
 
 /** Whether the file manager can keep files here: read from the server's own answer, never assumed. */
 function useArchiveState(): Archive {
@@ -97,6 +106,8 @@ export default function ScreenUpload({
   const tools = SCREEN_TOOLS[screen];
   const recordKinds = useRecordKinds();
   const archive = useArchiveState();
+  const uploaders = useUploaders(screen);
+  const usable = uploaders.filter((u) => !u.unavailable);
   const [step, setStep] = useState<Step>('pick');
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -118,11 +129,19 @@ export default function ScreenUpload({
     setTable({ name, sheets });
     const best = rankImportKinds(sheets, kinds)[0];
     setChosen(best && best.level !== 'poor' ? best.kind : null);
-    setStep(kinds.length ? 'choose' : 'file');
+    setStep(kinds.length || usable.length ? 'choose' : 'file');
+  }
+
+  /** Hands the file to the screen's own import and closes this drawer. */
+  function giveOwn(u: UploadHandler, f?: File | null) {
+    onClose();
+    u.open(f ?? undefined);
   }
 
   async function take(f: File | undefined) {
     if (!f) return;
+    // P129: a screen whose records load through its own import (Guard pay, Staff payroll) takes the file there at once.
+    if (!kinds.length && usable.length === 1 && isTableFile(f.name)) return giveOwn(usable[0], f);
     setError(null);
     setFile(f);
     setTable(null);
@@ -183,7 +202,9 @@ export default function ScreenUpload({
         {step === 'pick' && (
           <>
             <p className="muted small">
-              {kinds.length
+              {uploaders.length && !kinds.length
+                ? 'Choose the file. It goes straight into this screen’s own import: the columns are matched and every row is checked before anything is saved.'
+                : kinds.length
                 ? 'Choose any file. A list (Excel, CSV, a table in Word or PDF) is read on this device and matched to the records of this screen: you check the columns, sort and check every row, then save. Nothing is saved until you press Import.'
                 : 'Choose any file. This screen keeps no records that load from a list, so a file is kept as a file in "Old files and data" where the file manager is switched on.'}
             </p>
@@ -192,7 +213,8 @@ export default function ScreenUpload({
                 {`Records of this screen: ${kinds.map((k) => importSpec(k).label).join(', ')}.`}
               </p>
             )}
-            {!kinds.length && archive.state === 'off' && (
+            {uploaders.length > 0 && <OwnImports uploaders={uploaders} onUse={(u) => giveOwn(u, file)} />}
+            {!kinds.length && !usable.length && archive.state === 'off' && (
               <>
                 <OffNotice why={archive.why} rowsHere={false} />
                 <div className="imp-actions">
@@ -202,7 +224,7 @@ export default function ScreenUpload({
                 </div>
               </>
             )}
-            {(kinds.length > 0 || archive.state !== 'off') && (
+            {(kinds.length > 0 || usable.length > 0 || archive.state !== 'off') && (
               <label
                 className={`imp-drop${dragging ? ' imp-drop-on' : ''}`}
                 onDragOver={(e) => {
@@ -283,6 +305,8 @@ export default function ScreenUpload({
               <strong>{table.name}</strong>
               {table.sheets.length > 1 && <span className="muted">{` · ${table.sheets.length} sheets`}</span>}
             </p>
+            {usable.length > 0 && <OwnImports uploaders={usable} onUse={(u) => giveOwn(u, file)} withFile={!!file} />}
+            {kinds.length > 0 && (
             <fieldset className="up-kinds">
               <legend className="small">Which records does it hold?</legend>
               {ranked.map((r) => (
@@ -301,7 +325,8 @@ export default function ScreenUpload({
                 </label>
               ))}
             </fieldset>
-            {!ranked.some((r) => r.level !== 'poor') && (
+            )}
+            {kinds.length > 0 && !ranked.some((r) => r.level !== 'poor') && (
               <p className="notice" data-tone="warn">
                 None of this screen&apos;s records matches the columns of this file. Pick the record yourself to match the columns by hand, or keep the file as a file.
               </p>
@@ -316,9 +341,9 @@ export default function ScreenUpload({
                   Keep it as a file instead
                 </button>
               )}
-              <button className="btn btn-primary" disabled={!chosen} onClick={() => chosen && setImporting({ fileName: table.name, sheets: table.sheets, sheet: fit?.sheet })}>
+              {kinds.length > 0 && <button className="btn btn-primary" disabled={!chosen} onClick={() => chosen && setImporting({ fileName: table.name, sheets: table.sheets, sheet: fit?.sheet })}>
                 Check the columns
-              </button>
+              </button>}
             </div>
           </>
         )}
@@ -331,6 +356,7 @@ export default function ScreenUpload({
               </p>
             )}
             {notRows && <p className="muted small">{notRows}</p>}
+            {table && <TablePreview sheets={table.sheets} />}
             {archive.state === 'loading' && <Loading what="the file manager" />}
             {archive.state === 'error' && <ErrorNotice error={archive.message} />}
             {keepAsFile && (
@@ -365,6 +391,78 @@ export default function ScreenUpload({
         )}
       </div>
     </Drawer>
+  );
+}
+
+/** P129: the screen's own importers, each with what happens next, or why it cannot be used now. */
+function OwnImports({ uploaders, onUse, withFile }: { uploaders: UploadHandler[]; onUse: (u: UploadHandler) => void; withFile?: boolean }) {
+  return (
+    <div className="up-own">
+      <h3 className="small">Load it into this screen</h3>
+      {uploaders.map((u) => (
+        <div key={u.key} className="up-own-card" data-off={u.unavailable ? '' : undefined}>
+          <div className="up-own-body">
+            <strong>{u.label}</strong>
+            <span className="muted small">{u.unavailable ?? u.detail}</span>
+          </div>
+          {!u.unavailable && (
+            <button className="btn btn-primary btn-sm" onClick={() => onUse(u)}>
+              {withFile ? 'Use this file' : 'Open'}
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type PreviewRow = { n: number; cells: string[] };
+
+/**
+ * P129 (Fitri: "check all the columns ... can sort it and then save it"): a list that holds none of this screen's
+ * records is shown before it is kept as old data: its columns as the file names them, every row sortable and
+ * searchable, so the person checks it is the right file. It is then kept whole in "Old files and data", where its words
+ * are searchable.
+ */
+function TablePreview({ sheets }: { sheets: XlsxSheet[] }) {
+  const [at, setAt] = useState(0);
+  const sheet = sheets[Math.min(at, sheets.length - 1)];
+  const rows = (sheet?.rows ?? []).filter((r) => r.some((c) => String(c ?? '').trim()));
+  const header = (rows[0] ?? []).map((c, i) => String(c ?? '').trim() || `Column ${i + 1}`);
+  const width = Math.min(30, Math.max(header.length, ...rows.slice(1, 200).map((r) => r.length)));
+  const body: PreviewRow[] = rows.slice(1, 1001).map((r, i) => ({ n: i + 2, cells: Array.from({ length: width }, (_, c) => String(r[c] ?? '').trim()) }));
+  const money = (v: string) => v.replace(/^RM\s*/i, '').replace(/,/g, '');
+  const num = (c: number) => {
+    const filled = body.filter((r) => r.cells[c]);
+    return filled.length > 0 && filled.every((r) => /^-?\d*\.?\d+$/.test(money(r.cells[c])));
+  };
+  const numeric = Array.from({ length: width }, (_, c) => num(c));
+  const columns: DtColumn<PreviewRow>[] = Array.from({ length: width }, (_, c) => ({
+    id: `c${c}`,
+    label: header[c] ?? `Column ${c + 1}`,
+    value: (r: PreviewRow) => (numeric[c] ? Number(money(r.cells[c])) || 0 : r.cells[c]),
+    render: (r: PreviewRow) => r.cells[c],
+    sort: numeric[c] ? 'number' : 'text',
+    align: numeric[c] ? 'right' : 'left',
+  }));
+  if (!body.length) return null;
+  return (
+    <div className="up-preview">
+      <p className="small">
+        <strong>What the file holds</strong>
+        <span className="muted">{` · ${body.length}${rows.length - 1 > body.length ? ` of ${rows.length - 1}` : ''} rows · ${width} columns. Sort or search to check it before keeping it.`}</span>
+      </p>
+      {sheets.length > 1 && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {sheets.map((sh, i) => (
+            <button key={i} className={`btn btn-sm${i === at ? ' btn-primary' : ''}`} onClick={() => setAt(i)} data-no-translate="">
+              {sh.name || `Sheet ${i + 1}`}
+            </button>
+          ))}
+        </div>
+      )}
+      <DataTable label="Rows of the file" rows={body} rowKey={(r) => String(r.n)} columns={columns} searchText={(r) => r.cells.join(' ')} />
+    </div>
   );
 }
 

@@ -1,8 +1,9 @@
 import { Select } from './SearchSelect';
 import { installScrollStrips } from './scroll-strip';
 import { CleanupReceiptRecovery } from './views/ItCleanup';
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
+import { Component, createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
 import { type Company, type User, RULES, archiveAllowed, assistantAllowed, dataCleanupAllowed, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch, staffPayStepper } from '@prima/core';
+import { DemoAdminBar, DemoAdminCard, demoAdminOn } from './DemoAdmin';
 import { ApiError, api, type Me } from './api';
 import { CaretRightIcon, ChatCircleDotsIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon, XIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
@@ -149,6 +150,8 @@ const QualityView = lazyView(() => import('./views/Quality'), 'QualityView');
 // P121: the SOP and workflow guide, and the equipment requests screen.
 const SopView = lazyView(() => import('./views/Sop'), 'SopView');
 const EquipRequestsView = lazyView(() => import('./views/EquipRequests'), 'EquipRequestsView');
+// P129 (upstream D2, 23 Nov 2026): everyone can ask the PDPA officer about their own personal data (on My details).
+const AskMyDataPanel = lazyView(() => import('./views/PdpaOfficer'), 'AskMyDataPanel');
 
 /** The code of each menu screen, fetched ahead (see prefetchMenuScreens). */
 const SCREEN_CODE: Partial<Record<ViewName, () => Promise<unknown>>> = {
@@ -173,7 +176,7 @@ const SCREEN_CODE: Partial<Record<ViewName, () => Promise<unknown>>> = {
   cmsready: () => import('./views/CmsReadiness'),
   audit: () => import('./views/Audit'),
   device: () => import('./views/Device'),
-  mine: () => import('./views/MyDuty'),
+  mine: () => Promise.all([import('./views/MyDuty'), import('./views/PdpaOfficer')]),
   work: () => import('./views/Work'),
   branchwork: () => import('./views/Work'),
   socso: () => import('./views/Socso'),
@@ -325,6 +328,30 @@ interface AppCtx {
   route?: Route;
 }
 
+/**
+ * A screen's file could not be fetched (no signal, or Prima was updated and the old file is gone). Say so plainly and
+ * offer to reload, instead of a blank page.
+ */
+class ScreenLoadGuard extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="notice" data-tone="warn" role="alert">
+        This screen could not open. Check your signal, then reload Prima.
+        <div style={{ marginTop: 8 }}>
+          <button className="btn" onClick={() => window.location.reload()}>
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 export const Ctx = createContext<AppCtx>(null as unknown as AppCtx);
 export const useApp = () => useContext(Ctx);
 
@@ -467,7 +494,7 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
     roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'],
     depts: ['chief_of_staff'],
   },
-  { view: 'arms', label: 'Arms control', icon: 'arms', roles: ['director', 'pwvsb_officer', 'company_manager', 'supervisor'], depts: ['arms_control'] },
+  { view: 'arms', label: 'Arms control', icon: 'arms', roles: ['director', 'pwvsb_officer', 'company_manager', 'supervisor', 'admin_exec'], depts: ['arms_control'] },
   { view: 'cms', label: 'CMS', icon: 'device', roles: ['director', 'pwvsb_officer'], depts: ['arms_control', 'cms'] },
   // CMS site readiness (audit decision 4, Fauzan 5 Nov 2026): the company records each site's devices (the client's brands)
   // and preparations; Arms Control checks; CMS and operations watch. No device is connected from it.
@@ -547,7 +574,7 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
     roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'],
   },
   // Operation claims (OM to COO) and office needs (company manager to Chief of Staff to COO) (Fauzan, 26 Oct 2026).
-  { view: 'requests', label: 'Requests', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
+  { view: 'requests', label: 'Requests', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Payment requests (Fauzan, 1 Nov 2026): company head creates, department head, Finance check, COO or FD, Finance pays.
   { view: 'payreq', label: 'Payment requests', icon: 'insurance', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   { view: 'fleet', label: 'Vehicles', icon: 'sites', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
@@ -798,6 +825,8 @@ function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?:
           </div>
         </div>
         <LangPicker />
+        {/* Test version only: one button to see the whole system (Fauzan, 23 Nov 2026). */}
+        {api.mode === 'demo' && <DemoAdminCard />}
         {ways?.office && (
           // P66: inside the Agentic Office, Prima opens with the office's sign-in (no second one).
           <div className="list" style={{ gap: 8 }}>
@@ -879,6 +908,11 @@ function LangPicker({ compact }: { compact?: boolean }) {
       ))}
     </div>
   );
+}
+
+/** The Deputy OGM or the Deputy Operations Director, named in the org chart, stands in for the head (23 Nov 2026). */
+function standsInForOpsHead(u: { deputyOf?: string[] }): boolean {
+  return (u.deputyOf ?? []).some((k) => k === 'c_goodwill' || k === 'c_sasateam');
 }
 
 export function App() {
@@ -982,7 +1016,9 @@ function AppBody() {
       <RefreshContext.Provider value={{ version, bump }}>
         {me ? (
           <Shell
+            key={me.user.id}
             me={me}
+            onSwitch={setMe}
             onSignOut={() => {
               // Signing out clocks staff out (Fauzan, 27 Oct 2026).
               void forgetOwner().catch(() => undefined);
@@ -1013,7 +1049,7 @@ function AppBody() {
   );
 }
 
-function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onReset: () => void }) {
+function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => void; onReset: () => void; onSwitch: (me: Me) => void }) {
   const role = me.user.role;
   const isGroup = role === 'director' || role === 'pwvsb_officer';
   const dept = me.user.department;
@@ -1094,7 +1130,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     cms: ['cms', 'ja', 'arms', 'fleet', 'clock', 'cmsready'],
     director_office: ['doa', 'commercial', 'guardpay', 'reports', 'meetings', 'clock'],
     marketing: ['marketing', 'commercial', 'reports', 'meetings', 'clock'],
-    chief_of_staff: ['requests', 'claims', 'staffpay', 'insurance', 'reports', 'meetings', 'clock'],
+    chief_of_staff: ['requests', 'claims', 'staffpay', 'insurance', 'corporate', 'reports', 'meetings', 'clock'],
     // FWM: foreign workers, their movements and hostels only, no tenders or other modules (Fauzan, 26 Oct 2026).
     fwm: ['arrivalcash', 'fwm', 'fwcost', 'fwstat', 'ja', 'hostels', 'people', 'reports', 'meetings', 'clock'],
     pdpa: ['pdpa', 'fleet', 'reports', 'meetings', 'clock'],
@@ -1158,7 +1194,9 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       (n.view !== 'work-kpi' || !!workKpiScope(me.user, [], me.now.slice(0, 10))) &&
       // Salary calculator: the OM and above, ACT and group leadership (Fauzan, 6 Nov 2026).
       (n.view !== 'salarycalc' || leader || dept === 'audit' || ['om', 'regional', 'ogm', 'ops_director', 'coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
-      (n.view !== 'hr-it-intake' || !me.user.integration) &&
+      // IT gaps D1 (Fauzan, 23 Nov 2026: one door for a new joiner): the staged HR-IT intake leaves the menu; Accounts and
+      // Access is the door, and IT works joiners and leavers from "From HR" on IT > Joining and leaving. Records stay.
+      n.view !== 'hr-it-intake' &&
       (n.view !== 'archive' || archiveAllowed(me.user, me.now.slice(0, 10))) &&
       (n.view !== 'data-cleanup' || dataCleanupAllowed(me.user)) &&
       (n.view !== 'assistant' || assistantAllowed(me.user)) &&
@@ -1191,7 +1229,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       (n.view !== 'statutory' || leader || dept === 'hr' || dept === 'audit' || (dept === 'finance' && me.user.financeTeam != null) || ['coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
       (n.view !== 'advances' || leader || dept === 'hr' || (dept === 'finance' && me.user.financeTeam != null) || ['om', 'regional', 'ogm', 'ops_director', 'coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
       // Company secretary: group leadership (the Chief of Staff and Deputy approve changes), the company manager and admin executives.
-      (n.view !== 'corporate' || role !== 'pwvsb_officer' || leader || dept === 'legal' || !!me.user.corpSecretary) &&
+      (n.view !== 'corporate' || role !== 'pwvsb_officer' || leader || dept === 'legal' || dept === 'chief_of_staff' || !!me.user.corpSecretary) &&
       (n.view !== 'renewals' || role !== 'pwvsb_officer' || leader || dept === 'audit') &&
       (n.view !== 'credit' || role !== 'pwvsb_officer' || leader || !!me.user.creditOfficer || dept === 'legal') &&
       (n.view !== 'contracts' || dept !== 'operations' || leader || ['om', 'regional', 'ogm', 'ops_director'].includes(me.user.opsTier ?? '')) &&
@@ -1211,20 +1249,22 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       (n.view !== 'requests' || dept !== 'operations' || leader || ['om', 'ogm', 'ops_director'].includes(me.user.opsTier ?? '')) &&
       (n.view !== 'clients' || dept !== 'operations' || leader || ['om', 'regional', 'ogm', 'ops_director', 'patrol'].includes(me.user.opsTier ?? '')) &&
       // Procurement sits under the OGM, so operations sees it only as OGM or Operations Director.
-      (n.view !== 'purchasing' || dept !== 'operations' || leader || ['ogm', 'ops_director'].includes(me.user.opsTier ?? '')) &&
+      (n.view !== 'purchasing' || dept !== 'operations' || leader || ['ogm', 'ops_director'].includes(me.user.opsTier ?? '') || standsInForOpsHead(me.user)) &&
       // CMS: the CMS, Arms Control, and the COO or higher; not the other group leaders (bug found 27 Oct 2026).
       (n.view !== 'cms' || seesArmsDetail(me.user)) &&
-      (n.view !== 'pdpa' || dept !== 'operations' || leader || me.user.opsTier === 'ops_director') &&
-      (n.view !== 'hostels' || dept !== 'operations' || leader || ['ops_director', 'ogm'].includes(me.user.opsTier ?? '')) &&
+      (n.view !== 'pdpa' || dept !== 'operations' || leader || me.user.opsTier === 'ops_director' || (me.user.deputyOf ?? []).includes('c_sasateam')) &&
+      (n.view !== 'hostels' || dept !== 'operations' || leader || ['ops_director', 'ogm'].includes(me.user.opsTier ?? '') || standsInForOpsHead(me.user)) &&
       // Everyone has their own details and clock, except the CEO, Chairman and Vice Chairman (Fauzan, 26 Oct 2026).
       (n.view !== 'mine' || !!me.user.personId) &&
       // P90: the owner sees Clock to test check-in and check-out (a test only, never attendance or pay).
       (n.view !== 'clock' || hasOwnStaffRecord(me.user) || isOwnerAdmin(me.user)) &&
       // Arms detail: CMS, Arms Control, COO or higher, the company manager and the supervisor for their own people (Fauzan, 26 Oct 2026).
       (n.view !== 'arms' || !isGroup || seesArmsDetail(me.user)) &&
+      // An admin executive sees Arms only as the Amra or on a vault's written authorised list (B1, 23 Nov 2026).
+      (n.view !== 'arms' || role !== 'admin_exec' || (me.keptVaultCompanyIds ?? []).length > 0) &&
       // Operations sees foreign workers only as OM or Regional OM; the FWM despatch sees tasks.
       (n.view !== 'fwm' || dept !== 'operations' || leader || ['om', 'regional'].includes(me.user.opsTier ?? '')) &&
-      (dept !== 'fwm' || me.user.fwmRole !== 'despatch' || n.view === 'fwm' || n.view === 'clock' || n.view === 'hr-it-intake') &&
+      (dept !== 'fwm' || me.user.fwmRole !== 'despatch' || n.view === 'fwm' || n.view === 'clock') &&
       // The JA Group app owns foreign worker management (rule SYS-JA-OWNS); Prima's own screen is switched off, not deleted.
       (n.view !== 'quality' || me.user.procRole !== 'storekeeper') &&
       (n.view !== 'fwm' || !jaOwns('fwm')) &&
@@ -1477,13 +1517,18 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       case 'device':
         return <Device />;
       case 'mine':
+        // D2 (Fauzan, 23 Nov 2026): everyone can ask the PDPA officer about their own personal data.
         return me.user.role === 'guard' ? (
           <>
             <MyDuty />
             <MyGuardRosterPanel />
+            <AskMyDataPanel />
           </>
         ) : (
-          <MyDuty />
+          <>
+            <MyDuty />
+            <AskMyDataPanel />
+          </>
         );
       case 'clock':
         return <MyClockView />;
@@ -1751,6 +1796,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         )}
         <div className="main">
           {!me.user.integration && <CleanupReceiptRecovery key={`${me.user.id}:${route.view}`} owner={me.user.id}/>}
+          {api.mode === 'demo' && demoAdminOn() && <DemoAdminBar me={me} onSwitch={onSwitch} />}
           {api.mode === 'demo' && (
             <div className="demo-band">
               <strong>Test version.</strong>
@@ -1799,7 +1845,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
               />
             )}
             {!me.user.integration && role !== 'site_device' && <ReportProblemButton screen={route.view} />}
-            <span className="mono num muted small" title="Malaysia time">
+            <span className="mono num muted small hide-sm" title="Malaysia time">
               {hhmm(clock)} MYT
             </span>
             {/* P86: the draft review queue sits in the top bar as a pop-over, not a strip of its own above it. */}
@@ -1815,8 +1861,11 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
           {/* Upload, Key in and Download on every screen and tab (Fauzan, 23 Nov 2026). */}
           <ScreenTools key={`${me.user.id}:${route.view}`} screen={route.view} label={nav.find((n) => n.view === route.view)?.label ?? route.view} contentRef={contentRef} />
           <div className="view-host" ref={contentRef} data-screen-content="">
-            {/* P103: a screen's code arrives the first time it opens (lazyView); this shows meanwhile. */}
-            <Suspense fallback={<Loading what="the screen" />}>{view}</Suspense>
+            {/* P103: a screen's code arrives the first time it opens (lazyView); this shows meanwhile. Upstream's guard: a
+                screen whose file cannot be fetched says so and offers a reload instead of a blank page. */}
+            <ScreenLoadGuard key={route.view}>
+              <Suspense fallback={<Loading what="the screen" />}>{view}</Suspense>
+            </ScreenLoadGuard>
           </div>
         </div>
         {(
@@ -1847,7 +1896,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
           {!apps && tabNav.map((n) => (
             <button key={n.view} aria-current={route.view === n.view ? 'page' : undefined} onClick={() => go({ view: n.view })}>
               <ViewIcon view={n.view} fallback={n.icon} />
-              {n.label.split(' ')[0]}
+              {/* The whole name, cut to fit: the first word alone read "Payment", "Speak" or "My" (whole-app review). */}
+              <span className="tab-label">{n.label}</span>
             </button>
           ))}
           {/* Always shown: More also holds Switch person and the language. */}

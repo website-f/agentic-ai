@@ -117,7 +117,7 @@ const IT_FORBIDDEN_BM = [
 ];
 
 /** `labels` (P105): what a select shows for each value (a name for an id, plain words for a code); the value sent is unchanged. */
-export type Field = { k: string; l: string; t?: 'text' | 'number' | 'date' | 'select' | 'yn' | 'check' | 'proof' | 'photos' | 'list' | 'area' | 'company'; o?: readonly string[]; labels?: Readonly<Record<string, string>> };
+export type Field = { k: string; l: string; t?: 'text' | 'number' | 'date' | 'select' | 'yn' | 'check' | 'proof' | 'photos' | 'list' | 'area' | 'company'; o?: readonly string[]; labels?: Readonly<Record<string, string>>; /** Shown text for a select value (the value still travels). */ ol?: Record<string, string> };
 
 /** P105: a field that names a company by its id is a pick-list of the person's companies (the value sent is still the id). */
 const COMPANY_KEYS = /^(companyId|ownerId|ownerCompanyId|managingCompanyId|tenantCompanyId)$/;
@@ -241,7 +241,7 @@ export function OpForm({ title, op, fields, fixed = {}, done = 'Saved.', send: s
               <option value="">-</option>
               {(f.t === 'yn' ? ['yes', 'no', 'unknown'] : f.o ?? []).map((o) => (
                 <option key={o} value={o}>
-                  {f.labels?.[o] ?? optionLabel(o)}
+                  {f.ol?.[o] ?? f.labels?.[o] ?? optionLabel(o)}
                 </option>
               ))}
             </Select>

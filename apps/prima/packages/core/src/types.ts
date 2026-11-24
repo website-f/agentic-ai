@@ -371,6 +371,12 @@ export interface Person {
   /** Hiring papers on file (Shahirah, 26 Oct 2026): the signed agreement, the stamped agreement and the vetting certificate. */
   hiringDocs?: HiringDoc[];
   /**
+   * Age exception (Fauzan, 23 Nov 2026, decision "Up to 65 by exception only"): a guard or officer aged 61 to 65 may be
+   * rostered only with this exception in force and a valid yearly medical. The HR Director or the CEO decides it with a
+   * reason; it lapses on its own date and never runs past the person's 66th birthday.
+   */
+  ageException?: { until: IsoDate; reason: string; by: string; byId: Id; at: IsoDateTime; endedAt?: IsoDateTime | null; endedBy?: string | null; endReason?: string | null } | null;
+  /**
    * The utility clause in the worker's contract of employment (Fauzan, 26 Oct 2026): without it, utility excess is a
    * notice only, never a deduction.
    */
@@ -534,6 +540,8 @@ export interface PayChange {
    * after the HR Director verifies it (Fauzan, 1 Nov 2026).
    */
   vcConsent?: { by: string; byId: Id; at: IsoDateTime; note: string } | null;
+  /** The Vice Chairman's consent recorded for him by HR from his message or call (HR gap B1, 23 Nov 2026). */
+  vcRecord?: VcConsentRecord | null;
   /**
    * An allowance change consented before its date waits (null) and is applied on the day it takes effect (Arisha main
    * retest, 4 Nov 2026). Absent on older rows means applied at consent.
@@ -549,6 +557,23 @@ export type LeaveKind = 'ANNUAL' | 'SICK' | 'HOSPITAL' | 'EMERGENCY' | 'UNPAID' 
 
 /** Leave kinds whose yearly days HR may raise above the Act for one staff member (Fauzan, 2 Nov 2026). */
 export type LeaveOverrideKind = 'ANNUAL' | 'SICK' | 'MATERNITY' | 'PATERNITY';
+
+/**
+ * HR gap B1 (Fauzan, 23 Nov 2026: "Vc not in system yet. But when consent needed. Cos or dcos or hr upload the consent
+ * given from what app or call"): the Chief of Staff, the Deputy or the HR Administrator records the Vice Chairman's answer
+ * with how he gave it and the proof (a screenshot of the message, the letter, or the call log).
+ */
+export interface VcConsentRecord {
+  how: 'app' | 'call' | 'meeting' | 'letter';
+  /** The day the Vice Chairman gave his answer. */
+  givenOn: IsoDate;
+  consent: boolean;
+  recordedBy: string;
+  recordedById: Id;
+  recordedAt: IsoDateTime;
+  proofIds: Id[];
+  note: string;
+}
 
 export interface LeaveRequest {
   /** Policy evaluated at a new medical approval; older decisions are never rewritten. */
@@ -586,6 +611,8 @@ export interface LeaveRequest {
    * HR's approval is kept here and the request stays pending until the Vice Chairman consents (or refuses).
    */
   hrApproval?: { by: string; byId: Id; at: IsoDateTime; note: string } | null;
+  /** The Vice Chairman's answer, recorded for him by HR from his message or call (HR gap B1, 23 Nov 2026). */
+  vcRecord?: VcConsentRecord | null;
   /**
    * Office staff of a licensed company (Fauzan, 3 Nov 2026): the Company Manager authorises the request first, with a
    * comment; HR then decides as before. Central staff (PWVSB, Merdeka, Goodwill) have no company manager step.
@@ -664,10 +691,11 @@ export interface Credential {
   recordedAt?: IsoDateTime | null;
   /**
    * Where the date came from (FWM real use, 5 Nov 2026): 'prima' = recorded in Prima from a copy of the paper,
-   * 'ja' = taken from the JA Group app feed (copy not seen in Prima). P90: 'typed' = typed by FWM from an old list or by
-   * hand when adding the worker (copy not seen in Prima). Missing on older and sample rows.
+   * 'ja' = taken from the JA Group app feed (copy not seen in Prima), 'list' = loaded from FWM's own Excel or CSV list
+   * (rule FWM-BULK-LOAD, copy not seen yet). P90: 'typed' = typed by FWM from an old list or by hand when adding the
+   * worker (copy not seen in Prima). Missing on older and sample rows.
    */
-  source?: 'prima' | 'ja' | 'typed';
+  source?: 'prima' | 'ja' | 'typed' | 'list';
   /** Copy of the paper (evidence documents, fwmId = this id). */
   docIds?: Id[];
   /** The JA record and its JA change time, when the date came from the JA feed. */
@@ -1390,6 +1418,8 @@ export interface FwRenewal {
   /** The new paper recorded after this submission (the ladder then restarts on its date). */
   doneCredentialId?: Id;
   doneAt?: IsoDateTime;
+  /** Work permit only (rule FWM-LEVY): the levy paid for the new permit year, with its receipt. */
+  levy?: { amount: number; paidOn: IsoDate; ref: string; docIds: Id[]; by: string; at: IsoDateTime } | null;
 }
 
 /** Errands FWM asks the OM to get done with the guard (Fauzan, 26 Oct 2026). */
@@ -2345,6 +2375,9 @@ export interface CmsShift {
   handoverRef?: string | null;
   /** Seats Arms Control took a person off, with the reason (sick, leave, emergency). Newest last. */
   released?: { name: string; by: string; at: IsoDateTime; reason: string }[];
+  /** B3 (23 Nov 2026): a replacement seat for the rest of a shift: the seat it covers and why. */
+  replacementOf?: Id | null;
+  replacementReason?: string | null;
 }
 
 /** A person who works in the CMS command centre, and the posts they may fill. */
@@ -3166,6 +3199,8 @@ export interface User {
   procRole?: 'manager' | 'executive' | 'storekeeper';
   /** Asset Management: the Asset Director approves reminder letters and notices of demand for unpaid rent. */
   assetRole?: 'director';
+  /** D8 (23 Nov 2026): set on the signed-in user only, while an approved delegation line makes them acting Asset Director. Never stored. */
+  actingAssetDirector?: { holderName: string; to: IsoDate | null } | null;
   /**
    * Foreign Worker Management (Fauzan, 26 Oct 2026): FWM Manager, Deputy Manager, 3 FWM Executives and a driver cum
    * despatch. The despatch carries papers and runs errands; he does not open worker records or payslips.
@@ -3177,6 +3212,11 @@ export interface User {
    */
   financeTeam?: number;
   financeRole?: 'leader' | 'deputy' | 'data_entry';
+  /**
+   * The Account Manager (Fauzan, 23 Nov 2026: "It sit below FD, it do what FD delegated"): group Finance, no team,
+   * under the Finance Director. What they may do, and for which companies, is what the FD delegates in Finance Settings.
+   */
+  financeAccountManager?: boolean;
   /**
    * Group leadership who may see group-wide data (Fauzan, 26 Oct 2026): Chairman, Vice Chairman, Finance Director,
    * Chief of Staff and Deputy Chief of Staff; the CEO and COO are marked by opsTier. Everyone else sees only their own
@@ -3201,7 +3241,7 @@ export interface User {
    */
   monthlySalary?: number;
   /** A system sign-in for a connected app (the JA Group app feed), never a person; it cannot sign in to screens. */
-  integration?: 'ja' | 'door' | 'planner' | 'analytics' | 'inhouse' | 'cms' | 'tracker' | 'am' | 'whatsapp' | 'tender_watcher';
+  integration?: 'ja' | 'door' | 'planner' | 'analytics' | 'inhouse' | 'cms' | 'tracker' | 'am' | 'whatsapp' | 'tender_watcher' | 'teams_approvals' | 'report_maker';
 
   /** For a far-branch manager (Fauzan, 27 Oct 2026): the branch they run. */
   branchId?: Id;
@@ -3379,6 +3419,8 @@ export interface Dataset {
   groupMonthRecs: import('./group-month-service').GmRec[];
   /** Part Z: duty map registers (factoring, school contributions, notices, HRDF, PTPTN, Protégé, welfare fund, Nepal unit, audit, key log, set-up checklist, payback, OM records). */
   dutyRegisterRecs: import('./duty-registers').RegRec[];
+  /** FWM check gaps (Fauzan, 23 Nov 2026): exit files, absconding cases, quotas and caseload (module fw-gaps-v1). */
+  fwGapRecs: import('./fw-gaps').FwGapRec[];
   /** Part U: stock counts, variance, week closes, adjustments, disposal cases, damage charges, monthly reports. */
   inventoryRecs: import('./inventory-control').InvRec[];
   amRentalRecs: import('./am-rental').RentRec[];
@@ -3531,6 +3573,8 @@ export interface Dataset {
   tripApprovals: TripApproval[];
   staffPayRuns: StaffPayRun[];
   finStatus: FinStatus[];
+  /** B3 (Fauzan, 23 Nov 2026): Finance payments in their own table (module fin-payments-v1); see finance-payment-rows.ts. */
+  finPayments: import('./finance-payment-rows').FinPaymentRow[];
   contracts: Contract[];
   branchSettlements: BranchSettlement[];
   branchActions: BranchAction[];
@@ -3640,7 +3684,12 @@ export interface Dataset {
   sharedLogins: import('./shared-logins').SharedLogin[];
   sharedLoginKinds: import('./shared-logins').SharedLoginKindRow[];
   hrLists: import('./hr-lists').HrList[];
+  /** D1 (Fauzan, 23 Nov 2026): what the Chief of Staff hands to the Deputy or the HR Administrator (module cos-cover-v1). */
+  cosCover: import('./hr').CosCoverRow[];
   consentGates: import('./paper-consent').ConsentGate[];
+  /** PDPA officer inbox and clean-up OKs (module pdpa-officer-v1, Fauzan 23 Nov 2026). */
+  pdpaInbox: import('./pdpa-officer').PdpaInboxItem[];
+  pdpaPurgeOks: import('./pdpa-officer').PdpaPurgeOk[];
   fwMoves: import('./fw-moves').FwMove[];
   stayRequests: import('./short-stays').StayRequest[];
   ssRecs: import('./short-stays').SsRec[];
@@ -3671,6 +3720,10 @@ export interface Dataset {
   warrantyClaims: import('./warranty-claims').WarrantyClaim[];
   /** Company paper library for tenders (Marketing item AH7, 23 Nov 2026; module company-papers-v1, not installed until Fauzan says). */
   companyPapers: import('./company-papers').CompanyPaper[];
+  /** Monthly reports Prima makes by itself (Fauzan, 23 Nov 2026; module auto-reports-v1, not installed until Fauzan says). */
+  autoReports: import('./auto-reports').AutoReport[];
+  autoReportLayouts: import('./auto-reports').AutoReportLayout[];
+  fleetRecords: FleetRecord[];
   /** Guard roster engine (Part O, Fauzan 13-14 Nov 2026; module guard-roster-v1, not installed until the CEO says). */
   siteCoverage: import('./roster-records').SiteCoverageRow[];
   rosterVersions: import('./roster-records').RosterVersionRow[];
@@ -3864,6 +3917,54 @@ export interface VehicleLogEntry {
   by: string;
   what: string;
   docId: Id | null;
+  /**
+   * Who had the vehicle, kept with each trip out and in (Transport check, 23 Nov 2026): a summons is linked to the
+   * driver at that time and a company-car mileage claim is checked against the km logged. Absent on older entries.
+   */
+  trip?: { kind: 'out' | 'in'; driver: string; driverUserId: Id | null; outAt: IsoDateTime; km?: number };
+}
+
+/**
+ * Accidents, traffic summonses and driver licences (Transport check, 23 Nov 2026; module fleet-records-v1). Kept by the
+ * Transport department; nothing is deleted, a record is closed with a note and history only grows. A licence copy is
+ * personal data, seen only by Transport, the OGM, group leaders and the driver.
+ */
+export type FleetRecordKind = 'ACCIDENT' | 'SUMMONS' | 'LICENCE';
+export type SummonsIssuer = 'JPJ' | 'PDRM' | 'AES' | 'COUNCIL' | 'OTHER';
+export interface FleetRecord {
+  id: Id;
+  kind: FleetRecordKind;
+  /** The vehicle's owner company; for a licence, the driver's employer. */
+  companyId: Id;
+  vehicleId: Id | null;
+  plate: string | null;
+  driverUserId: Id | null;
+  driver: string | null;
+  /** When it happened (accident, offence) or when the licence copy was filed. */
+  at: IsoDateTime;
+  place?: string;
+  what?: string;
+  injured?: boolean;
+  policeReport?: string | null;
+  insurerClaim?: string | null;
+  issuer?: SummonsIssuer;
+  ref?: string;
+  amountRm?: number | null;
+  dueOn?: IsoDate | null;
+  classes?: string[];
+  expiresOn?: IsoDate | null;
+  docIds: Id[];
+  status: 'open' | 'closed';
+  outcome?: 'PAID' | 'APPEALED' | 'CANCELLED' | 'SETTLED' | 'REPLACED' | null;
+  /**
+   * After the company paid a summons, how it is recovered from the driver at the wheel (rule FLEET-SUMMONS): the driver
+   * paid back (receipt), HR deducts it with the driver's signed consent, or the company bears it with a reason. Set once.
+   */
+  recovery?: { how: 'DRIVER_PAID' | 'DEDUCT' | 'COMPANY_BEARS'; amountRm: number | null; note: string; docId: Id | null; by: string; at: IsoDateTime } | null;
+  history: { at: IsoDateTime; by: string; byId: Id; what: string }[];
+  by: string;
+  byId: Id;
+  recordedAt: IsoDateTime;
 }
 
 export interface Vehicle {
@@ -3875,6 +3976,8 @@ export interface Vehicle {
   /** Due dates by renewal; a renewal the vehicle does not need is left out. */
   renewals: Partial<Record<VehicleRenewal, IsoDate>>;
   odometerKm: number;
+  /** First registration date (JPJ), for the replacement review (rule FLEET-REPLACE); absent when not keyed in. */
+  registeredOn?: IsoDate | null;
   service: { dueOn: IsoDate; dueKm: number; lastOn: IsoDate | null };
   /** Hire purchase or lease; null when owned outright. */
   payment: { lender: string; monthly: number; dayOfMonth: number; endsOn: IsoDate; paidPeriods: string[] } | null;
@@ -4057,8 +4160,11 @@ export interface ExpenseRequest {
   userId: Id;
   requestedBy: string;
   createdAt: IsoDateTime;
-  status: 'draft' | 'submitted' | 'cos_approved' | 'approved' | 'returned' | 'rejected';
+  /** head_check: an admin executive prepared it; the company head checks and sends it (company admin D1, 23 Nov 2026). */
+  status: 'draft' | 'head_check' | 'submitted' | 'cos_approved' | 'approved' | 'returned' | 'rejected';
   submittedAt: IsoDateTime | null;
+  /** The company head's check of an executive's office request, with the comment. */
+  headCheck?: HostelBillStep | null;
   cosApproval: HostelBillStep | null;
   cooDecision: HostelBillStep | null;
   returned: HostelBillStep | null;
@@ -5197,6 +5303,17 @@ export interface FinStatus {
   arReviews?: { month: string; sign: FinSign; cases: number; unpaid: number }[];
   /** Group Finance settings, kept on PWVSB's own row only. The Finance Director (or the CEO) sets them (Fauzan, 1 Nov 2026). */
   settings?: FinSettings;
+  /** PWVSB's row only: what the FD delegates to each Account Manager (Fauzan, 23 Nov 2026). */
+  amDelegations?: import('./finance-payouts').FinAmDelegation[];
+  /** PWVSB's row only: the FD's confirmation of the Finance thresholds and budget limits (Fauzan, 23 Nov 2026, due 18 Jan 2027). */
+  settingsConfirmed?: import('./finance-payouts').FinSettingsConfirmation[];
+  /** The yearly budget limit the FD sets for this company: a budget above it is approved by the CEO (Fauzan, 23 Nov 2026). */
+  budgetLimit?: { amount: number; set: FinSign } | null;
+  /**
+   * Salary, claim, advance and loan payouts this company paid from its bank (Fauzan, 23 Nov 2026): prepared by one
+   * Finance person, recorded paid by another, looked for on the bank statement, and payroll journals checked.
+   */
+  payouts?: import('./finance-payouts').FinPayout[];
   /** Regular payments: hire purchase, loans, bills, rent, insurance, statutory, zakat, tax, levy (Fauzan, 2 Nov 2026). */
   regular?: FinRegular[];
   /** PWVSB's row only: EPF and PERKESO contribution tables loaded from the published schedules, every version kept. */
@@ -5880,6 +5997,11 @@ export interface CorpProfile {
   /** The company's key corporate papers on file (registers, constitution, SSM notices), by reference only. */
   papers?: { name: string; ref: string; on: IsoDate | null }[];
   file?: CorpFileStatus | null;
+  /**
+   * D1 (Fauzan, 23 Nov 2026): the Chief of Staff office executive the Deputy Chief of Staff named to record this
+   * company's filing steps. Records steps only; never approves a corporate change or checks the company file.
+   */
+  filingExec?: { id: Id; name: string; by: string; at: IsoDateTime } | null;
 }
 
 /** One year's statutory audit of a company by a firm on the group's auditor panel (V9). */
@@ -5932,6 +6054,10 @@ export interface CorpFiling {
   lodged: { by: string; at: IsoDateTime; ref: string; on: IsoDate } | null;
   receipt: { by: string; at: IsoDateTime; ref: string } | null;
   changeId?: Id | null;
+  /** Financial statements: the year end they cover (opened by Prima from the company file). */
+  fyEnd?: IsoDate | null;
+  /** Who opened it: Prima from the company file, or a person (a filing Prima does not open by itself). */
+  openedBy?: { by: string; byId: Id | null; at: IsoDateTime } | null;
 }
 
 export type CorpChangeKind =
@@ -6087,6 +6213,8 @@ export interface PurStep {
   note: string;
 }
 
+export type PurTier = 'inventory' | 'manager' | 'coo' | 'ceo';
+
 export interface PurRequest {
   id: Id;
   companyId: Id;
@@ -6109,14 +6237,36 @@ export interface PurRequest {
   chosenSupplierId: Id | null;
   /** Why the chosen quote is not the lowest. */
   notLowestReason: string | null;
-  /** Approval tiers needed, fixed when it goes for approval from the chosen quote and the delegation limits. */
-  tiers: ('manager' | 'coo' | 'ceo')[];
-  approvals: (PurStep & { tier: 'manager' | 'coo' | 'ceo' })[];
+  /**
+   * Approval tiers needed, fixed when it goes for approval from the chosen quote and the delegation limits. 'inventory'
+   * is the Inventory Manager's check before the COO (Fauzan, 23 Nov 2026, D1), left out when the Inventory Manager
+   * raised or sourced it, or when there is no Inventory Manager yet.
+   */
+  tiers: PurTier[];
+  approvals: (PurStep & { tier: PurTier })[];
+  /**
+   * D3 (Fauzan, 23 Nov 2026): the online listing (index in online) chosen as the source instead of a supplier quote.
+   * Allowed up to the CEO's online buying limit; Finance approves the payment before it is ordered, and the platform's
+   * receipt stands in for the e-Invoice. Null or missing: a supplier quote was chosen.
+   */
+  chosenOnline?: number | null;
+  /** Finance's approval of paying the online platform (D3). */
+  onlinePay?: PurStep | null;
+  /** The platform's receipt or order confirmation, kept with the invoice step (D3). */
+  receiptDocIds?: Id[];
+  /**
+   * D5 (Fauzan, 23 Nov 2026): urgent path. The COO approves alone with a reason; the missing quotes and online prices
+   * follow within 3 working days (quotesDue); the CEO sees it afterwards and marks it seen.
+   */
+  urgent?: { reason: string; by: string; byId: Id; at: IsoDateTime; quotesDue: IsoDate; ceoSeen: PurStep | null } | null;
   status: 'quoting' | 'awaiting_approval' | 'approved' | 'rejected' | 'ordered' | 'received' | 'posted';
   rejected: PurStep | null;
-  po: { ref: string; by: string; at: IsoDateTime; amount: number } | null;
+  /** expectedOn: the delivery date the supplier promised (23 Nov 2026); older orders have none (Unknown). */
+  po: { ref: string; by: string; at: IsoDateTime; amount: number; expectedOn?: IsoDate | null } | null;
+  /** When Procurement sent it for approval (23 Nov 2026, for the Work KPIs); older requests have none. */
+  submitted?: PurStep | null;
   /** Goods received note: quantity received per line. */
-  grn: (PurStep & { qty: number[]; condition?: { good: number; damaged: number; wrong: number; note: string }[]; docIds?: Id[]; /** Part U16: the supplier's delivery order number and a photo of it. */ doNo?: string; doDocIds?: Id[] }) | null;
+  grn: (PurStep & { /** D4: the item register units made for the serial items received (one ID each). */ itemIds?: Id[]; qty: number[]; condition?: { good: number; damaged: number; wrong: number; note: string }[]; docIds?: Id[]; /** Part U16: the supplier's delivery order number and a photo of it. */ doNo?: string; doDocIds?: Id[] }) | null;
   /** Part U-X14: an office purchase (3 shop quotes AND 2 online prices). */
   forOffice?: boolean;
   /** Part T3d: the site supplies requests whose "buy" lines this purchase covers. */
@@ -6163,11 +6313,28 @@ export interface StockItem {
   opening?: { qty: number; by: string; byId: Id; at: IsoDateTime; confirmed: { on: IsoDate; by: string; witness: string; counted: number } | null } | null;
   /**
    * How Goodwill charges the company whose guard holds the item (Fauzan, 2 Nov 2026): a monthly rental, or a one-off
-   * sale. Prices are set by Goodwill's Inventory Manager; a missing price stays missing and is never guessed.
+   * sale. Prices are set by Goodwill's Inventory Manager, and the Finance Director may set them too (Fauzan, 23 Nov
+   * 2026: "Inventory set it. But fd can set also"); a missing price stays missing and is never guessed.
    */
   charge?: 'rental' | 'sale' | null;
   rentalMonthly?: number | null;
   salePrice?: number | null;
+  /** Who last set the prices on the Goodwill prices panel, when and why (23 Nov 2026). */
+  priceSet?: { by: string; byId: Id; at: IsoDateTime; reason: string } | null;
+  /**
+   * What one unit cost the store (Fauzan, 23 Nov 2026: "Make sure charges price and stock by price are stated in data"):
+   * the weighted average of the purchase orders received, or entered with a reason (opening stock). Null: not known yet,
+   * never guessed. Stock value = on hand x this cost.
+   */
+  unitCost?: number | null;
+  costSet?: { by: string; at: IsoDateTime; reason: string; source: 'purchase' | 'entered' } | null;
+  /**
+   * A sale price at or below the unit cost waits here for the Finance Director (Fauzan, 23 Nov 2026: "unprofit need fd
+   * approval"); the item keeps its earlier sale price until then.
+   */
+  pendingSale?: { salePrice: number; unitCost: number; by: string; byId: Id; at: IsoDateTime; reason: string } | null;
+  /** The Finance Director's (or the CEO's) approval of the current sale price at or below cost. */
+  belowCostOk?: { salePrice: number; unitCost: number; by: string; at: IsoDateTime; reason: string } | null;
   /**
    * Part T4 (Fitri package, 13 Nov 2026): the store's MAXIMUM beside reorderAt (the minimum). Null or missing means
    * "not set"; no number is ever invented. Set by the Procurement executive, each change kept with who and why.
@@ -6184,6 +6351,12 @@ export interface StockItem {
    */
   kitParts?: { stockItemId: Id; qty: number }[] | null;
   kitHistory?: { at: IsoDateTime; by: string; byId: Id; note: string }[];
+  /**
+   * D4 (Fauzan, 23 Nov 2026): the item register type (SKU) for a serial item such as a radio or bodycam. The store keeps
+   * the quantity and money; each unit received gets its own item register ID automatically. Set by the Inventory
+   * Manager; null or missing means not linked.
+   */
+  itemSkuId?: Id | null;
 }
 
 /**
@@ -7295,6 +7468,8 @@ export interface FinStatementLine {
     | { kind: 'guarantee'; guaranteeId: Id; by: string; at: IsoDateTime }
     /** A hostel bill the company paid itself, found by Prima on the company's bank statement. */
     | { kind: 'hostel'; hostelBillId: Id; by: string; at: IsoDateTime }
+    /** A salary, claim, advance or loan payout Finance recorded (Fauzan, 23 Nov 2026), found by Prima. */
+    | { kind: 'payout'; payoutId: Id; by: string; at: IsoDateTime }
     /** A client deposit or retention paid back, found by Prima (Fauzan, 2 Nov 2026: suggestion 3). */
     | { kind: 'deposit'; depositId: Id; by: string; at: IsoDateTime }
     /** A fixed deposit placed or uplifted, found by Prima (Fauzan, 2 Nov 2026: suggestion 15). */
@@ -8522,8 +8697,10 @@ export interface FwWelfareCheck {
 export interface ApprovalLimits {
   claimsMax: number | null;
   purchasesMax: number | null;
+  /** D3 (Fauzan, 23 Nov 2026): the most one purchase may be bought from an online platform. Null: online buying off. */
+  onlineBuyMax?: number | null;
   set: FinSign | null;
-  history: { claimsMax: number | null; purchasesMax: number | null; set: FinSign | null }[];
+  history: { claimsMax: number | null; purchasesMax: number | null; onlineBuyMax?: number | null; set: FinSign | null }[];
 }
 
 // ---------- Recruitment cost for foreign workers working under another company (Fauzan, 3 Nov 2026) ----------
@@ -9229,7 +9406,12 @@ export interface AmBqAward {
   askedById: Id;
   askedAt: IsoDateTime;
   director: AmBqStep | null;
+  /** The COO decides first only when the Asset Director worked on the award (D3, Fauzan 23 Nov 2026). */
   coo: AmBqStep | null;
+  /** The Vice Chairman consents above AM-BQ vcAbove (D3, Fauzan 23 Nov 2026: one ladder for all AM spending). */
+  vc?: AmBqStep | null;
+  /** The CEO approves above AM-BQ ceoAbove. */
+  ceo?: AmBqStep | null;
   /** True once every approver needed has approved. */
   final: boolean;
 }
@@ -9611,6 +9793,8 @@ export interface FwStatLine {
   perkesoRef: string;
   /** Why a paid figure differs from the published rate, when it does. */
   note: string;
+  /** Rule FWM-LEVY (Fauzan, 23 Nov 2026): the user's share of the yearly levy the owner paid (levy / 12 x days used / days in the month). */
+  levy?: { yearly: number; renewalId: Id; charged: number } | null;
 }
 
 /** A month's EPF and SOCSO recharge from the owner company to one user (a company, or a branch): a debit note to repay. */

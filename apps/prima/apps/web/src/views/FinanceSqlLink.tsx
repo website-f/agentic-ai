@@ -154,6 +154,7 @@ const JOB_FILTERS: DtFilter<Job>[] = [
 
 function Company({ co, lead, run }: { co: Co; lead: boolean; run: (kind: 'switch' | 'code' | 'exception' | 'paste', input: Record<string, unknown>, msg: string) => Promise<unknown> }) {
   const [reason, setReason] = useState('');
+  const [stage, setStage] = useState<'copy' | 'live'>(co.stage);
   const [types, setTypes] = useState<Record<string, boolean>>(Object.fromEntries(co.docTypes.map((t) => [t.docType, t.on])));
   const [code, setCode] = useState<Record<string, string>>({});
   const [comment, setComment] = useState<Record<string, string>>({});
@@ -170,7 +171,7 @@ function Company({ co, lead, run }: { co: Co; lead: boolean; run: (kind: 'switch
         <Kpi label="Differences" value={co.counts.differences} tone={co.counts.differences ? 'crit' : 'ok'} />
       </div>
       <p className="small" style={{ padding: '0 12px' }}>
-        Book: <b data-no-translate>{co.book ?? 'not confirmed'}</b> · Posting for this company: <Chip tone={co.on ? 'ok' : 'neutral'}>{co.on ? 'on' : 'off'}</Chip> · Last post: {co.lastPostedAt ? dateTimeLabel(co.lastPostedAt) : 'none'} · Last daily
+        Book: <b data-no-translate>{co.book ?? 'not confirmed'}</b> ({co.stage === 'live' ? 'real book' : 'copy'}) · Posting for this company: <Chip tone={co.on ? 'ok' : 'neutral'}>{co.on ? 'on' : 'off'}</Chip> · Last post: {co.lastPostedAt ? dateTimeLabel(co.lastPostedAt) : 'none'} · Last daily
         check: {co.lastCheckedAt ? dateTimeLabel(co.lastCheckedAt) : 'not checked yet'}
       </p>
       {lead && (
@@ -182,9 +183,17 @@ function Company({ co, lead, run }: { co: Co; lead: boolean; run: (kind: 'switch
               {!t.built && <span className="muted"> (waits for SQL support's answer)</span>}
             </label>
           ))}
+          {/* D4 (Fauzan, 23 Nov 2026): payment vouchers only, one company first, on the copy of the book first. */}
+          <label className="small" style={{ display: 'block', marginTop: 6 }}>
+            Post to{' '}
+            <select className="select" aria-label="Post to" value={stage} onChange={(e) => setStage(e.target.value === 'live' ? 'live' : 'copy')}>
+              <option value="copy">The copy of the book (first)</option>
+              <option value="live">The real book (after a checked voucher on the copy)</option>
+            </select>
+          </label>
           <input className="input" placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-            <button className="btn" onClick={() => void run('switch', { companyId: co.companyId, on: true, docTypes: types, reason }, 'Posting switched on for the ticked types.')}>
+            <button className="btn" onClick={() => void run('switch', { companyId: co.companyId, on: true, stage, docTypes: types, reason }, 'Posting switched on for the ticked types.')}>
               Switch on
             </button>
             <button className="btn" onClick={() => void run('switch', { companyId: co.companyId, on: false, docTypes: {}, reason }, 'Posting switched off.')}>

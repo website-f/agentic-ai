@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { receivedSupplierBill } from './supplier-bill-helper';
 import { AccessDenied, GROUP_EMPLOYER_ID, MemoryStore, PrimaService, finApproverFor, generateDataset, myt, type FinStatus } from '../src';
 
 // Finance Phase 2 (Fauzan, 31 Oct 2026): payment control with separation of duties, the month-end close with evidence
@@ -233,14 +234,20 @@ describe('month-end close: evidence, exceptions, review and the Finance Director
     const [de, dep, lead, fd, ceo] = await Promise.all(['u-fin-t1-de1', 'u-fin-t1-dep', 'u-fin-t1-lead', 'u-fd', 'u-fauzan'].map((id) => svc.user(id)));
     const F = () => ds.finStatus.find((x) => x.companyId === T1)!;
     booksInOrder(F(), '2026-09', '2026-09-30');
-    F().posting.supplierBillsUnposted = 2;
+    receivedSupplierBill(ds, T1, 1, myt('2026-09-25', '10:00'));
+    receivedSupplierBill(ds, T1, 2, myt('2026-09-29', '15:00'));
+    // A bill received after the month end belongs to the next close, not this one.
+    receivedSupplierBill(ds, T1, 3, myt('2026-10-02', '09:00'));
     F().tests.find((t) => t.id === 'FS-07')!.diff = 120;
     // Not ready: no reconciliation reports attached and two exceptions unexplained.
     await expect(svc.finance.closeStep(de, T1, 'prepare')).rejects.toThrow(/Attach the SQL Account bank reconciliation report/);
     for (const b of F().banks) await svc.finance.closeStep(de, T1, 'evidence', { bankId: b.id, ref: `SharePoint/Finance/Bank rec ${b.id} Sep.pdf` });
-    await expect(svc.finance.closeStep(de, T1, 'prepare')).rejects.toThrow(/Explain: 2 supplier bill/);
-    await expect(svc.finance.closeStep(de, T1, 'explain', { key: 'gap:supplier', text: 'late' })).rejects.toThrow(/at least 10/);
-    await svc.finance.closeStep(de, T1, 'explain', { key: 'gap:supplier', text: 'Bills arrived 3 Oct; posted in October.' });
+    await expect(svc.finance.closeStep(de, T1, 'prepare')).rejects.toThrow(/Explain: Supplier bill INV-TEST-1 .*Supplier bill INV-TEST-2/);
+    await expect(svc.finance.closeStep(de, T1, 'explain', { key: 'gap:supplier:pur-test-pwvsb-1', text: 'late' })).rejects.toThrow(/at least 10/);
+    await svc.finance.closeStep(de, T1, 'explain', { key: 'gap:supplier:pur-test-pwvsb-1', text: 'Bill reached Finance 3 Oct; posted in October.' });
+    await expect(svc.finance.closeStep(de, T1, 'prepare')).rejects.toThrow(/INV-TEST-2/);
+    // Once posted in SQL Account the second bill leaves the close list by itself.
+    ds.purRequests.find((r) => r.id === 'pur-test-pwvsb-2')!.posted = { sqlRef: 'PI-TEST-2', by: 'Test Clerk', at: myt('2026-10-03', '09:00') };
     await svc.finance.closeStep(de, T1, 'explain', { key: 'test:FS-07', text: 'Unapplied receipt RM120, allocated 2 Oct.' });
     expect((await svc.finance.closeStep(de, T1, 'prepare')).status).toBe('prepared');
     // The preparer cannot review; review needs a comment.

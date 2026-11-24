@@ -1,3 +1,4 @@
+import { isOgm } from './ops-access';
 import { RULES } from "./rules";
 import { addDays } from "./time";
 import { dateOf } from "./time";
@@ -132,7 +133,7 @@ function isDepartmentHead(u: User, dept: NonNullable<User['department']>): boole
     case 'chief_of_staff':
       return u.leadership === 'cos';
     case 'procurement':
-      return u.opsTier === 'ogm';
+      return isOgm(u);
     case 'asset':
       return u.department === 'asset' && u.assetRole === 'director';
     default:

@@ -5,6 +5,7 @@
 // Upload, Check, Download. Each file made is kept with the employer (the server counts it again) so it can be
 // downloaded again; every download is in the audit log.
 import { useEffect, useMemo, useState } from 'react';
+import { takeHandedFile, useScreenUploader } from '../upload-handlers';
 import { CheckCircleIcon, DownloadSimpleIcon, FileArrowUpIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import {
   FIGURE_LABEL,
@@ -68,6 +69,18 @@ type Tab = 'new' | 'records';
 export function ContribFilesView() {
   const { data, error } = useLoad(() => api.contributionFiles(), []);
   const [tab, setTab] = useRouteTab<Tab>('new', ['new', 'records']);
+  // P129: the toolbar's Upload here (or on Staff payroll) starts New file with the chosen file.
+  const [handed, setHanded] = useState<File | null>(() => takeHandedFile('contribfiles'));
+  useScreenUploader('contribfiles', {
+    key: 'salary-sheet',
+    label: 'Salary sheet: SOCSO, EIS, SKBBK and EPF',
+    detail: 'Any salary sheet (Excel, CSV, PDF or Word) is read on this device; you check each person, then download the PERKESO file and the converter workbook.',
+    unavailable: data && !data.employers.length ? 'No employer is open to you here.' : null,
+    open: (f) => {
+      setTab('new');
+      if (f) setHanded(f);
+    },
+  });
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="contribution files" />;
   return (
@@ -85,7 +98,7 @@ export function ContribFilesView() {
           </button>
         </div>
       </PageHead>
-      {tab === 'new' ? <NewFile board={data} /> : <Records board={data} />}
+      {tab === 'new' ? <NewFile board={data} handed={handed} onHandedRead={() => setHanded(null)} /> : <Records board={data} />}
     </div>
   );
 }
@@ -217,7 +230,7 @@ async function giveFile(rec: ContribFileRecord, kind: ContribDownloadKind) {
 
 type Edit = Partial<Pick<ContribPerson, 'id' | 'name' | 'nationality' | 'age' | 'skbbkOptOut' | 'include'>>;
 
-function NewFile({ board }: { board: ContribBoard }) {
+function NewFile({ board, handed, onHandedRead }: { board: ContribBoard; handed?: File | null; onHandedRead?: () => void }) {
   const act = useAction();
   const [step, setStep] = useState<Step>('upload');
   const [companyId, setCompanyId] = useState(board.employers[0]?.companyId ?? '');
@@ -287,6 +300,14 @@ function NewFile({ board }: { board: ContribBoard }) {
       setBusy(null);
     }
   }
+
+  // P129: a file handed over from the toolbar's Upload is read at once.
+  useEffect(() => {
+    if (!handed) return;
+    onHandedRead?.();
+    void readFile(handed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handed]);
 
   function readPaste() {
     setError(null);

@@ -1,4 +1,5 @@
 // One item register for the whole group: server rules (Fauzan, 6 Nov 2026; Fitri's paper v1.0 sections 2-10).
+import { isOgm, isOpsDirector } from './ops-access';
 import { sqlConfirmedBook } from './sql-posting';
 // Every write is checked here, whatever the screen shows: who the user is, which legal entity they act for, the item's
 // state and version, and the request id (a double tap or retry never repeats a change). A scan only finds a record.
@@ -307,7 +308,7 @@ export class ItemService {
         for (const id of granted) add(id, 'view');
         for (const id of actGranted) add(id, 'store');
       }
-      if (user.opsTier === 'ogm' || user.opsTier === 'ops_director') {
+      if (isOgm(user) || isOpsDirector(user)) {
         add(GOODWILL_PARTY_ID, 'manager');
         for (const id of granted) add(id, 'view');
       }
@@ -1405,11 +1406,39 @@ export class ItemService {
 
   // ----- Units -----
 
-  private async register(tx: Store, ctx: Ctx, a: Extract<ItemAction, { kind: 'item.register' }>) {
+  /** D4 (Fauzan, 23 Nov 2026): the item register type a store item is linked to (module item_register, on the release list). */
+  async skuFor(skuId: Id): Promise<ItemSku | null> {
+    return (await this.store.get('itemSkus', skuId)) ?? null;
+  }
+
+  /** D4: the serial item types a store item may be linked to (IT devices stay with IT under Merdeka Network). */
+  async serialSkus(): Promise<{ id: Id; code: string; name: string }[]> {
+    return (await this.store.list('itemSkus'))
+      .filter((k) => k.tracking === 'SERIALIZED' && k.category !== 'it_device')
+      .map((k) => ({ id: k.id, code: k.code, name: k.name }))
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }
+
+  /**
+   * D4 (Fauzan, 23 Nov 2026): serial items received into the store get their item register IDs here, inside the
+   * receiving transaction. The purchase already checked that this storekeeper may receive; the units start in quarantine
+   * at the buyer's store like any other registration, waiting to be checked. The store keeps the quantity and money.
+   */
+  async registerReceived(tx: Store, user: User, a: { skuId: Id; partyId: Id; count: number; note: string; requestId: string }): Promise<PhysicalItem[]> {
+    const sku = await tx.get('itemSkus', a.skuId);
+    if (!sku || sku.tracking !== 'SERIALIZED') return [];
+    const ctx = await this.ctx(user, a.requestId);
+    const out: PhysicalItem[] = [];
+    for (let left = Math.round(a.count), k = 0; left > 0; left -= 50, k++)
+      out.push(...((await this.register(tx, { ...ctx, requestId: `${a.requestId}:${k}` }, { kind: 'item.register', skuId: sku.id, partyId: a.partyId, count: Math.min(50, left), note: a.note }, true)) as PhysicalItem[]));
+    return out;
+  }
+
+  private async register(tx: Store, ctx: Ctx, a: Extract<ItemAction, { kind: 'item.register' }>, fromReceipt = false) {
     const sku = this.skuCheck(await tx.get('itemSkus', a.skuId));
     if (sku.tracking === 'BULK') throw new BadRequest('That item type is counted by quantity: add stock instead.');
     if (sku.tracking === 'KIT') throw new BadRequest('A set is made from units already registered: assemble the set.');
-    if (!this.mayMake(ctx, a.partyId, sku)) throw new ItemDenied('Only store staff of that company (or IT for IT devices) register items.');
+    if (!fromReceipt && !this.mayMake(ctx, a.partyId, sku)) throw new ItemDenied('Only store staff of that company (or IT for IT devices) register items.');
     const count = Math.round(Number(a.count));
     if (!(count >= 1 && count <= 50)) throw new BadRequest('Register 1 to 50 units at a time.');
     const serials = (a.serials ?? []).map((s) => clip(s, 60));
@@ -2286,6 +2315,21 @@ export class ItemService {
     return { ev: (id: Id) => ev.get(id) ?? [], rec: (id: Id) => rec.get(id) ?? [] };
   }
 
+  /**
+   * Full uniform suits a person had from this register in the 12 months up to `today` (free and paid), for the Goodwill
+   * store's per-item allowance (gap 7 of the Goodwill study, 23 Nov 2026): one suit here is one of each worn item there.
+   * Empty when the item register module is not installed in this database.
+   */
+  async uniformSuitsFor(personId: Id, today: IsoDate): Promise<{ suits: number; last: IsoDate | null }> {
+    try {
+      const t = await this.uniformTally(this.store, personId, today);
+      return { suits: t.pieces, last: t.last };
+    } catch (e) {
+      if ((e as { code?: string } | null)?.code === '42P01') return { suits: 0, last: null };
+      throw e;
+    }
+  }
+
   private async uniformTally(tx: Store, personId: Id, today: IsoDate) {
     const [events, items, skus, records] = await Promise.all([tx.list('itemEvents'), tx.list('physicalItems'), tx.list('itemSkus'), tx.list('uniformRecords')]);
     return this.tallyFrom(personId, events, records, new Map(items.map((i) => [i.id, i])), new Map(skus.map((s) => [s.id, s])), today);
@@ -2922,7 +2966,7 @@ export class ItemService {
         }
       } else if ((c.kind === 'short' && a.outcome === 'lost') || (c.kind === 'missing' && a.outcome === 'confirmed_lost')) {
         await this.setItem(tx, item, { state: 'lost', writeOff: 'finance_to_decide', pendingAck: null });
-        await ev('lost', `${note}. Write-off for Finance to decide under the approved policy. No automatic pay deduction.`);
+        await ev('lost', `${note}. Write-off for Finance to decide under the approved policy. No automatic pay deduction; if a manager finds negligence or misuse, the store's damage charge rule (Part U) applies, with HR's review.`);
       } else if (c.kind === 'damaged' && a.outcome === 'usable') {
         await this.setItem(tx, item, { state: item.custody.kind === 'store' ? 'available' : item.state, condition: 'worn' });
         await ev('inspect', `Checked usable: ${note}`);

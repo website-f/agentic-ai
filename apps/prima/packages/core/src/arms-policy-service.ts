@@ -8,7 +8,7 @@
 // with an append-only history. Prima records what the police, KDN, BOMBA and the council did; it never says a licence or
 // approval exists until its reference, date and a copy are recorded. Synthetic test data only.
 import { AccessDenied, can, canRunCms, GOV_OPS_COMPANY_ID, isGroupRole, seesArmsDetail } from './access';
-import { holdsArmsWall } from './special-ops';
+import { holdsArmsWall, decidesForArmsControl, ARMS_MANAGER_ONLY } from './special-ops';
 import { BadRequest, NotFound } from './service';
 import type { PrimaService, ProofInput } from './service';
 import type { Store } from './store';
@@ -152,6 +152,12 @@ export class ArmsPolicyService {
   private ac(u: User) {
     return !u.integration && canRunCms(u);
   }
+  /** D1 (23 Nov 2026): the Arms Control Manager decides; the Assistant prepares. */
+  private async mgr(u: User) {
+    if (!this.ac(u)) return false;
+    if (decidesForArmsControl(u, await this.store.list('users'))) return true;
+    throw new AccessDenied('arms.view', `(${ARMS_MANAGER_ONLY})`);
+  }
   private async handles(u: User, companyId: Id | null) {
     if (this.ac(u)) return true;
     if (!companyId) return false;
@@ -289,6 +295,8 @@ export class ArmsPolicyService {
         return this.vaultAuth(user, i);
       case 'vaultAuthRemove':
         return this.vaultAuthRemove(user, i);
+      case 'vaultKeeper':
+        return this.vaultKeeper(user, i);
       case 'vaultLog':
         return this.vaultLog(user, i);
       case 'vaultBreach':
@@ -360,7 +368,7 @@ export class ArmsPolicyService {
   }
 
   private async setSettings(user: User, i: Record<string, unknown>) {
-    if (!this.ac(user)) throw new AccessDenied('arms.view', '(Arms Control keeps the arms policy settings)');
+    if (!(await this.mgr(user))) throw new AccessDenied('arms.view', '(Arms Control keeps the arms policy settings)');
     const reason = this.reason(i.reason);
     const cur = (await this.all()).find((r) => r.kind === 'settings');
     const d: Record<string, unknown> = { ...(cur?.d ?? {}) };
@@ -431,7 +439,7 @@ export class ArmsPolicyService {
     if (!cat) throw new BadRequest('Choose light, medium or critical.');
     const was = r.d.category as DamageCategory | null;
     if (was && CAT_RANK[cat] < CAT_RANK[was]) {
-      if (!this.ac(user)) throw new BadRequest('Only Arms Control lowers a damage category, with a reason. Jika ragu, naikkan kategori.');
+      if (!(await this.mgr(user))) throw new BadRequest('Only Arms Control lowers a damage category, with a reason. Jika ragu, naikkan kategori.');
       this.reason(i.reason, 'why the category is lowered');
     }
     const saved = await this.save(user, r, { d: { ...r.d, category: cat } }, 'category', `${was ?? 'none'} to ${cat}${i.reason ? `: ${s(i.reason, 200)}` : ''}`);
@@ -518,6 +526,15 @@ export class ArmsPolicyService {
     const reqIds = new Set((await this.store.list('armsRequests', { companyId: f.companyId })).filter((q) => q.kind === 'SERVICE' && (q.firearmIds ?? []).includes(f.id)).map((q) => q.id));
     const repairers = repairs.filter((r) => reqIds.has(r.requestId!)).flatMap((r) => [r.d.sentById, r.d.backById]);
     if (dmg && (dmg.byId === user.id || repairers.includes(user.id))) throw new BadRequest('A person who did not report it and did not repair it confirms reuse.');
+    // D1: the Arms Control Manager confirms; the Assistant only when the Manager reported or repaired it (independence first).
+    const users = await this.store.list('users');
+    if (!decidesForArmsControl(user, users)) {
+      const managerInvolved = !!dmg && [dmg.byId, ...repairers].some((id) => {
+        const u = users.find((x) => x.id === id);
+        return !!u && u.department === 'arms_control' && decidesForArmsControl(u, users);
+      });
+      if (!managerInvolved) throw new AccessDenied('arms.view', `(${ARMS_MANAGER_ONLY})`);
+    }
     const since = dmg?.at ?? '';
     const passed = recs.some((r) => r.kind === 'inspect' && r.firearmId === f.id && r.status === 'pass' && r.at >= since);
     if (!passed) throw new BadRequest('Record a passing inspection first (pemeriksaan selepas kerosakan atau pembaikan).');
@@ -771,7 +788,9 @@ export class ArmsPolicyService {
     const letterRef = this.reason(i.letterRef, 'the authorisation letter reference');
     if (!isDate(i.letterOn)) throw new BadRequest('Give the letter date.');
     const entry = { personId, name, letterRef, letterOn: i.letterOn, givenBy: user.name, givenById: user.id, reason: this.reason(i.reason), removedOn: null, removedReason: null };
-    const list = [...(v.authorisedStaff ?? []).filter((a) => a.name.toLowerCase() !== name.toLowerCase() || a.removedOn), entry];
+    // One active line per staff record (B2): two staff who share a name stay two lines.
+    const same = (a: NonNullable<Vault['authorisedStaff']>[number]) => (personId ? a.personId === personId : !a.personId && a.name.toLowerCase() === name.toLowerCase());
+    const list = [...(v.authorisedStaff ?? []).filter((a) => a.removedOn || !same(a)), entry];
     await this.writeAuth(user, v, list, `${name} authorised (${letterRef})`);
     return { ok: true, authorised: list.filter((a) => !a.removedOn).map((a) => a.name) };
   }
@@ -779,10 +798,45 @@ export class ArmsPolicyService {
     const v = await this.vaultOf(s(i.vaultId, 120));
     if (!(await this.head(user, v.companyId))) throw new AccessDenied('arms.handle', '(the A licence holder or the company manager)');
     const name = s(i.name, 120).toLowerCase();
+    const personId = s(i.personId, 120) || null;
     const reason = this.reason(i.reason);
-    const list = (v.authorisedStaff ?? []).map((a) => (a.name.toLowerCase() === name && !a.removedOn ? { ...a, removedOn: this.today(), removedReason: reason } : a));
+    // Removed by staff record when given; by name only when the name is on one active line (B2).
+    const hit = (a: NonNullable<Vault['authorisedStaff']>[number]) => !a.removedOn && (personId ? a.personId === personId : a.name.toLowerCase() === name);
+    const hits = (v.authorisedStaff ?? []).filter(hit).length;
+    if (!hits) throw new BadRequest('That person is not on the authorised list.');
+    if (hits > 1) throw new BadRequest('Two people on the list share this name. Choose the staff member.');
+    const list = (v.authorisedStaff ?? []).map((a) => (hit(a) ? { ...a, removedOn: this.today(), removedReason: reason } : a));
     await this.writeAuth(user, v, list, `${s(i.name, 120)} removed: ${reason}`);
     return { ok: true };
+  }
+  /**
+   * Name the vault's Amra or A licence holder by staff record (Part R7; 23 Nov 2026 review). Only the company head (the
+   * company manager or a director with the company) names them, never themselves, always with a reason. A named Amra
+   * then keeps that vault (arms_keeper wall). A blank person clears the post. The licence itself is checked by the
+   * readiness lines, not here, so a person can be named while their AMRA licence is being applied for.
+   */
+  private async vaultKeeper(user: User, i: Record<string, unknown>) {
+    const v = await this.vaultOf(s(i.vaultId, 120));
+    if (!(await this.head(user, v.companyId))) throw new AccessDenied('arms.handle', '(the company manager names the Amra and the A licence holder)');
+    const post = i.post === 'a_licence' ? 'a_licence' : i.post === 'amra' ? 'amra' : null;
+    if (!post) throw new BadRequest('Choose the post: amra or a_licence.');
+    const reason = this.reason(i.reason);
+    const personId = s(i.personId, 120) || null;
+    let name = '';
+    if (personId) {
+      const p = await this.store.get('people', personId);
+      if (!p || p.companyId !== v.companyId) throw new BadRequest('Choose a staff member of this company.');
+      if (p.status && p.status !== 'active') throw new BadRequest('That staff member is not active.');
+      if (user.personId === personId) throw new BadRequest('Nobody names themselves.');
+      name = p.name;
+    }
+    const patch = post === 'amra' ? { custodianPersonId: personId, custodian: name } : { aLicenceHolderPersonId: personId, aLicenceHolder: name };
+    const label = post === 'amra' ? 'Amra' : 'A licence holder';
+    await this.store.transaction(async (tx) => {
+      await tx.update('vaults', v.id, patch as Partial<Vault>);
+      await tx.audit({ at: this.now(), actor: user.name, companyId: v.companyId, action: 'arms.vault_keeper', entity: 'vault', entityId: v.id, summary: `${v.name}: ${label} ${name || 'cleared'}: ${reason}`.slice(0, 300) });
+    });
+    return { ok: true, vaultId: v.id, post, name: name || null };
   }
   private async writeAuth(user: User, v: Vault, list: NonNullable<Vault['authorisedStaff']>, note: string) {
     await this.store.transaction(async (tx) => {
@@ -1172,7 +1226,7 @@ export class ArmsPolicyService {
       return this.save(user, r, { d: { ...r.d, needConfirmed: st } }, 'need', st.reason);
     }
     if (step === 'spec') {
-      if (!this.ac(user)) throw new AccessDenied('arms.view', '(Arms Control sets and confirms the specification)');
+      if (!(await this.mgr(user))) throw new AccessDenied('arms.view', '(Arms Control sets and confirms the specification)');
       const spec = this.reason(i.spec, 'the specification');
       return this.save(user, r, { d: { ...r.d, spec, specConfirmed: st } }, 'spec', spec);
     }
@@ -1327,7 +1381,7 @@ export class ArmsPolicyService {
     throw new BadRequest('Unknown step.');
   }
   private async tradeStore(user: User, i: Record<string, unknown>) {
-    if (!this.ac(user)) throw new AccessDenied('arms.view', '(Arms Control records the trade store approval)');
+    if (!(await this.mgr(user))) throw new AccessDenied('arms.view', '(Arms Control records the trade store approval)');
     const v = await this.vaultOf(s(i.vaultId, 120));
     const copy = this.proofs(user, i.docs);
     if (!copy.length || !isDate(i.on)) throw new BadRequest('Give the police reference, date and a copy.');
@@ -1386,7 +1440,9 @@ export class ArmsPolicyService {
     const creds = await this.store.list('credentials', { companyId: v.companyId });
     if (v.aLicenceHolderPersonId && !validLicence(creds, v.aLicenceHolderPersonId, 'PELESEN_A', today)) block('VAULT_STAFF_LICENCE', `${v.name}: the A licence holder has no valid Pelesen A licence.`);
     if (v.custodianPersonId && !validLicence(creds, v.custodianPersonId, 'AMRA', today)) block('VAULT_STAFF_LICENCE', `${v.name}: the Amra has no valid AMRA licence.`);
-    const { m, categoryRequired } = await this.values();
+    const { m, categoryRequired: switchedOn } = await this.values();
+    // D3 (Fauzan, 23 Nov 2026): required from 1 January 2027 (rule ARMS-LICENCE-CATEGORY), or earlier by the switch.
+    const categoryRequired = switchedOn || today >= RULES.armsLicenceCategory.value.requiredFrom;
     const needed = licenceNeededFor(site, null);
     if (needed) {
       const mine = creds.filter((c) => c.personId === person.id && c.type === 'FIREARM_PERMIT' && (!c.expiresOn || c.expiresOn >= today));
@@ -1598,6 +1654,8 @@ export class ArmsPolicyService {
           const day = Number(today.slice(8));
           return { month, due: `${month}-28`, missing, state: !missing.length ? 'done' : day > 28 ? 'late' : day >= 21 ? 'reminder' : 'open' };
         })(),
+        // Vault keepers (23 Nov 2026 review): who keeps each vault, so forms pick a vault by name.
+        vaults: mine(vaults as Vault[]).map((v) => ({ id: v.id, name: v.name, companyId: v.companyId, state: v.state, amra: v.custodian || null, amraPersonId: v.custodianPersonId ?? null, aLicence: v.aLicenceHolder || null, aLicencePersonId: v.aLicenceHolderPersonId ?? null, authorised: (v.authorisedStaff ?? []).filter((a) => !a.removedOn).map((a) => ({ personId: a.personId ?? null, name: a.name })) })),
         // V15: vault fire extinguishers: warn 30 days before expiry, expired amber (a safety flag, never a block).
         extinguishers: mine(vaults as Vault[]).filter((v) => v.state !== 'APPLYING').map((v) => {
           const e = recs.filter((r) => r.kind === 'extinguisher' && r.vaultId === v.id).sort((a, b) => a.at.localeCompare(b.at)).pop();

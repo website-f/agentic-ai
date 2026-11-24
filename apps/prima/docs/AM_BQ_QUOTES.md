@@ -26,7 +26,7 @@ The BQ is stored on the work order's existing row, at `prima.am_work_orders.data
    - up to RM50,000: three quotes (RFQ)
    - above RM50,000: open tender
    - A BQ with unpriced lines never goes out on a single quote.
-4. **Approve.** The Asset Director approves, and the COO also approves above RM50,000. When the Asset Director prepared the BQ, the COO decides in their place. Nobody decides their own BQ, and every decision needs a reason.
+4. **Approve.** The Asset Director approves the BQ. When the Asset Director prepared the BQ, the COO decides in their place. Nobody decides their own BQ, and every decision needs a reason. (D3, Fauzan 23 Nov 2026: the COO no longer approves large BQs; the money is approved at the award.)
 5. **Quotes.** The team records each contractor's rate for each BQ line, plus the total written on the quote. The system then checks each quote:
    - the arithmetic
    - lines left unpriced
@@ -37,7 +37,7 @@ The BQ is stored on the work order's existing row, at `prima.am_work_orders.data
    - Choosing a quote that is not the lowest complete one needs a written reason.
    - Choosing with fewer quotes than the route needs also needs a written reason.
    - A price above the route's ceiling must go out again on the next route.
-   - The Asset Director decides, plus the COO above RM50,000.
+   - One ladder for all Asset Management spending (D3, Fauzan 23 Nov 2026): the Asset Director decides (the COO in the Director's place when the Director worked on it), the Vice Chairman consents above RM5,000, and the CEO approves above RM50,000. Nobody signs twice, and a refusal at any step turns the award down.
    - The final approval sets the contractor and the agreed price on the work order, in the same transaction.
 7. **Advice** for the lowest cost. This is advice only, and people decide. It covers:
    - asking suppliers for missing prices
@@ -68,8 +68,7 @@ variation order (VO); the work order edit form still cannot change the contracto
   or is new work (positive only). A rate other than the awarded rate on that line needs its reason.
 - One VO waits at a time. A VO that changes nothing, or takes the price to zero or below, is refused.
 - The Asset Director decides with a reason, never the person who raised it (the COO decides when the Asset Director
-  raised it). The COO also decides when all approved VOs plus this one exceed `voCooPct` (10%, proposed) of the award,
-  or the price after it exceeds `cooAbove` (RM50,000).
+  raised it). D3 (23 Nov 2026) retired the separate COO step for large VOs; the CEO and Chairman consent below covers them.
 - Fauzan, 5 Nov 2026: every VO must get the consent of the Chairman and the CEO. After the approvals above, the CEO
   consents, then the Chairman, each with a reason. Nobody who raised or approved the VO gives consent, and a refused
   consent turns the VO down. Audit actions `asset.bq.vo.consent.ceo`, `asset.bq.vo.consent.chairman` (or `vo.refuse.*`).

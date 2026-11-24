@@ -206,7 +206,7 @@ describe('company office', () => {
     let t = o.desks.find((x) => x.desk === 'tenders')!;
     expect(t.state).toBe('cover');
     expect(t.actingUserId).toBe('u-ae-arsh-2');
-    expect(o.findings.some((f) => f.tone === 'crit' && /Tenders and quotations: the owner has left/.test(f.message))).toBe(true);
+    expect(o.findings.some((f) => f.tone === 'crit' && /Quotations and Marketing bids: the owner has left/.test(f.message))).toBe(true);
     // The backup on approved leave too: the work falls to the head.
     const personId = ds.users.find((u) => u.id === 'u-ae-arsh-2')!.personId!;
     ds.leaveRequests.push({

@@ -7,7 +7,8 @@ import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad, type
 
 /**
  * Bill of quantities, quotes and award for one Asset Management work order (Fauzan, 5 Nov 2026, rule AM-BQ). The team
- * prepares the BQ, the Asset Director approves it (and the COO above the limit), quotes are compared line by line,
+ * prepares the BQ, the Asset Director approves it, quotes are compared line by line, the award follows one ladder
+ * (Asset Director, Vice Chairman consent above RM5,000, CEO above RM50,000; D3, Fauzan 23 Nov 2026),
  * and the lowest complete quote wins unless a reason is approved. Prices come only from our own past awarded jobs or
  * from a price staff entered with its source.
  */
@@ -94,7 +95,7 @@ function Body({ data, workOrderId, reload }: { data: AmBqView; workOrderId: stri
         <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
           <Chip tone={STATUS[bq.status][0]}>{STATUS[bq.status][1]}</Chip>
           {data.route && <Chip tone="neutral">{ROUTE[data.route.route]}</Chip>}
-          {data.route?.cooToo && <Chip tone="warn">COO also approves</Chip>}
+          {data.route && data.estimate.withContingency > data.rule.vcAbove && <Chip tone="warn">{data.estimate.withContingency > data.rule.ceoAbove ? "Award: Vice Chairman consent, then CEO" : "Award: Vice Chairman consent"}</Chip>}
           <span className="muted small">
             Estimate {rm(data.estimate.withContingency)}
             {data.estimate.contingency > 0 ? ` with ${bq.contingencyPct}% contingency` : ""}
@@ -524,10 +525,10 @@ function Quotes({ data, workOrderId, reload }: { data: AmBqView; workOrderId: st
       {award && awarded && (
         <p className="small">
           Award to <b>{awarded.contractor}</b> at {rm(award.total)}
-          {award.reason ? ` (reason: ${award.reason})` : ""}: {award.final ? "approved" : (award.director && !award.director.approve) || (award.coo && !award.coo.approve) ? "turned down" : "waiting for approval"}.
+          {award.reason ? ` (reason: ${award.reason})` : ""}: {award.final ? "approved" : [award.director, award.coo, award.vc, award.ceo].some((x) => x && !x.approve) ? "turned down" : "waiting for approval"}.
         </p>
       )}
-      {award && <Steps steps={[["Asset Director", award.director], ["COO", award.coo]]} />}
+      {award && <Steps steps={[["Asset Director", award.director], ["COO (in the Director's place)", award.coo], ["Vice Chairman consent", award.vc ?? null], ["CEO", award.ceo ?? null]]} consent={["Vice Chairman consent"]} />}
       {data.can.reopen && <Reopen workOrderId={workOrderId} reload={reload} />}
       {data.can.askAward && (
         <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 6 }}>
@@ -556,6 +557,14 @@ function AddQuote({ data, workOrderId, reload }: { data: AmBqView; workOrderId: 
   const { run, busy, error } = useAction();
   const [f, setF] = useState({ contractor: "", ref: "", receivedOn: "", validUntil: "", statedTotal: "" });
   const [rates, setRates] = useState<Record<string, string>>({});
+  // Quotes only from approved contractors (23 Nov 2026): offer the approved names; the server checks again.
+  const [approved, setApproved] = useState<string[] | null>(null);
+  useEffect(() => {
+    api
+      .amExtras()
+      .then((b) => setApproved(b.installed && b.contractors.length ? b.contractors.filter((c) => c.status === "active").map((c) => c.name) : null))
+      .catch(() => setApproved(null));
+  }, []);
   const save = () =>
     run(
       () =>
@@ -581,7 +590,7 @@ function AddQuote({ data, workOrderId, reload }: { data: AmBqView; workOrderId: 
   const field = (k: keyof typeof f, label: string, type = "text") => (
     <label className="small" style={{ display: "grid", gap: 2 }}>
       {label}
-      <input className="input" type={type} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+      <input className="input" type={type} value={f[k]} list={k === "contractor" && approved ? "am-approved-contractors" : undefined} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
     </label>
   );
   return (
@@ -589,11 +598,19 @@ function AddQuote({ data, workOrderId, reload }: { data: AmBqView; workOrderId: 
       <summary className="btn btn-sm">Record a quote</summary>
       <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 6 }}>
         {field("contractor", "Contractor")}
+        {approved && (
+          <datalist id="am-approved-contractors">
+            {approved.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+        )}
         {field("ref", "Quote number")}
         {field("receivedOn", "Received on", "date")}
         {field("validUntil", "Valid until", "date")}
         {field("statedTotal", "Total on the quote (RM)")}
       </div>
+      {approved && <p className="muted small">Only contractors approved on the Contractors tab can quote ({approved.length} approved).</p>}
       <div className="list">
         {bq.lines.map((l) => (
           <div key={l.id} className="list-item small" style={{ gap: 6 }}>

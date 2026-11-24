@@ -9,6 +9,7 @@ import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataT
 import { ProofPicker } from './Proof';
 import '../styles/leadership.css';
 import { SopHelp } from '../sop/SopHelp';
+import { AutoReportsPanel } from './AutoReports';
 
 const STATUS: Record<string, { label: string; tone: Tone }> = {
   on_time: { label: 'Sent on time', tone: 'ok' },
@@ -72,6 +73,7 @@ export function ReportsView() {
         }
       />
       {editing && data.editList && <ReportListEditor list={data.editList} departments={data.departments} onDone={() => setEditing(false)} />}
+      <AutoReportsPanel />
       {data.mine.length > 0 && (
         <>
           <Stats>

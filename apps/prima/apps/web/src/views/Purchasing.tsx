@@ -1,6 +1,7 @@
 import { SiteSuppliesPanel } from './SiteSupplies';
 import { InventoryPanel } from './Inventory';
 import { KitsPanel } from './ItemKits';
+import { saveFile } from '../save';
 import { WarrantyClaimsSection } from './Warranty';
 import { Select } from '../SearchSelect';
 import { useState, type ReactNode } from 'react';
@@ -12,6 +13,7 @@ import {
   ReceiptXIcon,
   ShoppingCartIcon,
   StorefrontIcon,
+  TruckIcon,
   UserFocusIcon,
   WarningIcon,
 } from '@phosphor-icons/react';
@@ -41,6 +43,8 @@ import { SopHelp } from '../sop/SopHelp';
 type Tab = 'requests' | 'suppliers' | 'store';
 type ReqRow = PurBoard['requests'][number];
 type SupRow = PurBoard['suppliers'][number];
+/** "Buy more" from a low-stock row: fills the purchase form, nothing is bought by itself. */
+type BuyMore = { companyId: string; stockItemId: string; item: string; qty: number | null; unitPrice: number | null };
 
 const rm = (n: number) => `RM${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -101,6 +105,7 @@ export function PurchasingView() {
   // P121: '#purchasing/store' opens the Store tab (links from the SOP guide and the equipment requests screen).
   const [tab, setTab] = useRouteTab<Tab>('requests', ['requests', 'suppliers', 'store']);
   const [newReq, setNewReq] = useState(false);
+  const [buy, setBuy] = useState<BuyMore | null>(null);
   if (error)
     return (
       <div className="page">
@@ -172,6 +177,14 @@ export function PurchasingView() {
           onClick={() => setTab('requests')}
         />
         <Stat
+          label="Orders past delivery date"
+          value={k.lateOrders}
+          note="The supplier's promised date has passed"
+          tone={k.lateOrders ? 'crit' : 'ok'}
+          icon={<TruckIcon size={16} />}
+          onClick={() => setTab('requests')}
+        />
+        <Stat
           label="Suppliers not ready"
           value={k.suppliersNotReady}
           tone={k.suppliersNotReady ? 'warn' : 'ok'}
@@ -205,9 +218,9 @@ export function PurchasingView() {
           </button>
         ))}
       </div>
-      {tab === 'requests' && <Requests data={data} form={newReq} setForm={setNewReq} />}
+      {tab === 'requests' && <Requests data={data} form={newReq} setForm={setNewReq} buy={buy} onBuyDone={() => setBuy(null)} />}
       {tab === 'suppliers' && <Suppliers data={data} />}
-      {tab === 'store' && <><Store data={data} /><WarrantyClaimsSection source="stock" /></>}
+      {tab === 'store' && <><Store data={data} onBuyMore={(b) => { setBuy(b); setTab('requests'); }} /><WarrantyClaimsSection source="stock" /></>}
     </div>
   );
 }
@@ -224,7 +237,7 @@ const companiesOf = (data: PurBoard) => {
 
 /** P107: open or finished (posted or rejected), the old Open / Show finished switch, now a filter of the table. */
 const purStage = (r: ReqRow) => (['posted', 'rejected'].includes(r.req.status) ? 'done' : 'open');
-const purStatusText = (r: ReqRow) => (mismatch(r) ? 'Invoice mismatch' : STATUS[r.req.status]);
+const purStatusText = (r: ReqRow) => (mismatch(r) ? 'Invoice mismatch' : r.late ? 'Late delivery' : STATUS[r.req.status]);
 const paidText = (r: ReqRow) =>
   r.req.status !== 'posted'
     ? ''
@@ -273,7 +286,12 @@ const PUR_COLUMNS: DtColumn<ReqRow>[] = [
     value: (r) => r.waiting ?? paidText(r),
     hideBelow: 1200,
     phone: 'hidden',
-    render: (r) => (r.waiting ? r.waiting : paidText(r) ? <span className="muted small">{paidText(r)}</span> : '–'),
+    render: (r) => (
+      <>
+        {r.waiting ? r.waiting : paidText(r) ? <span className="muted small">{paidText(r)}</span> : '–'}
+        {r.req.po?.expectedOn && r.req.status === 'ordered' && <div className={r.late ? 'small' : 'muted small'}>Delivery due {dateLabel(r.req.po.expectedOn)}</div>}
+      </>
+    ),
   },
   {
     id: 'amount',
@@ -311,7 +329,7 @@ const PUR_FILTERS: DtFilter<ReqRow>[] = [
   { id: 'company', label: 'Company', value: (r) => r.companyName },
 ];
 
-function Requests({ data, form, setForm }: { data: PurBoard; form: boolean; setForm: (open: boolean) => void }) {
+function Requests({ data, form, setForm, buy, onBuyDone }: { data: PurBoard; form: boolean; setForm: (open: boolean) => void; buy: BuyMore | null; onBuyDone: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
   // P107: the table keeps the Open / finished choice (open first, as before); the card's title follows it.
   const table = useTableState('purchasing.requests', { f: { show: 'open' } });
@@ -371,9 +389,24 @@ function Requests({ data, form, setForm }: { data: PurBoard; form: boolean; setF
           <RequestDetail key={current.req.id} r={current} data={data} />
         </Drawer>
       )}
-      {form && (
-        <Drawer title="New purchase" sub="Procurement collects the quotes and checks the online price after you raise it." onClose={() => setForm(false)}>
-          <NewRequest data={data} onDone={() => setForm(false)} />
+      {(form || buy) && (
+        <Drawer
+          title={buy ? `Buy more: ${buy.item}` : 'New purchase'}
+          sub="Procurement collects the quotes and checks the online price after you raise it."
+          onClose={() => {
+            setForm(false);
+            onBuyDone();
+          }}
+        >
+          <NewRequest
+            key={buy ? `${buy.companyId}:${buy.stockItemId}` : 'new'}
+            data={data}
+            initial={buy}
+            onDone={() => {
+              setForm(false);
+              onBuyDone();
+            }}
+          />
         </Drawer>
       )}
     </>
@@ -393,6 +426,7 @@ function RequestRow({ r, onOpen }: { r: ReqRow; onOpen: () => void }) {
         <span className="bz-row-meta">
           Raised by {r.req.raisedBy}, {dateLabel(r.req.at.slice(0, 10))}
           {r.waiting ? ` · waiting for ${r.waiting}` : ''}
+          {r.req.po?.expectedOn && r.req.status === 'ordered' ? ` · due ${dateLabel(r.req.po.expectedOn)}` : ''}
           {r.req.status === 'posted' &&
             (r.paid ? (r.paid.status === 'released' ? ` · paid by Finance ${r.paid.releasedOn ? dateLabel(r.paid.releasedOn) : ''}` : ' · Finance paying') : ' · Finance to pay')}
         </span>
@@ -405,7 +439,7 @@ function RequestRow({ r, onOpen }: { r: ReqRow; onOpen: () => void }) {
       <span className="bz-row-side">
         <span className="bz-amt">{rm(r.chosen?.amount ?? r.req.total)}</span>
         <span className="bz-sub">{r.chosen ? 'chosen quote' : 'estimated'}</span>
-        <Chip tone={r.canApprove ? 'warn' : r.tone}>{mismatch(r) ? 'Invoice mismatch' : STATUS[r.req.status]}</Chip>
+        <Chip tone={r.canApprove ? 'warn' : r.tone}>{purStatusText(r)}</Chip>
       </span>
     </button>
   );
@@ -421,8 +455,12 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
   const [quote, setQuote] = useState({ supplierId: '', amount: '', ref: '' });
   const [quoteDoc, setQuoteDoc] = useState<ProofInput[]>([]);
   const [onlineDoc, setOnlineDoc] = useState<ProofInput[]>([]);
-  const [chosen, setChosen] = useState(r.quotes[0]?.supplierId ?? '');
+  const [chosen, setChosen] = useState(r.quotes[0]?.supplierId ?? ((r.online ?? []).length ? 'online:0' : ''));
+  const [urgent, setUrgent] = useState(false);
+  const [urgentWhy, setUrgentWhy] = useState('');
+  const [receipt, setReceipt] = useState<ProofInput[]>([]);
   const [po, setPo] = useState('');
+  const [due, setDue] = useState('');
   const [qty, setQty] = useState<string[]>(r.lines.map((l) => String(l.qty)));
   // P121: goods received with the supplier's DO (Part U16: number and photo, needed while grnDoRequired is on) and, per
   // line, damaged and wrong-item pieces with a note (Part T7). The server already asked for these; the form did not.
@@ -438,23 +476,31 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
   const [sqlRef, setSqlRef] = useState('');
   const sup = (id: string) => data.suppliers.find((s) => s.supplier.id === id)?.supplier.name ?? id;
   const ready = data.suppliers.filter(
-    (s) => s.supplier.companyId === r.companyId && s.state === 'approved' && !r.quotes.some((q) => q.supplierId === s.supplier.id),
+    // D2: the group supplier list (kept under PWVSB) serves every company; older company lists still count.
+    (s) => (s.supplier.companyId === r.companyId || s.supplier.companyId === 'pwvsb') && s.state === 'approved' && !r.quotes.some((q) => q.supplierId === s.supplier.id),
   );
   const states = flowStates(r.status);
   const facts: [ReactNode, ReactNode][] = [
     ['Amount', <strong key="a">{rm(row.chosen?.amount ?? r.total)}{row.chosen ? '' : ' estimated'}</strong>],
     ['Raised by', `${r.raisedBy}, ${dateLabel(r.at.slice(0, 10))}`],
-    ['Status', <Chip key="s" tone={row.canApprove ? 'warn' : row.tone}>{mismatch(row) ? 'Invoice mismatch' : STATUS[r.status]}</Chip>],
+    ['Status', <Chip key="s" tone={row.canApprove ? 'warn' : row.tone}>{purStatusText(row)}</Chip>],
   ];
   if (row.waiting) facts.push(['Waiting for', row.waiting]);
-  if (r.tiers.length > 0) facts.push(['Approvals needed', r.tiers.map((t) => ({ manager: 'company manager', coo: 'COO', ceo: 'CEO' })[t]).join(', then ')]);
-  if (r.po) facts.push(['Purchase order', `PO ${r.po.ref} ${rm(r.po.amount)}`]);
-  if (r.grn) facts.push(['Received', `By ${r.grn.by}, ${dateTimeLabel(r.grn.at)}${r.grn.note ? ` (${r.grn.note})` : ''}`]);
+  if (r.tiers.length > 0)
+    facts.push(['Approvals needed', r.tiers.map((t) => ({ inventory: 'Inventory Manager check', manager: 'company manager', coo: 'COO', ceo: 'CEO' })[t]).join(', then ')]);
+  if (r.po) facts.push(['Purchase order', `PO ${r.po.ref} ${rm(r.po.amount)}${r.po.expectedOn ? `, delivery promised by ${dateLabel(r.po.expectedOn)}` : ''}`]);
+  if (r.grn)
+    facts.push([
+      'Received',
+      `By ${r.grn.by}, ${dateTimeLabel(r.grn.at)}${r.grn.doNo ? ` · DO ${r.grn.doNo}` : ''}${r.grn.note ? ` (${r.grn.note})` : ''}${
+        r.grn.itemIds?.length ? ` · ${r.grn.itemIds.length} item register ID${r.grn.itemIds.length === 1 ? '' : 's'} made (see Items)` : ''
+      }`,
+    ]);
   if (r.invoice)
     facts.push(['Invoice', `${r.invoice.number} ${rm(r.invoice.amount)}${r.invoice.eInvoiceUuid ? `, e-Invoice ${r.invoice.eInvoiceUuid}` : ', no e-Invoice'}`]);
   if (r.posted) facts.push(['SQL Account', r.posted.sqlRef]);
   const history = [
-    ...r.approvals.map((a) => `Approved by ${a.by}, ${dateLabel(a.at.slice(0, 10))}`),
+    ...r.approvals.map((a) => `${a.tier === 'inventory' ? 'Checked' : 'Approved'} by ${a.by}, ${dateLabel(a.at.slice(0, 10))}${a.note ? ` (${a.note})` : ''}`),
     ...(r.rejected ? [`Rejected by ${r.rejected.by}: ${r.rejected.note}`] : []),
     ...(r.rounds ?? []).map(
       (x, i) => `Round ${i + 1} (${rm(x.total)}) rejected by ${x.rejected.by}: ${x.rejected.note}; corrected by ${x.reopened.by}: ${x.reopened.note}`,
@@ -479,6 +525,39 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
       <div className="bz-facts">
         <Facts items={facts} />
       </div>
+      {r.chosenOnline != null && (r.online ?? [])[r.chosenOnline] && (
+        <p className="bz-note">
+          <strong>Buying online:</strong> {(r.online ?? [])[r.chosenOnline]!.source} {rm((r.online ?? [])[r.chosenOnline]!.amount)} ({(r.online ?? [])[r.chosenOnline]!.ref})
+          {r.onlinePay ? ` · payment approved by ${r.onlinePay.by} (${r.onlinePay.note})` : ' · Finance approves the payment before it is ordered'}
+        </p>
+      )}
+      {r.urgent && (
+        <div className="notice" data-tone={row.urgentOwed === 'overdue' ? 'crit' : 'warn'}>
+          Urgent ({r.urgent.reason}), sent by {r.urgent.by}: the COO approves alone.{' '}
+          {row.urgentOwed
+            ? `The quotes and online prices still owed are due by ${dateLabel(r.urgent.quotesDue)}${row.urgentOwed === 'overdue' ? ' and are late' : ''}.`
+            : 'The quotes have followed.'}{' '}
+          {r.urgent.ceoSeen ? `Seen by the CEO (${r.urgent.ceoSeen.by}).` : 'The CEO sees it after approval.'}
+        </div>
+      )}
+      {r.po && (
+        <div className="bz-actions">
+          <button
+            className="btn btn-sm"
+            disabled={act.busy}
+            onClick={() =>
+              act.run(async () => {
+                const f = await api.purOrderPdf(r.id);
+                await saveFile(f.name, `data:application/pdf;base64,${f.base64}`);
+                return f;
+              }, 'Purchase Order downloaded.')
+            }
+          >
+            Download Purchase Order (PDF)
+          </button>
+        </div>
+      )}
+      {row.late && <div className="notice" data-tone="warn">The supplier promised delivery by {dateLabel(r.po!.expectedOn!)}. The goods are not in yet: chase the supplier.</div>}
 
       {row.paid && (
         <div className="notice" data-tone={row.paid.status === 'released' ? 'info' : 'warn'}>
@@ -502,6 +581,7 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
                 <th>Item</th>
                 <th className="num">Qty</th>
                 <th className="num">Est. price</th>
+                {row.lastPaid.some(Boolean) && <th className="num">Last paid</th>}
                 {r.grn && <th className="num">Received</th>}
               </tr>
             </thead>
@@ -511,7 +591,17 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
                   <td>{l.item}</td>
                   <td className="num">{l.qty}</td>
                   <td className="num">{rm(l.unitPrice)}</td>
-                  {r.grn && <td className="num">{r.grn.qty[i]}</td>}
+                  {row.lastPaid.some(Boolean) && (
+                    <td className="num small">{row.lastPaid[i] ? `${rm(row.lastPaid[i]!.unitPrice)} (${row.lastPaid[i]!.ref}, ${dateLabel(row.lastPaid[i]!.on)})` : '-'}</td>
+                  )}
+                  {r.grn && (
+                    <td className="num">
+                      {r.grn.qty[i]}
+                      {r.grn.condition?.[i] && r.grn.condition[i].damaged + r.grn.condition[i].wrong > 0
+                        ? ` (${r.grn.condition[i].damaged} damaged, ${r.grn.condition[i].wrong} wrong)`
+                        : ''}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -563,8 +653,9 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
       )}
 
       {r.status === 'quoting' && !proc && <p className="bz-note">Procurement collects the quotes and checks the online price.</p>}
-      {proc && r.status === 'quoting' && (
+      {proc && (r.status === 'quoting' || !!row.urgentOwed) && (
         <>
+          {r.status !== 'quoting' && <p className="bz-note">Urgent purchase: add the quotes and online prices that are still owed.</p>}
           <section className="bz-act" aria-label="Add a supplier quote">
             <div className="bz-sec-head">
               <h3>Add a supplier quote</h3>
@@ -661,36 +752,68 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
             </div>
             <p className="bz-note">Each quote needs the supplier’s quotation and each online price a screenshot of the listing.</p>
           </section>
-          {r.quotes.length > 0 && (
+          {r.status === 'quoting' && (r.quotes.length > 0 || (data.onlineBuyMax != null && (r.online ?? []).length > 0)) && (
             <section className="bz-act" aria-label="Choose the quote">
               <h3 className="bz-pu-acth">Choose the quote and send for approval</h3>
               <div className="bz-form">
                 <F label="Chosen quote" span>
-                  <Select className="select" value={chosen} onChange={(e) => setChosen(e.target.value)}>
+                  <Select className="select" aria-label="Chosen quote" value={chosen} onChange={(e) => setChosen(e.target.value)}>
                     {r.quotes.map((q) => (
                       <option key={q.supplierId} value={q.supplierId}>
                         {sup(q.supplierId)} {rm(q.amount)}
                       </option>
                     ))}
+                    {data.onlineBuyMax != null &&
+                      (r.online ?? []).map((o, i) => (
+                        <option key={`online:${i}`} value={`online:${i}`}>
+                          Buy online: {o.source} {rm(o.amount)}
+                        </option>
+                      ))}
                   </Select>
                 </F>
                 <F label="Reason">
                   <input className="input" placeholder="Reason if not the lowest" value={note} onChange={(e) => setNote(e.target.value)} />
                 </F>
-                <F label="Reason if dearer than online">
-                  <input
-                    className="input"
-                    placeholder={`Reason if over ${data.rule.onlineTolerancePct}% above online`}
-                    value={onlineReason}
-                    onChange={(e) => setOnlineReason(e.target.value)}
-                  />
-                </F>
+                {!chosen.startsWith('online:') && (
+                  <F label="Reason if dearer than online">
+                    <input
+                      className="input"
+                      placeholder={`Reason if over ${data.rule.onlineTolerancePct}% above online`}
+                      value={onlineReason}
+                      onChange={(e) => setOnlineReason(e.target.value)}
+                    />
+                  </F>
+                )}
+                {urgent && (
+                  <F label="Why urgent" span>
+                    <input className="input" placeholder="Why it is urgent (needed)" value={urgentWhy} onChange={(e) => setUrgentWhy(e.target.value)} />
+                  </F>
+                )}
               </div>
+              {chosen.startsWith('online:') && (
+                <p className="bz-note">
+                  Buying online is allowed up to {rm(data.onlineBuyMax ?? 0)}. Finance approves the payment before you order, and the platform receipt is attached when the invoice is matched.
+                </p>
+              )}
+              <label className="small row" style={{ gap: 6, alignItems: 'center' }}>
+                <input type="checkbox" aria-label="Urgent" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} />
+                Urgent: the COO approves alone and the quotes follow within {data.rule.urgentQuotesWorkingDays} working days
+              </label>
               <div className="bz-actions">
                 <button
                   className="btn btn-primary"
-                  disabled={act.busy || !chosen}
-                  onClick={() => act.run(() => api.purStep(r.id, 'submit', { supplierId: chosen, note, onlineReason }), 'Sent to the COO and CEO for approval.')}
+                  disabled={act.busy || !chosen || (urgent && urgentWhy.trim().length < 3)}
+                  onClick={() =>
+                    act.run(
+                      () =>
+                        api.purStep(r.id, 'submit', {
+                          ...(chosen.startsWith('online:') ? { online: Number(chosen.slice(7)) } : { supplierId: chosen, onlineReason }),
+                          note,
+                          ...(urgent ? { urgent: true, urgentReason: urgentWhy } : {}),
+                        }),
+                      urgent ? 'Sent to the COO as urgent.' : 'Sent for approval.',
+                    )
+                  }
                 >
                   Send for approval
                 </button>
@@ -701,13 +824,17 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
       )}
       {row.canApprove && (
         <section className="bz-act" aria-label="Your decision">
-          <h3 className="bz-pu-acth">Your decision</h3>
+          <h3 className="bz-pu-acth">{row.nextTier === 'inventory' ? 'Inventory Manager check' : 'Your decision'}</h3>
           <F label="Note">
             <input className="input" placeholder="Comment (needed to approve or reject)" value={note} onChange={(e) => setNote(e.target.value)} />
           </F>
           <div className="bz-actions">
-            <button className="btn btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.purStep(r.id, 'approve', { note }), 'Approved.')}>
-              Approve
+            <button
+              className="btn btn-primary"
+              disabled={act.busy || !note.trim()}
+              onClick={() => act.run(() => api.purStep(r.id, 'approve', { note }), row.nextTier === 'inventory' ? 'Checked; it goes to the COO.' : 'Approved.')}
+            >
+              {row.nextTier === 'inventory' ? 'Checked, send to the COO' : 'Approve'}
             </button>
             <button className="btn" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.purStep(r.id, 'reject', { note }), 'Rejected.')}>
               Reject
@@ -716,14 +843,49 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
         </section>
       )}
       {row.canReopen && <Reopen r={r} />}
+      {row.canPayOnline && (
+        <section className="bz-act" aria-label="Online payment">
+          <h3 className="bz-pu-acth">Approve the online payment</h3>
+          <F label="Payment comment">
+            <input className="input" placeholder="Comment (needed)" value={note} onChange={(e) => setNote(e.target.value)} />
+          </F>
+          <div className="bz-actions">
+            <button className="btn btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.purStep(r.id, 'pay_online', { note }), 'Online payment approved.')}>
+              Approve paying the online platform
+            </button>
+          </div>
+        </section>
+      )}
+      {row.canSeeUrgent && (
+        <section className="bz-act" aria-label="Urgent purchase seen">
+          <h3 className="bz-pu-acth">Urgent purchase: mark as seen</h3>
+          <F label="CEO note">
+            <input className="input" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+          </F>
+          <div className="bz-actions">
+            <button className="btn" disabled={act.busy} onClick={() => act.run(() => api.purStep(r.id, 'urgent_seen', { note }), 'Marked as seen.')}>
+              Seen
+            </button>
+          </div>
+        </section>
+      )}
       {proc && r.status === 'approved' && (
         <section className="bz-act" aria-label="Place the order">
           <h3 className="bz-pu-acth">Place the order</h3>
-          <F label="PO number">
-            <input className="input" placeholder="Purchase order number" value={po} onChange={(e) => setPo(e.target.value)} />
-          </F>
+          <div className="bz-form">
+            <F label="PO number">
+              <input className="input" placeholder="Purchase order number" value={po} onChange={(e) => setPo(e.target.value)} />
+            </F>
+            <F label="Delivery promised by">
+              <input className="input" type="date" aria-label="Delivery promised by" value={due} onChange={(e) => setDue(e.target.value)} />
+            </F>
+          </div>
           <div className="bz-actions">
-            <button className="btn btn-sm" disabled={act.busy || !po.trim()} onClick={() => act.run(() => api.purStep(r.id, 'order', { ref: po }), 'Order recorded.')}>
+            <button
+              className="btn btn-sm"
+              disabled={act.busy || !po.trim()}
+              onClick={() => act.run(() => api.purStep(r.id, 'order', { ref: po, ...(due ? { expectedOn: due } : {}) }), 'Order recorded. Download the Purchase Order to send to the supplier.')}
+            >
               Order placed
             </button>
           </div>
@@ -734,7 +896,7 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
           <h3 className="bz-pu-acth">Receive the goods</h3>
           <div className="bz-form">
             {r.lines.map((l, i) => (
-              <F key={i} label={`Received ${l.item}`}>
+              <F key={i} label={`Received ${l.item} (ordered ${l.qty})`}>
                 <input
                   className="input num"
                   placeholder={`Received: ${l.item}`}
@@ -752,6 +914,7 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
             </F>
           </div>
           <ProofPicker site={null} refText={`DO ${r.ref}`} items={doDoc} onChange={setDoDoc} documentsOnly required={doNeeded} />
+          <p className="bz-note">Attach a photo or scan of the supplier's DO.</p>
           <details>
             <summary className="small">Some pieces damaged or the wrong item?</summary>
             <p className="bz-note">Only good pieces go into the store. Damaged and wrong pieces are kept for return to the supplier and show in Finance's invoice match.</p>
@@ -801,24 +964,32 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
             <F label="Invoice amount">
               <input className="input" placeholder="Invoice amount" inputMode="decimal" value={inv.amount} onChange={(e) => setInv({ ...inv, amount: e.target.value })} />
             </F>
-            <F label="e-Invoice UUID" span>
-              <input
-                className="input"
-                placeholder="e-Invoice UUID (MyInvois)"
-                value={inv.eInvoiceUuid}
-                onChange={(e) => setInv({ ...inv, eInvoiceUuid: e.target.value })}
-              />
-            </F>
+            {r.chosenOnline == null && (
+              <F label="e-Invoice UUID" span>
+                <input
+                  className="input"
+                  placeholder="e-Invoice UUID (MyInvois)"
+                  value={inv.eInvoiceUuid}
+                  onChange={(e) => setInv({ ...inv, eInvoiceUuid: e.target.value })}
+                />
+              </F>
+            )}
           </div>
           <div className="bz-actions">
             <button
               className="btn btn-sm"
-              disabled={act.busy || !inv.number.trim() || !inv.amount}
-              onClick={() => act.run(() => api.purStep(r.id, 'invoice', { ...inv, amount: Number(inv.amount) }), 'Invoice matched.')}
+              disabled={act.busy || !inv.number.trim() || !inv.amount || (r.chosenOnline != null && !receipt.length && !r.receiptDocIds?.length)}
+              onClick={() => act.run(() => api.purStep(r.id, 'invoice', { ...inv, amount: Number(inv.amount), ...(receipt.length ? { proof: receipt } : {}) }), 'Invoice matched.')}
             >
               Match invoice
             </button>
           </div>
+          {r.chosenOnline != null && (
+            <>
+              <p className="bz-note">Bought online: attach the platform's receipt or order confirmation instead of an e-Invoice.</p>
+              <ProofPicker site={null} refText={r.ref} items={receipt} onChange={setReceipt} documentsOnly required />
+            </>
+          )}
           {r.match?.ok && (
             <>
               <F label="SQL Account ref">
@@ -842,14 +1013,16 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
   );
 }
 
-function NewRequest({ data, onDone }: { data: PurBoard; onDone: () => void }) {
+function NewRequest({ data, onDone, initial }: { data: PurBoard; onDone: () => void; initial?: BuyMore | null }) {
   const act = useAction();
   const companies = data.raiseFor.length ? data.raiseFor : companiesOf(data);
-  const [companyId, setCompanyId] = useState(companies[0]?.id ?? '');
-  const [title, setTitle] = useState('');
+  const [companyId, setCompanyId] = useState(initial?.companyId ?? companies[0]?.id ?? '');
+  const [title, setTitle] = useState(initial ? `Restock ${initial.item}` : '');
   const [category, setCategory] = useState<PurCategory>('UNIFORM');
   const [lines, setLines] = useState<{ item: string; stockItemId: string; qty: string; unitPrice: string }[]>([
-    { item: '', stockItemId: '', qty: '', unitPrice: '' },
+    initial
+      ? { item: initial.item, stockItemId: initial.stockItemId, qty: initial.qty == null ? '' : String(initial.qty), unitPrice: initial.unitPrice == null ? '' : String(initial.unitPrice) }
+      : { item: '', stockItemId: '', qty: '', unitPrice: '' },
   ]);
   const stock = data.stock.filter((s) => s.item.companyId === companyId);
   const input: PurRequestInput = {
@@ -930,8 +1103,14 @@ function NewRequest({ data, onDone }: { data: PurBoard; onDone: () => void }) {
           );
         })}
       </section>
+      {initial && <p className="bz-note">Filled from the low-stock row. Check the quantity and price; nothing is bought until it is quoted and approved.</p>}
       <ErrorNotice error={act.error} />
       <div className="bz-form-foot">
+        {initial && (
+          <button className="btn" onClick={onDone}>
+            Cancel
+          </button>
+        )}
         <button
           className="btn btn-primary"
           disabled={act.busy || !companyId || !title.trim()}
@@ -998,6 +1177,14 @@ const SUP_COLUMNS: DtColumn<SupRow>[] = [
           ))}
         </span>
         {r.missing.length > 0 && <div className="bz-pu-warn">Missing: {r.missing.join(', ')}</div>}
+        {r.record.orders > 0 && (
+          <div className="small">
+            Record: {r.record.orders} order{r.record.orders === 1 ? '' : 's'} · delivered on time {r.record.onTime}, late {r.record.late}
+            {r.record.noDate ? `, no promised date ${r.record.noDate}` : ''}
+            {r.record.lateOpen ? ` · ${r.record.lateOpen} open past the date` : ''} · {r.record.damaged} damaged and {r.record.wrong} wrong of {r.record.pieces} pieces
+            {r.record.mismatches ? ` · ${r.record.mismatches} invoice mismatch${r.record.mismatches === 1 ? '' : 'es'}` : ''}
+          </div>
+        )}
         {r.supplier.blocked && (
           <div className="bz-pu-warn">
             Blocked by {r.supplier.blocked.by}: {r.supplier.blocked.note}
@@ -1047,7 +1234,8 @@ function Suppliers({ data }: { data: PurBoard }) {
       )}
       <p className="notice" data-tone="info">
         A supplier can quote only when Finance has verified its bank account against a bank letter, it has signed a conflict-of-interest declaration and the
-        anti-bribery acknowledgement (MACC Act s.17A), and its yearly review is current.
+        anti-bribery acknowledgement (MACC Act s.17A), and its yearly review is current. New suppliers go on one group list: Finance checks them once and
+        every company can buy from them.
       </p>
       {!data.suppliers.length && (
         <Card>
@@ -1248,7 +1436,7 @@ function NewSupplier({ data, onDone }: { data: PurBoard; onDone: () => void }) {
           disabled={act.busy || !companyId}
           onClick={() =>
             act
-              .run(() => api.addPurSupplier(companyId, f), 'Supplier added. Finance verifies the bank account next.')
+              .run(() => api.addPurSupplier(companyId, f), 'Supplier added to the group list. Finance verifies the bank account next.')
               .then((x) => {
                 if (x) onDone();
               })
@@ -1418,10 +1606,250 @@ const STOCK_FILTERS: DtFilter<StockRow>[] = [
   },
 ];
 
-function Store({ data }: { data: PurBoard }) {
+/**
+ * Goodwill prices and stock by price (Fauzan, 23 Nov 2026): the Inventory Manager sets the prices, the Finance Director
+ * may too; each item shows its unit cost, stock value and margin; selling at or below cost waits for the FD.
+ */
+function GoodwillPrices({ data }: { data: PurBoard }) {
+  const act = useAction();
+  const [open, setOpen] = useState<string | null>(null);
+  const [f, setF] = useState({ charge: '' as '' | 'rental' | 'sale', rentalMonthly: '', salePrice: '', unitCost: '', reason: '' });
+  const [why, setWhy] = useState('');
+  if (!data.canSetGoodwillPrices && !data.canApproveBelowCost) return null;
+  const rows = data.stock.filter((r) => r.item.companyId === 'goodwill' && !r.item.kitParts?.length);
+  const rm = (n: number | null | undefined) => (n == null ? 'not set' : `RM${n.toFixed(2)}`);
+  const v = data.goodwillStockValue;
+  return (
+    <Card title="Goodwill prices and stock value">
+      <p className="bz-note">
+        Stock value {rm(v.value)}
+        {v.noCost > 0 && ` (${v.noCost} item(s) in stock with no cost yet, not counted)`}. Cost comes from the purchase orders received, or is entered with a reason
+        for opening stock. Selling at or below cost needs the Finance Director. Each change is kept in the audit log.
+      </p>
+      {rows.length === 0 ? (
+        <Empty title="No Goodwill store items yet." />
+      ) : (
+        <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th className="num">Unit cost</th>
+              <th className="num">Stock value</th>
+              <th>Charged as</th>
+              <th className="num">Rental a month</th>
+              <th className="num">Sale</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ item }) => {
+              const margin = item.salePrice != null && item.unitCost != null ? item.salePrice - item.unitCost : null;
+              const p = item.pendingSale;
+              return (
+                <tr key={item.id}>
+                  <td>
+                    {item.name}
+                    {item.priceSet && <div className="muted small">Price by {item.priceSet.by}: {item.priceSet.reason}</div>}
+                    {item.belowCostOk && <div className="small"><Chip tone="warn">Below cost, approved by {item.belowCostOk.by}</Chip></div>}
+                  </td>
+                  <td className="num">{rm(item.unitCost)}</td>
+                  <td className="num">{item.unitCost == null ? 'not known' : rm(item.onHand * item.unitCost)}</td>
+                  <td>{item.charge ?? 'not set'}</td>
+                  <td className="num">{rm(item.rentalMonthly)}</td>
+                  <td className="num">
+                    {rm(item.salePrice)}
+                    {margin != null && <div className={margin > 0 ? 'muted small' : 'small'}>{margin > 0 ? `profit ${rm(margin)}` : `loss ${rm(-margin)}`}</div>}
+                  </td>
+                  <td>
+                    {p && (
+                      <div className="stack" style={{ minWidth: 220 }}>
+                        <Chip tone="warn">
+                          Waiting for the FD: sale {rm(p.salePrice)}, cost {rm(p.unitCost)} ({p.by})
+                        </Chip>
+                        {data.canApproveBelowCost && (
+                          <>
+                            <input className="input" placeholder="Reason" value={why} onChange={(e) => setWhy(e.target.value)} />
+                            <div className="row">
+                              <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.decideGoodwillSale(item.id, { approve: true, reason: why }), 'Approved.')}>
+                                Approve
+                              </button>
+                              <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.decideGoodwillSale(item.id, { approve: false, reason: why }), 'Refused.')}>
+                                Refuse
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {data.canSetGoodwillPrices &&
+                      (open === item.id ? (
+                        <div className="stack" style={{ minWidth: 220 }}>
+                          <Select className="select" aria-label="Charged as" value={f.charge} onChange={(e) => setF({ ...f, charge: e.target.value as '' | 'rental' | 'sale' })}>
+                            <option value="">Charged as (keep)</option>
+                            <option value="rental">Rental</option>
+                            <option value="sale">Sale</option>
+                          </Select>
+                          <input className="input" inputMode="decimal" placeholder="Rental a month (RM)" value={f.rentalMonthly} onChange={(e) => setF({ ...f, rentalMonthly: e.target.value })} />
+                          <input className="input" inputMode="decimal" placeholder="Sale price (RM)" value={f.salePrice} onChange={(e) => setF({ ...f, salePrice: e.target.value })} />
+                          <input className="input" inputMode="decimal" placeholder="Unit cost (RM), opening stock" value={f.unitCost} onChange={(e) => setF({ ...f, unitCost: e.target.value })} />
+                          <input className="input" placeholder="Reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+                          <button
+                            className="btn btn-sm btn-primary"
+                            disabled={act.busy}
+                            onClick={() =>
+                              act
+                                .run(
+                                  () =>
+                                    api.setGoodwillPrice(item.id, {
+                                      ...(f.charge ? { charge: f.charge } : {}),
+                                      rentalMonthly: f.rentalMonthly === '' ? null : Number(f.rentalMonthly),
+                                      salePrice: f.salePrice === '' ? null : Number(f.salePrice),
+                                      ...(f.unitCost === (item.unitCost == null ? '' : String(item.unitCost)) ? {} : { unitCost: f.unitCost === '' ? null : Number(f.unitCost) }),
+                                      reason: f.reason,
+                                    }),
+                                  'Saved.',
+                                )
+                                .then((x) => {
+                                  if (x) setOpen(null);
+                                })
+                            }
+                          >
+                            Save
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => {
+                            setF({
+                              charge: '',
+                              rentalMonthly: item.rentalMonthly == null ? '' : String(item.rentalMonthly),
+                              salePrice: item.salePrice == null ? '' : String(item.salePrice),
+                              unitCost: item.unitCost == null ? '' : String(item.unitCost),
+                              reason: '',
+                            });
+                            setOpen(item.id);
+                          }}
+                        >
+                          Set price
+                        </button>
+                      ))}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+    </Card>
+  );
+}
+
+/**
+ * D4 (Fauzan, 23 Nov 2026): the Inventory Manager links a store item to a serial item type in the item register, so each
+ * unit received gets its own ID. The store keeps the quantity and the money.
+ */
+function SkuLink({ item, skus }: { item: PurBoard['stock'][number]['item']; skus: PurBoard['serialSkus'] }) {
+  const act = useAction();
+  const [open, setOpen] = useState(false);
+  const [sku, setSku] = useState(item.itemSkuId ?? '');
+  const [why, setWhy] = useState('');
+  if (!open)
+    return (
+      <button className="btn btn-sm" style={{ marginTop: 4 }} onClick={() => setOpen(true)}>
+        {item.itemSkuId ? 'Item register link' : 'Link to item register'}
+      </button>
+    );
+  return (
+    <div style={{ display: 'grid', gap: 4, marginTop: 4 }}>
+      <Select className="select" aria-label={`Item register type for ${item.name}`} value={sku} onChange={(e) => setSku(e.target.value)}>
+        <option value="">Not linked</option>
+        {skus.map((k) => (
+          <option key={k.id} value={k.id}>
+            {k.code} {k.name}
+          </option>
+        ))}
+      </Select>
+      <input className="input" aria-label="Why the link changes" placeholder="Why (needed)" value={why} onChange={(e) => setWhy(e.target.value)} />
+      <div className="row" style={{ gap: 4 }}>
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={act.busy || why.trim().length < 3}
+          onClick={() => act.run(() => api.purLinkItemSku(item.id, sku || null, why), sku ? 'Linked: each unit received gets an item register ID.' : 'Unlinked.').then((x) => x && setOpen(false))}
+        >
+          Save
+        </button>
+        <button className="btn btn-sm" disabled={act.busy} onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+function Store({ data, onBuyMore }: { data: PurBoard; onBuyMore: (b: BuyMore) => void }) {
   const company = isStore(data.roles);
   // P91: Add and Import at the top of the Store tab, not under the follow-up lists.
   const mayAdd = useRecordKinds().has('stockItem');
+  // Serial items (D4) and "Buy more" on a low-stock row (23 Nov 2026) need this screen's data, so two columns are set here.
+  const columns = STOCK_COLUMNS.map((c): DtColumn<StockRow> => {
+    if (c.id === 'item')
+      return {
+        ...c,
+        render: (s) => (
+          <>
+            <strong className="bz-pu-item">
+              {s.item.name}
+              {s.item.size ? ` ${s.item.size}` : ''}
+            </strong>
+            {s.item.itemSkuId && (
+              <div className="muted small">
+                Serial item: each unit received gets an item register ID ({data.serialSkus.find((k) => k.id === s.item.itemSkuId)?.code ?? s.item.itemSkuId})
+              </div>
+            )}
+          </>
+        ),
+      };
+    if (c.id === 'onHand')
+      return {
+        ...c,
+        render: (s) => (
+          <>
+            <span className="bz-amt">{s.item.onHand}</span>
+            {s.low && (
+              <div>
+                <Chip tone="warn">Reorder</Chip>
+              </div>
+            )}
+            {s.buyMore && isProc(data.roles) && (
+              <div data-no-row-click>
+                <button
+                  className="btn btn-sm"
+                  title={s.buyMore.why}
+                  onClick={() =>
+                    onBuyMore({
+                      companyId: s.item.companyId,
+                      stockItemId: s.item.id,
+                      item: `${s.item.name}${s.item.size ? ` ${s.item.size}` : ''}`,
+                      qty: s.buyMore!.qty,
+                      unitPrice: s.item.unitCost ?? null,
+                    })
+                  }
+                >
+                  <ShoppingCartIcon size={14} aria-hidden="true" /> Buy more{s.buyMore.qty ? ` (${s.buyMore.qty})` : ''}
+                </button>
+                <div className="muted small">{s.buyMore.why}</div>
+              </div>
+            )}
+          </>
+        ),
+      };
+    return c;
+  });
   return (
     <>
       {mayAdd && (
@@ -1459,12 +1887,13 @@ function Store({ data }: { data: PurBoard }) {
           stateKey="purchasing.stock"
           rows={data.stock}
           rowKey={(s) => s.item.id}
-          columns={STOCK_COLUMNS}
+          columns={columns}
           filters={STOCK_FILTERS}
           rowEnd={(s) => (
             <div className="bz-pu-rowacts">
               {company && <CountButton itemId={s.item.id} companyId={s.item.companyId} />}
               <RecordButton kind="stockItem" id={s.item.id} />
+              {data.canLinkSku && !s.item.kitParts?.length && <SkuLink item={s.item} skus={data.serialSkus} />}
             </div>
           )}
           empty={<Empty title="No store items yet." action={<RecordButton kind="stockItem" label="Add store item" primary />} />}
@@ -1488,6 +1917,7 @@ function Store({ data }: { data: PurBoard }) {
         </Card>
       </div>
       <GoodwillBilling data={data} />
+      <GoodwillPrices data={data} />
     </>
   );
 }

@@ -1,10 +1,10 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import { AccessClosed, DEMO_PIN_KEY, PrimaService, accessClosed, dataWalls, dateOf, fromMs, isGroupRole, pinKeeper, tenantCompanyIds, RefusedAfterSave, type AuthorityGrant, type PinKeeper, type User, type Store, orgLinksEnabled, withOrgLinks, withRunCompanies, overlayOne, idLinker, type IdLinker } from '@prima/core';
+import { AccessClosed, DEMO_PIN_KEY, PrimaService, accessClosed, dataWalls, dateOf, fromMs, isGroupRole, pinKeeper, tenantCompanyIds, RefusedAfterSave, type AuthorityGrant, type PinKeeper, type User, type Store, orgLinksEnabled, withOrgLinks, withFinPayments, withRunCompanies, overlayOne, idLinker, type IdLinker } from '@prima/core';
 import { Pool } from 'pg';
 import { PgStore, TABLE } from './pg-store';
 import { withReadSnapshots } from './read-cache';
 import { ownRecordCompanyIds } from './office-accounts';
-import { FileStore, fileBackendFromEnv } from './file-store';
+import { FileStore, archiveDiskFromEnv, fileBackendFromEnv } from './file-store';
 import { BackendArchiveBytes } from './archive-bytes';
 import { migrationSha } from './schema';
 
@@ -79,7 +79,13 @@ export class Db implements OnModuleDestroy {
     return backend ? new FileStore(backend) : null;
   })();
   /** The data and file manager's bytes: the same file storage; null while FILE_STORE is off. */
-  readonly archiveBytes = this.files ? new BackendArchiveBytes(this.files.backend) : null;
+  readonly archiveBytes = this.files
+    ? new BackendArchiveBytes(this.files.backend)
+    : (() => {
+        // Office (P129): the server's own disk when there is no cloud storage (ARCHIVE_DISK_DIR).
+        const disk = archiveDiskFromEnv();
+        return disk ? new BackendArchiveBytes(disk) : null;
+      })();
   readonly idLinks = apiIdLinker();
   /** PRIMA_ORG_LINKS=true, read once at start (org-links.ts); off by default. */
   readonly orgLinks = orgLinksEnabled(process.env);
@@ -124,7 +130,9 @@ export class Db implements OnModuleDestroy {
       // P83: per-request read snapshots (read-cache.ts): one query per table instead of one per company.
       const reads = process.env.PRIMA_READ_SNAPSHOTS === 'false' ? pgStore : withReadSnapshots(pgStore, client, (t) => TABLE[t]);
       const fileStore = this.files ? this.files.wrap(reads) : reads;
-      const store = this.orgLinks ? withOrgLinks(fileStore) : fileStore;
+      const linked = this.orgLinks ? withOrgLinks(fileStore) : fileStore;
+      // Finance payments in their own table (gap B3, module fin-payments-v1), only once the module is installed.
+      const store = (await pgStore.hasTable('finPayments')) ? withFinPayments(linked) : linked;
       const svc = new PrimaService(store, clock);
       svc.pins = this.pins;
       svc.archiveBytes = this.archiveBytes;

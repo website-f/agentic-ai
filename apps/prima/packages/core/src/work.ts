@@ -3,6 +3,7 @@
 // on dated checklists with photo proof, a scorecard and a visit cycle. Tasks live in Prima and Microsoft Planner, with
 // Planner preferred (P1); built for all staff now for study, on mock data (P3).
 
+import { isOgm } from './ops-access';
 import { regionOfState } from './regions';
 import { addDays, dateOf, myt } from './time';
 import type { IsoDate, IsoDateTime, User } from './types';
@@ -364,7 +365,7 @@ export function playbookKey(u: User): string {
   if (u.opsTier === 'regional') return 'operations:regional';
   if (u.opsTier === 'patrol') return 'operations:patrol';
   if (u.role === 'supervisor') return 'supervisor';
-  if (u.opsTier === 'ogm' || u.opsTier === 'ops_director' || u.opsTier === 'coo' || u.department === 'operations') return 'operations:senior';
+  if (isOgm(u) || u.opsTier === 'ops_director' || u.opsTier === 'coo' || u.department === 'operations') return 'operations:senior';
   if (u.leadership === 'cos' || u.leadership === 'deputy_cos' || u.leadership === 'finance_director') return 'leadership';
   if (u.department === 'finance') return 'finance:officer';
   if (u.department && ['hr', 'director_office', 'audit', 'legal', 'arms_control', 'cms', 'asset', 'transport', 'pdpa'].includes(u.department))
@@ -381,6 +382,11 @@ export function playbookFor(u: User): Playbook {
  * Each person's line manager, from the reporting lines Fauzan gave (IT, Finance, FWM, Procurement, ACT, Operations,
  * company managers and branches). Where no line is set, the Chief of Staff is shown and marked as assumed.
  */
+/** Whether an operations manager x can be the manager of someone on this side: the same side, or x tied to none. */
+function fitsSide(x: User, side: User['opsSector']): boolean {
+  return !side || !x.opsSector || x.opsSector === side;
+}
+
 export function lineManagerOf(u: User, users: User[]): { manager: User | null; assumed: boolean } {
   const find = (p: (x: User) => boolean) => users.find((x) => x.id !== u.id && !x.integration && p(x)) ?? null;
   const ceo = () => find((x) => x.opsTier === 'ceo');
@@ -409,10 +415,14 @@ export function lineManagerOf(u: User, users: User[]): { manager: User | null; a
     const region = regionOfState(state)?.id;
     // A state with no OM or Regional OM (for example Perak): the OGM, until the OGM delegates an OM in the org chart
     // (Fauzan, 23 Nov 2026: "Any om delegated by ogm").
+    // Sasa Team and Goodwill have separate staff (Fauzan, 2 Nov 2026): an officer tied to a side goes to an OM of that
+    // side (or one not tied to a side), and with no OM to the head of that side: the Operations Director for private
+    // sites (private operations study, 23 Nov 2026), the OGM otherwise.
+    const side = (x: User) => fitsSide(x, u.opsSector);
     return pick(
-      () => find((x) => x.opsTier === 'om' && (x.areaStates ?? []).includes(state)),
-      () => find((x) => x.opsTier === 'regional' && !!region && (x.regionIds ?? []).includes(region)),
-      () => find((x) => x.opsTier === 'ogm'),
+      () => find((x) => x.opsTier === 'om' && (x.areaStates ?? []).includes(state) && side(x)),
+      () => find((x) => x.opsTier === 'regional' && !!region && (x.regionIds ?? []).includes(region) && side(x)),
+      () => find((x) => x.opsTier === (u.opsSector === 'private' ? 'ops_director' : 'ogm')),
     );
   }
   // A site officer reports to the patrolling officer for their sites (case escalation, 25 Oct 2026).
@@ -449,9 +459,18 @@ export function lineManagerOf(u: User, users: User[]): { manager: User | null; a
   // The ACT Manager (C6, 11 Nov 2026) reports to the ACT Director (org review, 23 Nov 2026).
   if (u.actRole === 'manager') return pick(() => find((x) => x.actRole === 'lead'));
   if (u.actRole === 'lead') return pick(ceo);
-  if (u.opsTier === 'om') return pick(() => find((x) => x.opsTier === 'regional' && (x.regionIds ?? []).some((r) => (u.regionIds ?? []).includes(r))));
-  if (u.opsTier === 'regional') return pick(() => find((x) => x.opsTier === 'ops_director'));
-  if (u.opsTier === 'ogm' || u.opsTier === 'ops_director') return pick(coo);
+  // An OM goes to a Regional OM of the same region and the same side (or one not tied to a side), same side first.
+  if (u.opsTier === 'om') {
+    const inRegion = (x: User) => x.opsTier === 'regional' && (x.regionIds ?? []).some((r) => (u.regionIds ?? []).includes(r));
+    return pick(
+      () => find((x) => inRegion(x) && !!u.opsSector && x.opsSector === u.opsSector),
+      () => find((x) => inRegion(x) && fitsSide(x, u.opsSector)),
+    );
+  }
+  // A government-side Regional OM reports to the OGM; a private-side one, or one not tied to a side, to the Operations
+  // Director (private operations study, 23 Nov 2026: before, every Regional OM went to the Operations Director).
+  if (u.opsTier === 'regional') return pick(() => find((x) => x.opsTier === (u.opsSector === 'government' ? 'ogm' : 'ops_director')));
+  if (isOgm(u) || u.opsTier === 'ops_director') return pick(coo);
   // A department member with a named head reports to that head; the head follows the department's own rule below.
   if (u.department && !(u.headOf ?? []).includes(`d_${u.department}`)) {
     const h = named(`d_${u.department}`);

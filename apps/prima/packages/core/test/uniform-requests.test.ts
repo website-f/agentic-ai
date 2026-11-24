@@ -104,3 +104,63 @@ describe('Uniform requests: the OM asks, the store issues, the OM collects the s
     await expect(svc.requestUniform(om, { staffNo: guard.staffNo, stockItemId: shirt.id, qty: 1, reason: 'Torn' })).rejects.toThrow(/paid by the guard/);
   });
 });
+
+describe('Uniform allowance counts both stores (Goodwill study gap 7, 23 Nov 2026)', () => {
+  it('a suit in the item register is one of each worn item in the Goodwill count', async () => {
+    const { svc, store, shirt, guard, om } = await setup();
+    const before = await svc.ssUniformHistory(guard.id, GOV_OPS_COMPANY_ID, 'synthetic shirt');
+    await store.insert('uniformRecords', {
+      id: 'ur-synthetic-1', kind: 'past', personId: guard.id, companyId: guard.companyId, on: '2026-11-01', pieces: 2, itemId: null,
+      receiptRef: null, amount: null, batchId: null, scope: 'person', reason: 'Synthetic past suits', by: 'Test', byId: 'u-test', at: NOW, partyIds: [guard.companyId],
+    } as never);
+    const after = await svc.ssUniformHistory(guard.id, GOV_OPS_COMPANY_ID, 'synthetic shirt');
+    expect(after.fromRegister).toBe(before.fromRegister + 2);
+    expect(after.pieces).toBe(before.pieces + 2);
+    expect(after.last).toBe('2026-11-01');
+    // The OM's request now sees the two suits: a third shirt is the last free one, a fourth needs the guard to pay.
+    const r = await svc.requestUniform(om, { staffNo: guard.staffNo, stockItemId: shirt.id, qty: 1, reason: 'Worn out, within 6 months', early: 'Torn on duty' } as never);
+    expect(r.history.pieces).toBe(after.pieces);
+  });
+});
+
+describe('Goodwill prices: the Inventory Manager sets them, the Finance Director may too (Fauzan, 23 Nov 2026)', () => {
+  it('lets the FD set a price with a reason and refuses store staff', async () => {
+    const { svc, store, ds, shirt, sk } = await setup();
+    const fdUser = ds.users.find((u) => u.leadership === 'finance_director')!;
+    const fd = await svc.user(fdUser.id);
+    expect((await svc.purBoard(fd)).canSetGoodwillPrices).toBe(true);
+    await expect(svc.setGoodwillPrice(fd, shirt.id, { rentalMonthly: 5, reason: '' })).rejects.toThrow(/reason/);
+    const done = await svc.setGoodwillPrice(fd, shirt.id, { charge: 'rental', rentalMonthly: 5, salePrice: '', reason: 'Synthetic rate from the FD' });
+    expect(done).toMatchObject({ charge: 'rental', rentalMonthly: 5, salePrice: null, priceSet: { by: fd.name, reason: 'Synthetic rate from the FD' } });
+    expect((await store.get('stockItems', shirt.id))!.rentalMonthly).toBe(5);
+    await expect(svc.setGoodwillPrice(sk, shirt.id, { rentalMonthly: 1, reason: 'Not mine to set' })).rejects.toThrow();
+  });
+
+  it('keeps cost and stock value, and holds a sale at or below cost for the Finance Director', async () => {
+    const { svc, store, ds, shirt } = await setup();
+    const im = { ...(await svc.user('u-proc-exec')), procRole: 'manager' as const };
+    const fd = await svc.user(ds.users.find((u) => u.leadership === 'finance_director')!.id);
+    // Opening stock cost entered with a reason; the shirt sells at RM40 (set in setup), so profit.
+    await svc.setGoodwillPrice(im, shirt.id, { charge: 'sale', salePrice: 40, unitCost: 30, reason: 'Synthetic opening cost' });
+    let board = await svc.purBoard(fd);
+    expect(board.goodwillStockValue.value).toBeGreaterThanOrEqual(20 * 30);
+    // The Inventory Manager lowers the sale to RM28, under the RM30 cost: it waits, RM40 stays.
+    const held = await svc.setGoodwillPrice(im, shirt.id, { charge: 'sale', salePrice: 28, reason: 'Clearance' });
+    expect(held).toMatchObject({ salePrice: 40, pendingSale: { salePrice: 28, unitCost: 30 } });
+    board = await svc.purBoard(fd);
+    expect(board.canApproveBelowCost).toBe(true);
+    expect(board.goodwillStockValue.waiting).toBe(1);
+    // Only the FD (or the CEO) decides, with a reason.
+    await expect(svc.decideGoodwillSale(im, shirt.id, { approve: true, reason: 'Mine' })).rejects.toThrow();
+    await expect(svc.decideGoodwillSale(fd, shirt.id, { approve: true, reason: '' })).rejects.toThrow(/reason/);
+    const ok = await svc.decideGoodwillSale(fd, shirt.id, { approve: true, reason: 'Old stock, clear it' });
+    expect(ok).toMatchObject({ salePrice: 28, pendingSale: null, belowCostOk: { salePrice: 28, unitCost: 30, by: fd.name } });
+    expect((await store.get('stockItems', shirt.id))!.salePrice).toBe(28);
+    // The FD may set a below-cost sale directly; it is recorded as approved.
+    const direct = await svc.setGoodwillPrice(fd, shirt.id, { charge: 'sale', salePrice: 25, reason: 'Synthetic FD below cost' });
+    expect(direct).toMatchObject({ salePrice: 25, pendingSale: null, belowCostOk: { salePrice: 25, by: fd.name } });
+    // A profitable price clears the approval mark.
+    const back = await svc.setGoodwillPrice(im, shirt.id, { charge: 'sale', salePrice: 45, reason: 'Back to normal' });
+    expect(back).toMatchObject({ salePrice: 45, pendingSale: null, belowCostOk: null });
+  });
+});

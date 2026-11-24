@@ -579,15 +579,7 @@ export class InventoryControlService {
   }
   /** Weekly usage over 8 weeks x (supplier lead time + 1 week), capped at Max; a suggestion only, never automatic. */
   private suggest(it: StockItem, issues: { itemId: Id; qty: number; issuedAt: string }[], prs: { lines: { stockItemId: Id | null }[]; po: { at: string } | null; grn: { at: string } | null }[]) {
-    const from = addDays(this.today(), -56);
-    const used = issues.filter((x) => x.itemId === it.id && dateOf(x.issuedAt) >= from).reduce((n, x) => n + x.qty, 0);
-    const weekly = used / 8;
-    const leads = prs.filter((p) => p.po && p.grn && p.lines.some((l) => l.stockItemId === it.id)).map((p) => daysBetween(dateOf(p.po!.at), dateOf(p.grn!.at)));
-    const lead = leads.length ? leads.reduce((a, b) => a + b, 0) / leads.length : null;
-    if (!weekly || lead === null) return null;
-    let q = Math.ceil(weekly * (lead / 7 + 1)) + (it.courseBufferAt ?? 0) - it.onHand;
-    if (it.maxAt != null) q = Math.min(q, it.maxAt - it.onHand);
-    return q > 0 ? { qty: q, weekly: Math.round(weekly * 10) / 10, leadDays: Math.round(lead) } : null;
+    return reorderSuggestion(it, issues, prs, this.today());
   }
 
   // ---------- U9 KPIs ----------
@@ -1124,3 +1116,16 @@ export class InventoryControlService {
   }
 }
 void can;
+
+/** U8 reorder suggestion: weekly usage over 8 weeks x (supplier lead time + 1 week), capped at Max; never automatic. */
+export function reorderSuggestion(it: StockItem, issues: { itemId: Id; qty: number; issuedAt: string }[], prs: { lines: { stockItemId: Id | null }[]; po: { at: string } | null; grn: { at: string } | null }[], today: IsoDate) {
+    const from = addDays(today, -56);
+    const used = issues.filter((x) => x.itemId === it.id && dateOf(x.issuedAt) >= from).reduce((n, x) => n + x.qty, 0);
+    const weekly = used / 8;
+    const leads = prs.filter((p) => p.po && p.grn && p.lines.some((l) => l.stockItemId === it.id)).map((p) => daysBetween(dateOf(p.po!.at), dateOf(p.grn!.at)));
+    const lead = leads.length ? leads.reduce((a, b) => a + b, 0) / leads.length : null;
+    if (!weekly || lead === null) return null;
+    let q = Math.ceil(weekly * (lead / 7 + 1)) + (it.courseBufferAt ?? 0) - it.onHand;
+    if (it.maxAt != null) q = Math.min(q, it.maxAt - it.onHand);
+    return q > 0 ? { qty: q, weekly: Math.round(weekly * 10) / 10, leadDays: Math.round(lead) } : null;
+  }

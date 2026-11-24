@@ -90,6 +90,15 @@ describe('Part S office asset records (PostgreSQL)', () => {
     const done = (await act('u-opsdir', 'repairApprove', { id: b.id, reason: 'approved for new staff' })) as OfficeAmRec;
     assert.equal(done.status, 'approved');
     assert.equal((await list('u-opsdir')).filter((x) => x.kind !== 'repair' || x.d.purpose !== 'buy').length, 0);
+    // The COO covers the Operations Director's step on a private buy (Fauzan, 23 Nov 2026: "Let coo cover also").
+    const coo = (await admin(`SELECT id FROM prima.users WHERE data->>'opsTier'='coo' AND data->>'role'='pwvsb_officer' ORDER BY id LIMIT 1`)).rows[0].id as string;
+    const b2 = (await act('u-cm-sasa', 'buyRequest', { companyId: 'co-sasa', address: 'Level 2, test office', buyType: 'furniture', item: 'Chair (test)', qty: 1, estimate: 300, description: 'New staff joining (test)' })) as OfficeAmRec;
+    await act('u-asset-mm', 'repairCheck', { id: b2.id, outcome: 'accept', reason: 'no spare chair', unitId: unit });
+    await act('u-asset-mm', 'repairQuotes', { id: b2.id, quotes: [{ contractor: 'Shop A (test)', price: 300 }, { contractor: 'Shop B (test)', price: 320 }, { contractor: 'Shop C (test)', price: 340 }], online: [{ where: 'Online one (test)', price: 295 }, { where: 'Online two (test)', price: 310 }], docs: PDF('bq2', 3) });
+    await act('u-asset-mm', 'repairPick', { id: b2.id, contractor: 'Shop A (test)', reason: 'lowest quote' });
+    await act('u-asset-dir', 'repairApprove', { id: b2.id, reason: 'recommended' });
+    const byCoo = (await act(coo, 'repairApprove', { id: b2.id, reason: 'OD away, COO covers' })) as OfficeAmRec;
+    assert.equal(byCoo.status, 'approved');
 
     const grants = (await admin(`SELECT privilege_type FROM information_schema.role_table_grants WHERE table_schema='prima' AND table_name='office_am_recs' AND grantee='prima_app'`)).rows.map((x) => x.privilege_type).sort();
     assert.deepEqual(grants, ['INSERT', 'SELECT', 'UPDATE']);

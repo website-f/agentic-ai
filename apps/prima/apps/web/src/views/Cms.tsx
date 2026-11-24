@@ -32,6 +32,8 @@ import "../styles/ops.css";
 import { CmsDevicesTab } from "./SiteDispatch";
 import { PoliceHelpPanel } from "./PoliceHelp";
 import { GuardPhonesBoard } from "./GuardPhoneOffice";
+import { parseCsv } from "./JaSwitch";
+import { mapColumns } from "./JaUploads";
 
 type Tab =
   | "now"
@@ -470,6 +472,68 @@ function MyDesk({ data }: { data: Cms }) {
   );
 }
 
+const CMS_ROSTER_COLUMNS = ['date', 'start', 'post', 'seat', 'staff'];
+
+/**
+ * B4 (Fauzan, 23 Nov 2026): upload a CMS roster from Excel saved as CSV. One line per seat: date (YYYY-MM-DD), start
+ * (08:00), post (HC or MO), seat (1, 2; empty means 1) and staff (name or staff id). Plan the days first; every line
+ * goes through the same checks as the roster screen and refused lines come back with the reason.
+ */
+function CmsRosterUpload() {
+  const { run, busy, error } = useAction();
+  const [file, setFile] = useState<{ name: string; rows: Record<string, string>[] } | null>(null);
+  const [result, setResult] = useState<{ assigned: number; rejected: { line: number; staff: string; reason: string }[] } | null>(null);
+  const template = `data:text/csv;charset=utf-8,${encodeURIComponent(CMS_ROSTER_COLUMNS.join(',') + '\n')}`;
+  return (
+    <div style={{ padding: "10px 16px 0" }}>
+      <strong>Upload roster</strong>
+      <div className="muted small">
+        Excel saved as CSV, columns {CMS_ROSTER_COLUMNS.join(', ')} (post HC or MO; seat empty means 1; staff by name or staff id). Plan the days first.{" "}
+        <a href={template} download="cms-roster-template.csv">Template</a>
+      </div>
+      <div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+        <input
+          className="input"
+          type="file"
+          accept=".csv,text/csv"
+          aria-label="CMS roster file"
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            setResult(null);
+            setFile(f ? { name: f.name, rows: mapColumns(parseCsv(await f.text()), CMS_ROSTER_COLUMNS) } : null);
+          }}
+        />
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={busy || !file}
+          onClick={async () => {
+            const r = await run(() => api.uploadCmsRoster({ fileName: file!.name, rows: file!.rows }), "Roster uploaded");
+            if (r) setResult(r);
+          }}
+        >
+          Upload roster
+        </button>
+      </div>
+      {file && <div className="muted small">{file.rows.length} line(s) read from {file.name}.</div>}
+      <ErrorNotice error={error} />
+      {result && (
+        <div className="small" style={{ marginTop: 6 }}>
+          {result.assigned} seat(s) set.{" "}
+          {result.rejected.length > 0 && (
+            <ul style={{ margin: "4px 0" }}>
+              {result.rejected.map((x) => (
+                <li key={x.line}>
+                  Line {x.line} {x.staff}: {x.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RosterTab({ data }: { data: Cms }) {
   const [pick, setPick] = useState<Record<string, string>>({});
   const [why, setWhy] = useState<Record<string, string>>({});
@@ -499,6 +563,7 @@ function RosterTab({ data }: { data: Cms }) {
     >
       <div className="op-pad">
         <ErrorNotice error={error} />
+        {data.canManage && <CmsRosterUpload />}
         <p className="op-note">
           {data.settings.shiftPattern === "2x12"
             ? "Two 12-hour shifts"
@@ -542,6 +607,12 @@ function RosterTab({ data }: { data: Cms }) {
                       {s.state === "no_show" ? (
                         <span className="op-crit"> · not clocked in</span>
                       ) : null}
+                      {s.shift.replacementOf ? (
+                        <span className="muted"> · replacement for the rest of the shift ({s.shift.replacementReason})</span>
+                      ) : null}
+                      {s.shift.clockOut && !s.shift.replacementOf ? (
+                        <span className="muted"> · left {hhmm(s.shift.clockOut)}</span>
+                      ) : null}
                       {s.shift.released?.length ? (
                         <span className="muted">
                           {" "}
@@ -570,6 +641,42 @@ function RosterTab({ data }: { data: Cms }) {
                           }
                         >
                           Take off
+                        </button>
+                      </div>
+                    )}
+                    {data.canManage && !r.done && !!s.shift.clockIn && !!s.shift.clockOut && Date.parse(s.shift.end) - Date.now() > 15 * 60_000 && (
+                      <div className="op-act">
+                        <Select
+                          className="select"
+                          aria-label={`Replacement for ${s.shift.id}`}
+                          value={pick[`r:${s.shift.id}`] ?? ""}
+                          onChange={(e) => setPick({ ...pick, [`r:${s.shift.id}`]: e.target.value })}
+                        >
+                          <option value="">Replacement…</option>
+                          {who.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </Select>
+                        <input
+                          className="input"
+                          aria-label={`Why a replacement for ${s.shift.id}`}
+                          placeholder="Why (sick, emergency…)"
+                          value={why[`r:${s.shift.id}`] ?? ""}
+                          onChange={(e) => setWhy({ ...why, [`r:${s.shift.id}`]: e.target.value })}
+                        />
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={busy || !pick[`r:${s.shift.id}`] || (why[`r:${s.shift.id}`] ?? "").trim().length < 3}
+                          onClick={() =>
+                            run(
+                              () => api.replaceCmsSeat(s.shift.id, pick[`r:${s.shift.id}`], why[`r:${s.shift.id}`] ?? ""),
+                              "Replacement on the seat for the rest of the shift.",
+                            )
+                          }
+                        >
+                          Replace for the rest
                         </button>
                       </div>
                     )}

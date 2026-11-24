@@ -1,3 +1,4 @@
+import { isOgm, isOpsDirector } from './ops-access';
 import { AccessDenied } from "./access";
 import { isGroupLeader } from "./access";
 import { sha256Hex } from "./audit";
@@ -166,7 +167,7 @@ const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{
 
 /** The Project Director (Fauzan, 5 Nov 2026): the COO, the Operations General Manager and the Operations Director. */
 export function isProjectDirector(user: User): boolean {
-  return user.role === 'pwvsb_officer' && !user.integration && (user.opsTier === 'coo' || user.opsTier === 'ogm' || user.opsTier === 'ops_director');
+  return user.role === 'pwvsb_officer' && !user.integration && (user.opsTier === 'coo' || isOgm(user) || isOpsDirector(user));
 }
 
 /** Guards on duty in a day: each post's guards per shift times the shifts needed to cover its hours. */

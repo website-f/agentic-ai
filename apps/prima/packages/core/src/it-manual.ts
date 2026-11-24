@@ -60,6 +60,13 @@ export class ItManualService {
     if (!p || (it && !isIt(p))) throw new BadRequest('Choose a currently available person.');
     return p;
   }
+  /** A person HR has closed (or is closing) for a leaving checklist: any non-system account, open or closed. */
+  private async leaver(tx: Store, id: unknown): Promise<User> {
+    if (typeof id !== 'string') throw new BadRequest('Choose the leaver.');
+    const p = (await tx.list('users', {})).find(u => u.id === id && !u.integration && u.role !== 'site_device' && u.role !== 'guard');
+    if (!p) throw new BadRequest('Choose the leaver.');
+    return p;
+  }
   private async company(tx: Store, id: unknown) {
     if (id === null) return null;
     if (typeof id !== 'string' || (!isCentralEmployer(id) && !(await tx.get('companies', id)))) throw new BadRequest('Choose a registered company or mark the unit unlinked.');
@@ -166,7 +173,8 @@ export class ItManualService {
       if (kind === 'intake') {
         if (i.kind !== 'join' && i.kind !== 'leave') throw new BadRequest('Choose joining or leaving.');
         if (!realCalendarDate(i.on)) throw new BadRequest('Give the real joining/leaving date.');
-        const person = i.personUserId === null ? null : await this.person(tx, i.personUserId);
+        // IT gaps B1 (23 Nov 2026): a leaving checklist links the leaver even after HR closed their access.
+        const person = i.personUserId === null ? null : i.kind === 'leave' ? await this.leaver(tx, i.personUserId) : await this.person(tx, i.personUserId);
         const owner = await this.person(tx, i.ownerStaffId, true);
         if (!assigns(user) && owner.id !== user.id) throw new BadRequest('Only the IT Manager or Lead assigns another IT person.');
         manual.personUserId = person?.id ?? null;

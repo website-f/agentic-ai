@@ -1,0 +1,851 @@
+/* P129 (Fitri, 24 Nov 2026): the Prima helper screen (views/Assistant.tsx). Say it, Check it, Send it.
+   Phone first: everything stacks at 390px and nothing scrolls sideways; two columns from 720px.
+   Colours come from the styles.css tokens only, with the one accent (--accent). */
+
+.as-page {
+  gap: 20px;
+}
+.as-page h2,
+.as-page h3 {
+  margin: 0;
+}
+
+/* ---------- How it works: three steps and the safety line ---------- */
+.as-how {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.as-how-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.as-how-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.as-how-step[data-state='now'] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: var(--ring);
+}
+.as-how-step[data-state='done'] {
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+.as-how-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.as-how-step[data-state='now'] .as-how-icon,
+.as-how-step[data-state='done'] .as-how-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.as-how-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.as-how-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.as-how-n {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.as-how-note {
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.as-safe {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.as-safe svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+/* ---------- The composer ---------- */
+.as-composer {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 16px);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.as-ask-label {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.as-picked {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.as-picked-label {
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+.as-picked-x {
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.as-picked-x:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.as-picked-x:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+textarea.as-ask {
+  width: 100%;
+  min-height: 120px;
+  padding: 14px 16px;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  resize: vertical;
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+}
+textarea.as-ask:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+  outline: none;
+}
+.as-ask-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: -4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.as-ask-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.as-ask-count[data-near] {
+  color: var(--warn);
+}
+/* No keyboard shortcut to show on a touch screen. */
+@media (hover: none) {
+  .as-ask-key {
+    display: none;
+  }
+}
+.as-examples {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.as-examples-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.as-examples-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.as-example,
+.as-alt {
+  appearance: none;
+  max-width: 100%;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.as-example:hover,
+.as-alt:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  background: var(--accent-soft);
+}
+.as-example:focus-visible,
+.as-alt:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.as-alt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.as-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.as-fill {
+  min-height: 44px;
+  padding-inline: 20px;
+  font-weight: 600;
+}
+.as-busy {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.as-spin {
+  animation: as-spin 0.9s linear infinite;
+}
+@keyframes as-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .as-spin {
+    animation: none;
+  }
+}
+
+/* ---------- Shared: a label over its control ---------- */
+.as-f {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.as-f-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.as-f .input,
+.as-f .select,
+.as-field .input,
+.as-field .select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ---------- Sent ---------- */
+.as-done {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--line));
+  border-radius: var(--r-lg, 16px);
+  background: color-mix(in srgb, var(--ok-soft) 60%, var(--surface));
+}
+.as-done-head {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+.as-done-icon {
+  flex: none;
+  color: var(--ok);
+}
+.as-done-text {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.as-done-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.as-done-sub {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.as-teach {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--ok) 25%, var(--line));
+}
+.as-teach-head h3 {
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+.as-teach-head p {
+  margin: 4px 0 0;
+  max-width: 72ch;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.as-teach-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: end;
+}
+.as-teach-go .btn {
+  width: 100%;
+}
+
+/* ---------- The filled form ---------- */
+.as-draft {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg, 16px);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  scroll-margin-top: 16px;
+}
+.as-draft-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.as-draft-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 240px;
+}
+.as-eyebrow {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.as-draft-title h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.as-draft-title p {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.as-draft-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px;
+  min-width: 0;
+}
+.as-job-row {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.as-job-row .as-f {
+  max-width: 480px;
+}
+.as-alts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.as-alts-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.as-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px 18px;
+  min-width: 0;
+}
+.as-field {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+  transition: border-color 0.15s;
+}
+.as-field:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+.as-field[data-missing] {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+  background: color-mix(in srgb, var(--warn-soft) 40%, var(--surface));
+}
+.as-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.as-req {
+  color: var(--crit);
+}
+.as-origin {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+.as-field-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.as-field-bool {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.as-bool {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.as-bool input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+.as-proof {
+  min-width: 0;
+}
+.as-proof:focus {
+  outline: none;
+}
+
+/* Store items: one line per item, the quantity beside it. */
+.as-lines {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.as-lines:focus {
+  outline: none;
+}
+.as-line {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 76px;
+  grid-template-areas: 'n item qty' '. x x';
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+.as-line-n {
+  grid-area: n;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+}
+.as-line-item {
+  grid-area: item;
+  width: 100%;
+  min-width: 0;
+}
+.as-line-qty {
+  grid-area: qty;
+  width: 100%;
+  min-width: 0;
+}
+.as-line-x {
+  grid-area: x;
+  justify-self: start;
+}
+.as-line-add {
+  justify-self: start;
+}
+
+.as-draft-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-2) 50%, var(--surface));
+  border-radius: 0 0 var(--r-lg, 16px) var(--r-lg, 16px);
+}
+.as-send {
+  min-height: 44px;
+  padding-inline: 22px;
+  font-weight: 600;
+}
+.as-foot-gap {
+  flex: 1 1 0;
+}
+
+/* The person's own guide for the job, when the helper does not fill it. */
+.as-guide {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px 20px;
+  border-top: 1px solid var(--line);
+}
+.as-guide h3 {
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+.as-guide-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+}
+.as-guide-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+}
+.as-guide-card .btn {
+  justify-self: start;
+}
+.as-guide-head {
+  display: grid;
+  gap: 2px;
+}
+.as-guide-where {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.as-guide-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+/* ---------- What it can do: jobs by kind ---------- */
+.as-jobs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+.as-jobs-intro {
+  margin: 0;
+  flex: 1 1 280px;
+  max-width: 64ch;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.as-jobs-bar .k-search {
+  flex: 1 1 240px;
+}
+.as-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.as-group + .as-group {
+  margin-top: 6px;
+}
+.as-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.as-group-n {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.as-jobs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 10px;
+}
+.as-job {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, transform 0.1s;
+}
+.as-job:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
+}
+.as-job:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.as-job:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.as-job:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.as-job[data-picked] {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+.as-job-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.as-job-text {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.as-job-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.as-job-need {
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.as-job-go {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.15s, color 0.15s;
+}
+.as-job:hover:not(:disabled) .as-job-go {
+  color: var(--accent);
+  transform: translateX(2px);
+}
+
+/* ---------- Skills and my style ---------- */
+.as-skills {
+  display: grid;
+  gap: 14px;
+}
+.as-skills-intro {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.as-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+}
+.as-card h3 {
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+.as-skill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.as-skill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 0;
+  min-width: 0;
+}
+.as-skill + .as-skill {
+  border-top: 1px solid var(--line);
+}
+.as-skill-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.as-skill-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.as-word {
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.as-style-line {
+  margin: 0;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+.as-style-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px 12px;
+  margin-top: 4px;
+}
+.as-style-edit .as-f {
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+.as-forget {
+  color: var(--crit);
+  white-space: normal;
+  text-align: left;
+}
+
+/* ---------- Wider screens ---------- */
+@media (min-width: 720px) {
+  .as-how-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .as-composer {
+    padding: 24px 26px;
+  }
+  .as-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .as-field[data-wide] {
+    grid-column: 1 / -1;
+  }
+  .as-teach-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  }
+  .as-teach-go .btn {
+    width: auto;
+  }
+  .as-line {
+    grid-template-columns: 22px minmax(0, 1fr) 90px auto;
+    grid-template-areas: 'n item qty x';
+  }
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 480px) {
+  .as-composer,
+  .as-done {
+    padding: 16px;
+  }
+  .as-draft-head,
+  .as-draft-body,
+  .as-guide {
+    padding-inline: 16px;
+  }
+  .as-draft-foot {
+    padding: 12px 16px;
+  }
+  .as-draft-foot .btn {
+    flex: 1 1 auto;
+  }
+  .as-foot-gap {
+    display: none;
+  }
+  .as-ask-label {
+    font-size: 1.15rem;
+  }
+  .as-done-open {
+    width: 100%;
+  }
+}

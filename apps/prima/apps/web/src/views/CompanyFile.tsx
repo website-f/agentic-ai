@@ -212,6 +212,12 @@ function FileDetail({ f, onDone }: { f: File; onDone: () => void }) {
   const [papers, setPapers] = useState(toLines(p.papers));
   const [constRef, setConstRef] = useState(p.constitution?.ref ?? '');
   const [constOn, setConstOn] = useState(p.constitution?.on ?? '');
+  // B1 (23 Nov 2026): the basic facts Prima needs to open the yearly filings and audit.
+  const [firm, setFirm] = useState(p.secretaryFirm ?? '');
+  const [licence, setLicence] = useState(p.secretaryLicence ?? '');
+  const [auditor, setAuditor] = useState(p.auditor ?? '');
+  const [incorporatedOn, setIncorporatedOn] = useState(p.incorporatedOn ?? '');
+  const [fyeMonth, setFyeMonth] = useState(String(p.fyeMonth || 12));
   const [ssmRef, setSsmRef] = useState('');
   const [note, setNote] = useState('');
   const [diffs, setDiffs] = useState('');
@@ -239,6 +245,11 @@ function FileDetail({ f, onDone }: { f: File; onDone: () => void }) {
         on: x.on || null,
       })),
       constitution: constRef ? { adopted: true, ref: constRef, on: constOn || null } : null,
+      fyeMonth: Number(fyeMonth),
+      ...(firm.trim() ? { secretaryFirm: firm } : {}),
+      ...(licence.trim() ? { secretaryLicence: licence } : {}),
+      ...(auditor.trim() ? { auditor } : {}),
+      ...(incorporatedOn ? { incorporatedOn } : {}),
     };
     return act.run(
       () => api.saveCompanyFile(p.companyId, input).then(onDone),
@@ -264,9 +275,31 @@ function FileDetail({ f, onDone }: { f: File; onDone: () => void }) {
   return (
     <div className="panel">
       <p className="muted small">
-        Secretary: {p.secretaryFirm} ({p.secretaryLicence}) · Auditor: {p.auditor} · Incorporated {dateLabel(p.incorporatedOn)} · Year end month {p.fyeMonth}
+        Secretary: {p.secretaryFirm || 'not keyed in'} ({p.secretaryLicence || 'no licence number'}) · Auditor: {p.auditor || 'not keyed in'} · Incorporated{' '}
+        {p.incorporatedOn ? dateLabel(p.incorporatedOn) : 'date not keyed in'} · Year end month {p.fyeMonth}
         {f.companyVerified ? ' · company record checked' : ' · company record still a draft'}
       </p>
+      {edit && (
+        <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+          <input aria-label="Company secretary firm" placeholder="Company secretary firm" value={firm} onChange={(e) => setFirm(e.target.value)} />
+          <input aria-label="Secretary licence number" placeholder="Secretary licence number" value={licence} onChange={(e) => setLicence(e.target.value)} />
+          <input aria-label="Auditor" placeholder="Auditor (from Panel firms)" value={auditor} onChange={(e) => setAuditor(e.target.value)} />
+          <label className="small">
+            Incorporated on
+            <input aria-label="Incorporated on" type="date" value={incorporatedOn} onChange={(e) => setIncorporatedOn(e.target.value)} />
+          </label>
+          <label className="small">
+            Financial year ends in
+            <select aria-label="Financial year ends in" className="select" value={fyeMonth} onChange={(e) => setFyeMonth(e.target.value)}>
+              {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((m, i) => (
+                <option key={m} value={String(i + 1)}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
       <Rows
         title="Directors"
         edit={edit}

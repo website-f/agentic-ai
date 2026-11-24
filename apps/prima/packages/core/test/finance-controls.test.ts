@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { receivedSupplierBill } from './supplier-bill-helper';
 import { AccessDenied, GROUP_EMPLOYER_ID, MemoryStore, PrimaService, generateDataset, myt, parseStatementCsv, sstPenalty, sstPeriodOf } from '../src';
 type FinStatusT = import('../src').FinStatus;
 
@@ -485,9 +486,9 @@ describe('review findings (Arisha main, 1 Nov 2026)', () => {
       await svc.setFinPack(dep, T1, 'bank', i.id, 'reviewed', 'ok');
     }
     // After review, a new exception appears (a supplier bill found unposted).
-    F().posting = { ...F().posting, supplierBillsUnposted: 1 };
+    receivedSupplierBill(ds, T1, 1, myt('2026-09-28', '10:00'));
     expect((await svc.finance.desk(fd)).companies.find((c) => c.companyId === T1)!.close.may).not.toContain('approve');
-    await expect(svc.finance.closeStep(fd, T1, 'approve', { comment: 'ok' })).rejects.toThrow(/Explain: 1 supplier bill/);
+    await expect(svc.finance.closeStep(fd, T1, 'approve', { comment: 'ok' })).rejects.toThrow(/Explain: Supplier bill INV-TEST-1/);
   });
 
   it('nobody who drafted or submitted a budget approves it, even after someone else submits', async () => {

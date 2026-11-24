@@ -10,6 +10,7 @@ import { RecordButton } from './RecordForm';
 import { Chip, Drawer, ErrorNotice, Findings, Loading, dayLabel, hhmm, useAction, useLoad } from '../ui';
 import '../styles/attendance.css';
 import '../styles/loading.css';
+import { JaUploadsPanel } from './JaUploads';
 
 type RosterShift = Roster['shifts'][number];
 
@@ -95,6 +96,8 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
           </Empty>
         </Card>
       )}
+
+      <JaUploadsPanel />
 
       {!noSites && (
         <>

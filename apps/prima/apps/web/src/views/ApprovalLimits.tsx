@@ -14,6 +14,7 @@ export function ApprovalLimitsPanel() {
   const [open, setOpen] = useState(false);
   const [claims, setClaims] = useState('');
   const [purchases, setPurchases] = useState('');
+  const [online, setOnline] = useState('');
   const [comment, setComment] = useState('');
   const act = useAction();
   if (error) return <ErrorNotice error={error} />;
@@ -21,12 +22,13 @@ export function ApprovalLimitsPanel() {
   const start = () => {
     setClaims(data.claimsMax == null ? '' : String(data.claimsMax));
     setPurchases(data.purchasesMax == null ? '' : String(data.purchasesMax));
+    setOnline(data.onlineBuyMax == null ? '' : String(data.onlineBuyMax));
     setComment('');
     setOpen(true);
   };
   const save = () =>
     act.run(
-      () => api.setApprovalLimits({ claimsMax: parse(claims), purchasesMax: parse(purchases), comment }),
+      () => api.setApprovalLimits({ claimsMax: parse(claims), purchasesMax: parse(purchases), onlineBuyMax: parse(online), comment }),
       'Approval limits saved.',
     ).then((r) => {
       if (r === undefined) return;
@@ -64,6 +66,11 @@ export function ApprovalLimitsPanel() {
             <span className="gv-limit-value">{rm(data.purchasesMax)}</span>
             <span className="muted small">Above this, the CEO approves too</span>
           </div>
+          <div className="gv-limit">
+            <span className="gv-limit-label">Buying from an online platform (Shopee, Lazada), up to</span>
+            <span className="gv-limit-value">{data.onlineBuyMax == null ? 'Off' : rm(data.onlineBuyMax)}</span>
+            <span className="muted small">Finance approves the payment first; the listing screenshot and the platform receipt are kept</span>
+          </div>
         </div>
         {data.set && (
           <p className="muted small">
@@ -80,6 +87,10 @@ export function ApprovalLimitsPanel() {
               <label className="field">
                 <span className="label">Purchases without the CEO, up to RM (empty = no limit)</span>
                 <input className="input" inputMode="decimal" aria-label="Purchases limit" value={purchases} onChange={(e) => setPurchases(e.target.value)} />
+              </label>
+              <label className="field">
+                <span className="label">Buying from an online platform, up to RM (empty = off)</span>
+                <input className="input" inputMode="decimal" aria-label="Online buying limit" value={online} onChange={(e) => setOnline(e.target.value)} />
               </label>
               <label className="field gv-span">
                 <span className="label">Why</span>

@@ -61,6 +61,11 @@ describe('Asset Management extras on PostgreSQL', () => {
     const b = await db.asUser('u-asset-dir', (svc, u) => svc.amExtras.board(u));
     assert.equal(b.installed, false);
     assert.deepEqual(b.contractors, []);
+    // Needs attention today (23 Nov 2026): no extras items before the module, and nothing for outsiders.
+    const today = await db.asUser('u-asset-mm', (svc, u) => svc.assetToday(u));
+    assert.ok(Array.isArray(today));
+    assert.ok(!today.some((t) => t.tag === 'Asset Management'));
+    await assert.rejects(db.asUser('u-it-ex1', (svc, u) => svc.assetToday(u)), AccessDenied);
     await assert.rejects(
       db.asUser('u-asset-mm', (svc, u) => svc.amExtras.act(u, 'contractor', 'add', '', { name: 'PG Contractor (test)', ssmNo: '000001-PG', trades: ['GENERAL'] })),
       /not set up in this database/,
@@ -93,6 +98,9 @@ describe('Asset Management extras on PostgreSQL', () => {
       AccessDenied,
     );
     await assert.rejects(db.asUser('u-it-ex1', (svc, u) => svc.amExtras.board(u)), AccessDenied);
+    // After the module the extras items reach the team's list through the wall.
+    const items = await db.asUser('u-asset-mm', (svc, u) => svc.amExtras.homeItems(u));
+    assert.ok(Array.isArray(items));
 
     // A resort booking: the Asset Director sets the price list, the team books and takes the deposit, Finance banks it.
     // The seeded taxes stay: RM800 room + 8% service tax + RM3 x 4 room-nights state fee = RM876, so 30% is RM262.80.

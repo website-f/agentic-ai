@@ -184,3 +184,23 @@ the Annex B application form fields (HR's form).
   (agrees the policy) and a guard (no menu entry). Mock data only.
 - 8 Nov 2026 PIKM rows: core quality tests 27 passed, full core 2187 passed, PostgreSQL quality tests 9 passed.
 - Not done: staff UAT, migration, deployment.
+
+## Operations standards duties (Fauzan, 23 Nov 2026)
+
+Fauzan: "Read back the whole system. We have done the iso rba pikmsirim. So make sure operation department do what needed." Prima already holds the records each standard asks operations to keep; what was missing was one place where operations sees what is due. The **Standards duties** panel sits on the Ops screen (OM, Regional OM, OGM or Deputy, Operations Director, COO) and on the Company screen (company manager, admin executives), for the sites each person covers (`svc.opsStandardsDuties`, `GET /ops/standards-duties`). Each line is a count from existing records with a link to the screen where the work is done. A count of 0 means none found, not that a standard is met; a source that is not installed shows "Not known". ACT still checks evidence in the register.
+
+| Duty | Standard | Read from |
+| --- | --- | --- |
+| Client-signed assignment instructions at every site | PIKM 9.5, ISO 8.5.1 | `sites.instructions.clientSigned` |
+| Risk briefing before the first shift at a medium or high risk site | PIKM 9.4 | roster check RISK_BRIEFING (next 7 days) |
+| Yearly medical from age 56 | PIKM 7.1 | roster check MEDICAL_56 |
+| Signed employment agreement uploaded | RBA, PIKM 7 | roster check NO_AGREEMENT (rule GUARD-AGREEMENT, warn only) |
+| Daily hours, rest between shifts, one rest day a week | RBA A.3, EA s.59 | roster checks OVER_12_HOURS, SHORT_REST, NO_REST_DAY, OVERLAP |
+| Only guards allowed to work (KDN, CSG, age, permits) | PIKM 7.2, 8 | deployability |
+| Site safety and operations talk every 30 days (OM) | RBA, ISO 7.3 | Toolbox X19 site talks |
+| Service faults and complaints closed; root cause for serious or repeated | ISO 8.7, 10.2 | quality module faults |
+| Client code inspections fixed within 14 days; first inspection done | RBA, client codes | client inspections and codes |
+| Client visit every 30 days, monthly report by the 10th, signed acknowledgement by the 10th, satisfaction asked | ISO 9.1.2 | client accounts (OPS-CLIENT-CARE) |
+| Incident cases not left open | PIKM 9, ISO 8.7 | cases |
+
+Tests: `packages/core/test/ja-uploads-agreements.test.ts`.

@@ -30,7 +30,14 @@ export const OFFICE_DESKS: { desk: OfficeDesk; label: string; covers: string; vi
     covers: 'Client reports and visits, contracts and renewals, invoices to chase, branches',
     views: ['clients', 'contracts', 'finance', 'branches', 'credit'],
   },
-  { desk: 'tenders', label: 'Tenders and quotations', covers: 'Tenders closing, bidding papers, quotations being prepared', views: ['commercial'] },
+  // Marketing prepares and lodges every tender (Fauzan, 22-23 Nov 2026); the office answers bid notices, approves the
+  // price and prepares its own quotations.
+  {
+    desk: 'tenders',
+    label: 'Quotations and Marketing bids',
+    covers: 'Quotations being prepared, Marketing bid notices to answer and prices to approve, company papers for tenders',
+    views: ['commercial', 'marketing'],
+  },
   {
     desk: 'licences',
     label: 'Licences, insurance and compliance',
@@ -41,8 +48,8 @@ export const OFFICE_DESKS: { desk: OfficeDesk; label: string; covers: string; vi
   {
     desk: 'office',
     label: 'Office, purchases and claims',
-    covers: 'Purchases and stock, staff claims, hostel bills, vehicles, IT help',
-    views: ['purchasing', 'claims', 'hostels', 'fleet', 'it', 'websites', 'staffpay'],
+    covers: 'Office supplies, utilities and rent requests, purchases and stock, staff claims, hostel bills, vehicles, IT help',
+    views: ['requests', 'purchasing', 'claims', 'hostels', 'fleet', 'it', 'websites', 'staffpay'],
   },
 ];
 

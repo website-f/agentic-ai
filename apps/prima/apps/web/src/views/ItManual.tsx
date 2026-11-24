@@ -28,9 +28,11 @@ export function decodeManualBoard(value:unknown,userId:string):Board {
   return b;
 }
 const createAction:Record<ManualKind,string>={intake:'createIntake',system:'createSystem',guidance:'createGuidance',asset:'createAsset'};
-export function ItManualPanel({mode,extra}:{mode:'intake'|'systems'|'assets';/** P91: shown next to the Add button (e.g. Import). */extra?:ReactNode}) {
+/** IT gaps B1 + D1 (23 Nov 2026): a checklist started from the "From HR" list, with the person already chosen. */
+export type IntakePrefill={kind:'join'|'leave';personUserId:string;personName:string;jobTitle:string;on:string;companyId:string|null};
+export function ItManualPanel({mode,extra,prefill,onDone}:{mode:'intake'|'systems'|'assets';/** P91: shown next to the Add button (e.g. Import). */extra?:ReactNode;prefill?:IntakePrefill;onDone?:()=>void}) {
   const {me}=useApp();const userId=me.user.id;
-  const [opened,setOpened]=useState<ManualKind|null>(null);
+  const [opened,setOpened]=useState<ManualKind|null>(prefill?'intake':null);
   const [review,setReview]=useState<string|null>(null);
   const [reviewAsCheck,setReviewAsCheck]=useState(false);
   const {data,error,reload}=useLoad(async()=>decodeManualBoard(await api.itManualAct(userId,'manualBoard',{}),userId),[userId]);
@@ -42,7 +44,7 @@ export function ItManualPanel({mode,extra}:{mode:'intake'|'systems'|'assets';/**
     <p className="muted small">Manual records only. This does not create or revoke accounts, grant permissions, create a SharePoint site, or prove a connection is working. Never enter passwords, tokens or recovery codes.</p>
     {(mode==='assets'?data.canCreateAsset:data.canCreate)&&!opened&&!review&&<div className="row it-actions">{(mode==='intake'?['intake']:mode==='assets'?['asset']:['system','guidance'] as ManualKind[]).map(kind=><button className="btn btn-primary" key={kind} onClick={()=>setOpened(kind as ManualKind)}><PlusIcon size={16} weight="bold" aria-hidden="true"/> {kind==='intake'?'Add joining / leaving request':kind==='system'?'Register existing system':kind==='asset'?'Register existing device':'Record SharePoint guidance'}</button>)}{extra}</div>}
     {!(mode==='assets'?data.canCreateAsset:data.canCreate)&&<p className="muted">Read-only here. Authorized IT staff record these details; system access still follows CEO approval.</p>}
-    {opened&&data.configuration==='ready'&&(opened==='asset'?data.canCreateAsset:data.canCreate)&&<ManualEditor key={`${userId}:${opened}`} kind={opened} board={data} onClose={()=>{setOpened(null);reload();}}/>}
+    {opened&&data.configuration==='ready'&&(opened==='asset'?data.canCreateAsset:data.canCreate)&&<ManualEditor key={`${userId}:${opened}`} kind={opened} board={data} prefill={opened==='intake'?prefill:undefined} onClose={()=>{setOpened(null);reload();onDone?.();}}/>}
     {mode==='systems'&&data.accounts.filter(a=>(a.manual as {kind?:unknown}|undefined)?.kind==='guidance').map(a=>{
       const record=a as unknown as Guidance,m=record.manual;
       const name=(id:string|null)=>id?data.staff.find(x=>x.id===id)?.name??data.itStaff.find(x=>x.id===id)?.name??'Linked staff record':'Not linked';
@@ -66,9 +68,9 @@ export function ItManualPanel({mode,extra}:{mode:'intake'|'systems'|'assets';/**
 function Select({label,value,onChange,items,optional=false}:{label:string;value:string;onChange:(value:string)=>void;items:Choice[];optional?:boolean}) {
   return <label className="field">{label}<KSelect className="select" aria-label={label} value={value} onChange={e=>onChange(e.target.value)} required={!optional}><option value="">{optional?'Not linked / not provided':'Choose an authorized record'}</option>{items.map(x=><option key={x.id} value={x.id}>{x.name}{x.title?` — ${x.title}`:''}</option>)}</KSelect></label>;
 }
-function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:()=>void}) {
+function ManualEditor({kind,board,onClose,prefill}:{kind:ManualKind;board:Board;onClose:()=>void;prefill?:IntakePrefill}) {
   const [,render]=useReducer(x=>x+1,0);
-  const [form,setForm]=useState<Record<string,string>>({kind:'join',systemKind:'other',assetKind:'LAPTOP'});
+  const [form,setForm]=useState<Record<string,string>>({kind:prefill?.kind??'join',systemKind:'other',assetKind:'LAPTOP',...(prefill?{personUserId:prefill.personUserId,jobTitle:prefill.jobTitle,on:prefill.on,companyId:prefill.companyId&&board.companies.some(c=>c.id===prefill.companyId)?prefill.companyId:''}:{})});
   const [validation,setValidation]=useState('');
   const put=(key:string,value:string)=>setForm(f=>({...f,[key]:value}));
   const session=useMemo(()=>new ManualSession({
@@ -83,7 +85,7 @@ function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:
     const companyId=form.companyId||null,unitLabel=form.unitLabel?.trim()||'';
     let payload:Record<string,unknown>;
     if(kind==='intake'){
-      const person=board.staff.find(x=>x.id===form.personUserId);
+      const person=board.staff.find(x=>x.id===form.personUserId)??(prefill&&form.personUserId===prefill.personUserId?{id:prefill.personUserId,name:prefill.personName}:undefined);
       if(form.personUserId&&!person){setValidation('Choose a currently authorized staff record.');return;}
       payload={kind:form.kind,personUserId:person?.id??null,personName:person?.name??form.personName?.trim(),jobTitle:form.jobTitle?.trim(),companyId,unitLabel,on:form.on,ownerStaffId:form.itResponsibleId};
     }else if(kind==='asset')payload={tag:form.tag?.trim(),serial:form.serial?.trim(),kind:form.assetKind,model:form.model?.trim(),companyId,unitLabel,location:form.location?.trim(),boughtOn:form.boughtOn||null,warrantyTo:form.warrantyTo||null};
@@ -99,7 +101,7 @@ function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:
       <fieldset disabled={blocked} className="it-fieldset">
         {kind==='intake'?<>
           <label className="field"><span className="label">Request type</span><select className="select" value={form.kind} onChange={e=>put('kind',e.target.value)}><option value="join">Joining</option><option value="leave">Leaving</option></select></label>
-          <Select label="Existing authorized staff identity (optional)" value={form.personUserId??''} onChange={v=>put('personUserId',v)} items={board.staff} optional/>
+          {prefill?<p className="small">Person from HR: <b>{prefill.personName}</b> ({prefill.kind==='leave'?'leaving':'joining'} {prefill.on})</p>:<Select label="Existing authorized staff identity (optional)" value={form.personUserId??''} onChange={v=>put('personUserId',v)} items={board.staff} optional/>}
           {!form.personUserId&&<>{field('Unlinked person name — not a verified staff account','personName','text',true)}<p className="small">This does not create a staff account or associate a typed name with an existing person.</p></>}
           {field('Job title','jobTitle','text',true)}{field('Joining / leaving date','on','date',true)}
         </>:kind==='asset'?<>

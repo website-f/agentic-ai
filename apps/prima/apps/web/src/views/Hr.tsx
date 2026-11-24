@@ -18,6 +18,7 @@ import { ScreeningPanel } from './HrScreening';
 import { OfficeOshPanel } from './HrOsh';
 import { AppraisalsPanel, HrLegalPanel, OvertimePanel, PoliciesPanel, TrainingPanel } from './HrDevelop';
 import { PayChangesPanel } from './PayChanges';
+import { CosCoverPanel } from './HrCosCover';
 import { HrGuide } from './HrGuide';
 import { AttendanceReportsSummary } from './AttendanceReports';
 import { hrKeeps, isOwnerAdmin, p91MayImport } from '@prima/core';
@@ -30,7 +31,7 @@ const GROUPS: { id: string; title: string; sub: string }[] = [
   { id: 'hr-g-move', title: 'Joining, leaving and moving', sub: 'Joiners and leavers, vacancies, staff movement and staff history' },
   { id: 'hr-g-cases', title: 'Cases, safety and legal', sub: 'Staff HR files, discipline appeals, screening, office safety and legal points for the directors' },
   { id: 'hr-g-grow', title: 'Appraisals, training and policies', sub: 'Appraisals, training, the handbook and how to do it' },
-  { id: 'hr-g-leave', title: 'Leave and holidays', sub: 'Leave requests, flexible work, extra leave, public holidays and CMS staff hours' },
+  { id: 'hr-g-leave', title: 'Leave and holidays', sub: 'Leave requests, Chief of Staff cover, flexible work, extra leave, public holidays and CMS staff hours' },
   // P81: the monthly attendance reports from the attendance system.
   { id: 'hr-g-att', title: 'Attendance reports', sub: 'Import the monthly attendance PDFs and see each month' },
 ];
@@ -236,6 +237,8 @@ export function HrView() {
         <HrGuide />
       </Group>
       <Group {...leave}>
+        {/* P129 (upstream HR gap D1): who covers the Chief of Staff's own items while on leave, and hand-overs. */}
+        <CosCoverPanel />
         <LeavePanel />
         <FlexPanel />
         <div id="hr-leave-settings">

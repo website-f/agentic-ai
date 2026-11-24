@@ -11,7 +11,7 @@ import { resetDb } from '../src/reset-db';
 const URL = process.env.DATABASE_URL ?? 'postgres://postgres:localdev@localhost:5432/prima_test';
 process.env.DATABASE_URL = URL;
 // Tables this branch's adapters read that live in a separately applied db/modules SQL file: missing after a plain reset.
-const MODULE_ONLY = ['tenderOpportunities', 'cleaningDays', 'stockRequests'];
+const MODULE_ONLY = ['tenderOpportunities', 'cleaningDays', 'stockRequests', 'officeAmRecs', 'stayRequests'];
 
 describe('work KPIs (database)', () => {
   let db: Db;
@@ -64,7 +64,7 @@ describe('work KPIs once the module is applied (database)', () => {
     const admin = new Client({ connectionString: URL });
     await admin.connect();
     try {
-      for (const module of ['tender-opportunities-v1.sql', 'cleaning-ops-v1.sql', 'uniform-requests-v1.sql']) await admin.query(readFileSync(join(__dirname, '../../../../db/modules', module), 'utf8'));
+      for (const module of ['tender-opportunities-v1.sql', 'cleaning-ops-v1.sql', 'uniform-requests-v1.sql', 'office-am-v1.sql', 'am-extras-v1.sql', 'short-stays-v1.sql']) await admin.query(readFileSync(join(__dirname, '../../../../db/modules', module), 'utf8'));
     } finally {
       await admin.end();
     }

@@ -209,6 +209,26 @@ describe("org chart: Fauzan's answers (23 Nov 2026)", () => {
     await expect(svc.org.setLine(await svc.user('u-it-mgr'), { userId: 'u-patrol-perak', managerId: 'u-it-mgr', reason: 'No reach' })).rejects.toThrow();
   });
 
+  it('a private patrolling officer with no OM is under the Operations Director, who delegates an OM of the private side', async () => {
+    const ds = generateDataset({ today: '2026-11-23', now: NOW });
+    const patrol = ds.users.find((u) => u.opsTier === 'patrol')!;
+    ds.users.push({ ...patrol, id: 'u-patrol-perak', name: 'Patrolling Officer Perak (mock)', title: 'Patrolling Officer, Sasa (Perak)', opsSector: 'private', entraOid: undefined, personId: undefined });
+    ds.users.push({ ...patrol, id: 'u-patrol-gov', name: 'Patrolling Officer Gov (mock)', title: 'Patrolling Officer, Goodwill (Perak)', opsSector: 'government', entraOid: undefined, personId: undefined });
+    const govOm = ds.users.find((u) => u.id === 'u-om-klang')!;
+    ds.users.push({ ...govOm, id: 'u-om-gov-only', name: 'Government OM (mock)', opsSector: 'government', entraOid: undefined, personId: undefined });
+    const svc = new PrimaService(new MemoryStore(ds), () => NOW);
+    expect(await managerOf(svc, 'u-patrol-perak')).toBe('u-opsdir');
+    const od = await svc.user('u-opsdir');
+    const c = await svc.org.chart(od);
+    expect(c.managerChoices.map((m) => m.id)).toContain('u-om-klang');
+    // OMs and Regional OMs with no side are listed for the heads.
+    expect(c.gaps.some((g) => g.includes('not tied to a side'))).toBe(true);
+    await expect(svc.org.setLine(od, { userId: 'u-patrol-gov', managerId: 'u-om-klang', reason: 'Not my side' })).rejects.toThrow();
+    await expect(svc.org.setLine(od, { userId: 'u-patrol-perak', managerId: 'u-om-gov-only', reason: 'Other side' })).rejects.toThrow();
+    await svc.org.setLine(od, { userId: 'u-patrol-perak', managerId: 'u-om-klang', reason: 'Klang OM covers Perak for now' });
+    expect(await managerOf(svc, 'u-patrol-perak')).toBe('u-om-klang');
+  });
+
   it('a role or line held for a while lapses after its last day; one person can hold several roles', async () => {
     const { svc, ds } = setup();
     const cos = await svc.user('u-cos');

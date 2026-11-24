@@ -40,8 +40,15 @@ const source = crypto.createHash('sha256').update(blocks.join('\n\u0000\n')).dig
 
 const js = (code) => ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.None } }).outputText;
 const names = Object.keys(core).filter((k) => /^[A-Za-z_$][\w$]*$/.test(k));
+// P129: small helpers App.tsx defines itself (lower-case top-level functions such as standsInForOpsHead) that the menu
+// filter calls; taken as they are (not part of the fingerprint: the filter that calls them is).
+const helpers = [...app.matchAll(/^function ([a-z][\w$]*)\([^\n]*\n(?:.*\n)*?\}\n/gm)]
+  .filter((m) => blocks[2].includes(`${m[1]}(`))
+  .map((m) => m[0])
+  .join('\n');
 // The menu as App.tsx's Shell makes it for `me`, before the office narrows it (office-access.ts).
-const body = `${js(blocks[0])}
+const body = `${js(helpers)}
+${js(blocks[0])}
 const role = me.user.role;
 const isGroup = role === 'director' || role === 'pwvsb_officer';
 const dept = me.user.department;

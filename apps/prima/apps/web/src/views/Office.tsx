@@ -121,8 +121,6 @@ const QUEUE_FILTERS: DtFilter<QueueRow>[] = [
 
 function AllOffices({ open }: { open: (id: string) => void }) {
   const { me, setCompanyId, go } = useApp();
-  // Fauzan, 3 Nov 2026: "cos will set" (the CEO keeps the right as owner); the server checks again.
-  const canSetRunBy = (me.user.role === 'pwvsb_officer' && me.user.leadership === 'cos') || (me.user.role === 'director' && me.user.opsTier === 'ceo');
   const { data, error } = useLoad(() => api.companyOffices(), []);
   const workTable = useTableState('board.office.work');
   const desk = workTable.state.f.desk || null;
@@ -237,7 +235,8 @@ function AllOffices({ open }: { open: (id: string) => void }) {
           empty={<Empty title="Nothing waiting." />}
         />
       </Card>
-      {canSetRunBy && <RunByForm rows={data.rows} />}
+      {/* Fauzan, 3 Nov 2026: "cos will set" (the CEO keeps the right; the Deputy while covering); the server checks again. */}
+      {data.canSetRunBy && <RunByForm rows={data.rows} />}
       <OfficeGuide role="monitor" />
     </div>
   );

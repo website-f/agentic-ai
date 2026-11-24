@@ -54,6 +54,8 @@ export const ACCOUNT_TEMPLATES: AccountTemplate[] = [
   C('finance_leader', 'Finance team leader', { department: 'finance', financeRole: 'leader' }, ['financeTeam']),
   C('finance_deputy', 'Finance team deputy', { department: 'finance', financeRole: 'deputy' }, ['financeTeam']),
   C('finance_data_entry', 'Finance data entry', { department: 'finance', financeRole: 'data_entry' }, ['financeTeam']),
+  // D1 (Fauzan, 23 Nov 2026): below the FD, does what the FD delegates. Needs module finance-account-manager-v1.
+  C('finance_account_manager', 'Finance Account Manager', { department: 'finance', financeAccountManager: true }),
   C('fwm_manager', 'FWM Manager', { department: 'fwm', fwmRole: 'manager' }),
   C('fwm_deputy', 'FWM Deputy Manager', { department: 'fwm', fwmRole: 'deputy' }),
   C('fwm_executive', 'FWM Executive', { department: 'fwm', fwmRole: 'executive' }),

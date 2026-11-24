@@ -102,7 +102,7 @@ describe('P78: the owner in People and HR', () => {
     expect((await svc.fwmBoard(owner)).canWork).toBe(true);
     expect((await svc.fwmWelfare(owner)).canRecord).toBe(true);
     expect((await svc.hostelBoard(owner)).canAddBill).toBe(true);
-    expect((await svc.expenseBoard(owner)).can).toEqual({ opsClaim: true, office: true });
+    expect((await svc.expenseBoard(owner)).can).toEqual({ opsClaim: true, office: true, sendOffice: true });
     expect((await svc.socsoClaims(owner)).canStart).toBe(true);
   });
 });

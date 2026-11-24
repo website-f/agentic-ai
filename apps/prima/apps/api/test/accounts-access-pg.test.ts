@@ -46,8 +46,12 @@ describe('Accounts and Access (PostgreSQL)', () => {
     const read = async () => (await admin('SELECT key, shape FROM prima.acc_templates() ORDER BY key COLLATE "C"')).rows;
     const byKey = (list: typeof want) => [...list].sort((a, b) => (a.key < b.key ? -1 : 1));
     // The three Marketing kinds (Fauzan, 22-23 Nov 2026) come with the add-on module marketing-accounts-v1.
-    assert.deepEqual(await read(), byKey(want.filter((t) => !t.key.startsWith('marketing_'))));
+    const addOn = (k: string) => k.startsWith('marketing_') || k === 'finance_account_manager';
+    assert.deepEqual(await read(), byKey(want.filter((t) => !addOn(t.key))));
     await admin(readFileSync(resolve(__dirname, '../../../../db/modules/marketing-accounts-v1.sql'), 'utf8'));
+    assert.deepEqual(await read(), byKey(want.filter((t) => t.key !== 'finance_account_manager')));
+    // The Finance Account Manager (Fauzan, 23 Nov 2026) comes with the add-on module finance-account-manager-v1.
+    await admin(readFileSync(resolve(__dirname, '../../../../db/modules/finance-account-manager-v1.sql'), 'utf8'));
     assert.deepEqual(await read(), byKey(want));
   });
 

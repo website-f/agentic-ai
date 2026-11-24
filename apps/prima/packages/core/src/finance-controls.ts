@@ -10,6 +10,9 @@ import { finThreeStatementAction } from "./finance-plan3";
 import { AccessDenied } from "./access";
 import { GROUP_EMPLOYER_ID } from "./access";
 import { FinanceDeskService } from "./finance";
+import { finCovers } from "./finance";
+import { finMatchPayouts } from "./finance-payouts";
+import { finUnmatchPayouts } from "./finance-payouts";
 import { ageTotal } from "./finance";
 import { finArActive } from "./finance";
 import { finMatchReceipts } from "./finance";
@@ -63,6 +66,7 @@ import { dateOf } from "./time";
 import { toMs } from "./time";
 import { FIN_PLAN_LINES } from "./types";
 import type { Contract } from "./types";
+import type { PurRequest } from "./types";
 import type { FinAgeBuckets } from "./types";
 import type { FinAgeing } from "./types";
 import type { FinArCase } from "./types";
@@ -512,7 +516,7 @@ export class FinanceControlsService {
     fn: (f: FinStatus, a: FinActor, s: FinSettingsValues) => { patch: Partial<FinStatus>; action: string; summary: string; result: T; also?: (tx: Store) => Promise<void> },
   ) {
     return this.store.transaction(async (tx) => {
-      const a = this.desk.actor(user);
+      const a = await this.desk.actorFor(user);
       const f = await this.desk.row(tx, user, a, companyId);
       const out = fn(f, a, await this.desk.settings(tx));
       if (Object.keys(out.patch).length) await tx.update('finStatus', f.id, out.patch);
@@ -679,11 +683,12 @@ export class FinanceControlsService {
         // Deposits and retention paid back by clients (suggestion 3).
         const dp = f.clientDeposits?.length ? finMatchDeposits(rg.statements, f.clientDeposits, contracts, this.now()) : null;
         const fd = f.fixedDeposits?.length ? finMatchFds(dp?.statements ?? rg.statements, f.fixedDeposits, this.now()) : null;
-        const found = rg.found + (dp?.found ?? 0) + (fd?.found ?? 0);
+        const po = f.payouts?.length ? finMatchPayouts(f.payouts, fd?.statements ?? dp?.statements ?? rg.statements, s, this.now()) : null;
+        const found = rg.found + (dp?.found ?? 0) + (fd?.found ?? 0) + (po?.found ?? 0);
         return {
           also: this.stampHostel(f, hostel, rg.hostelSeen, () => false),
           patch: found
-            ? { statements: fd?.statements ?? dp?.statements ?? rg.statements, regular: rg.regular, guarantees: rg.guarantees, ...(dp ? { clientDeposits: dp.deposits } : {}), ...(fd ? { fixedDeposits: fd.fds } : {}) }
+            ? { statements: po?.statements ?? fd?.statements ?? dp?.statements ?? rg.statements, regular: rg.regular, guarantees: rg.guarantees, ...(dp ? { clientDeposits: dp.deposits } : {}), ...(fd ? { fixedDeposits: fd.fds } : {}), ...(po ? { payouts: po.payouts } : {}) }
             : {},
           action: 'finance.regular.rematched',
           summary: `Looked again on the loaded bank statements: ${found} direct debit(s), collateral or deposit refund(s) or hostel payment(s) found.`,
@@ -702,7 +707,7 @@ export class FinanceControlsService {
    * Nothing is paid: the payments wait for review like any other.
    */
   async prepareRegularDue(user: User, companyId: Id, input: { items?: { regularId: Id; period: string; sqlRef?: string }[] } = {}) {
-    const a = this.desk.actor(user);
+    const a = await this.desk.actorFor(user);
     if (a.kind === 'viewer' || a.kind === 'coo') throw new AccessDenied('view', '(Finance staff prepare payments)');
     const today = this.today();
     const st = await this.desk.settings();
@@ -776,13 +781,13 @@ export class FinanceControlsService {
   /** Insurance and bank guarantees: add, check, release, claim the collateral, extend, called, close. */
   /** Fixed deposits (suggestion 15): add, check, renew, uplift, close. */
   async fdAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finFdAction({ ...ctx, a }, f, action, input));
   }
 
   /** Bank charges (suggestion 16): what the bank agreed per account, and a month above it explained. */
   async chargeAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => {
       if (a.kind === 'viewer' || a.kind === 'coo') throw new AccessDenied('view', '(Finance staff)');
       return finChargeAction({ ...ctx, a }, f, this.desk.closePeriod(), action, input);
@@ -791,45 +796,45 @@ export class FinanceControlsService {
 
   /** Supplier statements (suggestion 11): record the quarter's check for a big supplier, review it. */
   async supplierStatementAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finSupplierStatementAction({ ...ctx, a }, f, action, input));
   }
 
   /** Credit limits per private client (suggestion 4): set a limit, keep the balance, remove; see posts added after a warning. */
   async creditAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
     const clients = (await this.store.list('clientAccounts', { companyId: [companyId] })).filter((x) => x.companyId === companyId);
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finCreditAction({ ...ctx, a }, f, clients, action, input));
   }
 
   /** Withholding tax on payments to non-residents (suggestion 18): add, remit to LHDN, check. */
   async whtAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finWhtAction({ ...ctx, a }, f, action, input));
   }
 
   /** Prepayments and accruals (suggestion 21): add, post a month's journal, stop. */
   async scheduleAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finScheduleAction({ ...ctx, a }, f, action, input));
   }
 
   /** Fixed assets (suggestion 22): add, agree with SQL Account's register, dispose. */
   async assetAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finAssetAction({ ...ctx, a }, f, action, input));
   }
 
   /** Auditor requests (suggestion 23): add the items, mark each sent. */
   async auditAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finAuditRequestAction({ ...ctx, a }, f, action, input));
   }
 
   /** Client deposits and retention (suggestion 3): add, check, claim back, write off. */
   async depositAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
     const contracts = await this.contractsOf([companyId]);
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finDepositAction({ ...ctx, a }, f, contracts, action, input));
   }
 
@@ -857,7 +862,7 @@ export class FinanceControlsService {
 
   /** Bank mandates: add a new version, check it (a second person), confirm it with the bank (yearly, or when someone leaves). */
   async mandateAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finMandateAction({ ...ctx, a }, f, action, input));
   }
 
@@ -866,7 +871,7 @@ export class FinanceControlsService {
    * advance against it; 'settle', 'check' and 'recover' follow.
    */
   async advanceAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const a = finActor(user);
+    const a = await this.desk.actorOrNull(user);
     const ctx = await this.cashCtx(user, a);
     if (action === 'add') {
       const f0 = await this.store.get('finStatus', `fin-${companyId}`);
@@ -893,7 +898,7 @@ export class FinanceControlsService {
 
   /** Petty cash: add a float, check it, vouchers (custodian), top-up (prepares the payment), monthly count, close. */
   async pettyAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const a = finActor(user);
+    const a = await this.desk.actorOrNull(user);
     const ctx = await this.cashCtx(user, a);
     if (action === 'topup') {
       const f0 = await this.store.get('finStatus', `fin-${companyId}`);
@@ -918,7 +923,7 @@ export class FinanceControlsService {
 
   /** Company credit and fuel cards: add, check, load a statement, explain lines (holder), recover personal use, review. */
   async cardAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const a = finActor(user);
+    const a = await this.desk.actorOrNull(user);
     const ctx = await this.cashCtx(user, a);
     const f0 = await this.store.get('finStatus', `fin-${companyId}`);
     const holder = (f0?.cards ?? []).some((c) => c.id === input.cardId && c.holderId === user.id);
@@ -956,20 +961,20 @@ export class FinanceControlsService {
 
   /** Statement figures for FS-01 to FS-12: record (Finance staff), review (someone else). */
   async figuresAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finFiguresAction({ ...ctx, a, reviewer: this.reviewer(a), senior: this.senior(a) }, f, this.desk.closePeriod(), action, input));
   }
 
   /** Chart of accounts and cost dimension mapping: propose (Finance staff), approve or return (FD or CEO, not the proposer). */
   async coaAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     const contractIds = (await this.contractsOf([companyId])).map((c) => c.id);
     return this.change<unknown>(user, companyId, (f, a) => finCoaAction({ ...ctx, a }, f, contractIds, this.desk.closePeriod(), action, input));
   }
 
   /** SQL Account set-up (record, confirm) and, only when switched on with a reader installed, one read-only pull. */
   async sqlAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     if (action !== 'pull') return this.change<unknown>(user, companyId, (f, a) => finSqlDiscoveryAction({ ...ctx, a, senior: this.senior(a) }, f, action, input));
     const p = this.desk.closePeriod();
     const reader = this.sqlReader;
@@ -998,14 +1003,14 @@ export class FinanceControlsService {
   async billingAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
     const contracts = await this.contractsOf([companyId]);
     const clients = (await this.store.list('clientAccounts', { companyId: [companyId] })).filter((x) => x.companyId === companyId);
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finBillingAction({ ...ctx, a }, f, contracts, addMonthsP(this.desk.closePeriod(), -2), action, input, clients));
   }
 
   /** Stamp duty: add, stamped, check, cancelled (opens the refund), docs, submit, outcome, received. */
   async stampAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
     const contracts = await this.contractsOf([companyId]);
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finStampAction({ ...ctx, a }, f, contracts, action, input));
   }
 
@@ -1074,16 +1079,16 @@ export class FinanceControlsService {
       const [may, why] = outside[action];
       if (!may(user)) throw new AccessDenied('view', why);
       if (!(await this.desk.companies(user)).includes(companyId)) throw new NotFound('Company books');
-      const ctx = await this.dailyCtx(user, finActor(user));
+      const ctx = await this.dailyCtx(user, await this.desk.actorOrNull(user));
       return this.ownChange<unknown>(user, companyId, (f) => finDailyCashAction(ctx, f, action, input));
     }
     if (['received', 'pay', 'giveBack'].includes(action)) {
       if (!this.isCollector(user)) throw new AccessDenied('view', '(only the COO or the CEO collects and pays the daily cash)');
       if (!(await this.desk.companies(user)).includes(companyId)) throw new NotFound('Company books');
-      const ctx = await this.dailyCtx(user, finActor(user));
+      const ctx = await this.dailyCtx(user, await this.desk.actorOrNull(user));
       return this.ownChange<unknown>(user, companyId, (f) => finDailyCashAction(ctx, f, action, input));
     }
-    const ctx = await this.dailyCtx(user, this.desk.actor(user));
+    const ctx = await this.dailyCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finDailyCashAction({ ...ctx, a }, f, action, input));
   }
 
@@ -1103,7 +1108,7 @@ export class FinanceControlsService {
     if (bytes > max) throw new BadRequest(`The file is too large (over ${Math.round(max / 1000)} KB). Scan it smaller.`);
     const sha256 = sha256Hex(data);
     const name = (typeof input.name === 'string' ? input.name : '').trim().slice(0, 120) || 'Signed receipt';
-    const ctx = await this.dailyCtx(user, finActor(user));
+    const ctx = await this.dailyCtx(user, await this.desk.actorOrNull(user));
     const doc: EvidenceDoc = {
       id: `doc-${sha256.slice(0, 16)}`,
       companyId,
@@ -1177,7 +1182,7 @@ export class FinanceControlsService {
    */
   async icAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
     return this.store.transaction(async (tx) => {
-      const a = this.desk.actor(user);
+      const a = await this.desk.actorFor(user);
       const f = await this.desk.row(tx, user, a, companyId);
       await tx.lock?.('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
       const g = companyId === GROUP_EMPLOYER_ID ? f : await tx.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
@@ -1212,9 +1217,9 @@ export class FinanceControlsService {
 
   // ---------- Monthly pack and dashboard (Fauzan, 2 Nov 2026) ----------
 
-  private async packOf(user: User, f: FinStatus, period: string, ctx: { contracts: Contract[]; group: FinStatus | null | undefined; nameOf: (id: Id) => string; s: Awaited<ReturnType<FinanceDeskService['settings']>> }) {
+  private async packOf(user: User, f: FinStatus, period: string, ctx: { contracts: Contract[]; group: FinStatus | null | undefined; nameOf: (id: Id) => string; s: Awaited<ReturnType<FinanceDeskService['settings']>>; purs: PurRequest[] }) {
     const close = (f.closes ?? []).find((c) => c.period === period) ?? null;
-    const check = finCloseCheck(f, close, period, this.now(), ctx.s, ctx.contracts.filter((c) => c.companyId === f.companyId), ctx.group ?? null, ctx.nameOf);
+    const check = finCloseCheck(f, close, period, this.now(), ctx.s, ctx.contracts.filter((c) => c.companyId === f.companyId), ctx.group ?? null, ctx.nameOf, ctx.purs.filter((r) => r.companyId === f.companyId));
     const open = check.blockers.length + check.exceptions.filter((e) => !e.explained).length;
     return finPackData(f, { period, today: this.today(), contracts: ctx.contracts, group: ctx.group, runs: await this.payRunsOf(f.companyId), nameOf: ctx.nameOf, openExceptions: open, payDay: (await this.desk.settings()).staffPayDay });
   }
@@ -1224,15 +1229,16 @@ export class FinanceControlsService {
       group: await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`),
       nameOf: await this.desk.companyNamer(),
       s: await this.desk.settings(),
+      purs: companyIds.length ? await this.store.list('purRequests', { companyId: companyIds }) : [],
     };
   }
 
   /** One company's monthly pack (live until reviewed; then the figures as reviewed). */
   async pack(user: User, companyId: Id, period?: string) {
-    const a = this.desk.actor(user);
+    const a = await this.desk.actorFor(user);
     if (!(await this.desk.companies(user)).includes(companyId)) throw new NotFound('Company books');
     const f = await this.store.get('finStatus', `fin-${companyId}`);
-    if (!f || (a.team != null && f.team !== a.team)) throw new NotFound('Company books');
+    if (!f || !finCovers(a, f)) throw new NotFound('Company books');
     const close = this.desk.closePeriod();
     const p = typeof period === 'string' && /^\d{4}-\d{2}$/.test(period) && period <= close ? period : close;
     const reviewed = (f.packReviews ?? []).find((r) => r.period === p) ?? null;
@@ -1252,9 +1258,9 @@ export class FinanceControlsService {
 
   /** The dashboard: the key numbers for every company the person sees, for the month being closed. */
   async dashboard(user: User) {
-    const a = this.desk.actor(user);
+    const a = await this.desk.actorFor(user);
     const ids = await this.desk.companies(user);
-    const rows = (await this.store.list('finStatus', { companyId: ids })).filter((f) => ids.includes(f.companyId) && (a.team == null || f.team === a.team));
+    const rows = (await this.store.list('finStatus', { companyId: ids })).filter((f) => ids.includes(f.companyId) && finCovers(a, f));
     const period = this.desk.closePeriod();
     const ctx = await this.packCtx(rows.map((f) => f.companyId));
     const out: ReturnType<typeof finDashboardRow>[] = [];
@@ -1283,7 +1289,7 @@ export class FinanceControlsService {
    * days, invoices over 90 days and companies not closed, for the companies the person sees. Never a ranking.
    */
   async keyTiles(user: User): Promise<HomeTile[]> {
-    const a = finActor(user);
+    const a = await this.desk.actorOrNull(user);
     if (!a) return [];
     const d = await this.dashboard(user);
     if (!d.rows.length) return [];
@@ -1315,13 +1321,13 @@ export class FinanceControlsService {
 
   /** Government claims: add, follow, query, resubmit, paid (link the bank line), cancel. */
   async govtAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finGovtAction({ ...ctx, a }, f, action, input));
   }
 
   /** Unidentified money in: allocate it, and someone else checks the allocation. */
   async moneyInAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const ctx = await this.cashCtx(user, this.desk.actor(user));
+    const ctx = await this.cashCtx(user, await this.desk.actorFor(user));
     return this.change<unknown>(user, companyId, (f, a) => finAllocateAction({ ...ctx, a }, f, action, input));
   }
 
@@ -1641,7 +1647,9 @@ export class FinanceControlsService {
         const dp = f.clientDeposits?.length ? finMatchDeposits(rg.statements, finUnmatchDeposits(f.clientDeposits, (x) => x.statementId === id), contracts, this.now()) : null;
         // Fixed deposits placed and uplifted (suggestion 15).
         const fdm = f.fixedDeposits?.length ? finMatchFds(dp?.statements ?? rg.statements, finUnmatchFds(f.fixedDeposits, (x) => x.statementId === id), this.now()) : null;
-        const afterDp = fdm?.statements ?? dp?.statements ?? rg.statements;
+        // Salary, claim, advance and loan payouts (Fauzan, 23 Nov 2026, B1): taken back from an earlier load, then looked for again.
+        const po = f.payouts?.length ? finMatchPayouts(finUnmatchPayouts(f.payouts, (x) => x.statementId === id), fdm?.statements ?? dp?.statements ?? rg.statements, s, this.now()) : null;
+        const afterDp = po?.statements ?? fdm?.statements ?? dp?.statements ?? rg.statements;
         // Learned explanations (A6) last, on what is still unmatched in this statement.
         const mine = afterDp.find((x) => x.id === id)!;
         const ru = f.matchRules?.length ? finApplyMatchRules(f, mine, this.now()) : null;
@@ -1649,7 +1657,7 @@ export class FinanceControlsService {
         return {
           // A hostel bill found on an earlier load of this statement is found again or loses its bank record.
           also: this.stampHostel(f, hostel, rg.hostelSeen, (b) => b.bankSeen?.statementId === id),
-          patch: { statements: finalStatements, payments: m.payments, ...(f.arCases?.length ? { arCases: rc.cases } : {}), ...(gv ? { govtClaims: gv.claims } : {}), ...regPatch, ...(dp ? { clientDeposits: dp.deposits } : {}), ...(fdm ? { fixedDeposits: fdm.fds } : {}), ...(ru ? { matchRules: ru.rules } : {}) },
+          patch: { statements: finalStatements, payments: m.payments, ...(f.arCases?.length ? { arCases: rc.cases } : {}), ...(gv ? { govtClaims: gv.claims } : {}), ...regPatch, ...(dp ? { clientDeposits: dp.deposits } : {}), ...(fdm ? { fixedDeposits: fdm.fds } : {}), ...(po ? { payouts: po.payouts } : {}), ...(ru ? { matchRules: ru.rules } : {}) },
           action: 'finance.statement.loaded',
           summary: `${bank.bank} ${bank.accountMasked} statement ${p} loaded${prior ? ' (replacing the earlier load)' : ''}: ${parsed.length} lines, ${matched} of ${out} payments out matched.`,
           result: { statement: m.statement, matched, out },
@@ -1741,6 +1749,7 @@ export class FinanceControlsService {
             ...(line.match?.kind === 'govt' ? { govtClaims: finUnmatchGovt(f.govtClaims ?? [], (x) => x.lineId === line.id, this.now()) } : {}),
             ...(line.match?.kind === 'deposit' ? { clientDeposits: finUnmatchDeposits(f.clientDeposits ?? [], (x) => x.lineId === line.id) } : {}),
             ...(line.match?.kind === 'fd' ? { fixedDeposits: finUnmatchFds(f.fixedDeposits ?? [], (x) => x.lineId === line.id) } : {}),
+            ...(line.match?.kind === 'payout' ? { payouts: finUnmatchPayouts(f.payouts ?? [], (x) => x.lineId === line.id) } : {}),
           },
           ...(line.match?.kind === 'hostel' ? { also: this.stampHostel(f, hostel, [], (b) => b.bankSeen?.lineId === line.id) } : {}),
           action: 'finance.statement.unmatched',
@@ -2479,6 +2488,10 @@ export class FinanceControlsService {
         if (!isLead(a)) throw new AccessDenied('view', '(the Finance Director or the CEO approves the budget)');
         const authors = new Set([...(plan.budget.authorIds ?? []), plan.budget.prepared?.byId, plan.budget.submitted?.byId]);
         if (authors.has(user.id)) throw new AccessDenied('view', '(nobody approves a budget they drafted or submitted)');
+        // D3 (Fauzan, 23 Nov 2026): a budget whose yearly spending is above the company's limit set by the FD is approved by the CEO.
+        const spend = Object.entries(plan.budget.months).reduce((n, [line, arr]) => (line === 'revenue' ? n : n + sum(arr ?? [])), 0);
+        if (action === 'approve' && f.budgetLimit && spend > f.budgetLimit.amount && a.kind !== 'ceo')
+          throw new AccessDenied('view', `(spending RM${spend.toFixed(2)} is above this company's budget limit of RM${f.budgetLimit.amount.toFixed(2)}: the CEO approves it)`);
         const seq = finSeqNext(plan.budget, input, 'budget');
         const next =
           action === 'approve'
@@ -2632,10 +2645,10 @@ export class FinanceControlsService {
 
   /** Everything the controls show for one company the person can see. */
   async view(user: User, companyId: Id, billPeriod?: string) {
-    const a = this.desk.actor(user);
+    const a = await this.desk.actorFor(user);
     if (!(await this.desk.companies(user)).includes(companyId)) throw new NotFound('Company books');
     const f = await this.store.get('finStatus', `fin-${companyId}`);
-    if (!f || (a.team != null && f.team !== a.team)) throw new NotFound('Company books');
+    if (!f || !finCovers(a, f)) throw new NotFound('Company books');
     const ctl = await this.desk.settings();
     const close = this.desk.closePeriod();
     const today = this.today();
@@ -2808,11 +2821,11 @@ export class FinanceControlsService {
   }
 
   private async homeData(user: User) {
-    const a = this.desk.actor(user);
+    const a = await this.desk.actorFor(user);
     const perCompany: Record<Id, Record<string, number>> = {};
     if (a.kind === 'viewer') return { items: [] as HomeItem[], perCompany };
     const ids = await this.desk.companies(user);
-    const rows = (await this.store.list('finStatus', { companyId: ids })).filter((f) => a.team == null || f.team === a.team);
+    const rows = (await this.store.list('finStatus', { companyId: ids })).filter((f) => finCovers(a, f));
     const today = this.today();
     const st = await this.desk.settings();
     const [purs, sups] = ids.length ? await Promise.all([this.store.list('purRequests', { companyId: ids }), this.store.list('purSuppliers', { companyId: ids })]) : [[], []];
@@ -2874,7 +2887,7 @@ export class FinanceControlsService {
       const before = counters();
       const m = finMoneyInHome(f, { userId: user.id, reviewer: this.reviewer(a) }, allContracts, this.desk.closePeriod(), today);
       for (const k of Object.keys(m) as (keyof typeof m)[]) mi[k] = round2(mi[k] + m[k]);
-      if (a.team == null || f.team === a.team) {
+      if (finCovers(a, f)) {
         icOpen += finIcExceptions(icGroup, f.companyId, this.desk.closePeriod()).length;
         const fc = finCash13(f, await this.payRunsOf(f.companyId), today, (await this.desk.settings()).staffPayDay);
         if (fc.firstShort && (a.kind === 'ceo' || a.kind === 'director' || this.reviewer(a))) c13.short.push(`${f.companyId}: week of ${fc.firstShort.from}, RM${fc.firstShort.closing.toFixed(2)}`);
@@ -2921,7 +2934,7 @@ export class FinanceControlsService {
       for (const plan of f.plans ?? []) {
         if (plan.budget.status !== 'approved') continue;
         const pv = this.planView(f, plan.year, st);
-        if (a.kind === 'leader' && f.team === a.team) {
+        if (a.kind === 'leader' && finCovers(a, f)) {
           varOwn += pv.toExplain.length;
           varOwnLate += pv.toExplain.filter((x) => x.overdue).length;
         }

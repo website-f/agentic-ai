@@ -41,9 +41,10 @@ describe('Part S office repairs (S1-S16, S43-S45)', () => {
     await expect(act('u-asset-mm', 'repairStart', { id: r.id })).rejects.toThrow(/No work starts/);
     await expect(act('u-vchair', 'repairApprove', { id: r.id, reason: 'fine' })).rejects.toThrow(/Asset Director approves first/);
     await expect(act('u-asset-dir', 'repairApprove', { id: r.id })).rejects.toThrow(/reason/);
-    await act('u-asset-dir', 'repairApprove', { id: r.id, reason: 'needed for security' });
-    const ap = (await act('u-vchair', 'repairApprove', { id: r.id, reason: 'consent' })) as OfficeAmRec;
+    // D3 (Fauzan, 23 Nov 2026): one ladder; at RM650 the Asset Director's approval is final (VC consent above RM5,000).
+    const ap = (await act('u-asset-dir', 'repairApprove', { id: r.id, reason: 'needed for security' })) as OfficeAmRec;
     expect(ap.status).toBe('approved');
+    await expect(act('u-vchair', 'repairApprove', { id: r.id, reason: 'consent' })).rejects.toThrow(/Nothing to approve/);
     expect(ds.amWorkOrders.find((w) => w.id === wo.id)!.cost).toBe(650);
     await act('u-asset-mm', 'repairStart', { id: r.id });
     await act('u-asset-mm', 'repairDone', { id: r.id, photos: PDF('after') });
@@ -80,7 +81,6 @@ describe('Part S office repairs (S1-S16, S43-S45)', () => {
       await act('u-asset-mm', 'repairQuotes', { id: r.id, quotes: [{ contractor: 'Contractor B (test)', price: 650 }, { contractor: 'Contractor A (test)', price: 800 }, { contractor: 'Contractor C (test)', price: 900 }], docs: PDF(`${desc}-q`, 3) });
       await act('u-asset-mm', 'repairPick', { id: r.id, contractor: 'Contractor B (test)', reason: 'lowest price' });
       await act('u-asset-dir', 'repairApprove', { id: r.id, reason: 'needed' });
-      await act('u-vchair', 'repairApprove', { id: r.id, reason: 'consent' });
       await act('u-asset-mm', 'repairStart', { id: r.id });
       await act('u-asset-mm', 'repairDone', { id: r.id, photos: PDF(`${desc}-after`) });
       return r;

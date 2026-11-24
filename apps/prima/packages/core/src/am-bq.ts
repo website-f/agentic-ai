@@ -1,3 +1,4 @@
+import type { AmBqAward, AmBqStep } from "./types";
 import { RULES } from "./rules";
 import { addDays } from "./time";
 import { daysBetween } from "./time";
@@ -183,7 +184,7 @@ export function awardedPrices(orders: AmWorkOrder[]): PastPrice[] {
     if (!bq || !award?.final) continue;
     const quote = bq.quotes.find((q) => q.id === award.quoteId);
     if (!quote) continue;
-    const on = (award.coo ?? award.director)?.at.slice(0, 10) ?? award.askedAt.slice(0, 10);
+    const on = (award.ceo ?? award.vc ?? award.coo ?? award.director)?.at.slice(0, 10) ?? award.askedAt.slice(0, 10);
     for (const ql of quote.lines) {
       const line = bq.lines.find((l) => l.id === ql.lineId);
       if (line && ql.rate > 0) out.push({ item: line.item, unit: line.unit, rate: ql.rate, on, contractor: quote.contractor });
@@ -593,4 +594,9 @@ export function draftBq(kind: AmJobKind, measurements: Record<string, number>, r
     };
   }
   return { lines: draftBqLines(kind, measurements, rates) };
+}
+
+/** An award somebody on the ladder turned down (D3, 23 Nov 2026: Asset Director or COO, Vice Chairman, CEO). */
+export function awardTurnedDown(award: Pick<AmBqAward, 'director' | 'coo'> & { vc?: AmBqStep | null; ceo?: AmBqStep | null }): boolean {
+  return [award.director, award.coo, award.vc ?? null, award.ceo ?? null].some((s) => !!s && !s.approve);
 }

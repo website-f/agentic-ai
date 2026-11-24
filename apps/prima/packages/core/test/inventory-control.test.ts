@@ -222,6 +222,8 @@ describe('Part U: inventory control', () => {
     await expect(svc.purStep(sk, pr.id, 'receive', { qty: [5] })).rejects.toThrow(/delivery order/);
     const got = await svc.purStep(sk, pr.id, 'receive', { qty: [5], ref: 'DO-SYN-9', proof: doc() });
     expect(got.grn).toMatchObject({ doNo: 'DO-SYN-9' });
+    // Stock by price (Fauzan, 23 Nov 2026): the received units carry their cost from the order.
+    expect((await store.get('stockItems', shirt.id))!).toMatchObject({ unitCost: 30, costSet: { source: 'purchase' } });
     const iss = await svc.stockIssue(sk, G, { itemId: shirt.id, personId: guards[0].id, qty: 3, omUserId: om.id, patrolPersonId: po.id, course: { kind: 'CSG', date: '2026-11-20' } });
     expect(iss.course).toEqual({ kind: 'CSG', date: '2026-11-20' });
     expect(await svc.ssUniformHistory(guards[0].id, G)).toMatchObject({ pieces: 0 });

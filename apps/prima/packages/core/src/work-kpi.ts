@@ -1,3 +1,4 @@
+import { isOgm, isOpsDirector } from './ops-access';
 import { isActHead } from "./access";
 import { isHrDirector } from "./access";
 import { visibleCompanyIds } from "./access";
@@ -450,8 +451,8 @@ export function workKpiScope(user: User, grants: AuthorityGrant[], today: IsoDat
     const covered = workKpiCoveredDepts();
     const own = covered.filter((d) => ADAPTERS.some((a) => (a.heads ?? []).some((h) => h.dept === d && h.is(user))));
     if (own.length) return { depts: own, companyIds: null, label: own.map((d) => WORK_KPI_DEPT_LABEL[d]).join(', ') };
-    if (user.opsTier === 'ops_director') return { depts: ['operations', 'client_relations'], companyIds: null, label: 'Operations' };
-    if (user.opsTier === 'ogm' || user.opsTier === 'regional')
+    if (isOpsDirector(user)) return { depts: ['operations', 'client_relations'], companyIds: null, label: 'Operations' };
+    if (isOgm(user) || user.opsTier === 'regional')
       return { depts: ['operations', 'client_relations'], companyIds: visibleCompanyIds(user, grants, today), label: 'Operations, own companies' };
     return null;
   }

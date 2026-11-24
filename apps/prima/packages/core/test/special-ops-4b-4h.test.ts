@@ -43,7 +43,8 @@ describe('Part R13 dealer named at Arms Control review', () => {
   it('a buy request raised without a dealer cannot pass until Arms Control names a licensed one; a service-only field is refused elsewhere', async () => {
     const { svc, ds } = fresh();
     const gm = await svc.user('u-gm-sasa');
-    const asst = await svc.user('u-pwvsb-arms-asst');
+    // D1 (23 Nov 2026): the Arms Control Manager passes requests.
+    const asst = await svc.user('u-pwvsb-arms');
     const r = await svc.raiseArmsRequest(gm, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy cartridges (test)', note: 'Range practice (test)', quantity: 100 });
     await expect(svc.armsRequestStep(asst, r.id, 'pass', 'Checked (test)')).rejects.toThrow(/Name the licensed dealer/);
     await expect(svc.armsRequestStep(asst, r.id, 'pass', 'Checked (test)', { supplierId: 'no-such-supplier' })).rejects.toThrow(/Supplier not found/);
@@ -173,21 +174,22 @@ describe('4B arms register', () => {
 describe('4C arms requests and the supplier file', () => {
   it('lets the requester correct and resubmit a returned request, keeping the earlier values in the log', async () => {
     const { svc, ds } = fresh();
+    // D1 (23 Nov 2026): the Assistant prepares, the Arms Control Manager decides.
     const arms = await svc.user('u-pwvsb-arms');
     const asst = await svc.user('u-pwvsb-arms-asst');
     const cm = await svc.user('u-cm-sasa');
-    const r = await svc.raiseArmsRequest(arms, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy 9 mm rounds', note: 'Range', calibre: '9 mm', quantity: 500, estCost: 1250 });
-    await svc.armsRequestStep(asst, r.id, 'return', 'Quantity too high for two sessions');
+    const r = await svc.raiseArmsRequest(asst, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy 9 mm rounds', note: 'Range', calibre: '9 mm', quantity: 500, estCost: 1250 });
+    await svc.armsRequestStep(arms, r.id, 'return', 'Quantity too high for two sessions');
     await expect(svc.armsRequestStep(arms, r.id, 'pass', 'ok')).rejects.toThrow(/not this step/);
-    await expect(svc.armsRequestStep(arms, r.id, 'resubmit', '')).rejects.toThrow(/corrected/);
+    await expect(svc.armsRequestStep(asst, r.id, 'resubmit', '')).rejects.toThrow(/corrected/);
     await expect(svc.armsRequestStep(cm, r.id, 'resubmit', 'Fixed')).rejects.toBeInstanceOf(AccessDenied);
-    const s = await svc.armsRequestStep(arms, r.id, 'resubmit', 'Cut to 300 rounds', { changes: { quantity: 300, estCost: 750 } });
+    const s = await svc.armsRequestStep(asst, r.id, 'resubmit', 'Cut to 300 rounds', { changes: { quantity: 300, estCost: 750 } });
     expect(s.request.state).toBe('arms_review');
     const row = ds.armsRequests.find((x) => x.id === r.id)!;
     expect([row.quantity, row.estCost]).toEqual([300, 750]);
     expect(row.log!.at(-1)!.reason).toMatch(/Cut to 300 rounds; quantity was 500; cost was RM1250/);
     // Resubmitting again before it is returned is refused.
-    await expect(svc.armsRequestStep(arms, r.id, 'resubmit', 'again')).rejects.toThrow(/not waiting for correction/);
+    await expect(svc.armsRequestStep(asst, r.id, 'resubmit', 'again')).rejects.toThrow(/not waiting for correction/);
   });
 
   it('runs a purchase through all steps: nobody approves their own, every approval has a reason, spending needs the COO, and the register follows', async () => {
@@ -197,11 +199,11 @@ describe('4C arms requests and the supplier file', () => {
     const cm = await svc.user('u-cm-sasa');
     const coo = await svc.user('u-coo');
     const supplierId = licensedDealer(ds);
-    const r = await svc.raiseArmsRequest(arms, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy 9 mm rounds for range practice', note: 'Range season', calibre: '9 mm', quantity: 500, estCost: 1250, supplierId });
+    const r = await svc.raiseArmsRequest(asst, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy 9 mm rounds for range practice', note: 'Range season', calibre: '9 mm', quantity: 500, estCost: 1250, supplierId });
     expect(r.state).toBe('arms_review');
-    await expect(svc.armsRequestStep(arms, r.id, 'pass', 'ok')).rejects.toThrow(/Someone else/);
-    await expect(svc.armsRequestStep(asst, r.id, 'pass', '')).rejects.toThrow(/reason/);
-    await svc.armsRequestStep(asst, r.id, 'pass', 'Quantity matches two range sessions');
+    await expect(svc.armsRequestStep(asst, r.id, 'pass', 'ok')).rejects.toThrow(/Arms Control Manager/);
+    await expect(svc.armsRequestStep(arms, r.id, 'pass', '')).rejects.toThrow(/reason/);
+    await svc.armsRequestStep(arms, r.id, 'pass', 'Quantity matches two range sessions');
     await expect(svc.armsRequestStep(asst, r.id, 'authorise', 'fine')).rejects.toBeInstanceOf(AccessDenied);
     let s = await svc.armsRequestStep(cm, r.id, 'authorise', 'Needed for the December range');
     expect(s.request.state).toBe('regulator_pending');
@@ -212,17 +214,17 @@ describe('4C arms requests and the supplier file', () => {
     // The last paper in place moves it to approved by itself.
     s = await svc.armsRequestStep(coo, r.id, 'spend', 'Within the arms budget');
     expect(s.request.state).toBe('approved');
-    await svc.armsRequestStep(asst, r.id, 'verify', 'Boxes counted against the delivery order');
+    await svc.armsRequestStep(arms, r.id, 'verify', 'Boxes counted against the delivery order');
     const ledger = ds.ammoStocks.find((x) => x.id === 'ammo-va-sasa-1-pistol')!.ledger;
     // Part R16-R17: the approval letter and the receiving check come before the register changes.
-    await expect(svc.armsRequestStep(asst, r.id, 'reconcile', '')).rejects.toThrow(/approval letter/);
+    await expect(svc.armsRequestStep(arms, r.id, 'reconcile', '')).rejects.toThrow(/approval letter/);
     await svc.armsPolicyAct(cm, 'approvalLetter', { requestId: r.id, permitNo: 'PDRM/BELI/9', on: TODAY, firearmQty: 0, calibre: '9 mm', rounds: 500, holderName: 'Licence holder (test)', docs: PDF('letter') });
-    await expect(svc.armsRequestStep(asst, r.id, 'reconcile', '')).rejects.toThrow(/receiving check/);
-    await svc.armsPolicyAct(asst, 'armsGrn', { requestId: r.id, roundsCounted: 480, calibre: '9 mm', doNo: 'DO-1', checks: Object.fromEntries(['quantity', 'type', 'serials', 'deliveryOrder', 'invoice', 'condition', 'approvalLetter', 'supplier'].map((k) => [k, true])) });
-    await svc.armsRequestStep(asst, r.id, 'reconcile', '');
+    await expect(svc.armsRequestStep(arms, r.id, 'reconcile', '')).rejects.toThrow(/receiving check/);
+    await svc.armsPolicyAct(arms, 'armsGrn', { requestId: r.id, roundsCounted: 480, calibre: '9 mm', doNo: 'DO-1', checks: Object.fromEntries(['quantity', 'type', 'serials', 'deliveryOrder', 'invoice', 'condition', 'approvalLetter', 'supplier'].map((k) => [k, true])) });
+    await svc.armsRequestStep(arms, r.id, 'reconcile', '');
     // What was counted in (480), not what was ordered (500).
     expect(ds.ammoStocks.find((x) => x.id === 'ammo-va-sasa-1-pistol')!.ledger).toBe(ledger + 480);
-    s = await svc.armsRequestStep(asst, r.id, 'close', '');
+    s = await svc.armsRequestStep(arms, r.id, 'close', '');
     expect(s.request.state).toBe('closed');
     expect(s.request.log!.map((l) => l.to)).toEqual(['arms_review', 'company_auth', 'regulator_pending', 'regulator_pending', 'approved', 'verified', 'reconciled', 'closed']);
   });
@@ -237,9 +239,9 @@ describe('4C arms requests and the supplier file', () => {
     expect(move.needsLegal).toBe(false);
     await svc.armsRequestStep(arms, move.id, 'pass', 'Safe approved');
     await expect(svc.armsRequestStep(cm, move.id, 'authorise', 'own')).rejects.toThrow(/Someone else/);
-    const dispose = await svc.raiseArmsRequest(arms, { companyId: 'co-sasa', kind: 'DISPOSE', title: 'Dispose of a worn revolver', note: 'Armourer report', firearmIds: [f.id] });
+    const dispose = await svc.raiseArmsRequest(await svc.user('u-pwvsb-arms-asst'), { companyId: 'co-sasa', kind: 'DISPOSE', title: 'Dispose of a worn revolver', note: 'Armourer report', firearmIds: [f.id] });
     expect(dispose.needsLegal).toBe(true);
-    await svc.armsRequestStep(await svc.user('u-pwvsb-arms-asst'), dispose.id, 'pass', 'Report attached');
+    await svc.armsRequestStep(arms, dispose.id, 'pass', 'Report attached');
     const a = await svc.armsRequestStep(cm, dispose.id, 'authorise', 'Agree to dispose');
     expect(a.request.state).toBe('legal_check');
     await expect(svc.armsRequestStep(cm, dispose.id, 'legal_ok', 'fine')).rejects.toBeInstanceOf(AccessDenied);
@@ -274,7 +276,8 @@ describe('Company arms requests and director-only legal points (review, 2 Nov 20
     const { svc, ds } = fresh();
     const gm = await svc.user('u-gm-sasa');
     const cm = await svc.user('u-cm-sasa');
-    const asst = await svc.user('u-pwvsb-arms-asst');
+    // D1 (23 Nov 2026): the Arms Control Manager returns and passes requests.
+    const asst = await svc.user('u-pwvsb-arms');
     const sv = await svc.user('u-sv-sasa');
     const r = await svc.raiseArmsRequest(gm, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy 12 gauge cartridges', note: 'Range practice, quotation on file', calibre: '12 gauge', quantity: 800, estCost: 2400, supplierId: licensedDealer(ds) });
     let screen = await svc.arms(gm, 'co-sasa');
@@ -548,7 +551,8 @@ describe('4H arms trading and import, behind the CEO switch', () => {
     const { svc, ds } = fresh();
     const arms = await svc.user('u-pwvsb-arms');
     const ceo = await svc.user('u-fauzan');
-    const raise = () => svc.raiseArmsRequest(arms, { companyId: 'co-sasa', kind: 'IMPORT', title: 'Import 9 mm rounds for trade', note: '', calibre: '9 mm', quantity: 5000, importOrder: { country: 'Czech Republic', exportLicenceRef: null, district: 'IPD Shah Alam', appliedOn: '2026-10-01' } });
+    const preparer = await svc.user('u-pwvsb-arms-asst');
+    const raise = () => svc.raiseArmsRequest(preparer, { companyId: 'co-sasa', kind: 'IMPORT', title: 'Import 9 mm rounds for trade', note: '', calibre: '9 mm', quantity: 5000, importOrder: { country: 'Czech Republic', exportLicenceRef: null, district: 'IPD Shah Alam', appliedOn: '2026-10-01' } });
     const audits = ds.audit.length;
     const refused = await raise().catch((e: unknown) => e);
     expect(refused).toBeInstanceOf(TradingOff);
@@ -572,7 +576,7 @@ describe('4H arms trading and import, behind the CEO switch', () => {
 
     // Import: CPO licence, then KDN, then ship through Port Klang or KLIA.
     const r = await raise();
-    await svc.armsRequestStep(await svc.user('u-pwvsb-arms-asst'), r.id, 'pass', 'Supplier file complete');
+    await svc.armsRequestStep(arms, r.id, 'pass', 'Supplier file complete');
     await svc.armsRequestStep(await svc.user('u-cm-sasa'), r.id, 'authorise', 'Trade stock for Q1');
     await svc.armsRequestStep(await svc.user('u-legal'), r.id, 'legal_ok', 'End-user papers in order');
     await expect(svc.armsRequestStep(arms, r.id, 'import', '', { importStep: 'kdn', ref: 'KDN/1', on: TODAY })).rejects.toThrow(/CPO/);

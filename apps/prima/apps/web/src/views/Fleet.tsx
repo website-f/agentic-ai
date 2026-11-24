@@ -13,6 +13,7 @@ import { ProofPicker } from './Proof';
 import { VehicleRentalsPanel } from './VehicleRentals';
 import { FuelUsagePanel, MyFuel } from './FuelUsage';
 import '../styles/ops.css';
+import { FleetRecordsPanel, FleetToday } from './FleetRecords';
 
 /**
  * Fleet (Fauzan, 26 Oct 2026). The head of Transport monitors every company vehicle and is reminded of renewals,
@@ -22,7 +23,7 @@ import '../styles/ops.css';
  */
 
 /** P121: every section a link may open ('#fleet/mine'); one this person does not have falls back to their first. */
-const FLEET_TABS = ['due', 'vehicles', 'requests', 'monitor', 'hours', 'usage', 'rentals', 'consent', 'mine'];
+const FLEET_TABS = ['today', 'due', 'vehicles', 'requests', 'monitor', 'hours', 'usage', 'rentals', 'consent', 'mine', 'accidents', 'summonses', 'licences', 'myrecords'];
 
 type Row = FleetBoard['board'][number];
 type Request = FleetBoard['requests'][number];
@@ -72,6 +73,7 @@ export function FleetView() {
     (me.user.role === 'pwvsb_officer' && me.user.leadership === 'finance_director');
   const tabs: [string, string, number][] = full
     ? [
+        ['today', 'Do today', data.today.length],
         ['due', 'Reminders', data.reminders.length],
         ['vehicles', 'Vehicles', 0],
         ['requests', 'Requests', waiting],
@@ -79,6 +81,10 @@ export function FleetView() {
         ['hours', 'Trips and driving hours', 0],
         ['usage', 'Fuel and usage', 0],
         ...(rentals ? ([['rentals', 'Rented vehicles', 0]] as [string, string, number][]) : []),
+        ['accidents', 'Accidents', 0],
+        ['summonses', 'Summonses', 0],
+        ['licences', 'Driver licences', 0],
+        ...(data.role === 'leader' ? ([['mine', 'My requests', 0]] as [string, string, number][]) : []),
       ]
     : me.user.opsTier === 'ogm'
       ? [
@@ -96,7 +102,10 @@ export function FleetView() {
             ['consent', 'Driver consent', data.consentNeeded.length],
             ['mine', 'My requests', 0],
           ]
-        : [['mine', 'My requests', 0]];
+        : [
+            ['mine', 'My requests', 0],
+            ['myrecords', 'My summonses and licence', 0],
+          ];
   const view = tab && tabs.some((t) => t[0] === tab) ? tab : tabs[0][0];
   const unknown = data.board.filter((v) => v.tracker === 'unknown' || v.dashcam === 'unknown' || v.health === 'unknown').length;
   const go = (k: string) => (tabs.some((t) => t[0] === k) ? () => setTab(k) : undefined);
@@ -162,6 +171,7 @@ export function FleetView() {
           ))}
         </div>
       )}
+      {view === 'today' && <FleetToday items={data.today} />}
       {view === 'due' && <Reminders data={data} />}
       {view === 'vehicles' && <Vehicles data={data} edit={data.role === 'transport'} />}
       {view === 'requests' && <Requests data={data} edit={data.role === 'transport'} />}
@@ -172,6 +182,10 @@ export function FleetView() {
       {view === 'rentals' && <VehicleRentalsPanel />}
       {view === 'usage' && <FuelUsagePanel />}
       {view === 'mine' && <MyFuel />}
+      {view === 'accidents' && <FleetRecordsPanel kind="ACCIDENT" board={data} />}
+      {view === 'summonses' && <FleetRecordsPanel kind="SUMMONS" board={data} />}
+      {view === 'licences' && <FleetRecordsPanel kind="LICENCE" board={data} />}
+      {view === 'myrecords' && <FleetRecordsPanel kind="MINE" board={data} />}
     </div>
   );
 }
@@ -260,7 +274,7 @@ function Vehicles({ data, edit }: { data: FleetBoard; edit: boolean }) {
       detail={
         <div ref={detail} className="fl-detail">
           {sel ? (
-            <VehicleDetail key={sel.id} v={sel} edit={edit} approved={data.requests.filter((r) => r.status === 'approved' && r.vehicleId === sel.id)} />
+            <VehicleDetail key={sel.id} v={sel} edit={edit} drivers={data.drivers} approved={data.requests.filter((r) => r.status === 'approved' && r.vehicleId === sel.id)} />
           ) : (
             <Card title="Vehicle">
               <Empty title="No vehicle chosen." />
@@ -272,7 +286,8 @@ function Vehicles({ data, edit }: { data: FleetBoard; edit: boolean }) {
   );
 }
 
-function VehicleDetail({ v, edit, approved }: { v: Row; edit: boolean; approved: Request[] }) {
+function VehicleDetail({ v, edit, approved, drivers }: { v: Row; edit: boolean; approved: Request[]; drivers: FleetBoard['drivers'] }) {
+  const [driverUserId, setDriverUserId] = useState('');
   const [km, setKm] = useState(0);
   const [requestId, setRequestId] = useState(approved[0]?.id ?? '');
   const [driver, setDriver] = useState('');
@@ -330,8 +345,22 @@ function VehicleDetail({ v, edit, approved }: { v: Row; edit: boolean; approved:
             )}
             {!v.out && !requestId && (
               <label className="field">
+                <span className="label">Driver from staff list</span>
+                <Select className="select" aria-label="Driver from staff list" value={driverUserId} onChange={(e) => setDriverUserId(e.target.value)}>
+                  <option value="">Driver not in the staff list (type the name)</option>
+                  {drivers.map((d) => (
+                    <option key={d.userId} value={d.userId} disabled={!!d.licence?.expired}>
+                      {d.name}
+                      {d.licence ? (d.licence.expired ? ' (licence expired)' : ` (${d.licence.classes.join(' ')})`) : ' (no licence on file)'}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            )}
+            {!v.out && !requestId && !driverUserId && (
+              <label className="field">
                 <span className="label">Driver</span>
-                <input className="input" aria-label="Driver" placeholder="Driver" value={driver} onChange={(e) => setDriver(e.target.value)} />
+                <input className="input" aria-label="Driver" placeholder="Driver name" value={driver} onChange={(e) => setDriver(e.target.value)} />
               </label>
             )}
             <label className="field">
@@ -358,7 +387,7 @@ function VehicleDetail({ v, edit, approved }: { v: Row; edit: boolean; approved:
               disabled={act.busy || !km}
               onClick={() =>
                 act.run(
-                  () => (v.out ? api.vehicleIn(v.id, km, note) : api.vehicleOut(v.id, requestId || null, km, driver)),
+                  () => (v.out ? api.vehicleIn(v.id, km, note) : api.vehicleOut(v.id, requestId || null, km, driver, requestId ? null : driverUserId || null)),
                   v.out ? 'Logged in.' : 'Logged out.',
                 )
               }
@@ -455,13 +484,20 @@ function VehicleDetail({ v, edit, approved }: { v: Row; edit: boolean; approved:
 }
 
 function Requests({ data, edit }: { data: FleetBoard; edit: boolean }) {
+  const { me } = useApp();
   const order = [...data.requests].sort((a, b) => (a.status === 'requested' ? 0 : 1) - (b.status === 'requested' ? 0 : 1));
   return (
     <Card title="Requests" sub="Waiting for Transport first" flush>
       {data.requests.length === 0 && <Empty title="No requests." />}
       <ul className="op-list">
         {order.map((r) => (
-          <RequestLine key={r.id} r={r} edit={edit && r.status === 'requested'} vehicles={data.board} />
+          <RequestLine
+            key={r.id}
+            r={r}
+            // The Head of Transport decides, the OGM stands in; nobody decides their own (Fauzan, 23 Nov 2026).
+            edit={r.status === 'requested' && r.userId !== me.user.id && data.decidesBookings}
+            vehicles={data.board}
+          />
         ))}
       </ul>
     </Card>
@@ -649,7 +685,7 @@ function Mine({ data }: { data: FleetBoard }) {
         {data.mine.length === 0 && <Empty title="No requests yet." />}
         <ul className="op-list">
           {data.mine.map((r) => (
-            <RequestLine key={r.id} r={r} edit={false} vehicles={[]} />
+            <RequestLine key={r.id} r={{ ...r, fromTransport: false }} edit={false} vehicles={[]} />
           ))}
         </ul>
       </Card>

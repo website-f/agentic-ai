@@ -43,6 +43,16 @@ describe('procurement store locking on PostgreSQL', () => {
     return r.rows[0].id as string;
   }
 
+  it('gives two purchases raised at the same moment different numbers (23 Nov 2026)', async () => {
+    const line = [{ item: 'Synthetic torch', stockItemId: null, qty: 1, unitPrice: 10 }];
+    const [a, b] = await Promise.all([
+      db.asUser('u-proc-exec', (svc, u) => svc.raisePurRequest(u, 'co-arsh', { title: 'Synthetic A', category: 'OTHER', lines: line })),
+      db.asUser('u-proc-exec', (svc, u) => svc.raisePurRequest(u, 'co-arsh', { title: 'Synthetic B', category: 'OTHER', lines: line })),
+    ]);
+    assert.notEqual(a.ref, b.ref);
+    assert.notEqual(a.id, b.id);
+  });
+
   it('never issues the last item twice when two storekeepers issue at the same moment', async () => {
     const itemId = 'stk-co-arsh-7';
     await owner.query(`UPDATE prima.stock_items SET data = data || '{"onHand":1}'::jsonb WHERE id = $1`, [itemId]);
@@ -236,6 +246,8 @@ describe('procurement store locking on PostgreSQL', () => {
     const rq = await db.asUser('u-cm-inas', (svc, u) => svc.requestVehicle(u, { purpose: 'Synthetic PG trip', from: new Date(now + 60_000).toISOString(), to: new Date(now + 3_600_000).toISOString() }));
     await db.asUser('u-transport', (svc, u) => svc.decideVehicleRequest(u, rq.id, true, vid, 'Synthetic trip and vehicle availability checked'));
     const odo = Number((await owner.query(`SELECT data->>'odometerKm' AS k FROM prima.vehicles WHERE id = $1`, [vid])).rows[0].k);
+    // Synthetic: the seed vehicle's insurance has lapsed, and an uninsured vehicle no longer goes out (Transport check, 23 Nov 2026).
+    await owner.query(`UPDATE prima.vehicles SET data = jsonb_set(data, '{renewals,INSURANCE}', '"2099-01-01"') WHERE id = $1 AND data->'renewals' ? 'INSURANCE'`, [vid]);
     await db.asUser('u-transport', (svc, u) => svc.vehicleOut(u, vid, rq.id, odo));
     const fill2 = { at: at(0), paidWith: 'CASH' as const, fuel: 'RON95' as const, litres: 10, amountRm: 20, odometerKm: 999_050, station: 'Syn PG station' };
     await assert.rejects(db.asUser('u-cm-inas', (svc, u) => svc.recordFuel(u, vid, fill2, receipt)), /already on a fill-up/);

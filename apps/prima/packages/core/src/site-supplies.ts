@@ -9,7 +9,7 @@
 // returns at guard change, exit and contract end, and disposal with marks removed. Never a pay deduction.
 // Stored in prima.stock_requests (Part I module) with kind 'site_supplies' and its helper kinds; no new table.
 import { can, GOV_OPS_COMPANY_ID, isCentralEmployer, isGroupLeader, AccessDenied } from './access';
-import { isGovOm, isOgm, isOpsDirector, isPrivateOm } from './ops-access';
+import { actsAsOpsDirector, isGovOm, isOgm, isOpsDirector, isPrivateOm } from './ops-access';
 import { RULES } from './rules';
 import { BadRequest, NotFound, UNIFORM_REQUEST_RULE, type HomeItem, type PrimaService, type ProofInput } from './service';
 import type { Store } from './store';
@@ -172,7 +172,7 @@ export class SiteSuppliesService {
   private isConfirmer(user: User, storeId: Id, set: SupplySettings): boolean {
     if (user.integration) return false;
     if (set.deputyUserId && user.id === set.deputyUserId) return true;
-    return storeId === GOV_OPS_COMPANY_ID ? isOgm(user) : isOpsDirector(user);
+    return storeId === GOV_OPS_COMPANY_ID ? isOgm(user) : actsAsOpsDirector(user);
   }
   /** Nepal first checker (T-X3): the HQ admin executive of the store's company (Gov Ops HQ for government sites). */
   private isFirstChecker(user: User, storeId: Id): boolean {
@@ -1152,7 +1152,7 @@ export class SiteSuppliesService {
     await this.store.lock?.('stockRequests', id);
     const row = (await this.store.get('stockRequests', id)) as StockRequest | undefined;
     if (!row || row.kind !== 'ss_minmax') throw new NotFound('Min/Max proposal');
-    if (!(row.companyId === GOV_OPS_COMPANY_ID ? isOgm(user) : isOpsDirector(user))) throw new AccessDenied('view', '(the OGM approves a site Min and Max)');
+    if (!(row.companyId === GOV_OPS_COMPANY_ID ? isOgm(user) : actsAsOpsDirector(user))) throw new AccessDenied('view', '(the OGM approves a site Min and Max; the Operations Director for a private store)');
     if (row.requestedById === user.id) throw new BadRequest('Nobody approves their own proposal.');
     if (row.status !== 'open') throw new BadRequest('Already decided.');
     const note = s(i.note);

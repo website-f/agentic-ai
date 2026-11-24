@@ -8,6 +8,7 @@
 // Not here: the foreign worker hostels (fw-moves.ts, FWM) and rental tenancies (Part V). Prima never logs in to
 // Airbnb, sends WhatsApp, or links a platform calendar: those stay off until separately verified.
 
+import { isOgm, isOpsDirector } from './ops-access';
 import { AccessDenied, assetRole } from './access';
 import { bookingBill, bookingHolds, bookingPaid, cancelSettlement, isDate, isHhmm, maskPhone, nights, nightsTaken, sellable } from './am-extras';
 import type { AmBooking, AmStaySetup, AmStayTerms } from './am-extras';
@@ -413,7 +414,7 @@ const SS_TABLES = ['stayRequests', 'ssRecs'] as const;
 
 /** Who may ask for a staff stay (answer 31): Government Operations or an HQ department / division. */
 export function ssRequester(user: User) {
-  return !user.integration && (user.role === 'pwvsb_officer' || user.opsTier === 'ogm' || user.opsTier === 'ops_director' || user.opsTier === 'coo');
+  return !user.integration && (user.role === 'pwvsb_officer' || isOgm(user) || isOpsDirector(user) || user.opsTier === 'coo');
 }
 // Applicants read the homestay houses (name, town, price) to choose one; nothing about guests.
 registerWall('ss_requester', ssRequester);
@@ -1453,7 +1454,7 @@ export class ShortStayService {
       ref: `RP-${this.today().slice(0, 4)}-${rid.slice(-5).toUpperCase()}`,
       requesterId: user.id,
       requester: user.name,
-      department: user.department ?? (user.opsTier === 'ogm' ? 'Government Operations' : ''),
+      department: user.department ?? (isOgm(user) ? 'Government Operations' : isOpsDirector(user) ? 'Private Operations' : ''),
       propertyId,
       town,
       checkIn,

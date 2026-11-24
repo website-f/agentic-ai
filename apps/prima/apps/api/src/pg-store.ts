@@ -1,6 +1,6 @@
 import {workflowMetricProblems} from './it-workflow-metrics-readiness';
 import {cleanupSchemaProblems} from './it-cleanup-readiness';
-import type {CleanupKind, ActAudit} from '@prima/core';
+import type {CleanupKind, ActAudit, CompanyItRentals} from '@prima/core';
 import {procurementProblems} from './procurement-readiness';
 import {rentalCorrectionProblems} from './rental-correction-readiness';
 import { randomUUID } from 'node:crypto';
@@ -32,6 +32,7 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   staffDirectoryBatches: 'The staff directory is not switched on in this database yet (module staff-directory-v1).',
   tenderOpportunities: 'Tender opportunities are not switched on in this database yet (module tender-opportunities-v1).',
   tenderSources: 'Tender opportunities are not switched on in this database yet (module tender-opportunities-v1).',
+  finPayments: 'Finance payments in their own table are not installed in this database yet (module fin-payments-v1).',
   clientCodes: 'Client requirements and the yearly self-audit are not installed in this database yet (module client-codes-v1).',
   clientCodeChecks: 'Client requirements and the yearly self-audit are not installed in this database yet (module client-codes-v1).',
   clientInspections: 'Client requirements and the yearly self-audit are not installed in this database yet (module client-codes-v1).',
@@ -56,14 +57,21 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   toolboxRecs: 'Toolbox records are not installed in this database yet (module toolbox-v1, run by the CEO).',
   groupMonthRecs: 'Monthly group meeting records are not installed in this database yet (module group-monthly-v1, run by the CEO).',
   dutyRegisterRecs: 'Duty registers are not installed in this database yet (module duty-registers-v1, run by the CEO).',
+  fwGapRecs: 'Foreign worker exits, absconding cases, quotas and caseload are not installed in this database yet (module fw-gaps-v1, run by the CEO).',
   inventoryRecs: 'Inventory control records are not installed in this database yet (module inventory-control-v1, run by the CEO).',
   amRentalRecs: 'Rental home records are not installed in this database yet (module am-rental-v1, run by the CEO).',
   consentGates: 'Paper consent is not installed in this database yet (module paper-consent-v1, run by the CEO).',
+  pdpaInbox: 'The PDPA inbox is not installed in this database yet (module pdpa-officer-v1, run by the CEO).',
+  pdpaPurgeOks: 'The clean-up OK is not installed in this database yet (module pdpa-officer-v1, run by the CEO).',
   hrLists: 'HR lists are not installed in this database yet (module hr-lists-v1, run by the CEO).',
+  cosCover: 'Chief of Staff cover is not installed in this database yet (module cos-cover-v1, run by the CEO).',
   orgImportOks: 'The bulk load OK is not installed in this database yet (module bulk-load-ok-v1, run by the CEO).',
   staffOtClaims: 'Office overtime claims are not installed in this database yet (module staff-ot-claims-v1, run by the CEO).',
   warrantyClaims: 'Equipment warranty claims are not installed in this database yet (module warranty-claims-v1, run by the CEO).',
   companyPapers: 'The company paper library is not installed in this database yet (module company-papers-v1).',
+  autoReports: 'Monthly reports made by Prima are not installed in this database yet (module auto-reports-v1).',
+  autoReportLayouts: 'Monthly reports made by Prima are not installed in this database yet (module auto-reports-v1).',
+  fleetRecords: 'Accidents, summonses and driver licences are not installed in this database yet (module fleet-records-v1).',
   sqlPostings: 'The SQL Account posting link is not installed in this database yet (module sql-posting-v1, run by the CEO).',
   sqlPostingExceptions: 'The SQL Account posting link is not installed in this database yet (module sql-posting-v1, run by the CEO).',
   rbaTraceReviews: 'RBA readiness is not installed in this database yet (module rba-readiness-v1).',
@@ -194,6 +202,7 @@ staffClaims: 'prima.staff_claims',
 tripApprovals: 'prima.trip_approvals',
 staffPayRuns: 'prima.staff_pay_runs',
 finStatus: 'prima.fin_status',
+finPayments: 'prima.fin_payments',
 contracts: 'prima.contracts',
 branchSettlements: 'prima.branch_settlements',
 branchActions: 'prima.branch_actions',
@@ -355,13 +364,16 @@ archiveFiles:'prima.archive_files',assistantMemory:'prima.assistant_memory',
 sharedLogins:'prima.shared_logins',
 sharedLoginKinds:'prima.shared_login_kinds',
 hrLists:'prima.hr_lists',
+cosCover:'prima.cos_cover',
 consentGates:'prima.consent_gates',
+pdpaInbox:'prima.pdpa_inbox',
+pdpaPurgeOks:'prima.pdpa_purge_oks',
 fwMoves:'prima.fw_moves',
 hostelNeeds:'prima.hostel_needs',
 hostelRecs:'prima.hostel_recs',
 stayRequests:'prima.stay_requests',
 ssRecs:'prima.short_stay_recs',
-itPolicyRecs:'prima.it_policy_recs', armsPolicyRecs:'prima.arms_policy_recs', officeAmRecs:'prima.office_am_recs', kdnRecs:'prima.kdn_recs', toolboxRecs:'prima.toolbox_recs', inventoryRecs:'prima.inventory_recs', amRentalRecs:'prima.am_rental_recs', groupMonthRecs:'prima.group_month_recs', dutyRegisterRecs:'prima.duty_register_recs',
+itPolicyRecs:'prima.it_policy_recs', armsPolicyRecs:'prima.arms_policy_recs', officeAmRecs:'prima.office_am_recs', kdnRecs:'prima.kdn_recs', toolboxRecs:'prima.toolbox_recs', inventoryRecs:'prima.inventory_recs', amRentalRecs:'prima.am_rental_recs', groupMonthRecs:'prima.group_month_recs', dutyRegisterRecs:'prima.duty_register_recs', fwGapRecs:'prima.fw_gap_recs',
 companyDesks: 'prima.company_desks',
 companyRunLinks: 'prima.company_run_links',
 fwWelfareChecks: 'prima.fw_welfare_checks',
@@ -373,6 +385,9 @@ timeSlips: 'prima.time_slips',
 staffOtClaims: 'prima.staff_ot_claims',
 warrantyClaims: 'prima.warranty_claims',
 companyPapers: 'prima.company_papers',
+autoReports: 'prima.auto_reports',
+autoReportLayouts: 'prima.auto_report_layouts',
+fleetRecords: 'prima.fleet_records',
 timeSlipSettings: 'prima.time_slip_settings',
 siteCoverage: 'prima.site_coverage',
 rosterVersions: 'prima.roster_versions',
@@ -437,7 +452,7 @@ fwRecruitFiles: 'prima.fw_recruit_files'
 // the plain columns, and callers add a company filter wherever they know it.
 const COMPANY_INDEXED = new Set<TableName>(['branches', 'sites', 'posts', 'people', 'credentials', 'licences', 'shifts', 'attendance', 'cases', 'firearms', 'armsMovements', 'contracts', 'staffClaims', 'finStatus',
   // P81: a month of report attendance is thousands of day rows; a person's month is read by id (primary key).
-  'attendanceImports', 'attendanceDays', 'attendanceMatches']);
+  'attendanceImports', 'attendanceDays', 'attendanceMatches', 'finPayments']);
 
 /** Tables whose rows carry companyId in a company_id column. */
 const HAS_COMPANY_COLUMN = new Set<TableName>([
@@ -449,6 +464,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'checkinRules',
 'checkinSettings',
 'checkinEvents',
+'fwGapRecs',
 'inventoryRecs',
 'siteHoursApprovals',
 'publicHolidayLists',
@@ -476,6 +492,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'branchActions',
 'contracts',
 'finStatus',
+'finPayments',
 'staffPayRuns',
 'jaRecords',
 'socsoClaims',
@@ -580,6 +597,8 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'staffOtClaims',
 'warrantyClaims',
 'companyPapers',
+'autoReports',
+'fleetRecords',
 'siteCoverage',
 'rosterVersions',
 'rosterDays',
@@ -939,6 +958,11 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
       await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [id]);
       return;
     }
+    // Purchase numbers per company (23 Nov 2026): two purchases raised at once are numbered one after the other.
+    if (table === 'purRequests' && id.startsWith('pur-seq:')) {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [id]);
+      return;
+    }
     // Company-wide branch keys (invoice numbers, SQL project codes): one company-scoped transaction lock, since two
     // branches have two different rows and a row lock alone cannot keep a key unique across them.
     if (table === 'branches' && id.startsWith('company-keys:')) {
@@ -1118,6 +1142,15 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
   /** Accounts and Access: the company names for preparing access (IT sees no company itself). */
   async accountCompanies(): Promise<{ id: string; code: string; name: string }[]> {
     return (await this.client.query('SELECT id, code, name FROM prima.acc_companies()')).rows;
+  }
+
+  /** IT gaps B3 (23 Nov 2026): a company manager's own rented IT devices and bills (module it-gaps-v1). */
+  async companyItRentals(companyId: Id): Promise<CompanyItRentals> {
+    const empty: CompanyItRentals = { companyId, devices: [], bills: [] };
+    const fn = await this.client.query(`SELECT to_regprocedure('prima.it_company_rentals(text)') IS NOT NULL AS ok`);
+    if (!fn.rows[0]?.ok) return empty;
+    const r = (await this.client.query('SELECT prima.it_company_rentals($1) AS r', [companyId])).rows[0]?.r;
+    return r ? { companyId, devices: r.devices ?? [], bills: (r.bills ?? []).map((b: { total: unknown }) => ({ ...b, total: Number(b.total) })) } : empty;
   }
 
   /** Accounts and Access: an approved request is written by prima.apply_account_request, which checks every rule again. */

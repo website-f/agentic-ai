@@ -433,6 +433,7 @@ function SqlConnector({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
   const d = l.sql.discovery;
   const [f, setF] = useState({
     companyFile: '',
+    copyBook: '',
     deployment: 'unknown',
     version: '',
     partnerDoc: '',
@@ -506,6 +507,10 @@ function SqlConnector({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
             />
           </label>
           <label className="field">
+            <span>Copy of the book Prima posts to first (company file or database name)</span>
+            <input className="input" aria-label="Copy book" value={f.copyBook} onChange={(e) => setF({ ...f, copyBook: e.target.value })} />
+          </label>
+          <label className="field">
             <span>Where it runs</span>
             <select className="select" aria-label="Where it runs" value={f.deployment} onChange={(e) => setF({ ...f, deployment: e.target.value })}>
               <option value="unknown">Unknown</option>
@@ -536,6 +541,7 @@ function SqlConnector({ l, co, lead }: { l: L; co: Co; lead: boolean }) {
               () =>
                 api.finControlAction(co.companyId, 'sql', 'record', {
                   companyFile: f.companyFile,
+                  copyBook: f.copyBook || null,
                   deployment: f.deployment,
                   version: f.version,
                   partnerDoc: f.partnerDoc,

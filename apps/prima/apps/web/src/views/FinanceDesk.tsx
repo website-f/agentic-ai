@@ -20,6 +20,7 @@ import { Card, Empty, Stat, Stats, Steps, type StepState } from '../kit';
 import { FoldNotice } from '../fold';
 import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/finance.css';
+import { KeyIn } from '../KeyIn';
 
 /**
  * Finance Phase 2 (31 Oct 2026). Payments, the month-end close and the bank and payment packs. SQL Account keeps the
@@ -842,6 +843,20 @@ export function NewPayment({ desk, onClose }: { desk: FinDesk; onClose: () => vo
       <Field label="Due date">
         <input className="input" type="date" value={f.dueOn} onChange={(e) => set('dueOn')(e.target.value)} />
       </Field>
+      {/* A8 bill reading (Fauzan, 23 Nov 2026): read the supplier's bill on the phone first; the online reader only fills what it could not, when switched on. */}
+      <KeyIn
+        paper="invoice"
+        only={['amount', 'ref', 'dueOn']}
+        typed={{ amount: f.amount, ref: f.invoiceNo, dueOn: f.dueOn }}
+        onFields={(read) => {
+          for (const x of read) {
+            if (x.value == null) continue;
+            if (x.name === 'amount') set('amount')(String(x.value));
+            if (x.name === 'ref') set('invoiceNo')(String(x.value));
+            if (x.name === 'dueOn') set('dueOn')(String(x.value));
+          }
+        }}
+      />
       <Field label="Pay from">
         <Select className="select" value={f.bankId} onChange={(e) => set('bankId')(e.target.value)}>
           <option value="">Choose a bank account</option>

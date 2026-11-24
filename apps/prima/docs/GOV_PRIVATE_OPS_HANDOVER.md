@@ -75,3 +75,67 @@ Tests:
 - The handover order OM → patrol officer → guard.
 - Proof hashing.
 - JA HMAC and validation.
+
+## Goodwill gaps closed (23 Nov 2026)
+
+From the Goodwill study (Fauzan, 23 Nov 2026: "Do the gap") and his answers that day:
+
+- **Deputy OGM, full stand-in at any time** (decision card). The operations officer the CEO or the HR Director names
+  deputy of Goodwill Empire in the org chart (unit `c_goodwill`) may do every OGM step: government sites, cases above
+  the Regional OM, guard leave, no-shows, site supply orders, uniform requests, handover steps, Beli baru / renovasi,
+  site hours, holiday lists, Finance requests for Goodwill, FW moves, staff stays and the rollout. `isOgm()` in
+  `packages/core/src/ops-access.ts` now means "the OGM or the Deputy OGM"; `isOgmByJob()` is the OGM alone (unit head,
+  alerts and the line manager still go to the OGM). Every step still names the person who did it, and nobody approves
+  their own request. A closed account, a system feed, a deputy outside Operations or a deputy role past its last day
+  stands in for nothing. On PostgreSQL, `db/modules/office-am-buy-v1.sql` (not run yet) now lets the named deputy read
+  and approve a government "buy new" job, reading `prima.org_lines` only when module org-lines-v1 is installed.
+- **Rental at month end is the rule** (decision card "Yes, held on last day"): a rented item still with the guard on
+  the month's last day is billed one month's rent to the guard's company. No longer a proposal.
+- **Prices**: the Inventory Manager sets Goodwill's rental and sale prices (store item or the Goodwill prices panel);
+  the Finance Director (and the CEO) may set them too (Fauzan: "Inventory set it. But fd can set also").
+- **Cost and stock by price** (Fauzan: "Make sure charges price and stock by price are stated in data"): each store
+  item keeps `unitCost`, the weighted average of the orders received (order amount shared over the lines by value), or
+  entered with a reason for opening stock. The panel shows unit cost, stock value (on hand x cost), sale and margin;
+  items with no cost are counted as missing, never guessed.
+- **Selling below cost needs the FD** (Fauzan: "unprofit need fd approval"): a sale price at or below the unit cost
+  from anyone else waits as `pendingSale` and the earlier price stays; the Finance Director (or the CEO) approves or
+  refuses with a reason, never their own. The FD may set such a price directly; it is marked approved. Rental is not
+  checked against cost (no rule given).
+- **Uniform allowance across both stores**: suits from the item register count toward the Goodwill per-item allowance.
+
+API: `POST purchasing/goodwill-prices/:itemId` and `POST purchasing/goodwill-prices/:itemId/decide`. No new table;
+new optional fields on the stock item. Tests: `packages/core/test/deputy-ogm.test.ts`,
+`packages/core/test/uniform-requests.test.ts`, `packages/core/test/inventory-control.test.ts`.
+
+## Private operations gaps closed (23 Nov 2026)
+
+From the private operations study (Sasa Team, under the Operations Director) and Fauzan's answers that day ("Do the gap"):
+
+- **Deputy Operations Director, full stand-in at any time** (decision card "Yes, full stand-in any time"). The
+  operations officer the CEO or the HR Director names deputy of Sasa Team in the org chart (unit `c_sasateam`) may do
+  every Operations Director step on private sites: cases above the Regional OM, guard leave, roster publishing, site
+  man-hours, public holidays, client report choices, wage advances, FW moves and hostel checks, Sasa Team supply orders
+  and Min/Max, Beli baru, Finance requests for private operations, and the private ops monitor and fee bills.
+  `isOpsDirector()` in `packages/core/src/ops-access.ts` now means "the OD or the Deputy OD"; `isOpsDirectorByJob()` is
+  the OD alone (unit head, alerts, the RBA committee seat and the line manager stay with the OD).
+- **The COO covers the OD's decisions** (Fauzan: "Let coo cover also"). `actsAsOpsDirector()` lets the COO take the OD's
+  approval step on a private item: roster publish, site man-hours, public holidays, client reports, wage advances, FW
+  moves, hostel maintenance and needs, supply order confirm and Min/Max, Beli baru, Finance requests. The COO keeps the
+  COO's own view (not narrowed to private sites). Where the COO already has a later step (hostel bills), the COO does not
+  also take the OD's step: one person, one step. Every step names who did it, with the reason the step asks for.
+- **Lines follow the side.** With no line set in the org chart: a government Regional OM reports to the OGM and a
+  private or unsided one to the Operations Director (before, all went to the OD); an OM goes to a Regional OM of the
+  same region and side; a patrolling officer tied to the private side with no OM goes to the OD, not the OGM.
+- **The Operations Director delegates patrolling officers** to OMs and Regional OMs in the org chart, as the OGM does,
+  each head only on their own side.
+- **OMs with no side are listed** on the org chart (CEO, HR Director, OGM, OD): Sasa Team and Goodwill have separate
+  staff, so HR sets Government or Private in Accounts and access. Nothing is changed automatically.
+- Also fixed for the Deputy OGM: wage advances and hostel bill approvals checked the job tier, so the deputy could not
+  approve them.
+
+Database module: `db/modules/office-am-buy-v1.sql` (already listed, not run yet) now also lets the Deputy OD (org chart
+row `head-c_sasateam`, read only when org-lines-v1 is installed) and the COO read and approve a private "buy new" job.
+No new table. Tests: `packages/core/test/deputy-ops-director.test.ts`.
+
+Not done: the Operations Director's work score board still counts operations work of both sides, because the score
+records carry the company but not the site's side. Splitting it needs the side added to each operations score record.

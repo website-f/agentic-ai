@@ -14,8 +14,9 @@ import { SopHelp } from '../sop/SopHelp';
 
 /**
  * Operation claims and office requests (Fauzan, 26 Oct 2026). The Operations Manager sets the month's operation claim
- * items and the COO approves. Office consumables (not IT or asset items), office utilities and rent: the company
- * manager requests, the Chief of Staff approves, the COO gives the final approval.
+ * items and the COO approves. Office consumables (not IT or asset items), office utilities and rent: an admin executive
+ * or the company manager prepares, the company head checks and sends (Fauzan, 23 Nov 2026), the Chief of Staff
+ * approves, the COO gives the final approval.
  */
 
 type Row = ExpenseBoard['requests'][number];
@@ -27,6 +28,7 @@ const CATEGORY: Record<NonNullable<Row['category']>, string> = {
 };
 const STATUS: Record<Row['status'], [Tone, string]> = {
   draft: ['neutral', 'Draft'],
+  head_check: ['warn', 'With the company head'],
   submitted: ['warn', 'Submitted'],
   cos_approved: ['warn', 'Chief of Staff approved'],
   approved: ['ok', 'Approved'],
@@ -40,7 +42,7 @@ function thisMonth(): string {
 }
 
 const PAGE_SUB =
-  "Operation claims: the Operations Manager sets the month's items, the COO approves. Office supplies (pens, paper, files), office utilities and rent: the company manager requests, the Chief of Staff approves, the COO gives the final approval. New furniture, fittings or renovation: \"Beli baru / renovasi\" below (Asset Management, then the operations head). IT and electronic items: the IT screen.";
+  "Operation claims: the Operations Manager sets the month's items, the COO approves. Office supplies (pens, paper, files), office utilities and rent: an admin executive prepares, the company head checks and sends (or the head requests directly), the Chief of Staff approves, the COO gives the final approval. New furniture, fittings or renovation: \"Beli baru / renovasi\" below (Asset Management, then the operations head). IT and electronic items: the IT screen.";
 
 type Filter = 'all' | 'mine' | 'open';
 
@@ -92,7 +94,7 @@ export function RequestsView() {
       </div>
     );
   const open = data.requests.filter((r) => r.waitingOn);
-  const forMe = data.requests.filter((r) => r.canCos || r.canCoo);
+  const forMe = data.requests.filter((r) => r.canCos || r.canCoo || r.canHead);
   const shown = filter === 'all' ? data.requests : filter === 'mine' ? forMe : open;
   return (
     <div className="page ss">
@@ -147,9 +149,9 @@ export function RequestsView() {
           filters={REQUEST_FILTERS}
           searchText={(r) => r.lines.map((l) => l.item).join(' ')}
           onRowClick={(r) => toggle(r.id)}
-          rowTone={(r) => (r.canCos || r.canCoo ? 'warn' : STATUS[r.status][0] === 'crit' ? 'crit' : undefined)}
+          rowTone={(r) => (r.canCos || r.canCoo || r.canHead ? 'warn' : STATUS[r.status][0] === 'crit' ? 'crit' : undefined)}
           rowEnd={(r) => {
-            const decide = r.canCos || r.canCoo;
+            const decide = r.canCos || r.canCoo || r.canHead;
             const isOpen = opened.has(r.id);
             return (
               <button className={decide && !isOpen ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'} aria-expanded={isOpen} onClick={() => toggle(r.id)}>
@@ -162,7 +164,7 @@ export function RequestsView() {
             opened.has(r.id) ? (
               // data-no-row-click: a click inside the opened part (a phone card) does not close it.
               <div data-no-row-click>
-                <RequestDetail r={r} companies={data.companies} />
+                <RequestDetail r={r} companies={data.companies} canSendOffice={data.can.sendOffice} />
               </div>
             ) : null
           }
@@ -189,12 +191,15 @@ export function RequestsView() {
   );
 }
 
-/** Where a request is on its way: requested, Chief of Staff (office requests only), COO. */
+/** Where a request is on its way: requested, company head check (office requests an executive prepared), Chief of Staff (office requests only), COO. */
 function requestSteps(r: Row): { label: string; state: StepState; note?: string }[] {
   const office = r.kind === 'OFFICE';
   const steps: { label: string; state: StepState; note?: string }[] = [
     { label: 'Requested', state: r.status === 'draft' || r.status === 'returned' ? 'now' : 'done', note: r.status === 'draft' ? 'Draft' : r.status === 'returned' ? 'Sent back' : r.requestedBy },
   ];
+  // P129 (upstream, Fauzan 23 Nov 2026): an admin executive prepares, the company head checks and sends.
+  if (office && (r.headCheck || r.status === 'head_check'))
+    steps.push({ label: 'Company head', state: r.headCheck ? 'done' : 'now', note: r.headCheck?.by });
   if (office)
     steps.push({
       label: 'Chief of Staff',
@@ -212,12 +217,12 @@ function requestSteps(r: Row): { label: string; state: StepState; note?: string 
 }
 
 /** A request opened to act on: its steps, items, notes, papers, edit and submit, and the decision box. */
-function RequestDetail({ r, companies }: { r: Row; companies: ExpenseBoard['companies'] }) {
+function RequestDetail({ r, companies, canSendOffice }: { r: Row; companies: ExpenseBoard['companies']; canSendOffice: boolean }) {
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState('');
   const act = useAction();
   const docs = useLoad(() => api.expenseDocs(r.id), [r.docIds.length]);
-  const decide = r.canCos || r.canCoo;
+  const decide = r.canCos || r.canCoo || r.canHead;
   return (
     <div className="ss-req-detail small">
       <Steps steps={requestSteps(r)} />
@@ -248,8 +253,13 @@ function RequestDetail({ r, companies }: { r: Row; companies: ExpenseBoard['comp
           Sent back by {r.returned.by}: {r.returned.note}
         </div>
       )}
-      {(r.cosApproval || r.cooDecision) && (
+      {(r.headCheck || r.cosApproval || r.cooDecision) && (
         <div className="ss-meta">
+          {r.headCheck && (
+            <span>
+              Checked and sent by {r.headCheck.by}, {dateTimeLabel(r.headCheck.at)}
+            </span>
+          )}
           {r.cosApproval && (
             <span>
               Chief of Staff: {r.cosApproval.by}, {dateTimeLabel(r.cosApproval.at)}
@@ -269,7 +279,7 @@ function RequestDetail({ r, companies }: { r: Row; companies: ExpenseBoard['comp
             {editing ? 'Cancel edit' : 'Edit items'}
           </button>
           <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => act.run(() => api.submitExpense(r.id), 'Submitted.')}>
-            Submit
+            {r.kind === 'OFFICE' && !canSendOffice ? 'Send to the company head' : 'Submit'}
           </button>
         </div>
       )}
@@ -290,20 +300,25 @@ function RequestDetail({ r, companies }: { r: Row; companies: ExpenseBoard['comp
             <button
               className="btn btn-primary btn-sm"
               disabled={act.busy || !note.trim()}
-              onClick={() => act.run(() => api.decideExpense(r.id, 'approve', note), r.canCos ? 'Approved, sent to the COO.' : 'Approved.')}
+              onClick={() =>
+                act.run(() => api.decideExpense(r.id, 'approve', note), r.canHead ? 'Checked, sent to the Chief of Staff.' : r.canCos ? 'Approved, sent to the COO.' : 'Approved.')
+              }
             >
-              Approve
+              {r.canHead ? 'Check and send' : 'Approve'}
             </button>
             <button className="btn btn-sm" disabled={act.busy || note.trim().length < 3} onClick={() => act.run(() => api.decideExpense(r.id, 'return', note), 'Sent back.')}>
               Send back
             </button>
-            <button
-              className="btn btn-sm btn-danger"
-              disabled={act.busy || note.trim().length < 3}
-              onClick={() => act.run(() => api.decideExpense(r.id, 'reject', note), 'Rejected.')}
-            >
-              Reject
-            </button>
+            {/* The company head checks and sends or sends back; only the Chief of Staff and the COO reject. */}
+            {!r.canHead && (
+              <button
+                className="btn btn-sm btn-danger"
+                disabled={act.busy || note.trim().length < 3}
+                onClick={() => act.run(() => api.decideExpense(r.id, 'reject', note), 'Rejected.')}
+              >
+                Reject
+              </button>
+            )}
           </div>
         </div>
       )}

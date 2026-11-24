@@ -19,7 +19,7 @@ import { WebsitesView } from './Websites';
 import { ItPlanView } from './ItPlan';
 import { LoginHandoverPanel } from './LoginHandover';
 import { ItImport } from './ItImport';
-import { ItManualPanel, manualItVisible } from './ItManual';
+import { ItManualPanel, manualItVisible, type IntakePrefill } from './ItManual';
 import { ImportButton } from './ImportDrawer';
 import { ItOperations } from './ItOperations';
 import { ItGuide } from './ItGuide';
@@ -270,9 +270,9 @@ export function ItView() {
         {current === 'maintenance' && <><Maintenance data={data} staff={staff} /><ItOperations mode="inspection"/></>}
         {current === 'websites' && <WebsitesView />}
         {current === 'tickets' && <Tickets data={data} staff={staff} />}
-        {current === 'onboarding' && <>{manualItVisible(me.user)&&<ItManualPanel mode="intake"/>}<Onboarding data={data} staff={staff} /></>}
+        {current === 'onboarding' && <><FromHr data={data} staff={staff} />{manualItVisible(me.user)&&<ItManualPanel mode="intake"/>}<Onboarding data={data} staff={staff} /></>}
         {current === 'tenders' && <ItTenders data={data} />}
-        {current === 'mine' && <Mine data={data} onForms={has('policy') ? () => setTab('policy') : undefined} />}
+        {current === 'mine' && <><CompanyRentals data={data} /><Mine data={data} onForms={has('policy') ? () => setTab('policy') : undefined} /></>}
         {current === 'policy' && <ItPolicyPanel assets={(data.assets ?? []).map((r) => ({ id: r.asset.id, label: `${r.asset.tag} · ${r.asset.model}` }))} companyNames={Object.fromEntries((data.assets ?? []).map((r) => [r.asset.ownerId, r.ownerName]))} />}
         {current === 'import' && arishaLeader(me.user) === 'ceo' && <ItImport />}
       </div>
@@ -1288,5 +1288,144 @@ function ConfirmFix({ id }: { id: string }) {
       </div>
       <ErrorNotice error={act.error} />
     </div>
+  );
+}
+
+type FromHrRow = NonNullable<ItBoard['fromHr']>[number];
+
+/**
+ * IT gaps B1 + D1 (Fauzan, 23 Nov 2026): new joiners approved in Accounts and Access and leavers whose access HR closed,
+ * until IT has finished. IT starts the checklist from here; a joiner's approval also counts as the Microsoft 365 approval.
+ */
+function FromHr({ data, staff }: { data: ItBoard; staff: boolean }) {
+  const act = useAction();
+  const [open, setOpen] = useState<FromHrRow | null>(null);
+  const [done, setDone] = useState<string[]>([]);
+  const rows = (data.fromHr ?? []).filter((r) => !done.includes(`${r.kind}:${r.userId}`));
+  const prefill = (r: FromHrRow): IntakePrefill => ({ kind: r.kind, personUserId: r.userId, personName: r.name, jobTitle: r.title || 'Staff', on: r.on, companyId: r.companyId });
+  const m365 = (r: FromHrRow) =>
+    act.run(
+      () => api.itAct('policyAct', { op: 'acctFromAccess', accessRequestId: r.accessRequestId, userId: r.userId }),
+      `Microsoft 365 approval recorded for ${r.name} (approved in Accounts and Access by ${r.approvedBy ?? 'the approver'}).`,
+    ).then((x) => { if (x) setDone((d) => [...d, `m365:${r.userId}`]); });
+  const columns: DtColumn<FromHrRow>[] = [
+    { id: 'person', label: 'Person', value: (r) => r.name, render: (r) => <><strong>{r.name}</strong>{r.title && <div className="muted small">{r.title}</div>}</>, phone: 'title' },
+    {
+      id: 'kind',
+      label: 'From HR',
+      value: (r) => r.on,
+      sort: 'date',
+      render: (r) => (
+        <>
+          {r.kind === 'join' ? <Chip tone="info">Joining</Chip> : <Chip tone="warn">Leaving</Chip>} {dateLabel(r.on)}
+          {r.approvedBy && <div className="muted small">Approved by {r.approvedBy}</div>}
+        </>
+      ),
+      phone: 'sub',
+    },
+    {
+      id: 'devices',
+      label: 'Devices still held',
+      value: (r) => r.devices.map((d) => d.tag).join(', '),
+      render: (r) => (r.devices.length ? r.devices.map((d) => <div key={d.id}><Chip tone="crit">{d.tag}</Chip> {d.kind} {d.model}</div>) : <span className="muted">None</span>),
+    },
+    { id: 'checklist', label: 'IT checklist', value: (r) => (r.checklist ? `${r.checklist.done}/${r.checklist.total} done` : 'Not started'), render: (r) => (r.checklist ? `${r.checklist.done}/${r.checklist.total} done` : <Chip tone="warn">Not started</Chip>) },
+    { id: 'todo', label: 'To do', value: (r) => r.todo.join('; '), sort: false },
+  ];
+  return (
+    <Card
+      title="From HR: new joiners and leavers"
+      sub="New accounts approved in Accounts and Access and leavers whose Prima access HR closed, until IT has finished. A joiner approved there needs no second Microsoft 365 approval. A leaver stays here while any device is still with them."
+      flush
+    >
+      <ErrorNotice error={act.error} />
+      <DataTable
+        label="From HR: new joiners and leavers"
+        stateKey="it.fromHr"
+        rows={rows}
+        rowKey={(r) => `${r.kind}:${r.userId}`}
+        columns={columns}
+        filters={[{ id: 'kind', label: 'From HR', value: (r) => r.kind, options: [{ value: 'join', label: 'Joining' }, { value: 'leave', label: 'Leaving' }] }]}
+        rowTone={(r) => (r.kind === 'leave' && r.devices.length ? 'crit' : !r.checklist ? 'warn' : undefined)}
+        rowEnd={
+          staff
+            ? (r) => (
+                <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                  {!r.checklist && (
+                    <button className="btn btn-sm btn-primary" onClick={() => setOpen(r)}>
+                      Start {r.kind === 'join' ? 'joining' : 'leaver'} checklist
+                    </button>
+                  )}
+                  {r.kind === 'join' && !r.m365Approved && !r.m365Active && r.accessRequestId && !done.includes(`m365:${r.userId}`) && (
+                    <button className="btn btn-sm" disabled={act.busy} onClick={() => void m365(r)}>
+                      Record Microsoft 365 approval
+                    </button>
+                  )}
+                </span>
+              )
+            : undefined
+        }
+        empty={<Empty title="Nothing from HR waiting for IT." />}
+      />
+      {open && (
+        <Drawer title={`${open.kind === 'join' ? 'Joining' : 'Leaver'} checklist: ${open.name}`} onClose={() => setOpen(null)}>
+          <ItManualPanel mode="intake" prefill={prefill(open)} onDone={() => { setDone((d) => [...d, `${open.kind}:${open.userId}`]); setOpen(null); }} />
+        </Drawer>
+      )}
+    </Card>
+  );
+}
+
+type RentalCompany = NonNullable<ItBoard['companyRentals']>[number];
+
+/** IT gaps B3 (Fauzan, 23 Nov 2026): a company manager sees the devices the company rents from Merdeka and its bills. */
+function CompanyRentals({ data }: { data: ItBoard }) {
+  const { me } = useApp();
+  const list = data.companyRentals ?? [];
+  if (!list.length) return null;
+  const nameOf = (id: string) => me.companies.find((c) => c.id === id)?.name ?? id;
+  const deviceColumns: DtColumn<RentalCompany['devices'][number]>[] = [
+    { id: 'tag', label: 'Tag', value: (d) => d.tag, render: (d) => <strong>{d.tag}</strong>, phone: 'title' },
+    { id: 'kind', label: 'Kind', value: (d) => d.kind, phone: 'sub' },
+    { id: 'model', label: 'Model', value: (d) => d.model },
+    { id: 'status', label: 'Status', value: (d) => (d.status === 'repair' ? 'In repair' : 'In use'), translate: true, render: (d) => (d.status === 'repair' ? <Chip tone="warn">In repair</Chip> : 'In use') },
+    { id: 'with', label: 'With', value: (d) => d.assignedTo ?? '-' },
+    { id: 'location', label: 'Location', value: (d) => d.location, hideBelow: 1100 },
+  ];
+  const billColumns: DtColumn<RentalCompany['bills'][number]>[] = [
+    { id: 'period', label: 'Month', value: (b) => b.period, phone: 'title' },
+    { id: 'invoice', label: 'Invoice', value: (b) => b.invoiceRef, phone: 'sub' },
+    { id: 'total', label: 'Total (RM)', value: (b) => b.total, sort: 'number', render: (b) => b.total.toFixed(2) },
+    { id: 'paid', label: 'Paid', value: (b) => (b.paid ? 'Paid' : 'Not yet'), translate: true, render: (b) => (b.paid ? <Chip tone="ok">Paid</Chip> : <Chip tone="warn">Not yet</Chip>) },
+  ];
+  return (
+    <>
+      {list.map((c) => (
+        <Card
+          key={c.companyId}
+          title={list.length > 1 ? `Our IT devices and bills: ${nameOf(c.companyId)}` : 'Our IT devices and bills'}
+          sub="Devices your company rents from Merdeka Network and the monthly rental bills. Read only; ask IT on My requests for any change."
+          flush
+        >
+          <DataTable
+            label="Rented devices"
+            stateKey={`it.rentals.devices.${c.companyId}`}
+            rows={c.devices}
+            rowKey={(d) => d.tag}
+            columns={deviceColumns}
+            empty={<Empty title="No rented devices." />}
+          />
+          <DataTable
+            label="Rental bills"
+            stateKey={`it.rentals.bills.${c.companyId}`}
+            rows={c.bills}
+            rowKey={(b) => b.period}
+            columns={billColumns}
+            defaults={{ sort: 'period', dir: 'desc' }}
+            empty={<Empty title="No bills yet." />}
+          />
+        </Card>
+      ))}
+    </>
   );
 }

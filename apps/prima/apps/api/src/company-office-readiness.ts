@@ -222,6 +222,19 @@ export const COMPANY_RUN_LINKS_ATTESTED = {
   grants: { prima_app: ['INSERT', 'SELECT', 'UPDATE'] } as Record<string, string[]>,
 };
 
+const COVER_SETTER = "prima.cos_cover_acts('office_run_by'::text)";
+/** Optional policies from db/modules/cos-cover-v1.sql: the Deputy setting the link while covering for the Chief of Staff. */
+export const RUN_LINK_COVER_POLICIES: Record<string, { permissive: boolean; roles: string[]; cmd: string; using: string; check: string }> = {
+  run_links_cover_insert: { permissive: true, roles: ['public'], cmd: 'a', using: '', check: `(${COVER_SETTER} AND ${ON_SETTER_WALL} AND ${PARENT_ON_SETTER_WALL})` },
+  run_links_cover_update: {
+    permissive: true,
+    roles: ['public'],
+    cmd: 'w',
+    using: `(${COVER_SETTER} AND ${ON_SETTER_WALL})`,
+    check: `(${COVER_SETTER} AND ${ON_SETTER_WALL} AND ${PARENT_ON_SETTER_WALL})`,
+  },
+};
+
 /** Names only: what is missing or drifted for db/modules/company-run-links-v1.sql. Empty when installed as reviewed. */
 export async function companyRunLinkProblems(pool: Pick<Pool, 'query'>): Promise<string[]> {
   const R = COMPANY_RUN_LINKS_ATTESTED;
@@ -264,7 +277,14 @@ export async function companyRunLinkProblems(pool: Pick<Pool, 'query'>): Promise
     )
       out.push(`Policy company_run_links.${name} differs from the reviewed definition.`);
   }
-  for (const p of pol.rows.filter((x) => !(x.name in R.policies))) out.push(`Unexpected policy company_run_links.${p.name}.`);
+  // Module cos-cover-v1 (HR gap D1, 23 Nov 2026) adds two policies for whoever covers for the Chief of Staff; they are
+  // optional, but when present they must be exactly as reviewed.
+  for (const [name, want] of Object.entries(RUN_LINK_COVER_POLICIES)) {
+    const p = pol.rows.find((x) => x.name === name);
+    if (p && (p.permissive !== want.permissive || p.cmd !== want.cmd || (p.roles as string[]).join(',') !== want.roles.join(',') || norm(p.using) !== norm(want.using) || norm(p.check) !== norm(want.check)))
+      out.push(`Policy company_run_links.${name} differs from the reviewed definition.`);
+  }
+  for (const p of pol.rows.filter((x) => !(x.name in R.policies) && !(x.name in RUN_LINK_COVER_POLICIES))) out.push(`Unexpected policy company_run_links.${p.name}.`);
   const con = await pool.query(`SELECT conname AS name, pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid = $1`, [oid]);
   for (const [name, def] of Object.entries(R.constraints)) {
     const c = con.rows.find((x) => x.name === name);

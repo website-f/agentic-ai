@@ -50,7 +50,7 @@ What every head can now do (screen **Org chart**, menu for office staff):
 3. **Roles for a while or for good** (Fauzan, 23 Nov 2026: "Some staff have a few roles it hold for a while or for the
    whole"): one person can head or deputise several units, and any line or named role can carry a last day ("Until").
    After that day the role lapses and the person goes back to the line from the job. Empty means it holds until changed.
-4. **The OGM delegates patrolling officers** to any OM or Regional OM (only patrolling officers, only under an OM or ROM).
+4. **The OGM delegates patrolling officers** to any OM or Regional OM (only patrolling officers, only under an OM or ROM). The Deputy OGM (deputy of Goodwill named in the chart) stands in for every OGM step (Fauzan, 23 Nov 2026). The Operations Director delegates private-side patrolling officers the same way, and the Deputy Operations Director (deputy of Sasa Team named in the chart) stands in for every OD step; the COO may cover OD decisions (Fauzan, 23 Nov 2026). With no line set, a government Regional OM reports to the OGM and a private one to the OD.
 5. **The CEO and the HR Director (CoS or DCoS)** can set any line, across heads and companies (HR governs HR in every
    company). A move between two heads goes to them.
 6. **Naming unit heads**: the CEO or the HR Director names the head and deputy of each central department (16, including

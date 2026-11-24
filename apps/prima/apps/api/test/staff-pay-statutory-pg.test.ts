@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { dataWalls, staffPayRole, myt, type StaffPayRun } from '@prima/core';
 import { DEFAULT_STATUTORY } from '@prima/core';
+import { preparePayout } from './payout-helper';
 import { Db } from '../src/db';
 import { resetDb } from '../src/reset-db';
 
@@ -30,7 +31,11 @@ describe('staff payroll statutory Finance read wall and release gate (actual Pos
   const set = (rate: number, month = '2026-11') => db.asUser('u-fauzan', (svc, u) => svc.setStatutory(u, { effectiveFrom: month, settings: settings(rate), reason: 'Synthetic effective contribution settings' }), clock);
   const prepare = () => db.asUser('u-pwvsb-hr', (svc, u) => svc.prepareStaffPay(u, 'co-sasa', '2026-11'), clock);
   const stage = async (run: StaffPayRun, value: string) => db.pool.query(`UPDATE prima.staff_pay_runs SET data=data || $2::jsonb WHERE id=$1`, [run.id, JSON.stringify({ stage: value })]);
-  const pay = (run: StaffPayRun) => db.asUser(FINANCE, (svc, u) => svc.staffPayStep(u, run.id, 'pay', { bankRef: 'SYNTHETIC-NO-BANK-CALL', pcbChecked: true, paidOn: '2026-11-07' }), clock);
+  // Finance D2 (23 Nov 2026): the CEO prepares the payout, the Finance Director records it paid.
+  const pay = async (run: StaffPayRun) => {
+    await preparePayout(db, 'staff_pay', run.id, clock).catch(() => undefined);
+    return db.asUser('u-fd', (svc, u) => svc.staffPayStep(u, run.id, 'pay', { bankRef: 'SYNTHETIC-NO-BANK-CALL', pcbChecked: true, paidOn: '2026-11-07' }), clock);
+  };
 
   it('gives existing payroll Finance only statutory SELECT, not ACT/formula or employee-ID access', async () => {
     const version = await set(0.12);

@@ -93,8 +93,10 @@ const TENDER_FILTERS: DtFilter<TenderRow>[] = [
 ];
 
 /**
- * The Director Office Administrator's desk (Fauzan, 25 Oct 2026): every company's tenders, quotations, proposals and
- * leads and where each stands, the reports companies send in, and the meeting schedule.
+ * The Director Office Administrator's desk. Its own work comes first (Director Office study B4, Fauzan 23 Nov 2026): the
+ * weekly digest, CEO instructions, legal flags for the directors, reports and meetings, and cash lists. Tenders follow:
+ * before the Marketing desk starts the Director Office keeps the tender protocol as before (Fauzan, 25 Oct 2026); once
+ * it has started Marketing runs every bid and the Director Office only monitors.
  */
 export function DirectorOfficeView() {
   const { companyId, me, setCompanyId, go, canOpen } = useApp();
@@ -122,11 +124,22 @@ export function DirectorOfficeView() {
   // What waits for this person opens first; otherwise every tender (until the person picks).
   const control = { state: { ...table.state, f: { ...table.state.f, show: table.state.f.show ?? (mine ? 'mine' : '') } }, set: table.set };
   const setShow = (v: 'mine' | 'live' | '') => table.set({ f: { show: v } });
+  // Director Office study B4 (Fauzan, 23 Nov 2026): once the Marketing desk has started, Marketing runs every bid and the
+  // Director Office only monitors the tenders.
+  const monitorOnly = data.marketingDeskOn;
   return (
     <div className="page ld">
       <PageHead
         title="Director Office"
-        sub="Every company's tenders from papers to submission slip. Each company bids in its own name and does the work; the Director Office checks the checklist, follows each bid and gets the CEO's approval."
+        sub={
+          <>
+            The directors' week in one place: CEO instructions to done, reports due to the Director Office, meetings and minutes, and the legal points for
+            the directors.{' '}
+            {monitorOnly
+              ? 'Marketing prepares and lodges every bid; the Director Office monitors them below.'
+              : "Below: every company's tenders, which the Director Office still checks until the Marketing desk starts."}
+          </>
+        }
         actions={
           <>
             {instr.data && (
@@ -144,8 +157,17 @@ export function DirectorOfficeView() {
           </>
         }
       />
+
+      <DirectorDesk instr={instr} />
+      <DirectorOfficeCounterPanel />
+      <Card title="Cash lists">
+        <ExceptionalGuardCash key={cashCompany} companyId={cashCompany} picker={<label>Cash handover company<Select className="select" value={cashCompany} onChange={e => setCashCompany(e.target.value)}>{me.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label>} />
+        <MyDailyCash />
+      </Card>
+
+      <h2 style={{ margin: '16px 0 0', fontSize: '1.1rem' }}>{monitorOnly ? 'Tenders: monitor only (Marketing runs the bids)' : 'Tenders'}</h2>
       <Stats>
-        <Stat label="Waiting for you" value={mine} tone={mine ? 'warn' : 'ok'} icon={<TrayIcon />} onClick={() => setShow('mine')} />
+        {!monitorOnly && <Stat label="Waiting for you" value={mine} tone={mine ? 'warn' : 'ok'} icon={<TrayIcon />} onClick={() => setShow('mine')} />}
         <Stat label="Tenders being worked on" value={live.length} icon={<FileTextIcon />} onClick={() => setShow('live')} />
         <Stat
           label="Urgent or short window"
@@ -160,6 +182,10 @@ export function DirectorOfficeView() {
           icon={<HourglassIcon />}
         />
       </Stats>
+      <TenderCounterPanel />
+      <TenderOpportunitiesPanel />
+      <TenderSourcesPanel />
+      <JointTenders board={data} />
 
       <Card
         title="Tenders"
@@ -219,15 +245,6 @@ export function DirectorOfficeView() {
           </ul>
         )}
       </Card>
-
-      <DirectorDesk instr={instr} />
-      <ExceptionalGuardCash key={cashCompany} companyId={cashCompany} picker={<label>Cash handover company<Select className="select" value={cashCompany} onChange={e => setCashCompany(e.target.value)}>{me.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label>} />
-      <MyDailyCash />
-      <TenderOpportunitiesPanel />
-      <TenderCounterPanel />
-      <TenderSourcesPanel />
-      <DirectorOfficeCounterPanel />
-      <JointTenders board={data} />
     </div>
   );
 }

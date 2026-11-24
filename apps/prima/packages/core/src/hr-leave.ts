@@ -183,3 +183,51 @@ export function workingDayDeadlines(
   }
   return out;
 }
+
+/**
+ * D2 (Fauzan, 23 Nov 2026: "Yes"): office staff leave moves up after each `hours` working hours nobody acts on it, the
+ * way guard leave counts working days (C3). Working hours are the staff hours (rule HR-STAFF-HOURS, 8.30 am to 5.30 pm
+ * Malaysian time), Monday to Friday, public holidays not counted. Returns the moment each level ends, as UTC instants
+ * in ISO form (`deadlines[k]` is when step k moves to step k+1).
+ */
+export function workingHourDeadlines(
+  startedAt: string,
+  holidays: Set<IsoDate>,
+  hours: number,
+  steps: number,
+  day: { start: string; end: string } = RULES.staffHours.value,
+): string[] {
+  const MYT = 8 * 3_600_000;
+  const mins = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  const open = mins(day.start) * 60_000;
+  const close = mins(day.end) * 60_000;
+  const isWork = (d: IsoDate) => {
+    const w = weekday(d);
+    return w !== 0 && w !== 6 && !holidays.has(d);
+  };
+  // Walk in Malaysian local time: `t` is a local-clock instant in ms.
+  let t = Date.parse(startedAt) + MYT;
+  const out: string[] = [];
+  for (let k = 0; k < steps; k++) {
+    let left = hours * 3_600_000;
+    for (let guard = 0; guard < 400 && left > 0; guard++) {
+      const d = new Date(t).toISOString().slice(0, 10);
+      const dayStart = Date.parse(`${d}T00:00:00Z`);
+      const from = Math.max(t, dayStart + open);
+      if (!isWork(d) || from >= dayStart + close) {
+        t = Date.parse(`${nextDay(d)}T00:00:00Z`);
+        continue;
+      }
+      const room = dayStart + close - from;
+      if (room >= left) {
+        t = from + left;
+        left = 0;
+      } else {
+        left -= room;
+        t = Date.parse(`${nextDay(d)}T00:00:00Z`);
+      }
+    }
+    out.push(new Date(t - MYT).toISOString());
+  }
+  return out;
+}

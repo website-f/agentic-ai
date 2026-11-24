@@ -312,6 +312,8 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
         ['LORRY', 'Lorry'],
       ]),
       num('odometerKm', 'Odometer (km)', true),
+      // For the replacement review at 10 years or 300,000 km (Fauzan, 23 Nov 2026, rule FLEET-REPLACE).
+      date('registeredOn', 'First registered on'),
       date('roadTax', 'Road tax expires', true),
       date('insurance', 'Insurance expires', true),
       date('puspakom', 'PUSPAKOM due'),

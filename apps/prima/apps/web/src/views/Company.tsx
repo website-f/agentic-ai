@@ -9,6 +9,7 @@ import { RecordButton, useRecordKinds } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import '../styles/leadership.css';
 import { UnbilledSitesPanel } from './FinanceMonitor';
+import { StandardsDutiesPanel } from './StandardsDuties';
 
 export function CompanyView() {
   const { companyId, go, me } = useApp();
@@ -65,6 +66,8 @@ export function CompanyView() {
           </div>
         )}
       </PageHead>
+
+      {(me.user.role === 'company_manager' || me.user.role === 'admin_exec') && <StandardsDutiesPanel />}
 
       <Stats>
         <Stat label="Shifts today" value={today.total} icon={<CalendarCheckIcon />} tone="info" />

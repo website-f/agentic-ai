@@ -347,6 +347,24 @@ export class SpecialOpsController {
     return this.db.asUser(uid, (svc, u) => svc.groupMonthAct(u, op, b));
   }
 
+  // ---------- Monthly reports Prima makes by itself (Fauzan, 23 Nov 2026) ----------
+
+  @Post('auto-reports/:op')
+  autoReports(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown report action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.autoReportAct(u, op, b));
+  }
+
+  // ---------- FWM check gaps (23 Nov 2026): bulk dates, levy, exits, absconding, quotas, caseload ----------
+
+  @Post('fw-gaps/:op')
+  fwGaps(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown foreign worker action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.fwGapsAct(u, op, b));
+  }
+
   // ---------- Part Z: duty map registers ----------
 
   @Post('registers/:op')

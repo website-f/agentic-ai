@@ -1,8 +1,8 @@
 // Teams approvals read job (Fauzan, 1 Nov 2026: "5. Yes"). Track A of docs/TEAMS_APPROVALS_INTEGRATION.md.
 // Reads the protected SharePoint results list (and the request row each result names) through Microsoft Graph v1.0,
 // read-only, and hands each result to Prima's checks (packages/core/src/finance-teams.ts). Off unless
-// TEAMS_APPROVALS_READ=true. Nothing here is scheduled, and no tenant app, grant, list or flow exists yet: the tenant
-// admin and the Finance Director set those up first (gated), then Arisha main wires the schedule and the token.
+// TEAMS_APPROVALS_READ=true. The schedule and the app token are in teams-approvals-online.ts (Fauzan, 23 Nov 2026, D5);
+// no tenant app, grant, list or flow exists yet: the tenant admin and the Finance Director set those up first (gated).
 import type { FinTeamsRequestItem, FinTeamsResultItem } from '@prima/core';
 
 /** A Graph v1.0 listItem with its fields expanded. */

@@ -40,6 +40,7 @@ Until the CMS app is installed on the in-house server, the handover is done on P
 
 - Real CMS staff and their accounts: entered by Arms Control in the app, not in code.
 - Whether CMS overtime goes into staff payroll.
+- Mid-shift replacement seat: built 23 Nov 2026 (`replaceCmsSeat`, see docs/ARMS_CMS_GAPS.md).
 
 ## Checks run (5 Nov 2026)
 

@@ -168,6 +168,10 @@ function IssueForm({ d, onDone }: { d: Due; onDone: () => void }) {
           </div>
           <div className="muted small">
             {`Used ${r.daysUsed} of ${r.daysInMonth} days`}
+            {(() => {
+              const lv = data.find((w) => w.personId === r.personId)?.levy;
+              return lv ? ` · levy share ${rm(lv.charged)} (of ${rm(lv.yearly)} a year, added to the debit note)` : ' · no levy recorded on the work permit renewal';
+            })()}
           </div>
           <label className="field">
             <span className="label">Wage for the month (RM)</span>
@@ -293,7 +297,8 @@ function ChargeRow({ c }: { c: Charge }) {
               </b>{' '}
               · {l.daysUsed} of {l.daysInMonth} days · wage {rm(l.wage)} · salary paid by the {l.salaryPaidBy}
               <div className="muted">
-                {KEYS.map((k) => `${KEY_LABEL[k]} ${rm(l.charged[k])}`).join(' · ')} · KWSP {l.kwspRef} · PERKESO {l.perkesoRef}
+                {KEYS.map((k) => `${KEY_LABEL[k]} ${rm(l.charged[k])}`).join(' · ')}
+                {l.levy ? ` · Levy ${rm(l.levy.charged)}` : ''} · KWSP {l.kwspRef} · PERKESO {l.perkesoRef}
                 {l.note ? ` · ${l.note}` : ''}
               </div>
             </div>

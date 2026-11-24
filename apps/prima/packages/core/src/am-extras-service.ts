@@ -191,7 +191,9 @@ export class AmExtrasService {
 
     // ---- Finding tenants ----
     const lettingOf = new Map(lettings.map((l) => [l.unitId, l]));
+    const rumahSewa = await this.inRumahSewa();
     const toLet = units
+      .filter((u) => !(u.type === 'RESIDENTIAL' && !u.office && rumahSewa.has(u.id)))
       .filter((u) => u.status === 'vacant' || (u.tenancy && daysBetween(today, u.tenancy.endOn) <= rule.letBeforeEndDays && u.tenancy.endOn >= today))
       .map((u) => {
         const l = lettingOf.get(u.id) ?? null;
@@ -263,7 +265,8 @@ export class AmExtrasService {
     const monthStart = `${today.slice(0, 7)}-01` as IsoDate;
     const nowHm = fromMs(toMs(this.now())).slice(11, 16);
     const resorts = props
-      .filter((p) => p.kind === 'RESORT')
+      // D6 (department check, 23 Nov 2026): the training centre is booked on the same desk (hostel rooms, halls).
+      .filter((p) => p.kind === 'RESORT' || p.kind === 'TRAINING')
       .map((p) => {
         const stay = p.stay ?? null;
         const mine = bookings.filter((b) => b.propertyId === p.id);
@@ -355,13 +358,15 @@ export class AmExtrasService {
         // House rules the Asset Director must keep current.
         const pol = stay?.policy;
         const flags: string[] = [];
-        if (stay && !pol) flags.push('House rules not set: service tax, MOTAC, times and cancellation terms');
-        if (pol && !pol.motacNo) flags.push('No MOTAC registration recorded');
+        const training = p.kind === 'TRAINING';
+        if (stay && !pol) flags.push(training ? 'House rules not set: times and cancellation terms' : 'House rules not set: service tax, MOTAC, times and cancellation terms');
+        if (pol && !pol.motacNo && !training) flags.push('No MOTAC registration recorded');
         if (pol?.motacExpiresOn && pol.motacExpiresOn < today) flags.push(`MOTAC registration ended ${pol.motacExpiresOn}`);
         else if (pol?.motacExpiresOn && daysBetween(today, pol.motacExpiresOn) <= rule.motacWarnDays) flags.push(`MOTAC registration ends ${pol.motacExpiresOn}`);
         return {
           id: p.id,
           name: p.name,
+          training,
           stay,
           flags,
           grid,
@@ -464,6 +469,49 @@ export class AmExtrasService {
       units: units.map((u) => ({ id: u.id, code: u.code, name: u.name })),
       properties: props.map((p) => ({ id: p.id, name: p.name, kind: p.kind })),
     };
+  }
+
+  /**
+   * Asset Management extras on the home "Do today" list (department check, 23 Nov 2026, gap 1). Until now these flags
+   * showed only inside their own tab. The team sees what needs doing; the Asset Director also sees what waits for a
+   * decision; Finance sees money to confirm in the bank. Read-only: it adds no authority.
+   */
+  async homeItems(user: User): Promise<{ tone: 'crit' | 'warn'; tag: string; title: string; detail: string; go: { view: 'assets' } }[]> {
+    const role = this.role(user);
+    const fin = this.finance(user);
+    if (role !== 'team' && !fin) return [];
+    const b = await this.board(user).catch(() => null);
+    if (!b || !b.installed) return [];
+    type Item = { tone: 'crit' | 'warn'; tag: string; title: string; detail: string; go: { view: 'assets' } };
+    const out: Item[] = [];
+    const add = (tone: Item['tone'], title: string, detail: string) => out.push({ tone, tag: 'Asset Management', title, detail, go: { view: 'assets' } });
+    if (role === 'team') {
+      const dir = user.assetRole === 'director';
+      for (const c of b.contractors.filter((x) => x.status !== 'blacklisted' && x.flags.some((f) => f.startsWith('CIDB') || f.startsWith('Has open work'))))
+        add(c.flags.some((f) => f.includes('has ended') || f.startsWith('Has open work')) ? 'crit' : 'warn', `Contractor ${c.name}: ${c.flags.join(', ')}`, 'Contractors tab');
+      if (dir && b.kpis.contractorsToApprove) add('warn', `${b.kpis.contractorsToApprove} contractor(s) waiting for your approval`, 'Contractors tab');
+      if (dir && b.kpis.offersToApprove) add('warn', `${b.kpis.offersToApprove} tenancy offer(s) waiting for your approval`, 'Finding tenants tab');
+      for (const p of b.plans.filter((x) => !x.paused && x.statutory && (x.state === 'overdue' || x.state === 'due')))
+        add(p.state === 'overdue' ? 'crit' : 'warn', `Required by law: ${p.task} at ${p.place} ${p.state === 'overdue' ? `overdue ${-p.days} days` : `due in ${p.days} days`}`, p.state === 'due' ? 'Raise due work orders on Planned maintenance' : 'Planned maintenance tab');
+      const pmOther = b.plans.filter((x) => !x.paused && !x.statutory && x.state === 'overdue').length;
+      if (pmOther) add('warn', `${pmOther} planned job(s) overdue`, 'Planned maintenance tab');
+      const unread = b.meters.filter((m) => m.flags.some((f) => f === 'Never read' || f.startsWith('Not read'))).length;
+      if (unread) add('warn', `${unread} meter(s) not read this month`, 'Meters tab: reading with a photo');
+      const spikes = b.meters.filter((m) => m.flags.some((f) => f.startsWith('Used') || f.startsWith('Usage at an empty'))).length;
+      if (spikes) add('crit', `${spikes} meter(s) with unusual use: check for a leak or fault`, 'Meters tab');
+      for (const r of b.resorts) {
+        for (const f of r.flags) add(f.includes('ended') ? 'crit' : 'warn', `${r.name}: ${f}`, dir ? 'Resort bookings: house rules' : 'Tell the Asset Director');
+        const lapsed = r.bookings.filter((k) => k.flags.includes('Hold lapsed: no deposit')).length;
+        if (lapsed) add('warn', `${r.name}: ${lapsed} hold(s) lapsed without a deposit`, 'Release or confirm the rooms');
+        const passed = r.bookings.filter((k) => k.flags.some((f) => f.startsWith('Check-in date passed') || f.startsWith('Check-out date passed'))).length;
+        if (passed) add('crit', `${r.name}: ${passed} booking(s) past their dates`, 'Check in, check out or mark no-show');
+      }
+      if (b.kpis.harvestFlags) add('warn', `${b.kpis.harvestFlags} harvest record(s) flagged`, 'Harvest tab: spoilage, kept, low price or kg not accounted for');
+      const credit = b.credit.filter((s) => !s.banked && s.days > 30).length;
+      if (credit) add('warn', `${credit} harvest credit sale(s) unpaid over 30 days`, 'Harvest tab');
+    }
+    if (fin && b.toBank.length) add('warn', `${b.toBank.length} resort or harvest payment(s) to confirm in the bank`, 'Asset Management > Resort bookings or Harvest');
+    return out;
   }
 
   // =====================================================================================================================
@@ -594,9 +642,17 @@ export class AmExtrasService {
 
   // ---------- Finding tenants ----------
 
+  /** Homes handled in Rumah sewa (D2, department check 23 Nov 2026): their letting runs there, not on this older file. */
+  private async inRumahSewa(): Promise<Set<Id>> {
+    if (this.store.hasTable && !(await this.store.hasTable('amRentalRecs'))) return new Set();
+    const rows = ((await this.store.list('amRentalRecs', {}).catch(() => [])) as { unitId?: Id | null }[]) ?? [];
+    return new Set(rows.map((r) => r.unitId).filter(Boolean) as Id[]);
+  }
+
   private async lettingFor(user: User, unitId: Id) {
     const u = await this.store.get('amUnits', unitId);
     if (!u) throw new NotFound('Unit');
+    if (u.type === 'RESIDENTIAL' && !u.office && (await this.inRumahSewa()).has(u.id)) throw new BadRequest(`${u.code} is handled in Rumah sewa: advertise it and log enquiries there.`);
     const ending = u.tenancy && u.tenancy.endOn >= this.today() && daysBetween(this.today(), u.tenancy.endOn) <= this.rule.letBeforeEndDays;
     if (u.status !== 'vacant' && !ending) throw new BadRequest(`${u.code} is not empty and its tenancy is not ending soon.`);
     const id = `let-${u.id}`;
@@ -798,7 +854,7 @@ export class AmExtrasService {
     this.director(user, 'sets resort house rules');
     const p0 = await this.store.get('amProperties', propertyId);
     // Part P26: a homestay house takes the same house rules, licences and taxes as a resort.
-    if (!p0 || (p0.kind !== 'RESORT' && p0.kind !== 'HOMESTAY')) throw new NotFound('Resort');
+    if (!p0 || (p0.kind !== 'RESORT' && p0.kind !== 'HOMESTAY' && p0.kind !== 'TRAINING')) throw new NotFound('Resort');
     const checkInTime = text(b.checkInTime, 5);
     const checkOutTime = text(b.checkOutTime, 5);
     const freeCancelDays = num(b.freeCancelDays);
@@ -844,7 +900,7 @@ export class AmExtrasService {
   async resortRates(user: User, propertyId: Id, b: Body) {
     this.director(user, 'sets resort price lists');
     const p = await this.store.get('amProperties', propertyId);
-    if (!p || p.kind !== 'RESORT') throw new NotFound('Resort');
+    if (!p || (p.kind !== 'RESORT' && p.kind !== 'TRAINING')) throw new NotFound('Resort');
     const capacity: Partial<Record<AmStayType, number>> = {};
     const rates: Partial<Record<AmStayType, number>> = {};
     const capIn = (b.capacity ?? {}) as Record<string, unknown>;
@@ -908,7 +964,7 @@ export class AmExtrasService {
   async bookingAdd(user: User, b: Body) {
     this.team(user, 'takes resort bookings');
     const p = await this.store.get('amProperties', text(b.propertyId, 80));
-    if (!p || p.kind !== 'RESORT') throw new NotFound('Resort');
+    if (!p || (p.kind !== 'RESORT' && p.kind !== 'TRAINING')) throw new NotFound('Resort');
     if (!p.stay) throw new BadRequest('The Asset Director sets this resort’s rooms and price list first.');
     const type = pick(AM_STAY_TYPES, b.type);
     const qty = Math.round(num(b.qty));
@@ -1165,7 +1221,7 @@ export class AmExtrasService {
     return this.store.transaction(async (tx) => {
       await tx.lock?.('amProperties', propertyId);
       const p = await tx.get('amProperties', propertyId);
-      if (!p || p.kind !== 'RESORT' || !p.stay) throw new NotFound('Resort');
+      if (!p || (p.kind !== 'RESORT' && p.kind !== 'TRAINING') || !p.stay) throw new NotFound('Resort');
       const rooms = p.stay.rooms ?? [];
       const r = rooms.find((x) => x.no === no);
       if (!r) throw new NotFound('Room');

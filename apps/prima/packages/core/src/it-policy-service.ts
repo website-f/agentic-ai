@@ -15,6 +15,7 @@ import { registerWall } from './walls';
 import type { Id, IsoDate, IsoDateTime, ItAsset, ItAssetKind, ItProof, ItPurchase, User } from './types';
 import type { ProofInput } from './service';
 import { isWorkingDay } from './it-policies';
+import { accountsMade, itFromHr } from './it-gaps';
 
 export type ItPolicyKind =
   | 'settings'
@@ -333,6 +334,8 @@ export class ItPolicyService {
         return this.acctReq(user, i);
       case 'acctStep':
         return this.acctStep(user, s(i.id, 120), s(i.step, 20), i);
+      case 'acctFromAccess':
+        return this.acctFromAccess(user, i);
       case 'domainReq':
         return this.domainReq(user, i);
       case 'domainStep':
@@ -911,6 +914,40 @@ export class ItPolicyService {
     return this.create(user, 'acctReq', 'ACR', { d, status: 'submitted', requesterId: user.id, lineManagerId: lm.id, companyId: s(i.companyId, 60) || user.companyIds[0] || null }, `${kind}: ${d.fullName}`);
   }
 
+  /**
+   * IT gaps D1 (Fauzan, 23 Nov 2026: one door for a new joiner): a new account approved in Accounts and Access by the
+   * HR Director (CoS or DCoS) or the CEO is also the Microsoft 365 approval. IT records it here as an approved account
+   * request that names the Accounts and Access request, so nobody asks the line manager or the CoS a second time.
+   */
+  private async acctFromAccess(user: User, i: Record<string, unknown>) {
+    if (!this.it(user)) throw new AccessDenied('view', '(IT records the Microsoft 365 approval from Accounts and Access)');
+    const q = await this.store.get('accountRequests', s(i.accessRequestId, 160));
+    if (!q || q.status !== 'approved' || !q.applied) throw new BadRequest('Choose an approved Accounts and Access request.');
+    const userId = s(i.userId, 160);
+    const item = accountsMade(q).find((x) => x.userId === userId)?.item;
+    if (!item) throw new BadRequest('That person is not a new account on this request.');
+    if (userId === user.id || q.preparedById === user.id || q.decidedById === user.id)
+      throw new BadRequest('Someone else in IT records this (not the person, the preparer or the approver).');
+    if ((await this.all()).some((r) => r.kind === 'acctReq' && r.status !== 'rejected' && r.d.subjectUserId === userId))
+      throw new BadRequest('A Microsoft 365 account request for this person already exists.');
+    const at = this.now();
+    const d = {
+      fullName: item.name,
+      department: '',
+      jobTitle: item.title,
+      emailWanted: s(i.emailWanted, 160),
+      justification: `New joiner approved in Accounts and Access (${q.id}): ${q.reason}`.slice(0, 500),
+      apps: s(i.apps, 300),
+      accessLevel: 'standard',
+      kind: 'newJoiner',
+      hrItIntakeId: null,
+      subjectUserId: userId,
+      fromAccessRequest: { id: q.id, approvedBy: q.decidedBy, approvedById: q.decidedById, approvedAt: q.decidedAt },
+      cos: { byId: q.decidedById, by: q.decidedBy, at: q.decidedAt ?? at, reason: q.comment || 'Approved in Accounts and Access', decision: 'approve' },
+    };
+    return this.create(user, 'acctReq', 'ACR', { d, status: 'approved', requesterId: user.id, lineManagerId: null, companyId: item.companyId ?? null }, `newJoiner: ${item.name} (approved in Accounts and Access by ${q.decidedBy ?? 'the approver'})`);
+  }
+
   private async acctStep(user: User, id: Id, step: string, i: Record<string, unknown>) {
     const r = await this.get(id, 'acctReq');
     const reason = this.reason(i.reason);
@@ -1314,6 +1351,20 @@ export class ItPolicyService {
       if (acc.length) items.push({ tone: 'crit', tag: 'Akaun M365', title: `${acc.length} approved account(s) not ready in ${RULES.it.value.accountReadyWorkingDays} working days`, detail: acc.slice(0, 3).map((x) => x.ref).join(', '), go });
       const ip = itIpLate(recs, today);
       if (ip.length) items.push({ tone: 'warn', tag: 'Harta intelek', title: `${ip.length} change(s) not in the IP register after ${RULES.it.value.ipRegisterWorkingDays} working days`, detail: ip.slice(0, 3).map((x) => x.name).join(', '), go });
+    }
+    // IT gaps B1 + D1 (23 Nov 2026): leavers and new joiners from HR that IT has not finished.
+    if (this.it(user)) {
+      const [users, accountRequests, onboarding, assets] = await Promise.all([
+        this.store.list('users', {}),
+        this.store.list('accountRequests', {}).catch(() => []),
+        this.store.list('itOnboarding', {}).catch(() => []),
+        this.store.list('itAssets', {}).catch(() => []),
+      ]);
+      const rows = itFromHr({ users, accountRequests, onboarding, assets, policyRecs: recs, today });
+      const holding = rows.filter((r) => r.kind === 'leave' && r.devices.length);
+      if (holding.length) items.push({ tone: 'crit', tag: 'Leaver', title: `${holding.length} leaver(s) still hold IT devices`, detail: holding.slice(0, 3).map((r) => `${r.name} (${r.devices.length})`).join(', '), go });
+      const notStarted = rows.filter((r) => !r.checklist);
+      if (notStarted.length) items.push({ tone: 'warn', tag: 'From HR', title: `${notStarted.length} joiner(s) or leaver(s) from HR with no IT checklist`, detail: notStarted.slice(0, 3).map((r) => `${r.name} (${r.kind === 'join' ? 'joining' : 'leaving'})`).join(', '), go });
     }
     if (this.finance(user)) {
       push(recs.filter((r) => r.kind === 'disposal' && r.status === 'disposed' && r.d.writeOff === 'finance_to_record'), 'Hapus kira', 'IT disposal(s): record the write-off');

@@ -62,7 +62,8 @@ describe('public holidays (rule PAY-PUBLIC-HOLIDAYS)', () => {
     expect(board.missing.length).toBeGreaterThan(0);
     expect(board.company.canSet).toBe(true);
     const base = { companyId: 'co-sasa', year: 2027, days: list(2027), reason: 'Gazette 2027 (test)' };
-    await expect(svc.setPublicHolidays(user(ds, 'u-coo'), base)).rejects.toThrow(/Not allowed/);
+    // The COO covers the OD (Fauzan, 23 Nov 2026), with a reason like the OD.
+    await expect(svc.setPublicHolidays(user(ds, 'u-coo'), { ...base, reason: '' })).rejects.toThrow(/reason/);
     await expect(svc.setPublicHolidays(user(ds, 'u-om-klang'), base)).rejects.toThrow(/Operations Director or the OGM/);
     await expect(svc.setPublicHolidays(user(ds, 'u-ogm'), { ...base, reason: '' })).rejects.toThrow(/reason/);
     const v1 = await svc.setPublicHolidays(user(ds, 'u-ogm'), base);

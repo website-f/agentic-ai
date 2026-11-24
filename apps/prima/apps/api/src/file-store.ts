@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import nodePath from 'node:path';
 import { BadRequest, type Store } from '@prima/core';
 
 // Cloud file storage for photos and documents captured in the app (audit build order, 5 Nov 2026).
@@ -249,6 +251,99 @@ export class MemoryFiles implements FileBackend {
     if (!b) throw new Error('A stored file is missing from file storage.');
     return { bytes: Buffer.from(b.subarray(start, start + length)), total: b.length };
   }
+}
+
+/**
+ * Office addition (P129, Fitri 24 Nov 2026: Upload said "file storage ... not switched on"): the office server has no
+ * Azure storage, so the data and file manager may keep its files on the server's own disk, in a private volume
+ * (ARCHIVE_DISK_DIR). Same write-once names, pieces and range reads as AzureBlobFiles; the archive still checks each
+ * file's size and SHA-256 on every opening. Photos and proof stay in their rows (FILE_STORE is unchanged).
+ */
+export class DiskFiles implements FileBackend {
+  readonly label: string;
+  constructor(private dir: string) {
+    this.label = `disk ${dir}`;
+  }
+  private path(name: string): string {
+    if (!/^[A-Za-z0-9_/.-]{1,200}$/.test(name) || name.includes('..') || name.startsWith('/')) throw new Error('Invalid file name.');
+    return nodePath.join(this.dir, ...name.split('/'));
+  }
+  private async writeOnce(full: string, bytes: Buffer): Promise<boolean> {
+    await fs.mkdir(nodePath.dirname(full), { recursive: true });
+    try {
+      await fs.writeFile(full, bytes, { flag: 'wx' });
+      return true;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      throw e;
+    }
+  }
+  async put(name: string, bytes: Buffer): Promise<void> {
+    await this.writeOnce(this.path(name), bytes);
+  }
+  async get(name: string): Promise<Buffer> {
+    try {
+      const st = await fs.stat(this.path(name));
+      if (st.size > MAX_FILE_BYTES) throw new Error('A stored file is larger than any file the app accepts.');
+      return await fs.readFile(this.path(name));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('A stored file is missing from file storage.');
+      throw e;
+    }
+  }
+  async putBlock(name: string, index: number, bytes: Buffer): Promise<void> {
+    if (!Number.isInteger(index) || index < 0 || index > 9999) throw new Error('Invalid piece number.');
+    const full = `${this.path(name)}.part-${String(index).padStart(6, '0')}`;
+    await fs.mkdir(nodePath.dirname(full), { recursive: true });
+    await fs.writeFile(full, bytes);
+  }
+  async commitBlocks(name: string, count: number): Promise<void> {
+    if (!Number.isInteger(count) || count < 1 || count > 9999) throw new Error('Invalid number of pieces.');
+    const full = this.path(name);
+    const parts: Buffer[] = [];
+    for (let i = 0; i < count; i++) {
+      try {
+        parts.push(await fs.readFile(`${full}.part-${String(i).padStart(6, '0')}`));
+      } catch {
+        throw new Error('A piece of the file is missing.');
+      }
+    }
+    if (!(await this.writeOnce(full, Buffer.concat(parts)))) throw new Error('File storage refused to put a file together (409).');
+    for (let i = 0; i < count; i++) await fs.rm(`${full}.part-${String(i).padStart(6, '0')}`, { force: true });
+  }
+  async getRange(name: string, start: number, length: number): Promise<{ bytes: Buffer; total: number }> {
+    if (!Number.isInteger(start) || start < 0 || !Number.isInteger(length) || length < 1 || length > 8 * 1024 * 1024) throw new Error('Invalid stretch of a file.');
+    let h: Awaited<ReturnType<typeof fs.open>>;
+    try {
+      h = await fs.open(this.path(name), 'r');
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('A stored file is missing from file storage.');
+      throw e;
+    }
+    try {
+      const total = (await h.stat()).size;
+      const n = Math.max(0, Math.min(length, total - start));
+      const buf = Buffer.alloc(n);
+      if (n) await h.read(buf, 0, n, start);
+      return { bytes: buf, total };
+    } finally {
+      await h.close();
+    }
+  }
+  async check(): Promise<void> {
+    const probe = Buffer.from('prima file store check\n');
+    const name = `_check/${createHash('sha256').update(probe).digest('hex')}.txt`;
+    await this.put(name, probe);
+    if (!(await this.get(name)).equals(probe)) throw new Error('File storage gave back a different file than it was given.');
+  }
+}
+
+/** ARCHIVE_DISK_DIR: an absolute folder for the data and file manager's files when FILE_STORE is off; else null. */
+export function archiveDiskFromEnv(env: NodeJS.ProcessEnv = process.env): DiskFiles | null {
+  const dir = (env.ARCHIVE_DISK_DIR ?? '').trim();
+  if (!dir) return null;
+  if (!nodePath.isAbsolute(dir)) throw new Error('ARCHIVE_DISK_DIR must be an absolute folder.');
+  return new DiskFiles(dir);
 }
 
 /** Builds the configured backend, or null when the store is off. */

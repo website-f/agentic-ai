@@ -1,3 +1,4 @@
+import { actsAsOpsDirector, isOgm } from './ops-access';
 import { FIN_SUBJECTS } from "./finance";
 import { finApproverFor } from "./finance";
 import { isoDate } from "./finance";
@@ -42,10 +43,10 @@ export function finRequestHeadFits(user: User, r: Pick<FinRequest, 'subject' | '
   if (user.role !== 'pwvsb_officer' && user.role !== 'director') return false;
   switch (r.subject) {
     case 'operations':
-      return r.sector === 'government' ? user.opsTier === 'ogm' : user.opsTier === 'ops_director';
+      return r.sector === 'government' ? isOgm(user) : actsAsOpsDirector(user);
     case 'inventory':
     case 'goodwill':
-      return user.opsTier === 'ogm';
+      return isOgm(user);
     case 'it':
       return user.department === 'it' && user.itRole === 'manager';
     case 'fwm':

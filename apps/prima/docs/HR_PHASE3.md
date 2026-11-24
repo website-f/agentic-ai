@@ -413,8 +413,22 @@ group, notice board, other place) HR records where it was posted; a photo field 
 Still open: connecting the social accounts (needs Fauzan's account access and a separate check before any
 channel is switched on), and connecting an AI model for drafting.
 
+## HR, Chief of Staff and Deputy gaps (Fauzan, 23 Nov 2026)
+
+From the study "HR department, CoS and DCoS in Prima" (23 Nov 2026). Source only: not merged, migrated or deployed until Fauzan says so.
+
+- **Recording the Vice Chairman's answer (B1).** The Vice Chairman is not on Prima yet ("Vc not in system yet. But when consent needed. Cos or dcos or hr upload the consent given from what app or call"). When staff leave or a salary amount waits for his consent, the Chief of Staff, the Deputy or the HR Administrator records his answer: consented or refused, how he gave it (message, phone call, meeting or letter), the day, what he said, and the proof. A message or letter needs the screenshot or the letter; a call or meeting with no file needs a fuller note. The person whose leave or pay it is, and whoever took the step just before (the HR approver, or the HR Director who verified the pay), cannot record it. The record shows as "Vice Chairman (recorded by ...)". The recorders' Home shows each waiting answer, turning red after one working day or when the leave starts within two days.
+- **The HR Director step names both (B2).** Office leave that moves past HR shows "HR Director (Chief of Staff or Deputy)" and names both. The HR Administrator sees each such request on Home in red and chases it ("Hr adminstrator manage this").
+- **Chief of Staff cover (D1).** The Deputy stands in for the items only the Chief of Staff did (memos to all staff, office requests, the advance and loan scheme, the PDPA switch, which office runs a company) on any day the Chief of Staff is on approved leave. The Chief of Staff can also hand any of them to the Deputy and/or the HR Administrator, for good or until a last day, with a reason ("Cos can delegate what needed"), on the HR screen panel "Chief of Staff cover". The PDPA switch and which office runs a company go to the Deputy only, because the HR Administrator cannot open those screens. Every step taken in cover is recorded as done for the Chief of Staff. Handing over needs database module `db/modules/cos-cover-v1.sql` (not on the release list; run after company-run-links-v1). Without it the Deputy still covers on leave days.
+- **Working hours (D2).** Office staff leave now moves up after 12 working hours (8.30 am to 5.30 pm, Monday to Friday, public holidays skipped), not 12 clock hours.
+- **HR staff's own leave and claims (D3).** An HR Administrator's own leave and claims go straight to the HR Director (Chief of Staff or Deputy), not to an HR colleague.
+
 ## Not built yet
 
-- HR KPI monitoring: on hold until the pilot test 1 results are in (Fauzan, 1 Nov 2026 15:53Z).
-- Overtime claims inside the staff payroll run: waits for Finance PR #49.
 - Papers recorded in Prima flowing back to JA: waits for the live JA link.
+
+(Built since this list was first written: overtime claims inside the staff payroll run, and HR work KPIs; see `docs/WORK_KPI.md`.)
+
+## Guard age: up to 65 by exception only (Fauzan, 23 Nov 2026)
+
+Fauzan: "Guard supposedly can work until 65. But need yearly health check. But i dont recommend." Decision card: "Up to 65 by exception only". Rule HR-AGE-MAX stays 60; rule HR-AGE-EXCEPTION lets a guard or officer aged 61 to 65 be rostered only while an exception is in force and the yearly medical (MEDICAL_CHECK) is valid. The HR Director (Chief of Staff or Deputy) or the CEO gives it on the person's file with a reason, for at most 12 months (proposed) and never past the day before the 66th birthday, never for themselves; ending it early also needs a reason. Both are audited (`hr.age_exception`, `hr.age_exception_end`). Over 65 is always blocked. The HR Director and the CEO see a Do today line for guards over 60 with no exception. Stored on the person row (`ageException`), no new table. Tests: `packages/core/test/ja-uploads-agreements.test.ts`.

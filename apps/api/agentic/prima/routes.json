@@ -795,6 +795,12 @@
   "name": "fixedAssets"
  },
  {
+  "method": "GET",
+  "path": "api/assets/today",
+  "name": "amToday",
+  "doc": "Asset Management staff's own to-do items for the day (department check, 23 Nov 2026)."
+ },
+ {
   "method": "POST",
   "path": "api/assets/work-orders/:id/award",
   "name": "amAwardAsk",
@@ -1061,6 +1067,15 @@
   "method": "GET",
   "path": "api/audit",
   "name": "audit"
+ },
+ {
+  "method": "POST",
+  "path": "api/auto-reports/:op",
+  "name": "autoReports",
+  "params": [
+   "op"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
@@ -1708,6 +1723,12 @@
  },
  {
   "method": "POST",
+  "path": "api/cms/roster/upload",
+  "name": "cmsRosterUpload",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/cms/settings",
   "name": "cmsSettings",
   "body": "Record<string, unknown>"
@@ -1760,6 +1781,15 @@
   "method": "POST",
   "path": "api/cms/shifts/:id/release",
   "name": "cmsRelease",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/cms/shifts/:id/replace",
+  "name": "cmsReplace",
   "params": [
    "id"
   ],
@@ -2563,6 +2593,23 @@
   "name": "companyFiles"
  },
  {
+  "method": "GET",
+  "path": "api/corporate/filing-exec",
+  "name": "corpFilingExecChoices"
+ },
+ {
+  "method": "POST",
+  "path": "api/corporate/filing-exec",
+  "name": "setCorpFilingExec",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/corporate/filings",
+  "name": "openCorpFiling",
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/corporate/filings/:id/:action",
   "name": "corpFilingStep",
@@ -3181,6 +3228,12 @@
   "body": "Record<string, unknown>,"
  },
  {
+  "method": "POST",
+  "path": "api/finance/account-manager",
+  "name": "finDelegateAm",
+  "body": "{ userId?: unknown; level?: unknown; companies?: unknown; comment?: unknown }"
+ },
+ {
   "method": "GET",
   "path": "api/finance/arrivalcash/:companyId",
   "name": "finArrivalCash",
@@ -3196,6 +3249,15 @@
    "companyId",
    "docId"
   ]
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/budget-limit/:companyId",
+  "name": "finBudgetLimit",
+  "params": [
+   "companyId"
+  ],
+  "body": "{ amount?: unknown; comment?: unknown }"
  },
  {
   "method": "GET",
@@ -3292,6 +3354,35 @@
  },
  {
   "method": "GET",
+  "path": "api/finance/payouts/:companyId",
+  "name": "finPayouts",
+  "params": [
+   "companyId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/payouts/:companyId/journal",
+  "name": "finPayoutJournal",
+  "params": [
+   "companyId"
+  ],
+  "body": "{ payoutId?: unknown; action?: unknown; no?: unknown; comment?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/payouts/prepare",
+  "name": "finPayoutPrepare",
+  "body": "{ source?: unknown; sourceId?: unknown; bankId?: unknown; note?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/payouts/record",
+  "name": "finPayoutRecord",
+  "body": "{ source?: unknown; sourceId?: unknown; bankRef?: unknown; paidOn?: unknown; pcbChecked?: unknown }"
+ },
+ {
+  "method": "GET",
   "path": "api/finance/requests",
   "name": "finRequests"
  },
@@ -3325,6 +3416,12 @@
   "path": "api/finance/settings",
   "name": "finSetSettings",
   "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/settings/confirm",
+  "name": "finConfirmSettings",
+  "body": "{ comment?: unknown }"
  },
  {
   "method": "GET",
@@ -3461,6 +3558,20 @@
  },
  {
   "method": "GET",
+  "path": "api/fleet/records",
+  "name": "fleetRecords"
+ },
+ {
+  "method": "POST",
+  "path": "api/fleet/records/:op",
+  "name": "fleetRecordAct",
+  "params": [
+   "op"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/fleet/rentals",
   "name": "vehicleRentals",
   "query": [
@@ -3562,7 +3673,7 @@
   "params": [
    "id"
   ],
-  "body": "{ requestId?: unknown; km?: unknown; driver?: unknown }"
+  "body": "{ requestId?: unknown; km?: unknown; driver?: unknown; driverUserId?: unknown }"
  },
  {
   "method": "POST",
@@ -3635,6 +3746,15 @@
   "name": "fwCostBook",
   "params": [
    "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/fw-gaps/:op",
+  "name": "fwGaps",
+  "params": [
+   "op"
   ],
   "body": "Record<string, unknown>"
  },
@@ -4353,6 +4473,18 @@
   "params": [
    "id"
   ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/hr/cos-cover",
+  "name": "cosCover",
+  "doc": "D1 (Fauzan, 23 Nov 2026): what the Chief of Staff hands to the Deputy or the HR Administrator."
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/cos-cover",
+  "name": "setCosCover",
   "body": "Record<string, unknown>"
  },
  {
@@ -5150,6 +5282,23 @@
  },
  {
   "method": "GET",
+  "path": "api/ja/uploads",
+  "name": "jaUploadOptions"
+ },
+ {
+  "method": "POST",
+  "path": "api/ja/uploads/pay",
+  "name": "jaUploadPay",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/ja/uploads/roster",
+  "name": "jaUploadRoster",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/key-in",
   "name": "status"
  },
@@ -5210,6 +5359,16 @@
   "method": "POST",
   "path": "api/leave/:id/hospital-claim",
   "name": "hospitalClaim",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/leave/:id/vc-record",
+  "name": "recordLeaveVc",
+  "doc": "B1 (Fauzan, 23 Nov 2026): HR records the Vice Chairman's answer on staff leave, with how he gave it and the proof.",
   "params": [
    "id"
   ],
@@ -5704,6 +5863,11 @@
  },
  {
   "method": "GET",
+  "path": "api/ops/standards-duties",
+  "name": "opsStandardsDuties"
+ },
+ {
+  "method": "GET",
   "path": "api/org/chart",
   "name": "orgChart"
  },
@@ -5845,6 +6009,16 @@
  },
  {
   "method": "POST",
+  "path": "api/pay-changes/:id/vc-record",
+  "name": "recordPayVc",
+  "doc": "B1: the same for a salary amount (basic pay or allowances).",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/pay-formula-uses",
   "name": "setPayFormulaUse",
   "body": "Record<string, unknown>"
@@ -5929,6 +6103,45 @@
    "id"
   ],
   "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/pdpa-officer/:action",
+  "name": "pdpaOfficerAct",
+  "params": [
+   "action"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/pdpa-officer/client-steps",
+  "name": "pdpaOfficerClientSteps"
+ },
+ {
+  "method": "GET",
+  "path": "api/pdpa-officer/downloads",
+  "name": "pdpaOfficerDownloads"
+ },
+ {
+  "method": "GET",
+  "path": "api/pdpa-officer/inbox",
+  "name": "pdpaOfficerInbox"
+ },
+ {
+  "method": "GET",
+  "path": "api/pdpa-officer/keep",
+  "name": "pdpaOfficerKeep"
+ },
+ {
+  "method": "GET",
+  "path": "api/pdpa-officer/my-asks",
+  "name": "pdpaOfficerMyAsks"
+ },
+ {
+  "method": "GET",
+  "path": "api/pdpa-officer/today",
+  "name": "pdpaOfficerToday"
  },
  {
   "method": "GET",
@@ -6038,6 +6251,15 @@
   "params": [
    "id"
   ]
+ },
+ {
+  "method": "POST",
+  "path": "api/people/:id/age-exception",
+  "name": "ageException",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -6256,6 +6478,24 @@
  },
  {
   "method": "POST",
+  "path": "api/purchasing/goodwill-prices/:itemId",
+  "name": "setGoodwillPrice",
+  "params": [
+   "itemId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/purchasing/goodwill-prices/:itemId/decide",
+  "name": "decideGoodwillSale",
+  "params": [
+   "itemId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/purchasing/issues/:id/confirm-loss",
   "name": "confirmStockLoss",
   "params": [
@@ -6301,6 +6541,14 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "GET",
+  "path": "api/purchasing/requests/:id/po",
+  "name": "purOrderPdf",
+  "params": [
+   "id"
+  ]
+ },
+ {
   "method": "POST",
   "path": "api/purchasing/stock/:id/count",
   "name": "stockCount",
@@ -6308,6 +6556,15 @@
    "id"
   ],
   "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/purchasing/stock/:id/item-sku",
+  "name": "purLinkItemSku",
+  "params": [
+   "id"
+  ],
+  "body": "{ skuId?: unknown; reason?: unknown }"
  },
  {
   "method": "POST",

@@ -62,7 +62,8 @@ describe('approval limits set by the CEO', () => {
       await svc.purStep(await as('u-proc-exec'), pr.id, 'submit', { supplierId: sups[0].id, note: 'cheapest' } as never);
       return ds.purRequests.find((x) => x.id === pr.id)!;
     };
-    expect((await buy(45)).tiers).toEqual(['coo']);
-    expect((await buy(450)).tiers).toEqual(['coo', 'ceo']);
+    // The Inventory Manager's check comes first either way (D1, 23 Nov 2026).
+    expect((await buy(45)).tiers).toEqual(['inventory', 'coo']);
+    expect((await buy(450)).tiers).toEqual(['inventory', 'coo', 'ceo']);
   });
 });

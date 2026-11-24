@@ -26,9 +26,9 @@ describe('HR governs, the company monitors (Fauzan, 1 Nov 2026)', () => {
     await expect(svc.uploadHiringDoc(ae, staff.id, 'AGREEMENT', [doc()])).rejects.toBeInstanceOf(AccessDenied);
     expect((await svc.guardProfile(hr, staff.id)).hiring.canUpload).toBe(true);
     await svc.uploadHiringDoc(hr, staff.id, 'AGREEMENT', [doc()]);
-    // Guards stay with their company (they come from the JA Group app).
+    // Guards too (Fauzan, 23 Nov 2026): the company sees the file, HR keeps it.
     const guard = ds.people.find((p) => p.companyId === 'co-arsh' && p.role === 'guard' && p.status === 'active')!;
-    expect((await svc.guardProfile(cm, guard.id)).hiring.canUpload).toBe(true);
+    expect((await svc.guardProfile(cm, guard.id)).hiring.canUpload).toBe(false);
   });
 
   it('refuses the company manager asking for an office staff member’s leave unless they are the line manager', async () => {

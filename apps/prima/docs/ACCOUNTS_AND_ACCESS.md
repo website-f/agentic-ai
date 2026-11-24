@@ -83,6 +83,9 @@ must then be renewed.
    company office from the staff directory, each with Microsoft object IDs.
 5. Marketing accounts (Marketing Manager, Deputy, Tender Executive; Fauzan, 22-23 Nov 2026) need the add-on module
    `db/modules/marketing-accounts-v1.sql`, run the same way after this one. See `docs/MARKETING_TENDER_DESK.md`.
+6. The Finance Account Manager (Fauzan, 23 Nov 2026) needs the add-on module
+   `db/modules/finance-account-manager-v1.sql`, run after `marketing-accounts-v1`. It has no Finance team; the Finance
+   Director delegates what it may do in Finance settings. See `docs/FINANCE_PHASE2.md`.
 
 ## Tests
 

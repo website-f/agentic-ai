@@ -125,6 +125,8 @@ export interface Store {
   /** Accounts and Access: the database store calls prima.apply_account_request, the only other way the API writes accounts and grants. */
   /** Accounts and Access: id, code and name of every company, for those who prepare or approve access. */
   accountCompanies?(): Promise<{ id: Id; code: string; name: string }[]>;
+  /** IT gaps B3 (23 Nov 2026): a company manager's own rented IT devices and bills; the database store calls prima.it_company_rentals. */
+  companyItRentals?(companyId: Id): Promise<import('./it-gaps').CompanyItRentals>;
   applyAccountRequest?(requestId: Id): Promise<{ at: IsoDateTime; users: Id[]; grants: Id[]; ended: Id[] }>;
   closeAccess?(userId: Id, from: IsoDate, closed: NonNullable<User['accessClosed']>): Promise<number>;
   /**

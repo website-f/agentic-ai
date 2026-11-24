@@ -36,6 +36,7 @@
     "./src/work-kpi-inventory.ts",
     "./src/work-kpi-ops.ts",
     "./src/work-kpi-police-help.ts",
+    "./src/work-kpi-purchasing.ts",
     "./src/work-kpi-special-ops.ts",
     "./src/work-kpi-time-slip.ts",
     "./src/work-kpi.ts",

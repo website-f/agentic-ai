@@ -7,6 +7,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { PrimaService, RULES, generateDataset, myt, type GuardPayLine, type GuardPayRun } from '@prima/core';
+import { preparePayout } from './payout-helper';
 import { Db } from '../src/db';
 import { resetDb } from '../src/reset-db';
 
@@ -73,7 +74,8 @@ describe('guard pay: only the undecided guard waits (actual PostgreSQL)', () => 
   const payAll = async (run: GuardPayRun) => {
     await step('u-pwvsb-hr', run.id, 'submit');
     await step('u-coo', run.id, 'approve', { note: 'Synthetic approval' });
-    return step('u-fin-t1-lead', run.id, 'pay', { bankRef: 'NO-TRANSFER', paidOn: '2026-11-05', pcbChecked: true });
+    await preparePayout(db, 'guard_pay', run.id, clock);
+    return step('u-fd', run.id, 'pay', { bankRef: 'NO-TRANSFER', paidOn: '2026-11-05', pcbChecked: true });
   };
 
   let main: GuardPayRun;
@@ -112,7 +114,8 @@ describe('guard pay: only the undecided guard waits (actual PostgreSQL)', () => 
     await step('u-coo', later.id, 'approve', { note: 'Absence decided, synthetic approval' });
     const bank = await db.asUser('u-fin-t1-lead', (svc, u) => svc.guardPayExport(u, later.id, 'bank'), clock);
     assert.equal(bank.body.split('\n').filter((r) => r.includes('WAGES 2026-10')).length, 1);
-    const paid = await step('u-fin-t1-lead', later.id, 'pay', { bankRef: 'NO-TRANSFER-2', paidOn: '2026-11-05', pcbChecked: true });
+    await preparePayout(db, 'guard_pay', later.id, clock);
+    const paid = await step('u-fd', later.id, 'pay', { bankRef: 'NO-TRANSFER-2', paidOn: '2026-11-05', pcbChecked: true });
     assert.equal(paid.stage, 'paid');
     // Nobody is left to pay: a second later run is refused, and the guard is in exactly one run of the month.
     await assert.rejects(hr((svc, u) => svc.prepareGuardPayLater(u, main.id)), /No guard of this month is waiting/);

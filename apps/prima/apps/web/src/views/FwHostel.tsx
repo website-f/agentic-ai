@@ -250,11 +250,35 @@ export function FwHostelPanel() {
                   </button>
                 )}
                 {role === 'fwm' && (
+                  <button className="btn btn-sm" onClick={() => (setForm(`cert:${h.hostel.id}`), setF({}), setPhotos([]))}>
+                    {h.hostel.cert ? 'Kemas kini sijil / Update certificate' : 'Rekod sijil penginapan / Record certificate'}
+                  </button>
+                )}
+                {role === 'fwm' && (
                   <button className="btn btn-sm" disabled={act.busy} onClick={() => go('openCount', { id: h.hostel.id }, 'First count opened.')}>
                     Buka kiraan pertama (BRI)
                   </button>
                 )}
               </div>
+              {form === `cert:${h.hostel.id}` && (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <p className="muted small">Sijil penginapan (Akta 446) / accommodation certificate. Prima reminds 90, 60 and 30 days before it expires.</p>
+                  <input className="input" placeholder="No. sijil / certificate number" value={String(f.number ?? '')} onChange={(e) => setF({ ...f, number: e.target.value })} />
+                  <label className="small">
+                    Tarikh dikeluarkan / issued on
+                    <input className="input" type="date" value={String(f.issuedOn ?? '')} onChange={(e) => setF({ ...f, issuedOn: e.target.value })} />
+                  </label>
+                  <label className="small">
+                    Tarikh tamat / expires on
+                    <input className="input" type="date" value={String(f.expiresOn ?? '')} onChange={(e) => setF({ ...f, expiresOn: e.target.value })} />
+                  </label>
+                  <Photos label="Gambar sijil / photo of the certificate (optional)" onChange={setPhotos} />
+                  <input className="input" placeholder="Sebab / reason (needed)" value={String(f.reason ?? '')} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+                  <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => go('hostelDetails', { id: h.hostel.id, cert: { number: f.number, issuedOn: f.issuedOn, expiresOn: f.expiresOn, doc: photos[0] ?? null }, reason: f.reason }, 'Certificate recorded.')}>
+                    Simpan / Save
+                  </button>
+                </div>
+              )}
               {form === `check:${h.hostel.id}` && (
                 <div style={{ display: 'grid', gap: 6 }}>
                   <Photos label="2 photos (needed)" onChange={setPhotos} />

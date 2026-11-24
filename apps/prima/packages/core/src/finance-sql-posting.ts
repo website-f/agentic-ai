@@ -31,6 +31,7 @@ import {
   sqlSourceChange,
   sqlWaitsForCodes,
   sqlWorkingDaysAfter,
+  sqlSwitchOrderProblem,
 } from './sql-posting';
 import type { FinSqlCode, SqlAccountPoster, SqlAttempt, SqlDocType, SqlExceptionKind, SqlPayload, SqlPostedDoc, SqlPostingException, SqlPostingJob } from './sql-posting';
 import { addDays, dateOf } from './time';
@@ -75,8 +76,8 @@ export class FinanceSqlPostingService {
   private reviewer(a: FinActor) {
     return isLead(a) || a.kind === 'leader' || a.kind === 'deputy';
   }
-  private actor(user: User): FinActor {
-    const a = finActor(user);
+  private async actor(user: User): Promise<FinActor> {
+    const a = finActor(user) ? await this.desk.actorFor(user) : null;
     if (!a || a.kind === 'viewer') throw new AccessDenied('view', '(Finance staff, the Finance Director and the CEO)');
     return a;
   }
@@ -137,7 +138,7 @@ export class FinanceSqlPostingService {
   // ---------- The screen: Finance > Checks > SQL Account link ----------
 
   async view(user: User) {
-    const a = this.actor(user);
+    const a = await this.actor(user);
     if (!(await this.installed())) return { installed: false as const, enabled: this.opts.enabled, posterInstalled: !!this.opts.poster, companies: [] };
     const names = new Map((await this.store.list('companies')).map((c) => [c.id, c.name]));
     const today = this.today();
@@ -152,6 +153,8 @@ export class FinanceSqlPostingService {
         companyId: f.companyId,
         name: names.get(f.companyId) ?? f.companyId,
         book: sqlConfirmedBook(f),
+        /** D4 (Fauzan, 23 Nov 2026): posting to the copy book first, then the real book. */
+        stage: f.sqlPosting?.stage === 'live' ? ('live' as const) : ('copy' as const),
         on: !!f.sqlPosting?.on,
         docTypes: SQL_DOC_TYPES.map((t) => ({ docType: t, label: SQL_DOC_LABEL[t], on: !!f.sqlPosting?.docTypes[t], built: SQL_DOC_BUILT.includes(t) })),
         lastPostedAt: posted[0]?.postedAt ?? null,
@@ -220,8 +223,8 @@ export class FinanceSqlPostingService {
 
   // ---------- Switches (FD or CEO, with a reason) ----------
 
-  async setSwitch(user: User, companyId: Id, input: { on?: unknown; docTypes?: unknown; reason?: unknown }) {
-    const a = this.actor(user);
+  async setSwitch(user: User, companyId: Id, input: { on?: unknown; stage?: unknown; docTypes?: unknown; reason?: unknown }) {
+    const a = await this.actor(user);
     if (!isLead(a)) throw new AccessDenied('view', '(only the Finance Director or the CEO switches SQL Account posting)');
     const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
     if (reason.length < 10) throw new BadRequest('Give a reason (at least 10 characters).');
@@ -238,10 +241,22 @@ export class FinanceSqlPostingService {
       const f = await this.desk.row(tx, user, a, companyId);
       if (on && !sqlConfirmedBook(f)) throw new BadRequest("Confirm the company's SQL Account set-up first (Finance > Checks > SQL Account set-up).");
       const prev = f.sqlPosting ?? { on: false, docTypes: {}, changes: [] };
-      const sqlPosting = { on, docTypes, changes: [...prev.changes, { ...this.sign(user, reason), on, docTypes }].slice(-100) };
+      // D4 (Fauzan, 23 Nov 2026): payment vouchers only, one company, a copy book first.
+      const stage: 'copy' | 'live' = input.stage === 'live' ? 'live' : input.stage === 'copy' ? 'copy' : (prev.stage ?? 'copy');
+      if (prev.stage === 'live' && stage === 'copy') throw new BadRequest('This company already posts to its real book; it does not go back to the copy.');
+      const others = await Promise.all(
+        (await tx.list('finStatus', {})).filter((x) => x.companyId !== f.companyId && x.sqlPosting?.on).map(async (x) => {
+          const real = x.sqlDiscovery?.companyFile.trim();
+          const jobs = await this.jobsOf(tx, x.companyId);
+          return { companyId: x.companyId, on: true, proven: x.sqlPosting?.stage === 'live' && jobs.some((j) => j.docType === 'GL_PV' && j.book === real && j.status === 'checked_ok') };
+        }),
+      );
+      const order = sqlSwitchOrderProblem(f, { on, stage, docTypes }, await this.jobsOf(tx, f.companyId), others);
+      if (order) throw new BadRequest(order);
+      const sqlPosting = { on, stage, docTypes, changes: [...prev.changes, { ...this.sign(user, reason), on, docTypes, stage }].slice(-100) };
       await tx.update('finStatus', f.id, { sqlPosting });
       await this.refreshCompany(tx, { ...f, sqlPosting });
-      await this.log(tx, user, f, 'finance.sqlpost.switch', `SQL Account posting ${on ? 'on' : 'off'} (${Object.keys(docTypes).join(', ') || 'no document types'}): ${reason}`);
+      await this.log(tx, user, f, 'finance.sqlpost.switch', `SQL Account posting ${on ? 'on' : 'off'}, ${stage === 'live' ? 'real book' : 'copy book'} (${Object.keys(docTypes).join(', ') || 'no document types'}): ${reason}`);
       return sqlPosting;
     });
   }
@@ -249,7 +264,7 @@ export class FinanceSqlPostingService {
   // ---------- Codes (L4): Finance enters, a second person checks ----------
 
   async codeAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
-    const a = this.actor(user);
+    const a = await this.actor(user);
     return this.store.transaction(async (tx) => {
       const f = await this.desk.row(tx, user, a, companyId);
       let patch: Partial<FinStatus>;
@@ -307,7 +322,7 @@ export class FinanceSqlPostingService {
 
   /** "Send now" for the Finance Director or the CEO; the API timer calls run() when switched on. */
   async sendNow(user: User) {
-    const a = this.actor(user);
+    const a = await this.actor(user);
     if (!isLead(a)) throw new AccessDenied('view', '(the Finance Director or the CEO)');
     return this.run();
   }
@@ -481,7 +496,7 @@ export class FinanceSqlPostingService {
 
   /** "Check now" for Finance reviewers, the FD and the CEO; the API runs it at 06:00 when switched on. */
   async checkNow(user: User) {
-    const a = this.actor(user);
+    const a = await this.actor(user);
     if (!this.reviewer(a)) throw new AccessDenied('view', '(the team leader, the deputy, the Finance Director or the CEO)');
     const ids = (await this.rows(user, a)).map((f) => f.companyId);
     return this.check(ids);
@@ -564,7 +579,7 @@ export class FinanceSqlPostingService {
 
   /** Finance pastes SQL Account's daily document listing when the API cannot list (labelled "from a pasted export"). */
   async pasteListing(user: User, companyId: Id, csv: unknown) {
-    const a = this.actor(user);
+    const a = await this.actor(user);
     if (typeof csv !== 'string' || csv.length > 500_000) throw new BadRequest('Paste the SQL Account listing as CSV: document number, date (YYYY-MM-DD), amount, reference.');
     const rows = sqlParseListing(csv);
     if (!rows.length) throw new BadRequest('No lines could be read. Each line: document number, date (YYYY-MM-DD), amount, reference.');
@@ -583,7 +598,7 @@ export class FinanceSqlPostingService {
 
   /** Explain or fix (Finance, with a comment), then checked by someone else. */
   async exceptionAction(user: User, id: Id, action: string, input: Record<string, unknown>) {
-    const a = this.actor(user);
+    const a = await this.actor(user);
     return this.store.transaction(async (tx) => {
       if (!(await this.installed(tx))) this.notInstalled();
       const e0 = await tx.get('sqlPostingExceptions', typeof id === 'string' ? id.slice(0, 200) : '');
@@ -616,7 +631,7 @@ export class FinanceSqlPostingService {
   // ---------- Home items ----------
 
   async home(user: User): Promise<HomeItem[]> {
-    const a = finActor(user);
+    const a = await this.desk.actorOrNull(user);
     if (!a || a.kind === 'viewer' || !(await this.installed())) return [];
     const today = this.today();
     let codes = 0;

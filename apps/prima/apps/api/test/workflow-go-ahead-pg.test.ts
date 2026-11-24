@@ -87,6 +87,12 @@ describe('workflow go-ahead items (PostgreSQL)', () => {
       const dry = await purgeLocations(client, 'Daily job', false, Date.parse(NOW));
       assert.ok(dry.guard >= 1);
       assert.equal(Number((await admin(`SELECT count(*) FROM prima.guard_pings WHERE id = 'gpg-a12-old'`)).rows[0].count), 1);
+      // D1 (Fauzan, 23 Nov 2026): deleting needs the PDPA officer's OK for the week; without the module nothing goes.
+      await assert.rejects(purgeLocations(client, 'Daily job', true, Date.parse(NOW)), /not installed/);
+      await admin(readFileSync(resolve(__dirname, '../../../../db/modules/pdpa-officer-v1.sql'), 'utf8'));
+      await assert.rejects(purgeLocations(client, 'Daily job', true, Date.parse(NOW)), /No PDPA officer OK/);
+      assert.equal(Number((await admin(`SELECT count(*) FROM prima.guard_pings WHERE id = 'gpg-a12-old'`)).rows[0].count), 1);
+      await db.asUser('u-pdpa', (svc, u) => svc.pdpaOfficer.okCleanUp(u, { reason: 'No open legal hold needs these (synthetic)' }), () => NOW);
       await purgeLocations(client, 'Daily job', true, Date.parse(NOW));
       assert.equal(Number((await admin(`SELECT count(*) FROM prima.guard_pings WHERE id = 'gpg-a12-old'`)).rows[0].count), 0);
       assert.equal(Number((await admin(`SELECT count(*) FROM prima.guard_pings WHERE id = 'gpg-a12-new'`)).rows[0].count), 1);
@@ -109,6 +115,9 @@ describe('workflow go-ahead items (PostgreSQL)', () => {
       assert.equal(Number((await admin(`SELECT count(*) FROM prima.gate_entries WHERE id = 'gate-n16-old'`)).rows[0].count), 0);
       assert.equal(Number((await admin(`SELECT count(*) FROM prima.gate_entries WHERE id = $1`, [g.id])).rows[0].count), 1);
       assert.equal(Number((await admin(`SELECT count(*) FROM prima.audit WHERE data->>'action' = 'RETENTION_PURGE'`)).rows[0].count), 1);
+      // Both runs are added to the officer's OK.
+      const runs = (await admin(`SELECT data->'runs' AS runs FROM prima.pdpa_purge_oks LIMIT 1`)).rows[0].runs as unknown[];
+      assert.equal(runs.length, 2);
       await assert.rejects(purgeRetention(client, '', true), /--by/);
     } finally {
       client.release();

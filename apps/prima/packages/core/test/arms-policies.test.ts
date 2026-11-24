@@ -148,9 +148,11 @@ describe('Part R arms policies: buying (R12-R18)', () => {
   it('ACQUIRE is refused with an unlicensed or expired dealer', async () => {
     const { ds, svc } = fresh();
     const r = await approvedBuy(ds, svc, false);
-    await expect(svc.armsRequestStep(await svc.user('u-pwvsb-arms-asst'), r.id, 'pass', 'Quantities match the posts')).rejects.toThrow(/expired/);
+    // D1 (23 Nov 2026): the Arms Control Manager passes requests, so here the Assistant prepared this one.
+    Object.assign(ds.armsRequests.find((x) => x.id === r.id)!, { raisedById: 'u-pwvsb-arms-asst', raisedBy: 'Nur Izzati binti Kamal' });
+    await expect(svc.armsRequestStep(await svc.user('u-pwvsb-arms'), r.id, 'pass', 'Quantities match the posts')).rejects.toThrow(/expired/);
     ds.armsSuppliers[0].licenceRef = null as never;
-    await expect(svc.armsRequestStep(await svc.user('u-pwvsb-arms-asst'), r.id, 'pass', 'Quantities match the posts')).rejects.toThrow(/Only licensed dealers/);
+    await expect(svc.armsRequestStep(await svc.user('u-pwvsb-arms'), r.id, 'pass', 'Quantities match the posts')).rejects.toThrow(/Only licensed dealers/);
   });
 
   it('receiving above the approved quantity is refused, the requester cannot receive, and ammunition is added by counted rounds', async () => {

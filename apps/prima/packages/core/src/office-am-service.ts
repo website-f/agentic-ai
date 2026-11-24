@@ -4,6 +4,7 @@
 // collection (S63-S74) and periodic office visits (S75-S84). One door: `act(user, op, input)`. Every step checks who
 // may take it here; the database module office-am-v1 adds the walls. Prima records; it never moves money, never
 // applies to a bank, and never makes a rent invoice number of its own.
+import { actsAsOpsDirector, isOgm } from './ops-access';
 import { AccessDenied, GOV_OPS_COMPANY_ID, GROUP_EMPLOYER_ID, assetRole, isGroupLeader } from './access';
 import { BadRequest, NotFound, type ProofInput, type PrimaService } from './service';
 import { RULES } from './rules';
@@ -187,8 +188,8 @@ export class OfficeAmService {
   /** The operations head named on a buy request (never an integration). */
   private hodIs(u: User, hod: unknown) {
     if (u.integration) return false;
-    if (hod === 'ops_director') return u.role === 'pwvsb_officer' && u.opsTier === 'ops_director';
-    if (hod === 'ogm') return u.role === 'pwvsb_officer' && u.opsTier === 'ogm';
+    if (hod === 'ops_director') return actsAsOpsDirector(u);
+    if (hod === 'ogm') return u.role === 'pwvsb_officer' && isOgm(u);
     if (hod === 'cos') return u.leadership === 'cos';
     return false;
   }
@@ -733,14 +734,16 @@ export class OfficeAmService {
     } else if (!ap.ad) {
       if (!this.ad(user)) throw new BadRequest('The Asset Director approves first.');
       ap.ad = step;
-    } else if (!ap.vc) {
-      if (!this.vc(user)) throw new BadRequest('The Vice Chairman consents next.');
+    } else if (pick.price > v.vcAbove && !ap.vc) {
+      // D3 (Fauzan, 23 Nov 2026): one ladder for all Asset Management spending: the Vice Chairman consents above RM5,000.
+      if (!this.vc(user)) throw new BadRequest(`Above RM${v.vcAbove.toLocaleString('en-MY')} the Vice Chairman consents next.`);
       ap.vc = step;
     } else if (pick.price > v.ceoAbove && !ap.ceo) {
       if (!this.ceo(user)) throw new BadRequest(`Above RM${v.ceoAbove.toLocaleString('en-MY')} the CEO approves.`);
       ap.ceo = step;
     } else throw new BadRequest('Already approved.');
-    const done = !!ap.ad && !!(buy ? ap.hod : ap.vc) && (pick.price <= v.ceoAbove || !!ap.ceo);
+    if ([ap.vc, ap.ceo].some((x) => x && x !== step && (x as { byId: Id }).byId === user.id)) throw new BadRequest('The same person cannot approve twice.');
+    const done = !!ap.ad && (buy ? !!ap.hod : pick.price <= v.vcAbove || !!ap.vc) && (pick.price <= v.ceoAbove || !!ap.ceo);
     const saved = await this.save(user, r, { status: done ? 'approved' : 'for_approval', d: { ...r.d, approvals: ap, stage: done ? 'approved' : 'for_approval', approvedAmount: done ? pick.price : null } }, done ? 'approved' : 'approval_step', reason);
     if (done) await this.woPatch(user, saved, { contractor: pick.contractor, cost: pick.price });
     return saved;
@@ -1925,7 +1928,7 @@ export class OfficeAmService {
     if (!ap.ad) return this.ad(user);
     if (this.isBuy(r)) {
       if (!ap.hod) return this.hodIs(user, r.d.hod) && (ap.ad as { byId: Id }).byId !== user.id;
-    } else if (!ap.vc) return this.vc(user);
+    } else if (pick.price > RULES.officeAm.value.repair.vcAbove && !ap.vc) return this.vc(user);
     return pick.price > ceoAbove && !ap.ceo && this.ceo(user);
   }
 

@@ -33,10 +33,41 @@ export function sqlPayloadHash(payload: unknown): string {
   return sha256Hex(JSON.stringify(norm(payload)));
 }
 
-/** The company's SQL Account book from its confirmed set-up (null until the FD or the CEO confirms it). */
-export function sqlConfirmedBook(f: Pick<FinStatus, 'sqlDiscovery'> | null | undefined): string | null {
+/**
+ * The company's SQL Account book from its confirmed set-up (null until the FD or the CEO confirms it). D4 (Fauzan, 23 Nov
+ * 2026): while posting is at the copy stage, the copy book; the real book only once the FD or the CEO moves it to live.
+ */
+export function sqlConfirmedBook(f: Pick<FinStatus, 'sqlDiscovery' | 'sqlPosting'> | null | undefined): string | null {
   const d = f?.sqlDiscovery;
-  return d?.confirmed && d.companyFile.trim() ? d.companyFile.trim() : null;
+  if (!d?.confirmed || !d.companyFile.trim()) return null;
+  if (f?.sqlPosting?.stage !== 'live' && d.copyBook?.trim()) return d.copyBook.trim();
+  return d.companyFile.trim();
+}
+
+/** D4: the switch-on order, checked before posting is switched on or widened. Returns what stops it, if anything. */
+export function sqlSwitchOrderProblem(
+  f: Pick<FinStatus, 'companyId' | 'sqlDiscovery' | 'sqlPosting'>,
+  want: { on: boolean; stage: 'copy' | 'live'; docTypes: Partial<Record<SqlDocType, boolean>> },
+  ownJobs: Pick<SqlPostingJob, 'docType' | 'book' | 'status'>[],
+  others: { companyId: Id; on: boolean; proven: boolean }[],
+): string | null {
+  if (!want.on) return null;
+  const d = f.sqlDiscovery;
+  const copy = d?.copyBook?.trim() || null;
+  const real = d?.companyFile.trim() || null;
+  const okOn = (book: string | null, t: SqlDocType) => !!book && ownJobs.some((j) => j.docType === t && j.book === book && j.status === 'checked_ok');
+  // 1. Payment vouchers first, on the copy book.
+  if (want.stage === 'copy' && !copy) return 'Record a copy of this company\'s SQL Account book in the set-up first: Prima posts to the copy before the real book.';
+  if (want.stage === 'live' && !okOn(copy, 'GL_PV')) return 'Move to the real book only after a payment voucher posted to the copy book is read back and checked.';
+  for (const t of Object.keys(want.docTypes) as SqlDocType[]) {
+    if (!want.docTypes[t] || t === 'GL_PV') continue;
+    if (want.stage !== 'live' || !okOn(real, 'GL_PV')) return `${SQL_DOC_LABEL[t]}: payment vouchers go first. Switch this on only after a payment voucher posted to the real book is read back and checked.`;
+  }
+  // 2. One company first: no second company until the first has a checked payment voucher in its real book.
+  const already = others.filter((o) => o.companyId !== f.companyId && o.on);
+  if (!f.sqlPosting?.on && already.length && !already.some((o) => o.proven))
+    return `One company first: ${already.map((o) => o.companyId).join(', ')} is already posting and has no payment voucher checked in its real book yet.`;
+  return null;
 }
 
 // ---------- Types ----------
@@ -181,6 +212,8 @@ export interface SqlPostingException {
 /** Per company switch and per document type, set by the Finance Director or the CEO with a reason. Off by default. */
 export interface FinSqlPostingSwitch {
   on: boolean;
+  /** D4 (Fauzan, 23 Nov 2026): the copy book first, then the real book. Missing = copy. */
+  stage?: 'copy' | 'live';
   docTypes: Partial<Record<SqlDocType, boolean>>;
   changes: (FinSign & { on: boolean; docTypes: Partial<Record<SqlDocType, boolean>> })[];
 }

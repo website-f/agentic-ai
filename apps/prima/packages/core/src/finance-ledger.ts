@@ -489,6 +489,11 @@ export interface FinSqlDiscovery {
   modules: { restApi: FinYesNo; asset: FinYesNo; project: FinYesNo; consolidation: FinYesNo; bankFeed: FinYesNo };
   /** The SQL Account partner's written confirmation of the edition, modules and API (file name or link). */
   partnerDoc: string;
+  /**
+   * D4 (Fauzan, 23 Nov 2026): a copy of this company's book that Prima posts to first. Posting moves to the real book
+   * (companyFile) only after a payment voucher on the copy is posted and checked.
+   */
+  copyBook?: string | null;
   recorded: FinSign;
   confirmed: FinSign | null;
 }
@@ -618,6 +623,7 @@ export function finSqlDiscoveryAction(ctx: FinCashCtx, f: FinStatus, action: str
         bankFeed: yn(m.bankFeed, 'Bank feed'),
       },
       partnerDoc: noSecrets(text(input.partnerDoc, "The SQL Account partner's confirmation (file name or link)", 3, 300), 'Document'),
+      copyBook: input.copyBook == null || input.copyBook === '' ? null : noSecrets(text(input.copyBook, 'Copy book (company file or database name of the copy)', 2, 120), 'Copy book'),
       recorded: ctx.sign(),
       confirmed: null,
     };

@@ -23,6 +23,7 @@ import {
   type StaffPayRunView,
 } from "../api";
 import { useApp, useRouteTab } from "../App";
+import { handOver, useScreenUploader } from "../upload-handlers";
 import { SopHelp } from "../sop/SopHelp";
 import { PayChangesPanel } from "./PayChanges";
 import { StatTablesView } from "./StatTables";
@@ -91,7 +92,18 @@ function runSteps(stage: StaffPayStage, late: boolean) {
 type PayTab = 'runs' | 'mine' | 'tables';
 
 export function StaffPayView() {
-  const { me } = useApp();
+  const { me, go } = useApp();
+  // P129 (Fitri, 24 Nov 2026): Upload on Staff payroll takes a salary sheet in any format to Contribution files, which
+  // works out SOCSO, EIS, SKBBK and EPF and gives PERKESO's file and the converter workbook.
+  useScreenUploader('staffpay', {
+    key: 'salary-sheet',
+    label: 'Salary sheet: SOCSO, EIS, SKBBK and EPF (Contribution files)',
+    detail: 'Any salary sheet (Excel, CSV, PDF or Word). Prima reads it on this device, works out every contribution and gives you the PERKESO file and the converter workbook to submit.',
+    open: (f) => {
+      if (f) handOver('contribfiles', f);
+      go({ view: 'contribfiles' });
+    },
+  });
   const { data, error } = useLoad(() => api.staffPayroll(), []);
   // Pay changes: HR follows them, the Chief of Staff or Deputy verifies them (Fauzan, 27 Oct 2026).
   const seesPayChanges =

@@ -13,6 +13,7 @@ import { BreachRegisterPanel, ConsentsPanel, RegisterPanel } from './PdpaRegiste
 import '../styles/hrx.css';
 import { useRouteTab } from '../App';
 import { SopHelp } from '../sop/SopHelp';
+import { ClientStepsPanel, DownloadsPanel, InboxPanel, KeepPanel, PdpaTodayPanel } from './PdpaOfficer';
 
 /**
  * PDPA (Fauzan, 26 Oct 2026). The PDPA officer manages every personal data matter and is monitored by the Operations
@@ -22,9 +23,10 @@ import { SopHelp } from '../sop/SopHelp';
  */
 
 type Case = PdpaBoard['cases'][number];
-type Extra = 'REGISTER' | 'CONSENTS' | 'BREACH_REGISTER' | 'PRODUCTS' | 'PROPOSAL' | 'REQUESTS' | 'DPO' | 'SETTINGS';
+type Extra = 'INBOX' | 'REGISTER' | 'CONSENTS' | 'BREACH_REGISTER' | 'PRODUCTS' | 'PROPOSAL' | 'REQUESTS' | 'DPO' | 'DOWNLOADS' | 'KEEP' | 'SETTINGS';
 
 const EXTRA_LABEL: Record<Extra, string> = {
+  INBOX: 'Inbox',
   REGISTER: 'Data register',
   CONSENTS: 'Consents',
   BREACH_REGISTER: 'Breach register',
@@ -32,6 +34,8 @@ const EXTRA_LABEL: Record<Extra, string> = {
   PROPOSAL: 'Proposal check',
   REQUESTS: 'Data requests',
   DPO: 'DPO register',
+  DOWNLOADS: 'Personal data downloads',
+  KEEP: 'Keep periods',
   SETTINGS: 'Settings',
 };
 
@@ -76,6 +80,8 @@ export function PdpaView() {
       </div>
     );
   const officer = data.role === 'officer';
+  // D3: the Chief of Staff acts on breaches while the PDPA officer is away.
+  const covering = data.acts === 'cover';
   const inTab = data.cases.filter((c) => c.kind === tab);
   const closedCount = inTab.filter((c) => c.status === 'closed').length;
   const openCase = data.cases.find((c) => c.id === openId);
@@ -96,6 +102,12 @@ export function PdpaView() {
           PDPA is switched off by the Chief of Staff: PDPA alerts do not show on the leaders' screens. Records are kept and the legal duties still apply.
         </div>
       )}
+      {covering && (
+        <div className="notice" data-tone="warn" role="status" style={{ marginBottom: 12 }}>
+          The PDPA officer is away today. You act on breaches, data requests and the inbox until the officer is back; every step you take is marked as cover and shown to the officer.
+        </div>
+      )}
+      <PdpaTodayPanel />
       {data.counts.late > 0 && (
         <div className="notice" data-tone="crit" role="alert">
           {data.counts.late} breach{data.counts.late === 1 ? '' : 'es'} past the legal notice time.
@@ -152,6 +164,9 @@ export function PdpaView() {
       {tab === 'PROPOSAL' && <ProposalPanel />}
       {tab === 'REQUESTS' && <RequestsPanel />}
       {tab === 'DPO' && <DpoPanel />}
+      {tab === 'INBOX' && <InboxPanel />}
+      {tab === 'DOWNLOADS' && <DownloadsPanel />}
+      {tab === 'KEEP' && <KeepPanel />}
       {tab === 'SETTINGS' && <SettingsPanel s={data.settings} />}
       {caseTab && (
         <section className="k-card">
@@ -164,7 +179,7 @@ export function PdpaView() {
               </p>
             </div>
             <div className="k-card-actions">
-              {data.canAdd && !adding && (
+              {(data.canAdd || (covering && tab === 'BREACH')) && !adding && (
                 <button className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>
                   <PlusIcon size={14} weight="bold" aria-hidden="true" />
                   Open a case
@@ -192,14 +207,15 @@ export function PdpaView() {
               const t = caseChip(c, Date.now())[0];
               return t === 'crit' ? 'crit' : t === 'warn' ? 'warn' : undefined;
             }}
-            actions={(c) => [{ label: officer && c.status === 'open' ? 'Act' : 'Steps', onClick: () => setOpenId(c.id) }]}
+            actions={(c) => [{ label: (officer || (covering && c.kind === 'BREACH')) && c.status === 'open' ? 'Act' : 'Steps', onClick: () => setOpenId(c.id) }]}
             empty={<Empty title="Nothing here." />}
           />
           {openCase && (
             <Drawer title={openCase.title} sub={`${openCase.companyName} · opened ${dateTimeLabel(openCase.openedAt)} by ${openCase.openedBy}`} onClose={() => setOpenId(null)}>
-              <CaseDetail c={openCase} officer={officer} />
+              <CaseDetail c={openCase} officer={officer || (covering && openCase.kind === 'BREACH')} />
             </Drawer>
           )}
+          {tab === 'CLIENT_CONSENT' && <ClientStepsPanel officer={officer} />}
         </section>
       )}
     </div>
