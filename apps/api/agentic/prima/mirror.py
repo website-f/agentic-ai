@@ -318,20 +318,23 @@ async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool
                     }
                 )
             continue
-        # Place: Prima's company and central department.
-        if home and m.branch_id not in [office_of.get(c, [None])[0] for c in r.company_ids]:
+        # Place: Prima's company and central department. The owner, global admins and IT support
+        # keep theirs (their place scopes nothing). Someone in several companies keeps them all:
+        # only when none of their office companies is one of their Prima companies does their home
+        # move, and the new home joins the companies they already had.
+        prima_homes = {office_of[c][0] for c in r.company_ids if office_of.get(c)}
+        mine = {m.branch_id, *m.branch_ids} - {None}
+        if m.role in PINNED:
+            pass
+        elif home and not (mine & prima_homes):
             old = branches.get(m.branch_id or "")
             m.branch_id = home
             m.department_id = await _department(db, ws_id, home, r.department, report)
-            await db.execute(
-                MembershipBranch.__table__.delete().where(
-                    MembershipBranch.workspace_id == ws_id, MembershipBranch.user_id == m.user_id
-                )
-            )
-            db.add(MembershipBranch(workspace_id=ws_id, user_id=m.user_id, branch_id=home))
+            if home not in mine:
+                db.add(MembershipBranch(workspace_id=ws_id, user_id=m.user_id, branch_id=home))
             report.moved.append(f"{r.name}: {old.name if old else '-'} -> {branches[home].name}")
-        elif home and r.department:
-            dept = await _department(db, ws_id, m.branch_id or home, r.department, report)
+        elif home and r.department and m.branch_id in prima_homes:
+            dept = await _department(db, ws_id, m.branch_id, r.department, report)
             if dept and m.department_id != dept:
                 m.department_id = dept
                 report.moved.append(f"{r.name}: department {DEPARTMENT_LABEL.get(r.department)}")

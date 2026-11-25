@@ -10,7 +10,15 @@ from sqlalchemy import select
 
 from agentic.core.config import settings
 from agentic.core.db import SessionLocal
-from agentic.models import Branch, Department, Membership, PrimaLink, User, Workspace
+from agentic.models import (
+    Branch,
+    Department,
+    Membership,
+    MembershipBranch,
+    PrimaLink,
+    User,
+    Workspace,
+)
 from agentic.prima import adopt, autolink, client, mirror, org_link, org_sync
 
 from .conftest import csrf, setup_owner
@@ -250,3 +258,34 @@ async def test_office_edits_close_once_prima_keeps_the_people(client, fake_prima
         "/api/members/bulk", json={"user_ids": [u["pia"]], "action": "remove"}, headers=csrf(client)
     )
     assert r.status_code == 409
+
+
+async def test_mirror_keeps_several_companies_and_the_owners_place(client, fake_prima):
+    ws, b, u = await _office(client)
+    async with SessionLocal() as db:
+        names = {c["id"]: c["name"] for c in fake_prima["companies"]}
+        await adopt.apply(db, await adopt.build(db, names), dry=False)
+    # Omar heads Operasi Johor (Goodwill) and also works in Safe Zone; Prima has him at Safe Zone.
+    async with SessionLocal() as db:
+        db.add(MembershipBranch(workspace_id=ws, user_id=u["omar"], branch_id=b["safe"]))
+        await db.commit()
+    owner = await setup_owner_id(ws)
+    fake_prima["staff"] += [
+        {"id": f"u-off-{u['omar']}", "name": "Omar", "title": "", "role": "pwvsb_officer",
+         "companyIds": ["co-safe"], "email": "omar@example.com"},
+        {"id": f"u-off-{owner}", "name": "Owner One", "title": "", "role": "pwvsb_officer",
+         "companyIds": ["co-safe"], "department": "procurement", "email": "owner@example.com"},
+    ]  # fmt: skip
+    async with SessionLocal() as db:
+        rep = await mirror.run(db, ws)
+    assert not rep.moved, rep.moved
+    async with SessionLocal() as db:
+        omar = await db.get(Membership, (ws, u["omar"]))
+        assert omar.department_id is not None and b["safe"] in omar.branch_ids
+        o = await db.get(Membership, (ws, owner))
+        assert o.branch_id != b["safe"] and o.role == "owner"
+
+
+async def setup_owner_id(ws: str) -> str:
+    async with SessionLocal() as db:
+        return (await db.scalar(select(User.id).where(User.email == "owner@example.com"))) or ""
