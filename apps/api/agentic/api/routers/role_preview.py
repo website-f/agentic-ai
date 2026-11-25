@@ -194,7 +194,8 @@ async def start(
     email = f"try.{key.replace('_', '-')}.{tag}@{PREVIEW_DOMAIN}"
     label = LABELS.get(body.role, body.role)
     where = " · ".join(x for x in (branch.name if branch else "", dept.name if dept else "") if x)
-    name = f"Try: {label}" + (f" ({where})" if where else "")
+    # The role first: the home page greets them by the first word ("Good morning, Staff").
+    name = f"{label} (practice" + (f" · {where}" if where else "") + ")"
 
     user = await db.scalar(select(User).where(User.email == email))
     if user is None:
@@ -208,6 +209,7 @@ async def start(
         db.add(user)
         await db.flush()
     user.is_active = True
+    user.name = name[:120]
     m = await db.scalar(
         select(Membership).where(Membership.workspace_id == ws, Membership.user_id == user.id)
     )
@@ -219,6 +221,8 @@ async def start(
             branch_id=branch.id if branch else None,
             department_id=dept.id if dept else None,
             job_title=f"Practice account ({label})"[:120],
+            # The welcome tour is for new people; someone trying a role skips it (Guide has it).
+            getting_started={"welcome": "skipped"},
         )
         db.add(m)
         await db.flush()
