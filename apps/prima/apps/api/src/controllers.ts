@@ -452,16 +452,39 @@ export class OfficeController {
 
   @Get('staff')
   async staff() {
-    // P132 (office): the staff record's email comes along, so a person added in Prima can sign in to the office with it.
-    const res = await this.db.pool.query(
-      `SELECT u.data, p.data->>'email' AS email FROM prima.users u
-         LEFT JOIN prima.people p ON p.id = u.data->>'personId'
-        WHERE NOT (u.data ? 'integration') ORDER BY u.data->>'name', u.id`,
-    );
+    const res = await this.db.pool.query(`SELECT data FROM prima.users WHERE NOT (data ? 'integration') ORDER BY data->>'name', id`);
+    // P132 (office): the email on each account's staff record, so a person added in Prima can sign in to the office
+    // with it. Staff records sit behind the company wall: read as prima_app with the wall opened for the companies the
+    // accounts name (as companies() below), and only the email of the records the accounts point at.
+    const emails = new Map<string, string>();
+    const personIds = res.rows.map((r) => (r.data as User).personId).filter((x): x is string => typeof x === 'string' && !!x);
+    if (personIds.length) {
+      const client = await this.db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        const named = await client.query(
+          `SELECT DISTINCT jsonb_array_elements_text(data->'companyIds') AS id FROM prima.users WHERE jsonb_typeof(data->'companyIds') = 'array'`,
+        );
+        await client.query('SET LOCAL ROLE prima_app');
+        await client.query(`SELECT set_config('app.company_ids', $1, true)`, [named.rows.map((r) => String(r.id)).join(',')]);
+        await client.query(`SELECT set_config('app.user_id', '', true)`);
+        await client.query(`SELECT set_config('app.group_user', 'off', true)`);
+        await client.query(`SELECT set_config('app.walls', '', true)`);
+        const got = await client.query(`SELECT id, data->>'email' AS email FROM prima.people WHERE id = ANY($1::text[])`, [personIds]);
+        await client.query('COMMIT');
+        for (const r of got.rows) if (typeof r.email === 'string') emails.set(String(r.id), r.email);
+      } catch {
+        // No emails this time (the office then adds nobody new); never a failed staff list.
+        await client.query('ROLLBACK').catch(() => undefined);
+      } finally {
+        client.release();
+      }
+    }
     const today = dateOf(fromMs(Date.now()));
     return res.rows.map((r) => {
       const u = r.data as User;
-      const email = typeof r.email === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email.trim()) ? r.email.trim().toLowerCase() : null;
+      const raw = u.personId ? emails.get(u.personId) : undefined;
+      const email = typeof raw === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw.trim()) ? raw.trim().toLowerCase() : null;
       return {
         // P132 (Fitri, 26 Nov 2026: "let Prima handle the organization and members"): what the office mirrors of each
         // account: its companies, central department, Prima's leadership and operations tier (the office's access level
