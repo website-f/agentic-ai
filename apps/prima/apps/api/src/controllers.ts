@@ -452,11 +452,26 @@ export class OfficeController {
 
   @Get('staff')
   async staff() {
-    const res = await this.db.pool.query(`SELECT data FROM prima.users WHERE NOT (data ? 'integration') ORDER BY data->>'name', id`);
+    // P132 (office): the staff record's email comes along, so a person added in Prima can sign in to the office with it.
+    const res = await this.db.pool.query(
+      `SELECT u.data, p.data->>'email' AS email FROM prima.users u
+         LEFT JOIN prima.people p ON p.id = u.data->>'personId'
+        WHERE NOT (u.data ? 'integration') ORDER BY u.data->>'name', u.id`,
+    );
     const today = dateOf(fromMs(Date.now()));
     return res.rows.map((r) => {
       const u = r.data as User;
+      const email = typeof r.email === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email.trim()) ? r.email.trim().toLowerCase() : null;
       return {
+        // P132 (Fitri, 26 Nov 2026: "let Prima handle the organization and members"): what the office mirrors of each
+        // account: its companies, central department, Prima's leadership and operations tier (the office's access level
+        // is worked out from these), and whether access was closed.
+        email,
+        companyIds: Array.isArray(u.companyIds) ? u.companyIds : [],
+        department: u.department ?? null,
+        leadership: u.leadership ?? null,
+        opsTier: u.opsTier ?? null,
+        closed: accessClosed(u, today),
         id: u.id,
         name: u.name,
         title: u.title,

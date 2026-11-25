@@ -8,6 +8,7 @@ import { useNavigate, useParams, useRouterState, useSearch } from "@tanstack/rea
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import { usePrimaMaster } from "@/components/prima-master";
 import { ItSupportNotice } from "@/components/held-changes";
 import { Page, PageHeader, Section } from "@/components/page";
 import { SignInEmailsBar, useEmailMember } from "@/components/sign-in-emails";
@@ -670,7 +671,9 @@ function MemberSheet({ member, me, onClose }: { member: Member; me: Me; onClose:
 export function MembersTable({ control, me, withAddImport }: { control: TableControl; me: Me; withAddImport?: boolean }) {
   const t = useT();
   const qc = useQueryClient();
-  const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0;
+  // P132: once Prima keeps the people, they are added and removed in Prima (Accounts and access).
+  const master = usePrimaMaster();
+  const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0 && !master;
   const { data: branches = [] } = useQuery(branchesQuery);
   const { filters, data, isLoading, error, isFetching, refetch } = useMembersPage(control);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -845,7 +848,8 @@ export function MembersTable({ control, me, withAddImport }: { control: TableCon
 export function MembersPage() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
-  const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0;
+  const master = usePrimaMaster(); // P132: people are added in Prima once it keeps them
+  const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0 && !master;
   // P98: the owner changes what each role may do (Settings > Roles and access).
   const editsRoles = me.permissions.includes("roles.manage");
   // P107: the shared data table; the server searches, filters, sorts and pages, and the address

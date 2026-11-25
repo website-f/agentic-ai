@@ -24,7 +24,7 @@ from ...core.db import get_db
 from ...i18n import Msg, render
 from ...i18n.labels import role_label
 from ...models import Membership
-from ...prima import autolink, client, person_member
+from ...prima import autolink, client, mirror, person_member
 from ...prima.client import PrimaError
 from ...prima.person_member import Match, PersonRefused, PrimaPerson
 from ...services import audit
@@ -174,6 +174,7 @@ async def add_person(
     principal: Principal = Depends(members_router.people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> MemberCreateOut:
+    await mirror.guard(db, principal.workspace_id)  # P132: kept in Prima
     # The one-time password is shown once: never cached (as Members > Add member).
     response.headers["Cache-Control"] = "no-store"
     person, match = await _read(db, principal, person_id, request)

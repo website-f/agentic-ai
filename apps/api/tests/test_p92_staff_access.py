@@ -297,6 +297,8 @@ STAFF_OK = {
     "/api/integrations/microsoft/adminconsent",
     "/api/requests",  # P120: their own requests (and their people's, to decide)
     "/api/held-changes",  # P125: IT support's own held changes (none for staff: empty lists)
+    "/api/role-preview",  # P131: whether they may try a role (staff: no, and nothing else)
+    "/api/prima-master",  # P132: whether Prima keeps the people (counts only; held list: owner)
     # P127: their own approvals (role scope widens it: test_p127_approvals) and their own prepared
     # answers; the org chart as they already see it (limited people: name, title, company, dept)
     "/api/m365/approvals/all",

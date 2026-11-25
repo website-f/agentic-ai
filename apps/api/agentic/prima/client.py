@@ -179,6 +179,13 @@ class StaffRecord:
     # P112: the Prima person (staff record) this account belongs to, when Prima says (an
     # older Prima sends none): which office member is a Prima person (prima/person_member).
     person_id: str | None = None
+    # P132: what the office mirrors (prima/mirror.py), from a newer Prima; empty from an older one.
+    email: str | None = None
+    company_ids: tuple[str, ...] = ()
+    department: str | None = None
+    leadership: str | None = None
+    ops_tier: str | None = None
+    closed: bool = False
 
 
 @dataclass(frozen=True)
@@ -248,6 +255,12 @@ async def staff() -> list[StaffRecord]:
             can_sign_in=bool(r.get("canSignIn")),
             top=(str(r["top"]) if r.get("top") in ("ceo", "coo") else None),
             person_id=(str(r["personId"])[:120] if r.get("personId") else None),
+            email=(str(r["email"]).strip().lower()[:254] if r.get("email") else None),
+            company_ids=tuple(str(c)[:80] for c in (r.get("companyIds") or [])[:20] if c),
+            department=(str(r["department"])[:40] if r.get("department") else None),
+            leadership=(str(r["leadership"])[:40] if r.get("leadership") else None),
+            ops_tier=(str(r["opsTier"])[:40] if r.get("opsTier") else None),
+            closed=bool(r.get("closed")),
         )
         for r in (rows if isinstance(rows, list) else [])
         if isinstance(r, dict) and r.get("id")

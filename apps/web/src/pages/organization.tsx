@@ -15,6 +15,7 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ItSupportNotice } from "@/components/held-changes";
+import { PrimaMasterPanel, usePrimaMaster } from "@/components/prima-master";
 import { RolePreviewCard } from "@/components/role-preview";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -401,7 +402,9 @@ function CountLink({ n, label, onClick }: { n: number | undefined; label: string
 
 /** P107: one company opened from the table: its departments (add, rename, remove), its data
  * protection, and a way to its people. */
-function CompanySheet({ branch, canManage, seesMembers, people, onEdit, go, onClose }: {
+function CompanySheet({ branch, canManage, canProtect, seesMembers, people, onEdit, go, onClose }: {
+  /** P132: the office's own privacy setting stays editable when Prima keeps the structure. */
+  canProtect?: boolean;
   branch: Branch;
   canManage: boolean;
   seesMembers: boolean;
@@ -438,7 +441,7 @@ function CompanySheet({ branch, canManage, seesMembers, people, onEdit, go, onCl
           ) : null}
         </section>
         <div className="overflow-hidden rounded-[var(--radius-md)] border border-border [&>div]:border-t-0">
-          <DataProtection branch={branch} canManage={canManage} />
+          <DataProtection branch={branch} canManage={canProtect ?? canManage} />
         </div>
         {seesMembers ? (
           <div>
@@ -509,7 +512,8 @@ function useRefreshOrg() {
 const date = (iso: string) => new Date(iso).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" });
 
 /** P107: every company as a table row; a row opens its sheet. */
-function CompaniesTable({ branches, canManage, seesMembers, counts, prima, go }: {
+function CompaniesTable({ branches, canManage, canProtect, seesMembers, counts, prima, go }: {
+  canProtect?: boolean;
   branches: Branch[];
   canManage: boolean;
   seesMembers: boolean;
@@ -645,7 +649,7 @@ function CompaniesTable({ branches, canManage, seesMembers, counts, prima, go }:
         } : undefined}
       />
       {opened ? (
-        <CompanySheet branch={opened} canManage={canManage} seesMembers={seesMembers} people={peopleOf(opened)} go={go}
+        <CompanySheet branch={opened} canManage={canManage} canProtect={canProtect} seesMembers={seesMembers} people={peopleOf(opened)} go={go}
           onEdit={() => setEditing({ branch: opened, key: next() })} onClose={() => setOpen(null)} />
       ) : null}
       {editing ? <BranchDialog key={editing.key} open onOpenChange={(o) => !o && setEditing(null)} branch={editing.branch} /> : null}
@@ -768,7 +772,10 @@ function OrganizationOffice({ me }: { me: Me }) {
   const t = useT();
   // "Branches" is also the workflow word (Cabang); companies need their own Malay word.
   const lang = useLang((s) => s.lang);
-  const canManage = me.permissions.includes("org.manage");
+  // P132: once Prima keeps the organization, companies and departments are changed there.
+  const master = usePrimaMaster();
+  const canManage = me.permissions.includes("org.manage") && !master;
+  const canProtect = me.permissions.includes("org.manage");
   const seesMembers = me.permissions.includes("members.manage") || me.permissions.includes("team.manage");
   const { data: branches, isLoading, error } = useQuery(branchesQuery);
   const counts = useCounts(seesMembers);
@@ -809,6 +816,7 @@ function OrganizationOffice({ me }: { me: Me }) {
       {/* P125: IT support's changes wait for an owner or a global admin. */}
       <ItSupportNotice role={me.role} />
       {/* P131: owners and global admins sign in as any other role on a practice account. */}
+      <PrimaMasterPanel />
       <RolePreviewCard />
 
       {isLoading ? (
@@ -845,9 +853,9 @@ function OrganizationOffice({ me }: { me: Me }) {
           {view === "hierarchy" ? <OrgChartView key={focus ?? ""} me={me} initialFocus={focus} />
             : view === "members" ? <OrgMembers me={me} />
             : view === "departments" ? <DepartmentsTable branches={branches} canManage={canManage} counts={counts} go={go} onOpenCompany={setOpenCompany} />
-              : <CompaniesTable branches={branches} canManage={canManage} seesMembers={seesMembers} counts={counts} prima={prima} go={go} />}
+              : <CompaniesTable branches={branches} canManage={canManage} canProtect={canProtect} seesMembers={seesMembers} counts={counts} prima={prima} go={go} />}
           {opened && view === "departments" ? (
-            <CompanySheet branch={opened} canManage={canManage} seesMembers={seesMembers} people={counts ? (counts.byBranch.get(opened.id) ?? 0) : undefined} go={go}
+            <CompanySheet branch={opened} canManage={canManage} canProtect={canProtect} seesMembers={seesMembers} people={counts ? (counts.byBranch.get(opened.id) ?? 0) : undefined} go={go}
               onEdit={() => setEditBranch({ branch: opened, key: Date.now() })} onClose={() => setOpenCompany(null)} />
           ) : null}
           {editBranch ? <BranchDialog key={editBranch.key} open onOpenChange={(o) => !o && setEditBranch(null)} branch={editBranch.branch} /> : null}

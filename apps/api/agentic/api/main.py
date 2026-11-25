@@ -598,6 +598,11 @@ from .routers import role_preview as role_preview_router  # noqa: E402
 
 app.include_router(role_preview_router.router)
 
+# P132: Prima keeps the organization and the people; the office follows it.
+from .routers import prima_master as prima_master_router  # noqa: E402
+
+app.include_router(prima_master_router.router)
+
 # P94: only the API process holds the PC sockets (devices/hub.py); the worker reaches them
 # through /internal/devices/*. Set here, not when a module is imported.
 from ..devices import bridge as _devices_bridge  # noqa: E402

@@ -34,7 +34,7 @@ from ...i18n import MS, current_lang, render, tr
 from ...i18n import labels as i18n_labels
 from ...models import Branch, Department, Membership, User
 from ...org.names import org_name
-from ...prima import autolink, org_link
+from ...prima import autolink, mirror, org_link
 from ...services import audit
 from ..deps import Principal, api_error, require
 from . import members
@@ -975,6 +975,7 @@ async def add_companies(
 ) -> CompaniesOut:
     """P80: add the companies a sheet names that the office does not have yet, so its people
     can be placed in one go. Never a second company with a name the office already has."""
+    await mirror.guard(db, principal.workspace_id)  # P132: kept in Prima
     from ...engine import privacy
 
     out = await add_company_names(db, principal, body.names)
@@ -1048,6 +1049,7 @@ async def import_members(
 ) -> ImportOut:
     """Add every row that passes the checks; skip (and say why) the rest. Each new account
     gets a one-time password, shown here only; existing accounts keep their own."""
+    await mirror.guard(db, principal.workspace_id)  # P132: kept in Prima
     out = await import_rows(db, principal, _rows_out(body.rows))
     await db.commit()
     # P109: everyone added is linked to Prima, once the answer has gone.

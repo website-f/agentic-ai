@@ -196,8 +196,12 @@ async def tick() -> dict[str, int]:
                 )
             )
         ).all()
+    from . import mirror  # late: mirror builds on client and the models
+
     for ws in ids:
         if client.enabled(ws):
+            # P132: first the office follows Prima's companies and people, then the lines.
+            await mirror.tick_one(ws)
             await run_now(ws)
             done += 1
     return {"workspaces": done}

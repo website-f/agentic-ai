@@ -32,7 +32,7 @@ from ...models import (
 )
 from ...org import heads as dept_heads
 from ...org import hierarchy as org_chart
-from ...prima import autolink, modules, org_sync, screen_access
+from ...prima import autolink, mirror, modules, org_sync, screen_access
 from ...prima import client as prima_client
 from ...prima.client import PrimaError
 from ...services import audit, identity
@@ -827,6 +827,7 @@ async def add_member(
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> MemberCreateOut:
+    await mirror.guard(db, principal.workspace_id)  # P132: kept in Prima
     # P52: the temporary password is shown once: never cached (as with a password reset).
     response.headers["Cache-Control"] = "no-store"
     m, password = await add_one(
@@ -867,6 +868,17 @@ async def update_member(
         {"prima_modules", "prima_department"} & body.model_fields_set
     )
     unchanged = body.role is None and body.name is None and body.email is None
+    # P132: once Prima keeps the people, the office changes only its own: the owners', global
+    # admins' and IT support's access level, the email they sign in with, and Prima screens.
+    current = await db.get(Membership, (principal.workspace_id, user_id))
+    own_level = (
+        body.role is None
+        or body.role in mirror.PINNED
+        or (current is not None and current.role in mirror.PINNED)
+    )
+    await mirror.guard(
+        db, principal.workspace_id, allow=own_level and not org_change and body.name is None
+    )
     if unchanged and not org_change and not prima_change:
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "nothing_to_change", "Nothing to change."
@@ -1285,6 +1297,7 @@ async def set_member_team(
     Each change follows set_manager's rules; anyone the rules stop is skipped and says why.
     P113: a branch manager or HOD for someone of their branch or department (themselves too);
     the people under that person from outside their part stay as they are."""
+    await mirror.guard(db, principal.workspace_id)  # P132: kept in Prima
     _line_editor(principal)
     boss = await _membership(db, principal.workspace_id, user_id)
     if not _member_in_scope(principal, boss):
@@ -1561,6 +1574,7 @@ async def remove_member(
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    await mirror.guard(db, principal.workspace_id)  # P132: kept in Prima
     await remove_one(db, principal, user_id)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -1576,6 +1590,12 @@ async def bulk(
     """P82: the people ticked in the Members table: removed, or given one role and place.
     Each goes through the same rules as one; anyone those rules stop is skipped and says why
     (never half done: one person's refusal never undoes the others)."""
+    # P132: removing people, their place and their lines are Prima's once it keeps the people.
+    await mirror.guard(
+        db,
+        principal.workspace_id,
+        allow=body.action == "prima" or (body.action == "access" and body.role in mirror.PINNED),
+    )
     if body.action == "access" and body.role is None:
         raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "role_required", "Pick a role.")
     if body.action == "manager":

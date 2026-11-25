@@ -11,7 +11,7 @@ from ...models import Branch, Department, Workspace
 from ...org import starter
 from ...org.names import org_name, spaced
 from ...prima import client as prima_client
-from ...prima import org_link
+from ...prima import mirror, org_link
 from ...services import audit, events
 from ...services.text import slugify
 from ..deps import Principal, api_error, require
@@ -167,6 +167,7 @@ async def create_branch(
     principal: Principal = Depends(require("org.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> BranchOut:
+    await mirror.guard(db, principal.workspace_id)  # P132: kept in Prima
     industry = _industry(body.industry) if body.industry or body.starter_team else ""
     name = _name(body.name)
     slug = await _unique_slug(
@@ -219,6 +220,8 @@ async def update_branch(
     principal: Principal = Depends(require("org.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> BranchOut:
+    # P132: the name is Prima's; colour, privacy and data level stay the office's own.
+    await mirror.guard(db, principal.workspace_id, allow=body.name is None)
     b = await _branch(db, principal.workspace_id, branch_id)
     before = {
         "name": b.name,
@@ -266,6 +269,7 @@ async def delete_branch(
     principal: Principal = Depends(require("org.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    await mirror.guard(db, principal.workspace_id)  # P132: kept in Prima
     b = await _branch(db, principal.workspace_id, branch_id)
     before = {"name": b.name, "departments": len(b.departments)}
     await db.delete(b)
@@ -288,6 +292,7 @@ async def create_department(
     principal: Principal = Depends(require("org.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> DepartmentOut:
+    await mirror.guard(db, principal.workspace_id)  # P132: kept in Prima
     b = await _branch(db, principal.workspace_id, branch_id)
     name = spaced(body.name)  # P111: departments keep their case (org/names.py)
     slug = await _unique_slug(db, Department, Department.branch_id, b.id, name, "department")
@@ -325,6 +330,8 @@ async def update_department(
     principal: Principal = Depends(require("org.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> DepartmentOut:
+    # P132: the name is Prima's; the order on screen stays the office's own.
+    await mirror.guard(db, principal.workspace_id, allow=body.name is None)
     d = await _department(db, principal.workspace_id, dept_id)
     before = {"name": d.name, "position": d.position}
     if body.name is not None:
@@ -350,6 +357,7 @@ async def delete_department(
     principal: Principal = Depends(require("org.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    await mirror.guard(db, principal.workspace_id)  # P132: kept in Prima
     d = await _department(db, principal.workspace_id, dept_id)
     before = {"name": d.name, "branch_id": d.branch_id}
     await db.delete(d)

@@ -202,6 +202,9 @@ async def set_placement(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Staff say where they work, once: only what their manager has not set yet."""
+    from ...prima import mirror  # P132: their place comes from Prima
+
+    await mirror.guard(db, principal.workspace_id)
     if principal.role != "staff":
         raise api_error(
             status.HTTP_403_FORBIDDEN,
