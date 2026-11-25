@@ -593,6 +593,11 @@ from .routers import org_chart_files as org_chart_files_router  # noqa: E402
 
 app.include_router(org_chart_files_router.router)
 
+# P131: owners and global admins try any other role on a practice account, and come back.
+from .routers import role_preview as role_preview_router  # noqa: E402
+
+app.include_router(role_preview_router.router)
+
 # P94: only the API process holds the PC sockets (devices/hub.py); the worker reaches them
 # through /internal/devices/*. Set here, not when a module is imported.
 from ..devices import bridge as _devices_bridge  # noqa: E402

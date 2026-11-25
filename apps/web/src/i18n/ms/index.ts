@@ -60,6 +60,7 @@ import { SHELL_P123 } from "./shell-p123";
 import { PRIMA_DEPTS_P125 } from "./prima-depts-p125";
 import { PRIMA_ORG_P126 } from "./prima-org-p126";
 import { ORG_SYNC_P127 } from "./org-sync-p127";
+import { ROLE_PREVIEW_P131 } from "./role-preview-p131";
 import { APPROVALS_P127 } from "./approvals-p127";
 import { MAIL_P122 } from "./mail-p122";
 import { WORK_MAIL_P124 } from "./work-mail-p124";
@@ -178,6 +179,7 @@ export const MS: Record<string, string> = {
   ...PRIMA_DEPTS_P125,
   ...PRIMA_ORG_P126,
   ...ORG_SYNC_P127, // P127: the organization chart in step with Prima, Excel and PDF downloads
+  ...ROLE_PREVIEW_P131, // P131: sign in as a role on a practice account
   ...APPROVALS_P127, // P127: every Microsoft approval of the office, answers the AI prepares
   ...MAIL_P122, // P122: Work and Personal email, connecting another account by address
   ...WORK_MAIL_P124, // P124: extra work email accounts wait for approval

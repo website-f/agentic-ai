@@ -15,6 +15,7 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ItSupportNotice } from "@/components/held-changes";
+import { RolePreviewCard } from "@/components/role-preview";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { DataTable, eachRow, filterOf, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
@@ -807,6 +808,8 @@ function OrganizationOffice({ me }: { me: Me }) {
       />
       {/* P125: IT support's changes wait for an owner or a global admin. */}
       <ItSupportNotice role={me.role} />
+      {/* P131: owners and global admins sign in as any other role on a practice account. */}
+      <RolePreviewCard />
 
       {isLoading ? (
         <div className="grid gap-4">

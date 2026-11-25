@@ -44,7 +44,11 @@ def enabled(user: User) -> bool:
 
 
 def due(user: User, role: str, ws_settings: Mapping[str, Any] | None) -> bool:
-    """The workspace asks this person for two-step sign-in and they have not set it up."""
+    """The workspace asks this person for two-step sign-in and they have not set it up. A role
+    try-out account (P131, routers/role_preview.py) has no password anyone knows and is entered only
+    by an owner or global admin already signed in, so it is never asked."""
+    if (user.email or "").lower().endswith("@role-preview.local"):
+        return False
     return covers(policy(ws_settings), role) and not enabled(user)
 
 

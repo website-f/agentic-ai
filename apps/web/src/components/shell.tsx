@@ -29,6 +29,7 @@ import { Drawer } from "vaul";
 import { create } from "zustand";
 
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
+import { RolePreviewBar } from "@/components/role-preview";
 import { AiFab } from "@/components/ai-fab";
 import { GettingStartedChip } from "@/components/getting-started-chip";
 import { PrimaHost, PrimaWarm } from "@/components/prima-host";
@@ -954,6 +955,8 @@ export function AppShell() {
     <>
       {/* P119: Prima, kept loaded once opened. P123: first, so it never reloads. */}
       <PrimaHost />
+      {/* P131: trying a role: the way back, over every screen and Prima. */}
+      <RolePreviewBar />
       <div className="flex min-h-dvh md:pr-[env(safe-area-inset-right)] md:pl-[env(safe-area-inset-left)]" inert={primaFull || undefined}>
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
