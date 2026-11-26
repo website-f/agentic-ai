@@ -21,14 +21,14 @@ describe("P36: one guard for pages and the sidebar", () => {
     }
     for (const path of [
       "/", "/overview", "/agents", "/agents/ag_1", "/agents/new", "/office", "/monitor", "/brain", "/skills", "/learning",
-      "/schedules", "/ai-engine", "/activity", "/settings/members", "/settings/ai-use", "/objectives",
+      "/schedules", "/ai-engine", "/activity", "/settings/office-access", "/settings/ai-use", "/objectives",
     ]) {
       expect(pathAllowed(path, STAFF), path).toBe(false);
     }
   });
 
   it("lets the owner everywhere", () => {
-    for (const path of ["/", "/agents/ag_1", "/brain", "/settings/members", "/settings/ai-use", "/ai-engine"]) {
+    for (const path of ["/", "/agents/ag_1", "/brain", "/settings/office-access", "/settings/ai-use", "/ai-engine"]) {
       expect(pathAllowed(path, OWNER), path).toBe(true);
     }
   });

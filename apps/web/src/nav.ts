@@ -108,6 +108,7 @@ export type AppPath =
   | "/settings"
   | "/settings/members"
   | "/settings/ai-use"
+  | "/settings/office-access"
   | "/notifications"
   | "/settings/storage"
   | "/settings/roles"
@@ -231,11 +232,10 @@ export const NAV: NavSection[] = [
     hint: msg("Set up once: companies, people, AI, connections and limits."),
     open: "none",
     items: [
-      // P113: every member opens it (staff: the organization chart only, to look at).
-      { to: "/organization", label: msg("Organization"), icon: TreeStructureIcon, blurb: msg("Branches (one per company), the departments inside them, and the organization chart: who reports to whom.") },
+      // P133: companies, departments and people are kept in Prima (its org chart, Accounts and access).
+      { to: "/settings/office-access", label: msg("Office access"), icon: TreeStructureIcon, perm: ["members.manage", "team.manage", "org.manage"], blurb: msg("Who runs the office, helping someone sign in, and trying another role. Companies, departments and people are kept in Prima.") },
       { to: "/staff-computers", label: msg("Staff computers"), icon: DesktopTowerIcon, perm: ["members.manage", "team.manage"], blurb: msg("Every company computer your staff linked: who has which, online or not, the folders it shares. Open one to see its screen and fetch files, and turn on a company backup of those folders.") },
-      { to: "/settings", label: msg("Settings"), icon: GearSixIcon, blurb: msg("Members and roles, appearance and your account.") },
-      { to: "/settings/members", label: msg("Members and roles"), icon: UsersIcon, perm: ["members.manage", "team.manage"], hidden: true, blurb: msg("Add teammates and decide what each one can do.") },
+      { to: "/settings", label: msg("Settings"), icon: GearSixIcon, blurb: msg("Appearance, your account and the office's own settings.") },
       { to: "/settings/roles", label: msg("Roles and access"), icon: UserGearIcon, perm: "roles.manage", hidden: true, blurb: msg("What each role may do, area by area. Only the owner changes it.") },
       { to: "/settings/ai-use", label: msg("AI use and limits"), icon: CoinsIcon, perm: ["members.manage", "team.manage"], blurb: msg("Each person's daily AI allowance, what staff may use their AI for, and what was refused.") },
       { to: "/web-connections", label: msg("Web connections"), icon: GlobeIcon, perm: "org.manage", blurb: msg("How the AI's browsers reach websites: this server, a company computer, or your own proxies.") },
@@ -286,7 +286,7 @@ export const HUBS: Hub[] = [
   { label: msg("Workflows & goals"), tabs: ["/workflows", "/objectives"] },
   { label: msg("Agents"), tabs: ["/agents", "/timetable", "/monitor", "/meetings", "/broadcasts"] },
   { label: msg("Knowledge & skills"), tabs: ["/learning", "/skills", "/brain", "/blueprints"] },
-  { label: msg("Organization & people"), tabs: ["/organization", "/settings/members", "/settings/roles", "/staff-computers", "/settings/ai-use", "/approved-services", "/web-connections"] },
+  { label: msg("Organization & people"), tabs: ["/settings/office-access", "/settings/roles", "/staff-computers", "/settings/ai-use", "/approved-services", "/web-connections"] },
   { label: msg("Settings"), tabs: ["/settings", "/notifications", "/channels", "/ai-engine", "/settings/storage", "/logins", "/schedules", "/mcp-servers", "/activity"] },
   { label: msg("Learn"), tabs: ["/tutorial", "/guide", "/present"] },
 ];

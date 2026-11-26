@@ -24,4 +24,28 @@ export const PRIMA_MASTER_P132: Record<string, string> = {
   "Nobody loses access by surprise: these wait until the owner applies them. To keep someone's access, give it to them in Prima (for example name them head of their unit in the Org chart).":
     "Tiada sesiapa hilang akses secara mengejut: perubahan ini menunggu sehingga pemilik menggunakannya. Untuk mengekalkan akses seseorang, berikan dalam Prima (contohnya namakan mereka ketua unit dalam Carta organisasi).",
   "Head of department": "Ketua jabatan",
+  // P133: the office's own access page (Organization and Members moved to Prima).
+  "Office access": "Akses pejabat",
+  "Who runs the office, helping someone sign in, and trying another role. Companies, departments and people are kept in Prima.":
+    "Siapa yang mengurus pejabat, membantu seseorang log masuk, dan mencuba peranan lain. Syarikat, jabatan dan kakitangan disimpan dalam Prima.",
+  "Appearance, your account and the office's own settings.": "Paparan, akaun anda dan tetapan pejabat sendiri.",
+  "Who runs the office": "Siapa yang mengurus pejabat",
+  "Owners, global admins and IT support are the office's own: Prima never changes them. Taking someone off gives them back the access their Prima job gives (within 30 minutes).":
+    "Pemilik, pentadbir global dan sokongan IT ditetapkan oleh pejabat sendiri: Prima tidak mengubahnya. Mengeluarkan seseorang memberi semula akses mengikut tugas Prima mereka (dalam masa 30 minit).",
+  "Take off": "Keluarkan",
+  "Find someone to add (name or email)": "Cari orang untuk ditambah (nama atau e-mel)",
+  "As": "Sebagai",
+  "signed in before": "pernah log masuk",
+  "never signed in": "belum pernah log masuk",
+  "switched off": "dimatikan",
+  "Fix email": "Betulkan e-mel",
+  "Reset Microsoft": "Set semula Microsoft",
+  "Help someone sign in": "Bantu seseorang log masuk",
+  "Find them by name or email. The emailed sign-in password goes only to the email shown here, so a typo (outlookk.com) means nothing arrives: fix it first. Ask them to look in Junk too.":
+    "Cari mengikut nama atau e-mel. Kata laluan log masuk hanya dihantar ke e-mel yang ditunjukkan di sini, jadi kesilapan ejaan (outlookk.com) bermakna tiada apa yang sampai: betulkan dahulu. Minta mereka semak folder Junk juga.",
+  "Name or email": "Nama atau e-mel",
+  "Looking…": "Sedang mencari…",
+  "No one found. People are added in Prima (Accounts and access).": "Tiada sesiapa dijumpai. Kakitangan ditambah dalam Prima (Akaun dan akses).",
+  "Companies, departments and people are kept in Prima. Here: who runs the office, helping someone sign in, and trying another role.":
+    "Syarikat, jabatan dan kakitangan disimpan dalam Prima. Di sini: siapa yang mengurus pejabat, membantu seseorang log masuk, dan mencuba peranan lain.",
 };

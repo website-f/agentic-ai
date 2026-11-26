@@ -52,6 +52,7 @@ const page = {
   members: lazyRouteComponent(() => import("@/pages/members"), "MembersPage"),
   member: lazyRouteComponent(() => import("@/pages/members"), "MemberPage"),
   aiUse: lazyRouteComponent(() => import("@/pages/ai-use"), "AiUsePage"),
+  officeAccess: lazyRouteComponent(() => import("@/pages/office-access"), "OfficeAccessPage"),
   notifications: lazyRouteComponent(() => import("@/pages/notifications"), "NotificationsPage"),
   storage: lazyRouteComponent(() => import("@/pages/storage"), "StoragePage"),
   timetable: lazyRouteComponent(() => import("@/pages/timetable"), "TimetablePage"),
@@ -332,8 +333,14 @@ const organizationRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/organization",
   validateSearch: (s: Record<string, unknown>): { new?: number } => ({ new: s.new ? Number(s.new) : undefined }),
+  // P133: companies, departments and people are kept in Prima; its org chart shows them.
+  beforeLoad: () => {
+    throw redirect({ to: "/prima", hash: "orgchart" } as never);
+  },
   component: page.organization,
 });
+// P133: what the office keeps of its own (who runs it, sign-in help, trying a role).
+const officeAccessRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/office-access", component: page.officeAccess });
 
 const settingsRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings", component: page.settings });
 
@@ -341,12 +348,18 @@ const membersRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings/members",
   validateSearch: (s: Record<string, unknown>): { add?: number } => ({ add: s.add ? Number(s.add) : undefined }),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/office-access" } as never); // P133: people are kept in Prima
+  },
   component: page.members,
 });
 // P120: one member on a page of their own (a row of Members opens it).
 const memberRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings/members/$userId",
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/office-access" } as never); // P133
+  },
   component: page.member,
 });
 
@@ -988,6 +1001,7 @@ const routeTree = rootRoute.addChildren([
     membersRoute,
     memberRoute,
     aiUseRoute,
+    officeAccessRoute,
     notificationsRoute,
     rolesAccessRoute,
     storageRoute,

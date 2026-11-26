@@ -22,6 +22,16 @@ tenant an admin consented in or that members already connected from.
 
 Two-step sign-in: someone who set it up here still enters their code, unless Microsoft says it
 did multi-factor itself (`amr` has "mfa").
+
+P133 (Fitri, 26 Nov 2026: "allow all kinds of domain to log in with Microsoft", e.g. staff on
+@outlook.com): when the owner allows personal Microsoft accounts (Channels > Microsoft 365, the P124
+switch) on a multi-tenant app, someone whose email is not on the company's own Microsoft
+organisation signs in through "common" (any organisation, and personal Microsoft accounts) asking
+only who they are (SIGN_IN_ONLY: no mailbox, so a personal account can consent). They are still
+only ever a member already here, matched only by the address Microsoft vouches for: the user
+principal name (a domain verified in one organisation only), and for a personal account its sign-in
+email. The `mail` attribute, which another organisation's admin may set to anything, is trusted
+only from the company's own organisations.
 """
 
 import base64
@@ -112,6 +122,11 @@ async def start(db: AsyncSession, base: str, email: str = "", next_path: str = "
         else None
     )
     scope = await auth.scopes_for(db, cfg, ws_id, known, False)
+    authority = cfg.tenant
+    domain = email.strip().lower().rsplit("@", 1)[-1] if "@" in email else ""
+    if open_to_all(cfg) and domain and domain not in await own_domains(db, ws_id, cfg):
+        # P133: outside the company's own organisation (another company, or @outlook.com).
+        scope, authority = SIGN_IN_ONLY, app.COMMON
     state, nonce = secrets.token_urlsafe(24), secrets.token_urlsafe(16)
     verifier, challenge = _pkce()
     redirect = app.redirect_uri(base)
@@ -125,6 +140,7 @@ async def start(db: AsyncSession, base: str, email: str = "", next_path: str = "
                 "redirect": redirect,
                 "next": next_path,
                 "scope": scope,
+                "authority": authority,
             }
         ),
         ex=STATE_TTL,
@@ -143,7 +159,32 @@ async def start(db: AsyncSession, base: str, email: str = "", next_path: str = "
     }
     if email.strip():
         q["login_hint"] = email.strip()
-    return f"{app.LOGIN}/{cfg.tenant}/oauth2/v2.0/authorize?{urllib.parse.urlencode(q)}"
+    return f"{app.LOGIN}/{authority}/oauth2/v2.0/authorize?{urllib.parse.urlencode(q)}"
+
+
+SIGN_IN_ONLY = "openid profile email offline_access User.Read"
+# Microsoft's tenant id for personal accounts (outlook.com, hotmail.com, live.com...).
+CONSUMERS_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad"
+
+
+def open_to_all(cfg: app.AppConfig) -> bool:
+    """Any Microsoft account (another organisation or a personal one) may sign in a member."""
+    return cfg.personal_accounts and cfg.multi_tenant
+
+
+async def own_domains(db: AsyncSession, ws_id: str, cfg: app.AppConfig) -> set[str]:
+    """Email domains of the company's own Microsoft organisations (people connected from them)."""
+    tenants = await allowed_tenants(db, ws_id, cfg)
+    if not tenants:
+        return set()
+    rows = (
+        await db.scalars(
+            select(MicrosoftAccount.email).where(
+                MicrosoftAccount.workspace_id == ws_id, MicrosoftAccount.tenant_id.in_(tenants)
+            )
+        )
+    ).all()
+    return {e.rsplit("@", 1)[-1].lower() for e in rows if e and "@" in e}
 
 
 async def is_sign_in(state: str) -> bool:
@@ -190,7 +231,7 @@ async def finish(db: AsyncSession, state: str, code: str) -> SignedIn:
     if not (cfg.configured and cfg.sign_in):
         raise SignInError(Msg("Sign in with Microsoft is not set up here yet."))
     status, tok = await auth._token_call(  # noqa: SLF001 - same module family
-        cfg.tenant,
+        str(st.get("authority") or cfg.tenant),
         {
             "client_id": cfg.client_id,
             "client_secret": cfg.client_secret,
@@ -209,7 +250,8 @@ async def finish(db: AsyncSession, state: str, code: str) -> SignedIn:
     if not claims or claims.get("nonce") != st["nonce"] or claims.get("aud") != cfg.client_id:
         raise SignInError(Msg("Microsoft's answer could not be checked. Try again."))
     tid, oid = str(claims.get("tid") or ""), str(claims.get("oid") or "")
-    if cfg.multi_tenant and tid not in await allowed_tenants(db, ws_id, cfg):
+    own = not cfg.multi_tenant or tid in await allowed_tenants(db, ws_id, cfg)
+    if not own and not open_to_all(cfg):
         raise SignInError(
             Msg(
                 "This Microsoft organisation is not linked to the office. An admin links it on "
@@ -225,8 +267,15 @@ async def finish(db: AsyncSession, state: str, code: str) -> SignedIn:
 
     user: User | None = None
     # Only the organisation-managed addresses (the first two); preferred_username is the UPN
-    # on work accounts, kept only for the message below.
-    for e in [x for x in emails[:2] if x]:
+    # on work accounts, kept only for the message below. P133: from any other organisation only
+    # the user principal name (a verified domain), and a personal account's own sign-in email.
+    if own:
+        trusted = [x for x in emails[:2] if x]
+    else:
+        trusted = [x for x in emails[1:2] if x]
+        if tid == CONSUMERS_TENANT and emails[2]:
+            trusted.append(emails[2])
+    for e in trusted:
         user = await db.scalar(
             select(User)
             .join(Membership, Membership.user_id == User.id)
@@ -283,7 +332,7 @@ async def finish(db: AsyncSession, state: str, code: str) -> SignedIn:
         oid
         and tid
         and (membership.ms_oid, membership.ms_tenant_id) != (oid, tid)
-        and await auth.own_microsoft(db, ws_id, user.id, oid, emails[:2])
+        and await auth.own_microsoft(db, ws_id, user.id, oid, trusted)
     ):
         membership.ms_oid, membership.ms_tenant_id = oid, tid
         await db.commit()
