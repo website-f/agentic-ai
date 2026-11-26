@@ -37,6 +37,14 @@ registerRoute(
   },
 );
 
+// P138d: a page opened in a frame (Prima's Members and organization shows the office's own screens)
+// always comes from the server: the cached shell keeps the headers it was saved with, and an old
+// copy said "never in a frame" (frame-ancestors 'none'), so the frame was refused.
+registerRoute(
+  ({ request }) => request.mode === "navigate" && request.destination === "iframe",
+  ({ request }) => fetch(request),
+);
+
 // Client-side routes load the cached shell; API calls always go to the network.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("/index.html"), {
