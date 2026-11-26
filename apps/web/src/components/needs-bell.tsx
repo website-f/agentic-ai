@@ -53,7 +53,7 @@ export interface NeedEntry {
 export const needsQuery = queryOptions({
   queryKey: ["me", "needs"],
   queryFn: () => api<{ total: number; unread?: number; items: NeedItem[]; entries?: NeedEntry[] }>("/api/me/needs"),
-  refetchInterval: 30_000,
+  refetchInterval: 60_000, // P136: was 30 s in every open tab
   staleTime: 10_000,
   retry: false,
 });

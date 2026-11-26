@@ -2,7 +2,7 @@ import { Select } from './SearchSelect';
 import { installScrollStrips } from './scroll-strip';
 import { CleanupReceiptRecovery } from './views/ItCleanup';
 import { Component, createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
-import { type Company, type User, RULES, archiveAllowed, assistantAllowed, dataCleanupAllowed, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch, staffPayStepper } from '@prima/core';
+import { type Company, type User, RULES, archiveAllowed, assistantAllowed, dataCleanupAllowed, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch, staffPayStepper, fromMs } from '@prima/core';
 import { DemoAdminBar, DemoAdminCard, demoAdminOn } from './DemoAdmin';
 import { ApiError, api, type Me } from './api';
 import { CaretRightIcon, ChatCircleDotsIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon, XIcon } from '@phosphor-icons/react';
@@ -1351,18 +1351,18 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
     window.scrollTo(0, 0);
   }, []);
 
+  // P136 (Fitri, 26 Nov 2026: "Prima is very slow"): the clock ticks here from the server's time taken at sign-in.
+  // It asked the server "who am I" every 30 seconds in every open tab (about one heavy call a second on live), only to
+  // move the clock on.
   useEffect(() => {
     if (menuProbe || !shown) return;
-    const t = setInterval(
-      () =>
-        api
-          .me()
-          .then((m) => setClock(m.now))
-          .catch(() => undefined),
-      30_000,
-    );
+    const offset = Date.parse(me.now) - Date.now();
+    if (Number.isNaN(offset)) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') setClock(fromMs(Date.now() + offset));
+    }, 30_000);
     return () => clearInterval(t);
-  }, [shown]);
+  }, [shown, me.now]);
 
   // P91: the app the open screen sits in (null = the home screen and the everyday screens).
   const spaceOfRoute = useCallback(

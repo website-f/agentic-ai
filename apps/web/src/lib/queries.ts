@@ -35,7 +35,9 @@ export const setupStatusQuery = queryOptions({
 export const systemStatusQuery = queryOptions({
   queryKey: keys.status,
   queryFn: () => api<SystemStatus>("/api/system/status"),
-  refetchInterval: 15_000,
+  // P136: every open tab asked every 15 s (Prima-first: most tabs sit behind Prima); a minute is
+  // enough for the approvals badge and the status card.
+  refetchInterval: 60_000,
 });
 
 export const branchesQuery = queryOptions({

@@ -118,19 +118,35 @@ def _cond(c) -> tuple:
     return () if c is None else (c,)
 
 
+# P136 (Fitri, 26 Nov 2026: "very slow"): Valkey, Temporal and the worker are the same for
+# everyone: asked at most every 30 s by this process and shared, not once per person and tab.
+_CHECKS: tuple[float, list[Any]] | None = None
+_CHECKS_TTL = 30.0
+
+
+async def _shared_checks() -> list[Any]:
+    global _CHECKS
+    now = asyncio.get_running_loop().time()
+    if _CHECKS is not None and now - _CHECKS[0] < _CHECKS_TTL:
+        return _CHECKS[1]
+    got = list(
+        await asyncio.gather(
+            _timed("Valkey", _valkey_check()),
+            _timed("Temporal", _temporal_check()),
+            _timed("Worker", _worker_check()),
+        )
+    )
+    _CHECKS = (now, got)
+    return got
+
+
 @router.get("/api/system/status")
 async def system_status(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> SystemStatusOut:
     # P123 (polled every 15 s by the home page): Valkey, Temporal and the worker are asked while
     # the database counts run (they never touch this session), and the counts are one query.
-    others = asyncio.ensure_future(
-        asyncio.gather(
-            _timed("Valkey", _valkey_check()),
-            _timed("Temporal", _temporal_check()),
-            _timed("Worker", _worker_check()),
-        )
-    )
+    others = asyncio.ensure_future(_shared_checks())
     try:
         database = await _timed("Database", _db_check(db))
         counts = await _counts(db, principal)
