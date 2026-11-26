@@ -673,7 +673,8 @@ export function MembersTable({ control, me, withAddImport }: { control: TableCon
   const qc = useQueryClient();
   // P132: once Prima keeps the people, they are added and removed in Prima (Accounts and access).
   const master = usePrimaMaster();
-  const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0 && !master;
+  void master; // P135: managed here again, shown inside Prima
+  const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0;
   const { data: branches = [] } = useQuery(branchesQuery);
   const { filters, data, isLoading, error, isFetching, refetch } = useMembersPage(control);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -849,7 +850,8 @@ export function MembersPage() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const master = usePrimaMaster(); // P132: people are added in Prima once it keeps them
-  const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0 && !master;
+  void master; // P135
+  const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0;
   // P98: the owner changes what each role may do (Settings > Roles and access).
   const editsRoles = me.permissions.includes("roles.manage");
   // P107: the shared data table; the server searches, filters, sorts and pages, and the address

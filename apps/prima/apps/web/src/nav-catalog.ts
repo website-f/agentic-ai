@@ -77,7 +77,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'HR',
     blurb: 'Staff, attendance, leave and claims.',
     groups: [
-      { title: 'Staff', views: ['hr', 'staff-directory', 'orgchart', 'work-kpi', 'handovers'] },
+      { title: 'Staff', views: ['members', 'hr', 'staff-directory', 'orgchart', 'work-kpi', 'handovers'] },
       // P111 (Fitri, 17 Nov 2026: "the attendance should be in HR not operation"): the attendance screens sit under HR.
       // Only their place in the menu moved: the screen names (#attendance, #staffclock), who may open them and the data
       // are as before, so old links and bookmarks still open them.
@@ -195,6 +195,7 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   sitestock: { blurb: 'Stock and fittings kept at each site.', words: 'site stock stok fittings kelengkapan inventory inventori' },
   fleet: { blurb: 'Company vehicles, bookings and drivers.', words: 'vehicle kenderaan car kereta van motorcycle motosikal transport pengangkutan driver pemandu' },
   hr: { blurb: 'HR across the group: staff, leave and cases.', words: 'hr human resources sumber manusia staff kakitangan leave cuti hiring pengambilan' },
+  members: { blurb: 'Everyone who signs in, their role and company, companies and departments, and what each role may do.', words: 'members ahli kakitangan staff roles peranan organization organisasi syarikat company jabatan department add tambah access akses' },
   orgchart: { blurb: 'Who reports to whom; heads put their staff under them.', words: 'org chart carta organisasi hierarchy hierarki line manager pengurus ketua head' },
   marketing: { blurb: 'The central Marketing desk: tenders, papers and bids.', words: 'marketing pemasaran tender bid bida company papers kertas syarikat' },
   'shared-logins': { blurb: 'Which shared logins exist and who keeps them (no passwords).', words: 'shared login log masuk kongsi account akaun system sistem vault' },
@@ -447,7 +448,7 @@ export const PRIMA_SIDEBAR: { id: string; title: string; views: ViewName[] }[] =
   {
     id: 'people',
     title: 'People and HR',
-    views: ['hr', 'staffclock', 'socso', 'fwm', 'fwcost', 'fwstat', 'hostels', 'staff-directory', 'orgchart', 'hr-it-intake', 'staffpay', 'contribfiles', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'payformulas'],
+    views: ['members', 'hr', 'staffclock', 'socso', 'fwm', 'fwcost', 'fwstat', 'hostels', 'staff-directory', 'orgchart', 'hr-it-intake', 'staffpay', 'contribfiles', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'payformulas'],
   },
   { id: 'money', title: 'Money and buying', views: ['finance', 'payreq', 'credit', 'purchasing', 'items', 'assets', 'equiprequests'] },
   {

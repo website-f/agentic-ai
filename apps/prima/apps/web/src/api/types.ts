@@ -513,6 +513,8 @@ export interface Me {
     always: string[];
     /** P101: the person signed in to the office (an older office sends none). */
     name?: string;
+    /** P135: may run the office's Members & organization screens (shown in Prima). */
+    people?: boolean;
     /** P101: they open Prima as its shared top record (owners and the developer), so `user` is not them. */
     asTop?: boolean;
   };

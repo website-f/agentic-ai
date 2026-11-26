@@ -320,6 +320,11 @@ async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool
                     }
                 )
             continue
+        # P135: people the office manages (its own Members screens, shown inside Prima) keep the
+        # role and place set there; only people who came from Prima (linked by this mirror) follow
+        # Prima's role, company and department.
+        if lk is None or lk.linked_by != ACTOR:
+            continue
         # Place: Prima's company and central department. The owner, global admins and IT support
         # keep theirs (their place scopes nothing). Someone in several companies keeps them all:
         # only when none of their office companies is one of their Prima companies does their home
@@ -482,9 +487,8 @@ async def guard(db: AsyncSession, ws_id: str, *, allow: bool = False) -> None:
     """Refuse an office change to the organization or its people once the mirror is on (the
     office keeps only its own settings: access levels of owners, global admins and IT support,
     sign-in, Library, AI). `allow` lets a caller pass what stays the office's own."""
-    from fastapi import status
 
-    from ..api.deps import api_error  # late: deps imports the models this module needs
-
-    if not allow and is_on(await db.get(Workspace, ws_id)):
-        raise api_error(status.HTTP_409_CONFLICT, "managed_in_prima", CLOSED)
+    # P135 (Fitri, 26 Nov 2026: "all functions ... must be the same, just managed on Prima"): the
+    # office's own Organization and Members screens run again, shown inside Prima; nothing is
+    # refused here any more. Kept as a hook (callers unchanged) should a lock come back.
+    return

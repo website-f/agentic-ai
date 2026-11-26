@@ -38,7 +38,7 @@ import { PrimaNav } from "@/components/prima-nav";
 import { usePrima } from "@/lib/prima-embed";
 import { setInOffice, startsInPrima } from "@/lib/start-in-prima";
 import { useBackClose } from "@/lib/back-close";
-import { useLiveEvents } from "@/lib/live";
+import { inPrimaEmbed, useLiveEvents } from "@/lib/live";
 import { meQuery, systemStatusQuery } from "@/lib/queries";
 import { useBranch, usePalette, useTheme, type ThemePref } from "@/lib/stores";
 import { LanguageSwitch, useProfileLanguage } from "@/components/language-switch";
@@ -951,6 +951,14 @@ export function AppShell() {
   // P123: Prima shows full screen with its own menu (the office's sidebar, header and tabs wait
   // behind it, loaded, and cannot be reached); its "Agentic Office" entry brings them back.
   const primaFull = usePrimaFull();
+  // P135: inside Prima's Members & organization the office screen is shown alone (Prima has the menu).
+  if (inPrimaEmbed()) {
+    return (
+      <main className="min-h-dvh bg-bg">
+        <Outlet />
+      </main>
+    );
+  }
   return (
     <>
       {/* P119: Prima, kept loaded once opened. P123: first, so it never reloads. */}

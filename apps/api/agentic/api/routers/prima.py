@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from ...core.db import get_db
+from ...core.security import can
 from ...i18n import Msg, render, tr
 from ...models import Branch, Membership, PrimaLink, Workspace
 from ...prima import client, modules, org_link, people
@@ -510,6 +511,11 @@ def _with_office(ans: client.Answer, principal: Principal, own: bool = False) ->
         # P106: the developer who chose their own Prima account (client.opens_own) is not on
         # the shared record: Prima's web then shows them as themselves.
         "asTop": principal.role in client.TOP_ROLES and not own,
+        # P135 (Fitri, 26 Nov 2026: members and roles "fully managed on Prima"): Prima shows the
+        # office's Members & organization screens to whoever may run them here.
+        "people": any(
+            can(principal.role, p) for p in ("members.manage", "team.manage", "org.manage")
+        ),
     }
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode()
 

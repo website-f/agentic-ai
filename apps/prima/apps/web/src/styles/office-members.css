@@ -1,0 +1,20 @@
+/* P135: the office's Members and organization screens inside Prima: the frame fills the rest of the page. */
+.om-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.om-frame {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: calc(100dvh - 220px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+@media (max-width: 860px) {
+  .om-frame {
+    min-height: calc(100dvh - 260px);
+    border-radius: 10px;
+  }
+}

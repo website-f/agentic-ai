@@ -151,6 +151,9 @@ export function useLiveEvents() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // P135: an office screen shown inside Prima has no live stream of its own (the office
+    // around Prima already has one; a second would hold another server connection).
+    if (inPrimaEmbed()) return;
     let es: EventSource | null = null;
     let lastSeq = 0;
     /** lastSeq when the current stream opened: its URL resumes from there. */
@@ -245,4 +248,14 @@ export function useLiveEvents() {
       if (stopStream === stop) stopStream = null;
     };
   }, [qc, navigate]);
+}
+
+/** P135: this page is an office screen shown inside Prima (Members & organization): Prima names
+ * the frame "office-embed", which stays for every page opened in it. */
+export function inPrimaEmbed(): boolean {
+  try {
+    return typeof window !== "undefined" && window.self !== window.top && window.name === "office-embed";
+  } catch {
+    return false;
+  }
 }

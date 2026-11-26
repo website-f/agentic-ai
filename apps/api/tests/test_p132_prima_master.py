@@ -202,8 +202,10 @@ async def test_mirror_follows_prima_and_holds_what_takes_access_away(client, fak
         rep = await mirror.run(db, ws)
     assert rep.companies_made == ["Brand New Guards Sdn Bhd"]
     assert rep.added == ["Nadia (branch_manager)"] and rep.no_email == ["No Mail"]
-    assert "Hana: staff -> hod" in rep.raised
-    assert {(h["name"], h["kind"]) for h in rep.held} == {("Hadi", "down"), ("Pia", "close")}
+    # P135: Hana's account was made by the office: the office's Members screens keep her role.
+    assert rep.raised == []
+    # Hadi's Prima account is linked by this run; from the next run Prima's level is compared.
+    assert {(h["name"], h["kind"]) for h in rep.held} == {("Pia", "close")}
     async with SessionLocal() as db:
         nadia = await db.scalar(select(User).where(User.email == "nadia@example.com"))
         m = await db.get(Membership, (ws, nadia.id))
@@ -220,6 +222,7 @@ async def test_mirror_follows_prima_and_holds_what_takes_access_away(client, fak
     async with SessionLocal() as db:
         again = await mirror.run(db, ws)
     assert not again.added and not again.raised and not again.companies_made
+    assert {(h["name"], h["kind"]) for h in again.held} == {("Hadi", "down"), ("Pia", "close")}
     async with SessionLocal() as db:
         await mirror.run(db, ws, held_too=True)
     async with SessionLocal() as db:
@@ -227,40 +230,17 @@ async def test_mirror_follows_prima_and_holds_what_takes_access_away(client, fak
         assert not (await db.get(User, u["pia"])).is_active
 
 
-async def test_office_edits_close_once_prima_keeps_the_people(client, fake_prima):
+async def test_office_edits_stay_open_with_the_mirror_on(client, fake_prima):
+    """P135: the office's own Organization and Members screens run again (shown inside Prima),
+    with the mirror on."""
     ws, b, u = await _office(client)
-    # Before the mirror is on, the office edits as before.
-    r = await client.post("/api/branches", json={"name": "Before"}, headers=csrf(client))
-    assert r.status_code in (200, 201)
     async with SessionLocal() as db:
         await mirror.run(db, ws)  # the first real run switches it on
     r = await client.post("/api/branches", json={"name": "After"}, headers=csrf(client))
-    assert r.status_code == 409 and r.json()["code"] == "managed_in_prima"
-    r = await client.patch(
-        f"/api/branches/{b['pw']}", json={"name": "Renamed"}, headers=csrf(client)
-    )
-    assert r.status_code == 409
-    r = await client.patch(
-        f"/api/branches/{b['pw']}", json={"color": "#336699"}, headers=csrf(client)
-    )
-    assert r.status_code == 200  # the office's own setting
-    r = await client.post(
-        "/api/members", json={"email": "x@example.com", "name": "X", "role": "staff",
-                              "branch_id": b["pw"]}, headers=csrf(client),
-    )  # fmt: skip
-    assert r.status_code == 409
-    hana = u["hana"]
-    r = await client.patch(f"/api/members/{hana}", json={"role": "hod", "branch_id": b["hr"]},
-                           headers=csrf(client))  # fmt: skip
-    assert r.status_code == 409
-    r = await client.patch(f"/api/members/{hana}", json={"role": "admin"}, headers=csrf(client))
-    assert r.status_code == 200, r.text  # global admin: the office's own list
-    r = await client.request("DELETE", f"/api/members/{u['pia']}", json={}, headers=csrf(client))
-    assert r.status_code == 409
-    r = await client.post(
-        "/api/members/bulk", json={"user_ids": [u["pia"]], "action": "remove"}, headers=csrf(client)
-    )
-    assert r.status_code == 409
+    assert r.status_code in (200, 201), r.text
+    r = await client.patch(f"/api/members/{u['hana']}", json={"role": "hod", "branch_id": b["hr"],
+                           "department_id": None}, headers=csrf(client))  # fmt: skip
+    assert r.status_code != 409
 
 
 async def test_mirror_keeps_several_companies_and_the_owners_place(client, fake_prima):

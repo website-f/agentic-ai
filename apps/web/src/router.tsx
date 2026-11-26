@@ -13,6 +13,7 @@ import {
 } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 import { safeFrom } from "@/components/chat/links";
+import { inPrimaEmbed } from "@/lib/live";
 import { STORE_VIEWS, type StoreView } from "@/lib/file-store";
 
 import { Button } from "@/components/ui/button";
@@ -333,9 +334,9 @@ const organizationRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/organization",
   validateSearch: (s: Record<string, unknown>): { new?: number } => ({ new: s.new ? Number(s.new) : undefined }),
-  // P133: companies, departments and people are kept in Prima; its org chart shows them.
+  // P135: shown inside Prima's Members & organization; opened in the office, it goes there.
   beforeLoad: () => {
-    throw redirect({ to: "/prima", hash: "orgchart" } as never);
+    if (!inPrimaEmbed()) throw redirect({ to: "/prima", hash: "members" } as never);
   },
   component: page.organization,
 });
@@ -349,7 +350,7 @@ const membersRoute = createRoute({
   path: "/settings/members",
   validateSearch: (s: Record<string, unknown>): { add?: number } => ({ add: s.add ? Number(s.add) : undefined }),
   beforeLoad: () => {
-    throw redirect({ to: "/settings/office-access" } as never); // P133: people are kept in Prima
+    if (!inPrimaEmbed()) throw redirect({ to: "/prima", hash: "members" } as never); // P135
   },
   component: page.members,
 });
@@ -358,7 +359,7 @@ const memberRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings/members/$userId",
   beforeLoad: () => {
-    throw redirect({ to: "/settings/office-access" } as never); // P133
+    if (!inPrimaEmbed()) throw redirect({ to: "/prima", hash: "members" } as never); // P135
   },
   component: page.member,
 });

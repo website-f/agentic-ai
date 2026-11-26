@@ -61,6 +61,7 @@ const ArrivalCashView = lazyView(() => import('./views/ArrivalCash'), 'ArrivalCa
 const ItMetrics = lazyView(() => import('./views/ItMetrics'), 'ItMetrics');
 const WorkKpiView = lazyView(() => import('./views/WorkKpi'), 'WorkKpiView');
 const ItProcurement = lazyView(() => import('./views/ItProcurement'), 'ItProcurement');
+const OfficeMembersView = lazyView(() => import('./views/OfficeMembers'), 'OfficeMembersView');
 const HrItIntake = lazyView(() => import('./views/HrItIntake'), 'HrItIntake');
 const StaffDirectory = lazyView(() => import('./views/StaffDirectory'), 'StaffDirectory');
 const AccountsAccess = lazyView(() => import('./views/AccountsAccess'), 'AccountsAccess');
@@ -296,7 +297,7 @@ function prefetchMenuScreens(views: ViewName[]): () => void {
 
 
 
-export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'guardroster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'contribfiles' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'accounts' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'marketing' | 'orgchart' | 'shared-logins' | 'assistant' | 'archive' | 'data-cleanup' | 'sop' | 'equiprequests';
+export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'guardroster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'contribfiles' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'accounts' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'marketing' | 'orgchart' | 'shared-logins' | 'assistant' | 'archive' | 'data-cleanup' | 'sop' | 'equiprequests' | 'members';
 
 export interface Route {
   view: ViewName;
@@ -646,6 +647,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'orgchart', label: 'Org chart', icon: 'people', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Accounts and Access (Fauzan, 15 Nov 2026): IT or HR prepares sign-ins and company access; the HR Director or the CEO approves.
   { view: 'accounts', label: 'Accounts and access', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
+  // P135: the office's Members and organization screens; shown to whoever the office lets run them (me.office.people).
+  { view: 'members', label: 'Members and organization', icon: 'people', roles: [] },
   // Data and file manager for old records (Fauzan, 23 Nov 2026): every office staff member, for their own unit.
   { view: 'archive', label: 'Old files and data', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
   { view: 'data-cleanup', label: 'Data clean-up', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
@@ -775,6 +778,7 @@ const VIEW_TOKENS: ViewName[] = [
   'assistant',
   'staff-directory',
   'orgchart',
+  'members',
   'accounts',
   'shared-logins',
   'websites',
@@ -1285,7 +1289,10 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
     .map((n) => (n.view === 'people' && (dept === 'hr' || leader) ? { ...n, label: 'People' } : n))
     .sort((a, b) => rank(a.view) - rank(b.view));
   // P99: the office narrows Prima to the screens it gives this person (office-access.ts); Home if nothing is left.
-  const narrowed = officeNarrowed(roleNav, me.office);
+  const narrowedRole = officeNarrowed(roleNav, me.office);
+  // P135: the office's Members and organization screens for whoever may run them there, whatever their Prima role.
+  const membersItem = NAV.find((n) => n.view === 'members');
+  const narrowed = me.office?.people && membersItem && !narrowedRole.some((n) => n.view === 'members') ? [...narrowedRole, membersItem] : narrowedRole;
   const nav = narrowed.length ? narrowed : [{ view: 'home' as ViewName, label: 'Home', icon: 'company', roles: [] as User['role'][] }];
   const initialView = (): ViewName => {
     const h = splitHash(location.hash).view as ViewName;
@@ -1614,6 +1621,8 @@ function Shell({ me, onSignOut, onReset, onSwitch }: { me: Me; onSignOut: () => 
         return <StaffDirectory />;
       case 'orgchart':
         return <OrgChart />;
+      case 'members':
+        return <OfficeMembersView />;
       case 'accounts':
         return <AccountsAccess />;
       case 'archive':
