@@ -61,7 +61,7 @@ export function EmailSignInForm({ initialEmail = "", onBack }: { initialEmail?: 
             {t("If {email} belongs to someone in the office, a temporary password is on its way. Check your inbox (and Junk). It works once, for 24 hours.", { email: sentTo })}
           </p>
         </div>
-        <p className="text-[12.5px] text-muted">{t("Nothing after 10 minutes? Check the address, or ask your manager or an admin.")}</p>
+        <p className="text-[12.5px] text-muted">{t("Nothing after 10 minutes? Your email may not be registered yet: ask HR to add you in Prima (People) with this exact email, then try again. Check the spelling too.")}</p>
         <Button type="button" size="lg" onClick={onBack}>{t("Back to sign in")}</Button>
       </div>
     );

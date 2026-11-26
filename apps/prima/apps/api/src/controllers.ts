@@ -515,6 +515,51 @@ export class OfficeController {
    * read runs as prima_app with the wall opened for the companies the group knows: every company a grant or a staff
    * record names (each company has its grants from the first setup on).
    */
+  /**
+   * P134 (office, Fitri 26 Nov 2026: "most people do not receive the sign-in email": they were never added): HR's office
+   * staff records with an email, so a person HR adds in People can sign in to the office without a second step. Read as
+   * prima_app through the company wall (as companies() below); only what the office needs to make the member.
+   */
+  @Get('people')
+  async people() {
+    const client = await this.db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const named = await client.query(
+        `SELECT company_id AS id FROM prima.grants
+         UNION SELECT jsonb_array_elements_text(data->'companyIds') FROM prima.users WHERE jsonb_typeof(data->'companyIds') = 'array'
+         UNION SELECT id FROM prima.companies`,
+      );
+      await client.query('SET LOCAL ROLE prima_app');
+      await client.query(`SELECT set_config('app.company_ids', $1, true)`, [named.rows.map((r) => String(r.id)).join(',')]);
+      await client.query(`SELECT set_config('app.user_id', '', true)`);
+      await client.query(`SELECT set_config('app.group_user', 'off', true)`);
+      await client.query(`SELECT set_config('app.walls', '', true)`);
+      const res = await client.query(
+        `SELECT id, company_id, data->>'name' AS name, data->>'email' AS email, data->>'jobTitle' AS title, data->>'department' AS department
+           FROM prima.people
+          WHERE data->>'role' = 'office' AND coalesce(data->>'status', 'active') = 'active' AND coalesce(data->>'email', '') <> ''`,
+      );
+      await client.query('COMMIT');
+      const ok = (e: unknown) => typeof e === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e.trim());
+      return res.rows
+        .filter((r) => ok(r.email))
+        .map((r) => ({
+          id: String(r.id),
+          companyId: String(r.company_id),
+          name: String(r.name ?? ''),
+          email: String(r.email).trim().toLowerCase(),
+          title: typeof r.title === 'string' ? r.title : null,
+          department: typeof r.department === 'string' ? r.department : null,
+        }));
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
   @Get('companies')
   async companies() {
     const client = await this.db.pool.connect();

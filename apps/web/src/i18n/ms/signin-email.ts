@@ -10,8 +10,8 @@ export const SIGNIN_EMAIL: Record<string, string> = {
   "Type your full work email address.": "Taip alamat e-mel kerja anda yang penuh.",
   "If {email} belongs to someone in the office, a temporary password is on its way. Check your inbox (and Junk). It works once, for 24 hours.":
     "Jika {email} milik seseorang dalam pejabat, kata laluan sementara sedang dihantar. Semak peti masuk anda (dan Junk). Ia boleh digunakan sekali, dalam masa 24 jam.",
-  "Nothing after 10 minutes? Check the address, or ask your manager or an admin.":
-    "Tiada apa-apa selepas 10 minit? Semak alamat itu, atau minta bantuan pengurus atau pentadbir anda.",
+  "Nothing after 10 minutes? Your email may not be registered yet: ask HR to add you in Prima (People) with this exact email, then try again. Check the spelling too.":
+    "Tiada apa-apa selepas 10 minit? E-mel anda mungkin belum didaftarkan: minta HR menambah anda dalam Prima (Kakitangan) dengan e-mel yang sama ini, kemudian cuba lagi. Semak ejaan juga.",
   "Back to sign in": "Kembali ke log masuk",
 
   // Settings > Sign-in emails

@@ -298,6 +298,13 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+# P134: the sign-in email routes (/api/members/signin-emails...) come before members'
+# /api/members/{user_id}, which since P120 answered them as a member named "signin-emails"
+# (the bulk send and the sender check were unreachable).
+from .routers import signin_mail as signin_mail_router  # noqa: E402
+
+app.include_router(signin_mail_router.router)
+
 for r in (
     system.router,
     auth.router,
@@ -552,10 +559,8 @@ from .routers import bulk_delete as bulk_delete_router  # noqa: E402
 
 app.include_router(bulk_delete_router.router)
 
-# P92: emailed sign-in passwords (first sign-in, forgotten password) and the system sender.
-from .routers import signin_mail as signin_mail_router  # noqa: E402
-
-app.include_router(signin_mail_router.router)
+# P92: emailed sign-in passwords (first sign-in, forgotten password) and the system sender: included
+# above, before the members routes (P134).
 # P92: Settings > Roles and access (owner only), and the owner's own sign-in email.
 from .routers import account as account_router  # noqa: E402
 from .routers import role_access as role_access_router  # noqa: E402

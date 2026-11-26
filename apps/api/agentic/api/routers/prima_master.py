@@ -95,3 +95,38 @@ async def master_apply_held(
     if principal.role != "owner":
         raise api_error(status.HTTP_403_FORBIDDEN, "forbidden", "Only an owner can do this.")
     return await _run(db, principal, held_too=True)
+
+
+class UnknownOut(BaseModel):
+    email: str
+    at: str
+
+
+@router.get("/unknown-signins")
+async def unknown_signins(
+    principal: Principal = Depends(current_principal), db: AsyncSession = Depends(get_db)
+) -> list[UnknownOut]:
+    """P134: emails that asked for a sign-in password in the last 7 days but nobody signs in with
+    (the person HR still has to add in Prima). Those added since are left out."""
+    from sqlalchemy import func, select
+
+    from ...models import User
+    from ...services import signin_mail
+
+    if principal.role not in ("owner", "admin", "it_support"):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN, "forbidden", "Only the office's admins see this."
+        )
+    rows = await signin_mail.unknown_recent()
+    if not rows:
+        return []
+    known = set(
+        (
+            await db.scalars(
+                select(func.lower(User.email)).where(
+                    func.lower(User.email).in_([e for e, _ in rows])
+                )
+            )
+        ).all()
+    )
+    return [UnknownOut(email=e, at=at.isoformat()) for e, at in rows if e not in known]

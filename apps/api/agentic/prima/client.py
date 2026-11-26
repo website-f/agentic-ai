@@ -267,6 +267,39 @@ async def staff() -> list[StaffRecord]:
     ]
 
 
+@dataclass(frozen=True)
+class StaffPerson:
+    """P134: an office staff record HR keeps in Prima (People), with the email they sign in with."""
+
+    id: str
+    company_id: str
+    name: str
+    email: str
+    title: str | None = None
+
+
+async def people() -> list[StaffPerson]:
+    """HR's office staff records with an email (the office's own signed call). An older Prima
+    without the feed gives none."""
+    ans = await _send("GET", "/api/office/people", "", "system", b"", "")
+    if ans.status == 404:
+        return []
+    if ans.status != 200:
+        raise PrimaError(503, Msg("Prima is not answering right now. Try again in a minute."))
+    rows = ans.json()
+    return [
+        StaffPerson(
+            id=str(r["id"])[:120],
+            company_id=str(r.get("companyId") or "")[:80],
+            name=" ".join(str(r.get("name") or "").split())[:120],
+            email=str(r["email"]).strip().lower()[:254],
+            title=(str(r["title"])[:120] if r.get("title") else None),
+        )
+        for r in (rows if isinstance(rows, list) else [])
+        if isinstance(r, dict) and r.get("id") and r.get("email")
+    ]
+
+
 async def companies() -> list[Company]:
     """Prima's companies, id and name only (the office's own signed call), for the owner to say
     which Prima company each office branch is."""

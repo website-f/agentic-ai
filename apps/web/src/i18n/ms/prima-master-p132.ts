@@ -45,7 +45,11 @@ export const PRIMA_MASTER_P132: Record<string, string> = {
     "Cari mengikut nama atau e-mel. Kata laluan log masuk hanya dihantar ke e-mel yang ditunjukkan di sini, jadi kesilapan ejaan (outlookk.com) bermakna tiada apa yang sampai: betulkan dahulu. Minta mereka semak folder Junk juga.",
   "Name or email": "Nama atau e-mel",
   "Looking…": "Sedang mencari…",
-  "No one found. People are added in Prima (Accounts and access).": "Tiada sesiapa dijumpai. Kakitangan ditambah dalam Prima (Akaun dan akses).",
+  "No one found. People are added in Prima (People, then Accounts and access).": "Tiada sesiapa dijumpai. Kakitangan ditambah dalam Prima (Kakitangan, kemudian Akaun dan akses).",
+  "Asked for a sign-in password but not added yet ({n})": "Meminta kata laluan log masuk tetapi belum ditambah ({n})",
+  "No email is sent to these addresses: nobody here has them. Add each person in Prima (People, Add office staff) with this exact email; they can sign in within 30 minutes. A misspelt address is just a typo: ignore it.":
+    "Tiada e-mel dihantar ke alamat ini: tiada sesiapa di sini memilikinya. Tambah setiap orang dalam Prima (Kakitangan, Tambah kakitangan pejabat) dengan e-mel yang sama ini; mereka boleh log masuk dalam masa 30 minit. Alamat yang salah eja hanyalah kesilapan: abaikan.",
+  "Open People in Prima": "Buka Kakitangan dalam Prima",
   "Companies, departments and people are kept in Prima. Here: who runs the office, helping someone sign in, and trying another role.":
     "Syarikat, jabatan dan kakitangan disimpan dalam Prima. Di sini: siapa yang mengurus pejabat, membantu seseorang log masuk, dan mencuba peranan lain.",
 };

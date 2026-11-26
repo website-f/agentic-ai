@@ -10,6 +10,7 @@
  */
 import { ArrowsCounterClockwiseIcon, EnvelopeSimpleIcon, MagnifyingGlassIcon, PencilSimpleIcon, ShieldStarIcon, UserMinusIcon, UserPlusIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -166,9 +167,10 @@ function SignInHelp() {
               {items.map((m) => <SignInHelpRow key={m.user_id} m={m} />)}
             </ul>
           ) : (
-            <p className="text-[13px] text-muted">{found.isFetching ? t("Looking…") : t("No one found. People are added in Prima (Accounts and access).")}</p>
+            <p className="text-[13px] text-muted">{found.isFetching ? t("Looking…") : t("No one found. People are added in Prima (People, then Accounts and access).")}</p>
           )
         ) : null}
+        <NotRegistered />
       </CardBody>
     </Card>
   );
@@ -191,5 +193,37 @@ export function OfficeAccessPage() {
         <RolePreviewCard />
       </div>
     </Page>
+  );
+}
+
+/** P134: who asked for a sign-in password in the last 7 days with an email nobody here has:
+ * the people HR still has to add in Prima (they can then sign in within 30 minutes). */
+function NotRegistered() {
+  const t = useT();
+  const { data } = useQuery({
+    queryKey: ["unknown-signins"],
+    queryFn: () => api<{ email: string; at: string }[]>("/api/prima-master/unknown-signins"),
+    staleTime: 60_000,
+  });
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) return null;
+  return (
+    <div className="mt-2 grid gap-2 rounded-[var(--radius-sm)] bg-warn/5 p-3">
+      <p className="text-[13px] font-semibold">{t("Asked for a sign-in password but not added yet ({n})", { n: rows.length })}</p>
+      <p className="text-[12.5px] text-muted">
+        {t("No email is sent to these addresses: nobody here has them. Add each person in Prima (People, Add office staff) with this exact email; they can sign in within 30 minutes. A misspelt address is just a typo: ignore it.")}
+      </p>
+      <ul className="grid gap-1 text-[13px]">
+        {rows.slice(0, 50).map((r) => (
+          <li key={r.email} className="flex flex-wrap justify-between gap-x-3">
+            <span className="font-medium break-all">{r.email}</span>
+            <span className="text-muted">{new Date(r.at).toLocaleString()}</span>
+          </li>
+        ))}
+      </ul>
+      <Link to="/prima" hash="people" className="text-[13px] font-semibold text-accent hover:underline">
+        {t("Open People in Prima")}
+      </Link>
+    </div>
   );
 }

@@ -110,6 +110,8 @@ class Report:
     held: list[dict] = field(default_factory=list)  # {user_id, name, kind: down|close, from, to}
     no_email: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # P134: office staff records HR added in Prima (People) without a sign-in account yet.
+    added_from_records: list[str] = field(default_factory=list)
 
     def summary(self) -> dict:
         return {
@@ -357,6 +359,51 @@ async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool
             held.append(
                 {"user_id": m.user_id, "name": r.name, "kind": "down", "from": m.role, "to": want}
             )
+
+    # P134 (Fitri, 26 Nov 2026: "most do not receive the sign-in email": they were never added):
+    # an office staff record HR keeps in Prima, with an email nobody here signs in with, becomes a
+    # staff member of its company. They sign in with a code sent to that email; their own Prima
+    # account is made the first time they open Prima (client.ensure links it to this record).
+    # A record already behind an office member's Prima account is theirs, whatever email it shows
+    # (a typo fixed in the office only, for example).
+    taken = {
+        r.person_id
+        for r in staff
+        if r.person_id and (r.id in links or r.id.startswith(OFFICE_ACCOUNT_PREFIX))
+    }
+    for rec in await client.people():
+        if rec.id in taken or rec.email in by_email or rec.email.endswith(PREVIEW_DOMAIN):
+            continue
+        home = (office_of.get(rec.company_id) or [None])[0]
+        if home is None:
+            report.errors.append(f"{rec.name}: no office company for {rec.company_id}")
+            continue
+        user = await db.scalar(select(User).where(User.email == rec.email))
+        if user is None:
+            user = User(
+                email=rec.email,
+                name=rec.name or rec.email,
+                password_hash=hash_password(new_token()),
+            )
+            db.add(user)
+            await db.flush()
+        elif await db.get(Membership, (ws_id, user.id)) is not None:
+            continue
+        m = Membership(
+            workspace_id=ws_id,
+            user_id=user.id,
+            role="staff",
+            branch_id=home,
+            job_title=(rec.title or None) and rec.title[:120],
+        )
+        db.add(m)
+        await db.flush()
+        db.add(MembershipBranch(workspace_id=ws_id, user_id=user.id, branch_id=home))
+        by_email[rec.email] = m
+        report.added_from_records.append(rec.name or rec.email)
+        await audit.record(
+            db, ws_id, ACTOR, "member.added_from_prima_record", target=user.id, note=rec.id
+        )
 
     if held_too:
         for h in held:

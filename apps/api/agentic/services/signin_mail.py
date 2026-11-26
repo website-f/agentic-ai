@@ -314,6 +314,41 @@ async def issue(
 # ---------------------------------------------------------------- the public sources
 
 
+UNKNOWN_KEY = "signin_unknown"  # P134: emails asked for that no one signs in with (7 days)
+UNKNOWN_KEEP = 300
+
+
+async def note_unknown(email: str) -> None:
+    """P134: someone asked for a sign-in password (or failed a sign-in) with an email nobody has
+    here. Kept 7 days for the office's admins (Office access): the person HR still has to add.
+    The public answer stays the same, so this tells no outsider anything."""
+    if not valid_address(email):
+        return
+    try:
+        r = valkey()
+        now_ts = now().timestamp()
+        await r.zadd(UNKNOWN_KEY, {email: now_ts})
+        await r.zremrangebyscore(UNKNOWN_KEY, 0, now_ts - 7 * 86400)
+        await r.zremrangebyrank(UNKNOWN_KEY, 0, -UNKNOWN_KEEP - 1)
+        await r.expire(UNKNOWN_KEY, 8 * 86400)
+    except Exception:  # noqa: BLE001 - a note only
+        log.warning("could not note an unknown sign-in email")
+
+
+async def unknown_recent() -> list[tuple[str, datetime]]:
+    """The noted emails, newest first."""
+    rows = await valkey().zrevrange(UNKNOWN_KEY, 0, UNKNOWN_KEEP - 1, withscores=True)
+    out = []
+    for email, ts in rows:
+        e = email.decode() if isinstance(email, bytes) else str(email)
+        out.append((e, datetime.fromtimestamp(float(ts), UTC)))
+    return out
+
+
+async def forget_unknown(email: str) -> None:
+    await valkey().zrem(UNKNOWN_KEY, email)
+
+
 async def after_failed_login(email: str, ip: str) -> None:
     """A sign-in failed for `email`: a member who never signed in gets a temporary password
     (once per 10 minutes). Runs in the background for every failure, so nothing about it shows
@@ -321,7 +356,10 @@ async def after_failed_login(email: str, ip: str) -> None:
     try:
         async with SessionLocal() as db:
             user = await db.scalar(select(User).where(User.email == email))
-            if user is None or not user.is_active or user.last_login_at is not None:
+            if user is None:
+                await note_unknown(email)
+                return
+            if not user.is_active or user.last_login_at is not None:
                 return
             if user.signin_code_sent_at and now() - user.signin_code_sent_at < AUTO_WINDOW:
                 return
@@ -345,7 +383,10 @@ async def requested(email: str, ip: str) -> None:
             return
         async with SessionLocal() as db:
             user = await db.scalar(select(User).where(User.email == email))
-            if user is None or not user.is_active:
+            if user is None:
+                await note_unknown(email)
+                return
+            if not user.is_active:
                 return
             found = await sender_for(db, user)
             if found is None:

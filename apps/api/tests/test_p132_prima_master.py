@@ -54,6 +54,7 @@ def fake_prima(monkeypatch):
             }
         ],  # fmt: skip
         "heads": {},
+        "records": [],
     }
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -71,6 +72,8 @@ def fake_prima(monkeypatch):
             return httpx.Response(200, json=state["companies"])
         if url == "/api/office/staff":
             return httpx.Response(200, json=state["staff"])
+        if url == "/api/office/people":
+            return httpx.Response(200, json=state["records"])
         if url == "/api/org/chart" and h["x-office-user"] == "u-ceo":
             people = [
                 {"id": s["id"], "heads": state["heads"].get(s["id"], [])} for s in state["staff"]
@@ -289,3 +292,32 @@ async def test_mirror_keeps_several_companies_and_the_owners_place(client, fake_
 async def setup_owner_id(ws: str) -> str:
     async with SessionLocal() as db:
         return (await db.scalar(select(User.id).where(User.email == "owner@example.com"))) or ""
+
+
+async def test_a_staff_record_hr_adds_in_prima_can_sign_in(client, fake_prima):
+    """P134: HR adds office staff in Prima (People) with an email: they become a member and can
+    sign in; a record already behind a member's account (a typo fixed in the office) is theirs."""
+    ws, b, u = await _office(client)
+    async with SessionLocal() as db:
+        names = {c["id"]: c["name"] for c in fake_prima["companies"]}
+        await adopt.apply(db, await adopt.build(db, names), dry=False)
+    fake_prima["staff"].append(
+        {"id": f"u-off-{u['hana']}", "name": "Hana", "title": "", "role": "pwvsb_officer",
+         "companyIds": ["pwvsb"], "personId": "pr-hana"}
+    )  # fmt: skip
+    fake_prima["records"] = [
+        {"id": "pr-new", "companyId": "co-safe", "name": "Azim New", "email": "azim@example.com",
+         "title": "Clerk"},
+        {"id": "pr-hana", "companyId": "pwvsb", "name": "Hana", "email": "hana@exampel.com"},
+    ]  # fmt: skip
+    async with SessionLocal() as db:
+        rep = await mirror.run(db, ws)
+    assert rep.added_from_records == ["Azim New"]
+    async with SessionLocal() as db:
+        azim = await db.scalar(select(User).where(User.email == "azim@example.com"))
+        m = await db.get(Membership, (ws, azim.id))
+        assert m.role == "staff" and m.branch_id == b["safe"] and m.job_title == "Clerk"
+        assert await db.scalar(select(User).where(User.email == "hana@exampel.com")) is None
+    async with SessionLocal() as db:
+        again = await mirror.run(db, ws)
+    assert again.added_from_records == []
