@@ -33,7 +33,14 @@ async def test_an_outlook_com_member_signs_in_with_their_personal_microsoft_acco
 ):
     o = await office(client)
     await member(client, "zul@outlook.com", "staff", branch_id=o["branch"]["id"])
-    await _open(client)
+    ws_id = await _open(client)
+    # Another outlook.com person was invited into the company's organisation as a guest and
+    # connected from it: outlook.com is still not the company's own domain.
+    owner, _ = await user_id("owner@example.com")
+    async with SessionLocal() as db:
+        db.add(MicrosoftAccount(workspace_id=ws_id, user_id=owner, ms_user_id="g1",
+                                tenant_id="tid-own", email="guest@outlook.com"))  # fmt: skip
+        await db.commit()
     c = anon(client)
     try:
         r = await c.post("/api/auth/microsoft/start", json={"email": "zul@outlook.com"})
@@ -49,7 +56,8 @@ async def test_an_outlook_com_member_signs_in_with_their_personal_microsoft_acco
         me = (await c.get("/api/auth/me")).json()
         assert me["user"]["email"] == "zul@outlook.com"
         async with SessionLocal() as db:  # no mailbox taken on this path
-            assert await db.scalar(select(MicrosoftAccount.id)) is None
+            rows = (await db.scalars(select(MicrosoftAccount.email))).all()
+            assert rows == ["guest@outlook.com"]
     finally:
         await c.aclose()
 

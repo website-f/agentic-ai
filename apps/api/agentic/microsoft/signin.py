@@ -165,6 +165,12 @@ async def start(db: AsyncSession, base: str, email: str = "", next_path: str = "
 SIGN_IN_ONLY = "openid profile email offline_access User.Read"
 # Microsoft's tenant id for personal accounts (outlook.com, hotmail.com, live.com...).
 CONSUMERS_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad"
+# Personal Microsoft account domains: never an organisation's own, even when such people were
+# invited into the company's organisation as guests (their MicrosoftAccount rows carry its tenant).
+CONSUMER_DOMAINS = frozenset({
+    "outlook.com", "hotmail.com", "live.com", "msn.com", "passport.com",
+    "outlook.my", "hotmail.my", "live.com.my", "outlook.sg", "hotmail.co.uk", "outlook.co.id",
+})  # fmt: skip
 
 
 def open_to_all(cfg: app.AppConfig) -> bool:
@@ -184,7 +190,7 @@ async def own_domains(db: AsyncSession, ws_id: str, cfg: app.AppConfig) -> set[s
             )
         )
     ).all()
-    return {e.rsplit("@", 1)[-1].lower() for e in rows if e and "@" in e}
+    return {e.rsplit("@", 1)[-1].lower() for e in rows if e and "@" in e} - CONSUMER_DOMAINS
 
 
 async def is_sign_in(state: str) -> bool:
