@@ -39,6 +39,18 @@ P96 (the agent's own brain):
   it; a lesson on this kind of work taught after people last accepted it makes the agent do
   the job itself (with the lesson) until the routine is confirmed again.
 - Off per agent (workspace setting routines.agents_off) or for the whole office.
+
+P140 (document jobs: edit, fill, compile, export):
+- The file editors (docx_edit, xlsx_edit, pdf_edit, pptx_edit), fill_form and
+  compile_documents may be steps. A file attached to the task becomes a "file" slot (its
+  example is the id; the next task's attachment of the same type fills it), and a file an
+  earlier step made is {{out_N}} (with {{out_N_name}}, {{file_k_name}} for the answer), so
+  "edit, then export" chains on the new file instead of being refused as a stale value.
+  Linking is deterministic (bind_files); the model keeps file ids as they were.
+- A routine made only of document tools may have up to DOC_MAX_STEPS steps.
+- Learned or confirmed, a document routine is also a fact in the brain (with its
+  fingerprint), so the agent knows the job is one the office repeats.
+- run_python stays forbidden: its steps are code written for the occasion.
 """
 
 import hashlib
@@ -78,6 +90,7 @@ PAUSE_AFTER = 2  # results sent back or failed in a row
 STEPS_PER_CALL = 6  # tool calls per activity call (each may take up to 45 s)
 MAX_STEPS = 12
 BROWSER_MAX_STEPS = 30  # browser work takes more, smaller steps
+DOC_MAX_STEPS = 20  # P140: a routine made only of document tools
 MAX_RESULT_CHARS = 4000  # per step, in the write-up prompt
 # Drafting a routine costs one smart-model call; work that never repeats would waste it, so
 # each workspace drafts at most this many a day (confirming an existing one is free).
@@ -126,6 +139,25 @@ _ELEMENT = re.compile(
 )
 _PAGE_URL = re.compile(r"https?://[^\s|)\]>\"']+")
 _PAGE_LINE = re.compile(r"^Page: [^\n]*$", re.MULTILINE)  # browser_tools.view's first line
+# P140: tools that make a new file and name it first in their result ("Saved [fl_...]"): a
+# later step of the same routine may use that file as {{out_N}} (N = the step that made it).
+EDITORS = frozenset({"docx_edit", "xlsx_edit", "pdf_edit", "pptx_edit"})
+PRODUCERS = EDITORS | frozenset({"fill_form", "compile_documents", "export_document"})
+DOCUMENT_TOOLS = PRODUCERS | frozenset(
+    {
+        "read_file",
+        "list_files",
+        "view_image",
+        "describe_form",
+        "list_folders",
+        "file_document",
+        "rename_file",
+    }
+)
+FILE = "file"  # a slot whose value is a file attached to the task
+_MADE = re.compile(r"\[(fl_[0-9a-z]{6,40})\]")
+# Values a document routine works out as it runs (never a slot's name).
+RESERVED = re.compile(r"out_\d{1,2}(?:_name)?|file_\d{1,2}_name")
 # The agent's own bookkeeping: left out of the routine (it does not change the result).
 SKIPPED = frozenset(
     {"use_skill", "report_progress", "expand_result", "memory", "remember", "recall"}
@@ -147,6 +179,32 @@ def failed(result: str | None) -> bool:
 
 def forbidden(tool: str) -> bool:
     return tool in FORBIDDEN or tool.startswith(FORBIDDEN_PREFIXES)
+
+
+def is_file_slot(slot: dict[str, Any]) -> bool:
+    return slot.get("kind") == FILE
+
+
+def _ext(name: str) -> str:
+    return name.rsplit(".", 1)[-1].lower() if "." in name else ""
+
+
+def made_file(tool: str, result: str | None) -> str | None:
+    """P140: the id of the file a step made (a document tool's "Saved [fl_...]"), or None."""
+    if tool not in PRODUCERS or failed(result):
+        return None
+    m = _MADE.search(result or "")
+    return m.group(1) if m else None
+
+
+def is_document(steps: list[dict[str, Any]]) -> bool:
+    """A routine of document work only, that makes at least one file."""
+    tools = [str(s.get("tool") or "") for s in steps]
+    return (
+        bool(tools)
+        and all(t in DOCUMENT_TOOLS for t in tools)
+        and any(t in PRODUCERS for t in tools)
+    )
 
 
 def _norm(text: str) -> str:
@@ -433,10 +491,93 @@ def trajectory(msgs: list[AgentMessage]) -> list[Call] | None:
             if result is None or failed(result):
                 return None
             calls.append(Call(name, args, result))
-    limit = BROWSER_MAX_STEPS if any(is_browser(c.tool) for c in calls) else MAX_STEPS
+    if any(is_browser(c.tool) for c in calls):
+        limit = BROWSER_MAX_STEPS
+    elif is_document([{"tool": c.tool} for c in calls]):
+        limit = DOC_MAX_STEPS  # P140
+    else:
+        limit = MAX_STEPS
     if not calls or len(calls) > limit:
         return None
     return calls
+
+
+def _seen(c: Call) -> str:
+    """What an earlier step's result could hand a later one. A file editor's result only
+    repeats the agent's own operations, apart from the id of the file it made (P140)."""
+    if c.tool in EDITORS:
+        return " ".join(_MADE.findall(c.result or ""))
+    return c.result
+
+
+def bind_files(
+    steps: list[dict[str, Any]],
+    calls: list[Call],
+    slots: list[dict[str, Any]],
+    answer: dict[str, Any],
+    attached: dict[str, str],
+    names: dict[str, str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """P140: file ids in a drafted routine become links, with no model: a file attached to
+    the task becomes a "file" slot (the next task's attachment of the same type fills it),
+    and a file an earlier step made becomes {{out_N}}. In a template answer the ids and
+    names of those files become {{file_k}}/{{file_k_name}} and {{out_N}}/{{out_N_name}}.
+    `attached` and `names` map file ids to names (names: every file the run touched)."""
+    slots = [dict(s) for s in slots]
+    by_id = {str(s.get("example")): str(s.get("name")) for s in slots if is_file_slot(s)}
+    taken = {str(s.get("name") or "") for s in slots}
+    made: dict[str, str] = {}
+
+    def slot_for(fid: str) -> str:
+        if fid not in by_id:
+            k = 1
+            while f"file_{k}" in taken:
+                k += 1
+            name = f"file_{k}"
+            taken.add(name)
+            by_id[fid] = name
+            slots.append(
+                {
+                    "name": name,
+                    "kind": FILE,
+                    "description": f"a file attached to the task, like {attached[fid]}"[:200],
+                    "example": fid,
+                    "ext": _ext(attached[fid]),
+                }
+            )
+        return by_id[fid]
+
+    def link(v: Any) -> Any:
+        if isinstance(v, str):
+            key = v.strip()
+            if key in made:
+                return "{{" + made[key] + "}}"
+            if key in attached:
+                return "{{" + slot_for(key) + "}}"
+            return v
+        if isinstance(v, list):
+            return [link(x) for x in v]
+        if isinstance(v, dict):
+            return {k: link(x) for k, x in v.items()}
+        return v
+
+    out: list[dict[str, Any]] = []
+    for i, step in enumerate(steps):
+        new = dict(step)
+        if isinstance(step.get("args"), dict):
+            new["args"] = link(step["args"])
+        out.append(new)
+        if i < len(calls) and (fid := made_file(calls[i].tool, calls[i].result)):
+            made[fid] = f"out_{i + 1}"
+    if answer.get("mode") == "template" and (made or by_id):
+        swaps: dict[str, str] = {}
+        for fid, n in [*by_id.items(), *made.items()]:
+            swaps[fid] = "{{" + n + "}}"
+            if len(names.get(fid) or "") >= 5:
+                swaps[names[fid]] = "{{" + n + "_name}}"
+        rx = re.compile("|".join(re.escape(k) for k in sorted(swaps, key=len, reverse=True)))
+        answer = {**answer, "text": rx.sub(lambda m: swaps[m.group(0)], str(answer["text"]))}
+    return out, slots, answer
 
 
 def check(
@@ -446,8 +587,12 @@ def check(
     slots: list[dict[str, Any]],
     steps: list[dict[str, Any]],
     answer: dict[str, Any],
+    files: dict[str, str] | None = None,
+    file_names: dict[str, str] | None = None,
 ) -> str | None:
-    """Why this routine cannot be trusted to repeat the work, or None. No model involved."""
+    """Why this routine cannot be trusted to repeat the work, or None. No model involved.
+    P140: `files` are the files attached to the task (id -> name), the only values a "file"
+    slot may hold; `file_names` names every file the run touched (for {{out_N_name}})."""
     if [s.get("tool") for s in steps] != [c.tool for c in calls]:
         return "its steps are not the calls the agent made"
     names = {str(s.get("name") or "") for s in slots}
@@ -455,10 +600,22 @@ def check(
         return "a slot has no usable name"
     if ANSWER in names:
         return "a slot may not be called answer"
+    if any(RESERVED.fullmatch(n) for n in names):
+        return "a slot may not be called out_N or file_N_name"
+    attached = files or {}
+    known = {**attached, **(file_names or {})}
     plain = _norm(text)
     values: dict[str, str] = {}
+    extra: dict[str, str] = {}  # P140: what the run works out (files made, file names)
     for s in slots:
         ex = str(s.get("example") or "").strip()
+        if is_file_slot(s):
+            if ex not in attached:
+                return f"the file of {s.get('name')} is not attached to the task"
+            values[str(s["name"])] = ex
+            if known.get(ex):
+                extra[f"{s['name']}_name"] = known[ex]
+            continue
         if not ex or _norm(ex) not in plain:
             return f"the value of {s.get('name')} is not in the task"
         values[str(s["name"])] = ex
@@ -469,7 +626,7 @@ def check(
         if not isinstance(args, dict):
             return f"step {i + 1} has no arguments"
         inside = names_in(args)
-        unknown = inside - names - {ANSWER}
+        unknown = inside - names - {ANSWER} - set(extra)
         if unknown:
             return f"step {i + 1} uses {sorted(unknown)[0]}, which is not a slot"
         used |= inside
@@ -478,21 +635,25 @@ def check(
             continue
         if composed:
             return f"step {i + 1} comes after the write-up but does not use it"
-        if not _same(render(args, values), call.args):
+        if not _same(render(args, {**values, **extra}), call.args):
             return f"step {i + 1} filled with this task's values is not the call the agent made"
         # A value an earlier step found (an id, a link) would be stale next time.
-        earlier = " ".join(c.result for c in calls[:i])
+        earlier = " ".join(_seen(c) for c in calls[:i])
         for v in _strings(args):
             if names_in(v):
                 continue
             v = v.strip()
             if len(v) >= 6 and _norm(v) not in plain and v in earlier:
                 return f"step {i + 1} reuses {v[:40]!r}, found by an earlier step"
+        if fid := made_file(call.tool, call.result):
+            extra[f"out_{i + 1}"] = fid
+            if known.get(fid):
+                extra[f"out_{i + 1}_name"] = known[fid]
     if names - used:
         return "a slot is never used"
     mode = answer.get("mode")
     if mode == "template":
-        out = render(str(answer.get("text") or ""), values)
+        out = render(str(answer.get("text") or ""), {**values, **extra})
         if names_in(out) or _norm(out) != _norm(final):
             return "the answer template does not give back the agent's answer"
     elif mode != "compose" or not str(answer.get("text") or "").strip():
@@ -511,12 +672,26 @@ def captures(template: str, got: str) -> dict[str, str] | None:
     return {k: v for k, v in m.groupdict().items()} if m else None
 
 
-def confirms(r: Routine, text: str, calls: list[Call]) -> bool:
+def confirms(
+    r: Routine,
+    text: str,
+    calls: list[Call],
+    files: dict[str, str] | None = None,
+    file_names: dict[str, str] | None = None,
+) -> bool:
     """Was this work done the routine's way? Same tools in the same order, the same fixed
-    values, and every slot's value present in the task. No model involved."""
+    values, and every slot's value present in the task (P140: a file slot's value is a file
+    attached to it, {{out_N}} the file step N made). No model involved."""
     if [s.get("tool") for s in r.steps] != [c.tool for c in calls]:
         return False
     plain = _norm(text)
+    attached = files or {}
+    names = {**attached, **(file_names or {})}
+    known: dict[str, set[str]] = {}
+    for s in r.slots or []:
+        if is_file_slot(s):
+            known[str(s["name"])] = set(attached)
+            known[f"{s['name']}_name"] = set(attached.values())
     for i, (step, call) in enumerate(zip(r.steps, calls, strict=True)):
         tpl = step.get("args") or {}
         if ANSWER in names_in(tpl):
@@ -524,32 +699,40 @@ def confirms(r: Routine, text: str, calls: list[Call]) -> bool:
         earlier = [c.result for c in calls[:i] if is_browser(c.tool)]
         if not isinstance(tpl, dict) or set(tpl) != set(call.args):
             return False
-        if not _fits(tpl, call.args, earlier, plain):
+        if not _fits(tpl, call.args, earlier, plain, known):
             return False
+        if fid := made_file(call.tool, call.result):
+            known[f"out_{i + 1}"] = {fid}
+            known[f"out_{i + 1}_name"] = {names.get(fid, "")}
     return True
 
 
-def _fits(tpl: Any, got: Any, earlier: list[str], plain: str) -> bool:
+def _fits(
+    tpl: Any, got: Any, earlier: list[str], plain: str, known: dict[str, set[str]] | None = None
+) -> bool:
     """One argument of a routine step against the call a run made (P96: nested values and
-    elements found by name)."""
+    elements found by name; P140: `known` values for file slots and files made)."""
+    known = known or {}
     if isinstance(tpl, dict) and EL in tpl:
         ref = _ref(got)
         el = element_of(ref, earlier) if ref else None
         want = tpl[EL]
         if el is None or not _same_role(el[0], str(want.get("role") or "")):
             return False
-        return _fits(str(want.get("name") or ""), el[1], earlier, plain)
+        return _fits(str(want.get("name") or ""), el[1], earlier, plain, known)
     if isinstance(tpl, str) and names_in(tpl):
         # The same template, filled with values that are all in this task.
         found = captures(tpl, got) if isinstance(got, str) else None
-        return found is not None and all(_norm(x) in plain for x in found.values())
+        return found is not None and all(
+            (x in known[k]) if k in known else _norm(x) in plain for k, x in found.items()
+        )
     if isinstance(tpl, dict) and isinstance(got, dict):
         return set(tpl) == set(got) and all(
-            _fits(v, got[k], earlier, plain) for k, v in tpl.items()
+            _fits(v, got[k], earlier, plain, known) for k, v in tpl.items()
         )
     if isinstance(tpl, list) and isinstance(got, list):
         return len(tpl) == len(got) and all(
-            _fits(v, g, earlier, plain) for v, g in zip(tpl, got, strict=True)
+            _fits(v, g, earlier, plain, known) for v, g in zip(tpl, got, strict=True)
         )
     return _same(tpl, got)
 
@@ -639,7 +822,11 @@ Rules:
 - Keep exactly the same tools in the same order. Keep every argument; change only values that
   come from the task's own words into {{slot}} (the example is the exact words in the task).
 - A value that comes from an earlier tool's result (an id, a link, a number found) cannot be a
-  slot: then the work is not replayable.
+  slot: then the work is not replayable. File ids are the exception (next rule).
+- File ids (fl_...): keep each one exactly as it is, whether it is a file attached to the task
+  (listed under ATTACHED FILES) or a file an earlier step made ("Saved [fl_...]"). The office
+  links them to the next task's files itself; never make them slots, and they never make the
+  work unreplayable.
 - Arguments holding text the agent wrote from the results (a report body, a message, a
   summary) become exactly "{{answer}}"; such steps must come last.
 - answer.mode "template": the final answer is fixed wording plus slots (text is that wording
@@ -659,9 +846,17 @@ def _brief(value: Any, limit: int) -> str:
 
 
 async def _draft(
-    db: AsyncSession, ws: Workspace, task: Task, calls: list[Call], final: str
+    db: AsyncSession,
+    ws: Workspace,
+    task: Task,
+    calls: list[Call],
+    final: str,
+    attached: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
-    lines = [f"TASK:\n{task_text(task)[:3000]}", "", "TOOL CALLS:"]
+    lines = [f"TASK:\n{task_text(task)[:3000]}", ""]
+    if attached:  # P140: the files people gave the task, which the steps may work on
+        lines += ["ATTACHED FILES:", *(f"- [{i}] {n}" for i, n in attached.items()), ""]
+    lines.append("TOOL CALLS:")
     for i, c in enumerate(calls, 1):
         lines.append(f"{i}. {c.tool}({_brief(c.args, 1500)})\n   result: {_brief(c.result, 500)}")
     lines += ["", f"FINAL ANSWER:\n{final[:3000]}"]
@@ -753,21 +948,30 @@ async def learn(db: AsyncSession, task_id: str) -> Routine | None:
     # P96: browser work ran on one person's computer and sites, and a person's own AI works
     # with that person's things: such a routine is the agent's own, for that person only.
     own = personal(agent) or any(is_browser(c.tool) for c in calls)
+    # P140: the files people gave the task, and the names of every file the run made.
+    attached = await attached_files(db, task.id)
+    names = {**attached, **await _file_names(db, [made_file(c.tool, c.result) for c in calls])}
     for r, _ in await _nearest(db, agent, vector, ("candidate", "active"), CONFIRM):
         if not for_person(r, agent, person):
             continue
-        if confirms(r, text, calls):
+        if confirms(r, text, calls, attached, names):
             if task.id not in (r.source_task_ids or []):
                 r.source_task_ids = [*(r.source_task_ids or []), task.id][-10:]
                 flag_modified(r, "source_task_ids")
             await db.commit()
-            await _event(db, task, f"did it the way of the routine {r.name}", {"routine_id": r.id})
+            await _event(
+                db,
+                task,
+                f"did it the way of the routine {r.name}",
+                {"routine_id": r.id, "fingerprint": fingerprint(r)},
+            )
+            await remember(db, agent, task, r)
             await promote(db, r)
             return r
     if not await _may_draft(ws.id):
         log.info("routine drafts for today used up in %s", ws.id)
         return None
-    d = await _draft(db, ws, task, calls, task.result or "")
+    d = await _draft(db, ws, task, calls, task.result or "", attached)
     if not d or not d.get("replayable"):
         log.info("task %s is not replayable: %s", task.id, (d or {}).get("why"))
         return None
@@ -775,7 +979,9 @@ async def learn(db: AsyncSession, task_id: str) -> Routine | None:
     steps = [s for s in d.get("steps") or [] if isinstance(s, dict)]
     raw_answer = d.get("answer")
     answer: dict[str, Any] = raw_answer if isinstance(raw_answer, dict) else {}
-    why = check(text, calls, task.result or "", slots, steps, answer)
+    if attached or any(made_file(c.tool, c.result) for c in calls):
+        steps, slots, answer = bind_files(steps, calls, slots, answer, attached, names)
+    why = check(text, calls, task.result or "", slots, steps, answer, attached, names)
     if why is None:
         located, why = locate(steps, calls, slots)
         steps = located or steps
@@ -795,6 +1001,7 @@ async def learn(db: AsyncSession, task_id: str) -> Routine | None:
                 "name": str(s["name"]),
                 "description": str(s.get("description") or "")[:200],
                 "example": str(s.get("example") or "")[:200],
+                **({"kind": FILE, "ext": str(s.get("ext") or "")[:10]} if is_file_slot(s) else {}),
             }
             for s in slots
         ],
@@ -822,10 +1029,77 @@ async def learn(db: AsyncSession, task_id: str) -> Routine | None:
         db,
         task,
         f"learned the routine {r.name} (it goes live once the same job is done this way again)",
-        {"routine_id": r.id},
+        {"routine_id": r.id, "fingerprint": fingerprint(r)},
     )
+    await remember(db, agent, task, r)
     await events.publish(ws.id, "routine.updated", {"routine_id": r.id, "status": r.status})
     return r
+
+
+async def attached_files(db: AsyncSession, task_id: str) -> dict[str, str]:
+    """P140: the files people gave a task (id -> name, in the order they came; the same
+    files as the runtime's attached-files note), not the ones its work made."""
+    from ..models import DocFile
+
+    rows = (
+        await db.execute(
+            select(DocFile.id, DocFile.name)
+            .where(
+                DocFile.task_id == task_id,
+                DocFile.source != "generated",
+                DocFile.quarantined.is_(False),
+            )
+            .order_by(DocFile.created_at, DocFile.id)
+            .limit(20)
+        )
+    ).all()
+    return {str(i): str(n) for i, n in rows}
+
+
+async def _file_names(db: AsyncSession, ids: list[str | None]) -> dict[str, str]:
+    from ..models import DocFile
+
+    want = sorted({i for i in ids if i})
+    if not want:
+        return {}
+    rows = (await db.execute(select(DocFile.id, DocFile.name).where(DocFile.id.in_(want)))).all()
+    return {str(i): str(n) for i, n in rows}
+
+
+async def remember(db: AsyncSession, agent: Agent, task: Task, r: Routine) -> None:
+    """P140: a document job the office can repeat is also a fact in the agent's brain, with
+    the routine's fingerprint (the same steps, the same fingerprint: learning it again only
+    reinforces the fact). The routine itself is what replays; the fact lets the agent and
+    the people reading its memory know the job has a learned way."""
+    if not is_document(r.steps or []):
+        return
+    from ..brain import facts as brain_facts  # late: the brain reaches the runtime
+    from ..brain.scope import for_agent
+
+    tools = " then ".join(str(s.get("tool")) for s in r.steps)
+    text = brain_facts.clean(
+        f'Document routine "{r.name}" (fingerprint {fingerprint(r)}): '
+        f"{r.description or task.title}. Steps: {tools}. Repeated on the next attached file "
+        "without the model once confirmed."
+    )
+    if not text:
+        return
+    try:
+        await brain_facts.add(
+            db,
+            await for_agent(db, agent),
+            text,
+            branch_id=r.branch_id,
+            agent_id=agent.id if r.agent_only else None,
+            source_kind="task",
+            source_id=task.id,
+            source_label=f"routine {r.id}",
+            created_by="system:routines",
+        )
+        await db.commit()
+    except Exception:  # noqa: BLE001 - memory is extra; the routine stands
+        log.warning("could not remember the routine %s", r.id, exc_info=True)
+        await db.rollback()
 
 
 async def promote(db: AsyncSession, r: Routine) -> bool:
@@ -1001,17 +1275,39 @@ def _slot_values(raw: str, names: list[str], text: str) -> dict[str, str] | None
     return out
 
 
-async def _fill(db: AsyncSession, ws: Workspace, task: Task, r: Routine) -> dict[str, str] | None:
-    names = [str(s["name"]) for s in r.slots or []]
-    if not names:
+async def _files_for(db: AsyncSession, task: Task, r: Routine) -> dict[str, str] | None:
+    """P140: the routine's file slots filled with this task's attached files, by type and
+    in the order they came. None when the files do not match one to one (which file is
+    which would be a guess: the agent does the job itself)."""
+    wanted = [s for s in r.slots or [] if is_file_slot(s)]
+    if not wanted:
         return {}
+    have = await attached_files(db, task.id)
+    out: dict[str, str] = {}
+    for ext in sorted({str(s.get("ext") or "") for s in wanted}):
+        need = [s for s in wanted if str(s.get("ext") or "") == ext]
+        mine = [fid for fid, name in have.items() if _ext(name) == ext]
+        if len(mine) != len(need):
+            return None
+        out.update({str(s["name"]): fid for s, fid in zip(need, mine, strict=True)})
+    return out
+
+
+async def _fill(db: AsyncSession, ws: Workspace, task: Task, r: Routine) -> dict[str, str] | None:
+    files = await _files_for(db, task, r)
+    if files is None:
+        return None
+    said = [s for s in r.slots or [] if not is_file_slot(s)]  # values from the task's words
+    names = [str(s["name"]) for s in said]
+    if not names:
+        return files
     text = task_text(task)
     # P96: the same wording with new values (a schedule's run, a template brief): no model.
-    known = by_pattern(r.example, r.slots or [], text)
+    known = by_pattern(r.example, said, text)
     if known is not None and _slot_values(json.dumps({"values": known}), names, text):
-        return known
+        return {**known, **files}
     spec = "\n".join(
-        f"- {s['name']}: {s.get('description') or ''} (e.g. {s.get('example')})" for s in r.slots
+        f"- {s['name']}: {s.get('description') or ''} (e.g. {s.get('example')})" for s in said
     )
     prompt = [
         {"role": "system", "content": SLOT_PROMPT},
@@ -1034,7 +1330,8 @@ async def _fill(db: AsyncSession, ws: Workspace, task: Task, r: Routine) -> dict
         )
     except gateway.GatewayUnavailable:
         return None
-    return _slot_values(reply.content, names, text)
+    got = _slot_values(reply.content, names, text)
+    return {**got, **files} if got is not None else None
 
 
 async def stale(db: AsyncSession, agent: Agent, task: Task, r: Routine) -> bool:
@@ -1304,7 +1601,20 @@ async def step(
             if answer is None:
                 await _abort(db, agent, task, r, "the write-up could not be made")
                 return None
-        args = render(spec.get("args") or {}, {**slots, **({ANSWER: answer} if answer else {})})
+        # P140: the files earlier steps made ({{out_N}}) and the files' names.
+        extra = await _derived(db, r, slots, _results(history))
+        missing = sorted(
+            n for n in names_in(spec.get("args") or {}) if RESERVED.fullmatch(n) and n not in extra
+        )
+        if missing:
+            await _abort(
+                db, agent, task, r, f"step {nxt + 1} needs {missing[0]}, which no step made"
+            )
+            return None
+        args = render(
+            spec.get("args") or {},
+            {**slots, **extra, **({ANSWER: answer} if answer else {})},
+        )
         # P96: elements are found on the page as it is now, by role and name.
         refs: list[str] = []
         for el in _els(args):
@@ -1417,6 +1727,36 @@ async def step(
     return runtime.StepResult("done", answer)
 
 
+def _has_files(r: Routine) -> bool:
+    """P140: a routine with file slots or steps that make files."""
+    return any(is_file_slot(s) for s in r.slots or []) or any(
+        str(s.get("tool") or "") in PRODUCERS for s in r.steps or []
+    )
+
+
+async def _derived(
+    db: AsyncSession,
+    r: Routine,
+    slots: dict[str, str],
+    done: list[tuple[str, dict[str, Any], str, str]],
+) -> dict[str, str]:
+    """P140: what a document routine works out as it runs: {{out_N}} (the file step N made)
+    and the names of the files ({{out_N_name}}, {{file_k_name}}). Nothing for others."""
+    made = [made_file(tool, raw) for tool, _, _, raw in done]
+    files = {str(s["name"]): slots.get(str(s["name"])) for s in r.slots or [] if is_file_slot(s)}
+    names = await _file_names(db, [*made, *files.values()])
+    out: dict[str, str] = {}
+    for slot, fid in files.items():
+        if fid and fid in names:
+            out[f"{slot}_name"] = names[fid]
+    for j, fid in enumerate(made, 1):
+        if fid:
+            out[f"out_{j}"] = fid
+            if fid in names:
+                out[f"out_{j}_name"] = names[fid]
+    return out
+
+
 async def _write(
     db: AsyncSession,
     ws: Workspace,
@@ -1429,7 +1769,11 @@ async def _write(
     from ..agents import runtime  # late: the runtime imports this module
 
     if r.answer.get("mode") == "template":
-        text = render(str(r.answer.get("text") or ""), slots)
+        extra: dict[str, str] = {}
+        if _has_files(r):  # P140: the files the steps made, by id and name
+            done = _results(await runtime._history(db, task_id=task.id))
+            extra = await _derived(db, r, slots, done)
+        text = render(str(r.answer.get("text") or ""), {**slots, **extra})
         out = None if names_in(text) else text.strip() or None
     else:
         out = await _compose(db, ws, agent, task, r, await runtime._history(db, task_id=task.id))

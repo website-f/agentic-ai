@@ -3,7 +3,8 @@ paperwork, replies, proofreading, tenders, status reports, research, spreadsheet
 
 Written in the open Agent Skills format (agentskills.io: a name, a description that says
 when to use it, then the steps), the same shape community skill packs use, and pointed at
-this office's own tools (draft_document, file_document, compile_documents, fill_form...).
+this office's own tools (draft_document, file_document, compile_documents, fill_form,
+P140: docx_edit, xlsx_edit, pdf_edit, pptx_edit...).
 store.BUILTIN includes them, so every workspace gains them once (store.ensure_builtin).
 """
 
@@ -278,7 +279,8 @@ Someone gives you a messy Excel or CSV list (customers, stock, staff) to tidy.
 ## Steps
 1. Look at the columns and a sample of rows first; say what is wrong (duplicates, mixed date
    formats, phone numbers without +60, extra spaces, blank rows).
-2. run_python to clean a copy: never overwrite the original.
+2. xlsx_edit for direct changes (find_replace, set_cells, delete_rows), or run_python to clean
+   a copy when the rules need code: never overwrite the original.
 3. Count rows before and after; list removed duplicates.
 
 ## Output format
@@ -286,6 +288,47 @@ The cleaned file, then a short list: what changed and how many rows each rule to
 
 ## Pitfalls
 - Two rows that look alike may be two people; only merge exact duplicates unless told.
+""",
+    ),
+    (
+        "edit-office-files",
+        "Change an existing Word, Excel, PDF or PowerPoint file (replace names or dates, fill "
+        "cells or a PDF form, stamp, rotate, split, merge, number pages) and keep the original; "
+        "repeated jobs are learned and redone without the model.",
+        """## When to use
+Someone gives you a file to change rather than a new document to write: update a name, date
+or amount in a Word letter or contract; put figures into an Excel sheet; stamp PAID, COPY or
+a reference on a PDF; take out, rotate, reorder or merge pages; fill a fillable PDF form;
+number pages; change the text on PowerPoint slides. Also the same change on many files.
+
+## Steps
+1. Find the file (the task's attached files, list_files or search_documents). read_file it
+   first when you need to see the exact wording, the table numbers or the sheet names.
+2. Use the editor for its type, with all the changes in one call where you can:
+   - Word: docx_edit (replace_text, append_paragraph, insert_paragraph_after,
+     set_table_cell, add_table_row, delete_paragraph_containing).
+   - Excel: xlsx_edit (set_cells, append_rows, find_replace, add_sheet, rename_sheet,
+     delete_rows, set_column_width). A company form: fill_form instead.
+   - PDF: pdf_edit (extract_pages, delete_pages, rotate_pages, reorder, merge_with,
+     stamp_text, fill_form_fields, add_page_numbers; list_form_fields shows a form's fields).
+   - PowerPoint: pptx_edit (replace_text; list_texts shows each slide's text).
+3. Each call saves a NEW file next to the original and returns its id; use that id for the
+   next step (edit again, export, compile_documents, file_document).
+4. Give the exact values from the task (names, dates, amounts) as written there: that is
+   what lets the office learn the job and repeat it on the next file without the model.
+5. Do not use run_python for these changes: code written for the occasion cannot be learned
+   or repeated, and the editors keep the formatting.
+
+## Output format
+One line per file: what changed and the new file's id and name. Say what a person still has
+to check (a signature, a figure you could not confirm).
+
+## Pitfalls
+- An operation that finds nothing is an error, so a wrong file is caught; mark an operation
+  "optional": true only when it may rightly find nothing.
+- Excel: deleting rows does not shift formulas elsewhere; pictures and charts in a workbook
+  are not kept in the edited copy (say so if the file had them).
+- Never present the edited copy as sent or signed: a person reviews it.
 """,
     ),
 ]

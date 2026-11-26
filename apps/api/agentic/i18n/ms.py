@@ -2084,3 +2084,8 @@ MS.update({k: v for k, v in MS_APPROVALS.items() if k not in MS})
 from .ms_org_sync import MS_ORG_SYNC  # noqa: E402
 
 MS.update({k: v for k, v in MS_ORG_SYNC.items() if k not in MS})
+
+# P131/P132/P140: Sign in as a role, kept in Prima, and the file editors.
+from .ms_p140 import MS_P140  # noqa: E402
+
+MS.update({k: v for k, v in MS_P140.items() if k not in MS})

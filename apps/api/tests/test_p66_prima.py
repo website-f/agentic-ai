@@ -193,11 +193,12 @@ def test_the_screen_catalog_is_prima_s_menu():
     assert nav <= set(modules.ids()) and len(modules.ids()) == len(set(modules.ids()))
     # Each screen makes calls (Connections inside the office is the office's own page; P121: the SOP
     # guide is read-only text, its rules register uses a common call; P126: Old files and data is
-    # the Upload of the bar above every screen, so all its calls are common).
+    # the Upload of the bar above every screen, so all its calls are common; P139: Members and
+    # organization calls only the office API).
     assert not [
         v
         for v, calls in kept["calls"].items()
-        if not calls and v not in ("connections", "sop", "archive")
+        if not calls and v not in ("connections", "sop", "archive", "members")
     ]
     # Every route Prima serves belongs to a screen, or is refused to anyone with chosen
     # screens: only the guard's own phone app (its own sign-in, never through the office).

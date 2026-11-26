@@ -112,6 +112,8 @@ async def test_index_in_prompt_body_on_demand(client: httpx.AsyncClient, llm, te
         "proofread-document",
         "tender-document-check",
         "weekly-status-report",
+        # P140: edit Word, Excel, PDF and PowerPoint files
+        "edit-office-files",
         "research-brief",
         "clean-spreadsheet",
         # P92 the ePerolehan tender procedure (skills/eperolehan.py)

@@ -557,6 +557,17 @@
      },
      "modules": [
       {
+       "id": "members",
+       "title": {
+        "en": "Members and organization",
+        "ms": "Ahli dan organisasi"
+       },
+       "blurb": {
+        "en": "Everyone who signs in, their role and company, companies and departments, and what each role may do.",
+        "ms": "Semua yang log masuk, peranan dan syarikat mereka, syarikat dan jabatan, dan apa yang boleh dibuat oleh setiap peranan."
+       }
+      },
+      {
        "id": "hr",
        "title": {
         "en": "HR monitor",
@@ -2747,6 +2758,7 @@
    "POST registers/:",
    "POST toolbox/:"
   ],
+  "members": [],
   "memos": [
    "GET memos",
    "POST memos",

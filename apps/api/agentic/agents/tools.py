@@ -1356,6 +1356,12 @@ FOLLOWS = {
     "research_gather": "web_fetch",
     # P25: document search reads the same office documents as the library.
     "search_documents": "search_library",
+    # P140: editing a file is changing a document: an agent set to ask (or deny) before
+    # revise_document gets the same answer for the file editors.
+    "docx_edit": "revise_document",
+    "xlsx_edit": "revise_document",
+    "pdf_edit": "revise_document",
+    "pptx_edit": "revise_document",
 }
 
 BROWSER_TOOLS = tuple(n for n in TOOLS if n.startswith("browser_"))
@@ -1526,6 +1532,12 @@ TOOLS.update({t.name: t for t in FORM_TOOLS})
 from .office_tools import OFFICE_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in OFFICE_TOOLS})
+
+# P140: edit Word, Excel, PDF and PowerPoint files with structured operations (a new file
+# next to the original), so learned routines can repeat document jobs on the next file.
+from .office_edit_tools import OFFICE_EDIT_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in OFFICE_EDIT_TOOLS})
 
 # P31: the person's own computer (their own AI only): find, read, copy files in and out.
 from .pc_tools import PC_TOOLS  # noqa: E402

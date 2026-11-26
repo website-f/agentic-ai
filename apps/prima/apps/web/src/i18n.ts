@@ -3528,6 +3528,7 @@ const ROWS: Row[] = [
   ['Find a person, title or department', 'Cari nama, jawatan atau jabatan', 'Cari nama, jawatan atau department'],
   ['people', 'orang', 'orang'],
   ['The whole group', 'Seluruh kumpulan', 'Seluruh group'],
+  ['Everyone who signs in, their role and company, companies and departments, and what each role may do.', 'Semua yang log masuk, peranan dan syarikat mereka, syarikat dan jabatan, dan apa yang boleh dibuat oleh setiap peranan.', 'Semua yang log masuk, role dan syarikat, syarikat dan jabatan, dan apa setiap role boleh buat.'],
   ['Find a person, email or company', 'Cari nama, e-mel atau syarikat', 'Cari nama, email atau syarikat'],
   ['Add a department', 'Tambah jabatan', 'Tambah jabatan'],
   ['Rename the company', 'Tukar nama syarikat', 'Tukar nama syarikat'],
