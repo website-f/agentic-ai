@@ -601,3 +601,87 @@
 .oc-kids.oc-wrap > li > .oc-node::before {
   display: none;
 }
+
+/* P137: a plus on each box (put someone under) and drag and drop between boxes. */
+.oc-box {
+  position: relative;
+}
+.oc-add {
+  position: absolute;
+  right: 8px;
+  bottom: -12px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--line));
+  background: var(--surface);
+  color: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 2px 6px -2px hsl(152 30% 18% / 0.3);
+  transition: background-color 0.15s, transform 0.1s;
+  z-index: 2;
+}
+.oc-add:hover {
+  background: color-mix(in oklab, var(--accent) 12%, var(--surface));
+}
+.oc-add:active {
+  transform: scale(0.94);
+}
+.oc-box[draggable='true'] {
+  cursor: grab;
+}
+.oc-box[data-dragging] {
+  opacity: 0.45;
+}
+.oc-box[data-drop] {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
+}
+
+/* P137: "Move, then Put here" and the bar that says who is moving. */
+.oc-pickbar {
+  position: absolute;
+  left: 50%;
+  top: 72px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--line));
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.88rem;
+  box-shadow: 0 12px 28px -14px hsl(152 30% 18% / 0.45);
+}
+.oc-pickbar > svg {
+  color: var(--accent);
+  flex: none;
+}
+.oc-puthere {
+  position: absolute;
+  left: 50%;
+  bottom: -14px;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--accent);
+  color: var(--on-primary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px -4px hsl(152 40% 20% / 0.5);
+}
+.oc-puthere:hover {
+  filter: brightness(1.08);
+}

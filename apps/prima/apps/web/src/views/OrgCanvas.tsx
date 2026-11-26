@@ -86,6 +86,7 @@ export function OrgCanvas({
   unitName,
   onMove,
   onAddUnder,
+  onPlace,
   onBack,
   children,
 }: {
@@ -95,6 +96,8 @@ export function OrgCanvas({
   unitName: Map<string, string>;
   onMove: (p: Person) => void;
   onAddUnder: (p: Person) => void;
+  /** P137: a box dropped on another: put `who` under `boss` (a drawer asks the reason). */
+  onPlace?: (who: Person, boss: Person) => void;
   onBack: () => void;
   /** Drawers opened from the chart, drawn inside it so they sit above the canvas. */
   children?: ReactNode;
@@ -237,7 +240,7 @@ export function OrgCanvas({
   const pts = useRef(new Map<number, { x: number; y: number }>());
   const last = useRef<{ x: number; y: number; d: number } | null>(null);
   const down = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button, a, input, select, textarea, .oc-menu')) return;
+    if ((e.target as HTMLElement).closest('button, a, input, select, textarea, .oc-menu, [draggable="true"]')) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     view.current?.setPointerCapture(e.pointerId);
     pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -315,7 +318,33 @@ export function OrgCanvas({
       else n.add(key);
       return n;
     });
-  const ctx: Ctx = { c, kids, byId, unitName, closed, toggle, focus, canAddUnder, onMove, onAddUnder, openUnits, toggleUnit };
+  // P137 (Fitri, 26 Nov 2026: "drag and drop in the chart ... click a plus button, search the member, add"): who is being
+  // dragged, and where it may land (not on themselves, nor on anyone under them).
+  const [dragId, setDragId] = useState<string | null>(null);
+  const under = useCallback(
+    (top: string, id: string): boolean => (kids.get(top) ?? []).some((k) => k.id === id || under(k.id, id)),
+    [kids],
+  );
+  // "Move": pick someone, then press Put here on the person they go under (works on a phone too).
+  const [picked, setPicked] = useState<Person | null>(null);
+  const moving = dragId ?? picked?.id ?? null;
+  const canDrop = useCallback(
+    (boss: Person) => !!moving && moving !== boss.id && !under(moving, boss.id) && byId.get(moving)?.managerId !== boss.id,
+    [moving, under, byId],
+  );
+  const place = (boss: Person) => {
+    const who = moving ? byId.get(moving) : undefined;
+    setDragId(null);
+    setPicked(null);
+    if (who && onPlace && canDrop(boss)) onPlace(who, boss);
+  };
+  useEffect(() => {
+    if (!picked) return;
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setPicked(null);
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [picked]);
+  const ctx: Ctx = { c, kids, byId, unitName, closed, toggle, focus, canAddUnder, onMove, onAddUnder, openUnits, toggleUnit, dragId, setDragId, canDrop, place, dnd: !!onPlace, picked, pick: setPicked };
   return (
     <div className="oc-full" role="dialog" aria-label="Org chart">
       <header className="oc-bar">
@@ -390,7 +419,38 @@ export function OrgCanvas({
           </button>
         </div>
       </header>
-      <div className="oc-view" ref={view} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} tabIndex={0} aria-label="Chart canvas: drag to move, wheel or pinch to zoom">
+      {picked && (
+        <div className="oc-pickbar" role="status">
+          <ArrowsClockwiseIcon size={16} aria-hidden="true" />
+          <span>
+            <span>Moving</span> <strong>{picked.name}</strong>: <span>press Put here on the person they go under.</span>
+          </span>
+          <button type="button" className="btn btn-sm" onClick={() => setPicked(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+      <div
+        className="oc-view"
+        ref={view}
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={up}
+        tabIndex={0}
+        aria-label="Chart canvas: drag to move, wheel or pinch to zoom"
+        onDragOver={(e) => {
+          if (dragId) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          // Dropped on the empty canvas (dragged out): their line opens, to pick another head or go back to the job's.
+          if (!dragId || (e.target as HTMLElement).closest('.oc-box')) return;
+          e.preventDefault();
+          const who = byId.get(dragId);
+          setDragId(null);
+          if (who) onMove(who);
+        }}
+      >
         <div className="oc-inner" ref={inner} style={{ transform: `translate(${t.x}px, ${t.y}px) scale(${t.s})` }}>
           {mode === 'units' ? (
             <UnitsTree ctx={ctx} />
@@ -447,6 +507,13 @@ type Ctx = {
   onAddUnder: (p: Person) => void;
   openUnits: Set<string>;
   toggleUnit: (key: string) => void;
+  dragId: string | null;
+  setDragId: (id: string | null) => void;
+  canDrop: (boss: Person) => boolean;
+  place: (boss: Person) => void;
+  dnd: boolean;
+  picked: Person | null;
+  pick: (p: Person | null) => void;
 };
 
 function TreeNode({ p, ctx }: { p: Person; ctx: Ctx }) {
@@ -488,9 +555,37 @@ function Box({ p, ctx, count, open }: { p: Person; ctx: Ctx; count: number; open
     return n;
   }, [ctx.kids, p.id]);
   const canAdd = ctx.canAddUnder.has(p.id);
+  const [over, setOver] = useState(false);
+  const drags = ctx.dnd && p.canMove;
   return (
     <div
       className="oc-box"
+      draggable={drags || undefined}
+      data-drop={(over && ctx.canDrop(p)) || undefined}
+      data-dragging={ctx.dragId === p.id || ctx.picked?.id === p.id || undefined}
+      onDragStart={
+        drags
+          ? (e) => {
+              e.dataTransfer.setData('text/plain', p.id);
+              e.dataTransfer.effectAllowed = 'move';
+              ctx.setDragId(p.id);
+            }
+          : undefined
+      }
+      onDragEnd={drags ? () => ctx.setDragId(null) : undefined}
+      onDragOver={(e) => {
+        if (!ctx.canDrop(p)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (!over) setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        ctx.place(p);
+      }}
+      title={drags ? 'Drag onto another box to put them under that person' : undefined}
       data-pid={p.id}
       data-me={me || undefined}
       data-focus={ctx.focus === p.id || undefined}
@@ -527,6 +622,12 @@ function Box({ p, ctx, count, open }: { p: Person; ctx: Ctx; count: number; open
             </button>
             {menu && (
               <div className="oc-menu" role="menu" onMouseLeave={() => setMenu(false)}>
+                {p.canMove && ctx.dnd && (
+                  <button type="button" role="menuitem" onClick={() => (setMenu(false), ctx.pick(p))}>
+                    <ArrowsClockwiseIcon size={15} aria-hidden="true" />
+                    Move (then press Put here)
+                  </button>
+                )}
                 {p.canMove && (
                   <button type="button" role="menuitem" onClick={() => (setMenu(false), ctx.onMove(p))}>
                     <ArrowsClockwiseIcon size={15} aria-hidden="true" />
@@ -544,6 +645,16 @@ function Box({ p, ctx, count, open }: { p: Person; ctx: Ctx; count: number; open
           </div>
         )}
       </div>
+      {ctx.picked && ctx.canDrop(p) && (
+        <button type="button" className="oc-puthere" onClick={() => ctx.place(p)}>
+          Put here
+        </button>
+      )}
+      {canAdd && !ctx.picked && (
+        <button type="button" className="oc-add" title={`Put someone under ${p.name}`} aria-label={`Put someone under ${p.name}`} onClick={() => ctx.onAddUnder(p)}>
+          <PlusIcon size={13} weight="bold" aria-hidden="true" />
+        </button>
+      )}
       {count > 0 && (
         <button type="button" className="oc-toggle" aria-expanded={open} onClick={() => ctx.toggle(p.id)} title={open ? 'Close' : `Open: ${total} under`}>
           {open ? <CaretDownIcon size={11} weight="bold" aria-hidden="true" /> : <CaretRightIcon size={11} weight="bold" aria-hidden="true" />}

@@ -52,6 +52,8 @@ export function OrgChart() {
 function Screen({ c }: { c: Chart }) {
   const [moving, setMoving] = useState<Person | null>(null);
   const [adding, setAdding] = useState<Person | null>(null);
+  // P137: a box dropped on another in the chart: who goes under whom, the reason asked in a drawer.
+  const [placing, setPlacing] = useState<{ who: Person; boss: Person } | null>(null);
   const [naming, setNaming] = useState<Unit | null>(null);
   // P129 (Fitri, 24 Nov 2026): the chart opens as a full-page canvas; Back shows the details (tables, units, notices).
   const [tab, setTab] = useRouteTab<'chart' | 'details'>('chart', ['chart', 'details']);
@@ -86,6 +88,11 @@ function Screen({ c }: { c: Chart }) {
           <AddUnderForm boss={adding} c={c} byId={byId} onDone={() => setAdding(null)} />
         </Drawer>
       )}
+      {placing && (
+        <Drawer title="Put under" sub={`${placing.who.name} under ${placing.boss.name}`} onClose={() => setPlacing(null)}>
+          <MoveForm p={placing.who} c={c} to={placing.boss} onDone={() => setPlacing(null)} />
+        </Drawer>
+      )}
       {naming && (
         <Drawer title="Name head" sub={naming.label} onClose={() => setNaming(null)}>
           <HeadForm c={c} unit={naming} onDone={() => setNaming(null)} />
@@ -96,7 +103,7 @@ function Screen({ c }: { c: Chart }) {
   if (tab === 'chart')
     return (
       <div className="page org">
-        <OrgCanvas c={c} byId={byId} kids={children} unitName={unitName} onMove={setMoving} onAddUnder={setAdding} onBack={() => setTab('details')}>
+        <OrgCanvas c={c} byId={byId} kids={children} unitName={unitName} onMove={setMoving} onAddUnder={setAdding} onPlace={(who, boss) => setPlacing({ who, boss })} onBack={() => setTab('details')}>
           {drawers}
         </OrgCanvas>
       </div>
@@ -290,12 +297,14 @@ function Units({ c, onName }: { c: Chart; onName: (u: Unit) => void }) {
 
 // ---------- Forms (in drawers) ----------
 
-function MoveForm({ p, c, onDone }: { p: Person; c: Chart; onDone: () => void }) {
+function MoveForm({ p, c, onDone, to: preset }: { p: Person; c: Chart; onDone: () => void; to?: Person }) {
   const act = useAction();
-  const [to, setTo] = useState('');
+  const [to, setTo] = useState(preset?.id ?? '');
   const [reason, setReason] = useState('');
   const [until, setUntil] = useState('');
-  const choices = c.managerChoices.filter((m) => m.id !== p.id);
+  const listed = c.managerChoices.filter((m) => m.id !== p.id);
+  // P137: the box dropped on is offered even when it is not among the usual heads (the server checks it).
+  const choices = preset && !listed.some((m) => m.id === preset.id) ? [{ id: preset.id, name: preset.name, title: preset.title }, ...listed] : listed;
   return (
     <div className="org-form">
       <ErrorNotice error={act.error} />
