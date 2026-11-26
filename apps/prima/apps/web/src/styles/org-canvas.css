@@ -685,3 +685,118 @@
 .oc-puthere:hover {
   filter: brightness(1.08);
 }
+
+/* P139: the Companies view: every company, its departments and its people (from the office). */
+.oco-root {
+  width: 380px;
+}
+.oco-find {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.oco-find input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+}
+.oco-find:focus-within {
+  border-color: color-mix(in oklab, var(--accent) 50%, var(--line));
+}
+.oco-find-sm {
+  margin: 6px 0 4px;
+  padding: 3px 7px;
+}
+.oco-co {
+  width: 250px;
+}
+.oco-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.oco-icon:hover {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+.oco-dept {
+  width: 260px;
+  padding: 10px 10px 8px;
+  text-align: left;
+}
+.oco-dept-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.oco-dept-head .oc-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oco-people {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 260px;
+  overflow: auto;
+}
+.oco-people > li[draggable='true'] {
+  cursor: grab;
+}
+.oco-people > li[data-dragging] {
+  opacity: 0.45;
+}
+.oco-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.oco-person:hover {
+  background: var(--surface-2);
+}
+.oco-person-text {
+  display: grid;
+  min-width: 0;
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+.oco-person-text > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oco-none {
+  padding: 6px;
+}

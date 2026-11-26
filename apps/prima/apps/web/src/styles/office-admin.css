@@ -1,0 +1,548 @@
+/* P139: Members and organization, drawn natively in Prima (views/office/*). Prima's tokens only. */
+.oa-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.oa-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.oa-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.oa-bar > .k-search {
+  flex: 1 1 260px;
+  max-width: 420px;
+}
+.oa-h3 {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.oa-mono {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+.oa-danger-text,
+.oa-danger-text:hover {
+  color: var(--crit);
+}
+
+/* A company: its colour and name */
+.oa-company {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.oa-company b {
+  overflow-wrap: anywhere;
+}
+.oa-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  flex: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+/* A member's name with their job title */
+.oa-name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.oa-name small {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.oa-email {
+  color: var(--muted);
+  word-break: break-all;
+}
+
+/* Lists inside cards and drawers */
+.oa-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.oa-boxed {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+.oa-list-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+.oa-list-row + .oa-list-row {
+  border-top: 1px solid var(--line);
+}
+.oa-list-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.oa-list-main b {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.oa-list-main small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+.oa-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.oa-plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 0.88rem;
+}
+.oa-split-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+}
+.oa-split-line b {
+  word-break: break-all;
+}
+
+/* Forms in drawers */
+.oa-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+.oa-form > * {
+  min-width: 0;
+}
+.oa-wide,
+.oa-form > .notice,
+.oa-form > .oa-form-actions {
+  grid-column: 1 / -1;
+}
+.oa-form .input,
+.oa-form .select {
+  width: 100%;
+}
+.oa-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+.oa-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.oa-inline .input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.oa-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  cursor: pointer;
+}
+.oa-check input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+.oa-check > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.oa-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.oa-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.oa-swatch[aria-checked='true'] {
+  border-color: var(--surface);
+  outline: 2px solid var(--ink);
+}
+.oa-more {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.oa-more > summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.oa-more[open] > summary {
+  margin-bottom: 8px;
+}
+.oa-more > .input {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.oa-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 12px;
+  max-height: 240px;
+  overflow: auto;
+}
+.oa-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.oa-check-row input {
+  accent-color: var(--accent);
+  flex: none;
+}
+
+/* The temporary password, shown once */
+.oa-secret {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+.oa-secret code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+  user-select: all;
+}
+
+/* Confirm dialog */
+.oa-confirm .field {
+  margin-top: 4px;
+}
+.oa-confirm-body {
+  line-height: 1.5;
+}
+
+/* Roles and access */
+.oa-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+}
+.oa-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.oa-changed-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.oa-matrix-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.oa-matrix {
+  width: 100%;
+  min-width: 960px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.oa-matrix th,
+.oa-matrix td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+  vertical-align: middle;
+}
+.oa-matrix thead th {
+  background: var(--surface-2);
+  font-weight: 600;
+  font-size: 0.8rem;
+  position: sticky;
+  top: 0;
+}
+.oa-matrix thead th small {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.oa-matrix .oa-matrix-perm {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 240px;
+  max-width: 320px;
+  padding-left: 14px;
+  text-align: left;
+  background: var(--surface);
+  font-weight: 400;
+}
+.oa-matrix thead .oa-matrix-perm {
+  background: var(--surface-2);
+  z-index: 2;
+}
+.oa-matrix .oa-matrix-perm b {
+  display: block;
+  font-weight: 600;
+}
+.oa-matrix .oa-matrix-perm small {
+  display: block;
+  color: var(--muted);
+}
+.oa-matrix-section th {
+  text-align: left;
+  padding: 10px 14px 6px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.oa-link {
+  display: block;
+  margin: 2px auto 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.oa-link:hover {
+  text-decoration: underline;
+}
+.oa-switch-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.oa-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--line);
+  cursor: pointer;
+  transition: background-color 0.15s;
+  flex: none;
+}
+.oa-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 0.15s;
+}
+.oa-switch:checked {
+  background: var(--accent);
+}
+.oa-switch:checked::after {
+  transform: translateX(16px);
+}
+.oa-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.oa-switch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.oa-switch-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.oa-diff {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+}
+.oa-diff li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.oa-on {
+  color: var(--ok);
+}
+.oa-off {
+  color: var(--crit);
+}
+.oa-phone-only {
+  display: none;
+}
+@media (max-width: 700px) {
+  .oa-phone-only {
+    display: flex;
+  }
+  .oa-desk-only {
+    display: none;
+  }
+}
+
+/* Office access */
+.oa-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+.oa-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+.oa-tile:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-soft);
+}
+.oa-tile small {
+  color: var(--muted);
+}
+.oa-warn-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--r);
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+}
+.oa-warn-box p {
+  margin: 0;
+}
+.oa-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 13rem;
+  gap: 8px;
+  align-items: center;
+}
+.oa-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.oa-preview .select {
+  width: 100%;
+}
+.oa-preview-go {
+  display: flex;
+  align-items: flex-end;
+}
+.oa-preview-go .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.oa-page .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .oa-add-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .oa-list-row {
+    padding: 10px;
+  }
+  .oa-list-actions {
+    width: 100%;
+  }
+  .oa-help-row .oa-list-actions .btn {
+    flex: 1 1 auto;
+  }
+  .oa-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .oa-form-actions .btn {
+    flex: 1 1 auto;
+  }
+}

@@ -18,6 +18,7 @@ import type { api } from '../api';
 import { Avatar } from '../kit';
 import { Chip, dateLabel } from '../ui';
 import '../styles/org-canvas.css';
+import { CompaniesTree } from './OrgCompanies';
 
 /**
  * P129 (Fitri, 24 Nov 2026: "the org chart in Prima, make it visually nice with a canvas, draggable, zoom in and out like
@@ -31,7 +32,7 @@ import '../styles/org-canvas.css';
 type Chart = Awaited<ReturnType<typeof api.orgChart>>;
 type Person = Chart['people'][number];
 type Unit = Chart['units'][number];
-type Mode = 'lines' | 'units';
+type Mode = 'lines' | 'units' | 'companies';
 
 /** The people of a Prima unit: its central department's staff, or a central company's (core unitsOfMember). */
 function membersOf(u: Unit, people: Person[]): Person[] {
@@ -115,7 +116,8 @@ export function OrgCanvas({
   // P129: Prima's own structure (its departments and central companies, each with its head and deputy) or the lines.
   const [mode, setModeState] = useState<Mode>(() => {
     try {
-      return localStorage.getItem('prima.org.mode') === 'units' ? 'units' : 'lines';
+      const saved = localStorage.getItem('prima.org.mode');
+      return saved === 'units' || saved === 'companies' ? saved : 'lines';
     } catch {
       return 'lines';
     }
@@ -406,6 +408,9 @@ export function OrgCanvas({
           <button type="button" aria-pressed={mode === 'units'} onClick={() => setMode('units')}>
             Departments
           </button>
+          <button type="button" aria-pressed={mode === 'companies'} onClick={() => setMode('companies')}>
+            Companies
+          </button>
         </div>
         <div className="oc-tools" role="group" aria-label="Chart tools">
           <button type="button" className="btn btn-sm" onClick={() => goTo(c.meId)} title="Find me">
@@ -455,7 +460,9 @@ export function OrgCanvas({
         }}
       >
         <div className="oc-inner" ref={inner} style={{ transform: `translate(${t.x}px, ${t.y}px) scale(${t.s})` }}>
-          {mode === 'units' ? (
+          {mode === 'companies' ? (
+            <CompaniesTree />
+          ) : mode === 'units' ? (
             <UnitsTree ctx={ctx} />
           ) : roots.length ? (
             <div className="oc-roots">
