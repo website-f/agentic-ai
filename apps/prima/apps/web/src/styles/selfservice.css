@@ -792,3 +792,16 @@ button.ss-row:focus-visible {
     padding: 4px 16px 16px;
   }
 }
+
+/* P133: search above long staff clock lists (faces waiting, clock photos). */
+.ss-find {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.ss-find .k-search {
+  flex: 1 1 260px;
+  max-width: 420px;
+}

@@ -13392,11 +13392,18 @@ export class PrimaService {
       accuracyM: typeof input.accuracyM === 'number' ? Math.round(input.accuracyM) : null,
       distanceM: user.base ? Math.round(distanceM(input.lat, input.lng, user.base.lat, user.base.lng)) : null,
     };
-    return this.store.transaction(async (tx) => {
-      await tx.insert('locationPings', ping);
-      const clock = await tx.update('staffClocks', open.id, { lastPingAt: at, pings: open.pings + 1 });
-      return { accepted: true as const, clock };
-    });
+    try {
+      return await this.store.transaction(async (tx) => {
+        await tx.insert('locationPings', ping);
+        const clock = await tx.update('staffClocks', open.id, { lastPingAt: at, pings: open.pings + 1 });
+        return { accepted: true as const, clock };
+      });
+    } catch (e) {
+      // P133 (office): the same reading sent twice at once (a retry on a weak signal) both passed the check above; the
+      // second meets the first's row. It is the same reading: kept once, never a failed ping.
+      if (isDuplicateKey(e)) return { accepted: false as const, clock: open, duplicate: true as const };
+      throw e;
+    }
   }
 
   /** Where a clocked-in staff member is: followed, away from base, or Unknown when no reading came for too long. */
@@ -34925,17 +34932,20 @@ export class PrimaService {
     const text = requireApprovalReason(note, approve ? 'approve' : 'refuse');
     const at = this.now();
     const person = await this.store.get('people', personId);
+    // P133 (office): HR reviews faces in every company, but the audit trail only takes a company row from someone who
+    // sees that company (its database rule); otherwise the whole approval was refused. Not seen: a group-level row.
+    const auditCo = (await this.visibleCompanyIdsOf(user)).includes(f.companyId) ? f.companyId : null;
     await this.store.transaction(async (tx) => {
       await tx.update('staffFaces', personId, { status: approve ? 'approved' : 'refused', decidedBy: user.name, decidedById: user.id, decidedAt: at, note: text });
       if (approve && person) await tx.update('people', personId, { faceEnrolledOn: this.today() });
       await tx.audit({
         at,
         actor: user.name,
-        companyId: f.companyId,
+        companyId: auditCo,
         action: approve ? 'staff.face_approve' : 'staff.face_refuse',
         entity: 'person',
         entityId: personId,
-        summary: `Face for clock in of ${person?.name ?? personId} ${approve ? 'approved' : 'refused'}: ${text}`,
+        summary: `Face for clock in of ${person?.name ?? personId}${auditCo ? '' : ` (${f.companyId})`} ${approve ? 'approved' : 'refused'}: ${text}`,
       });
     });
     return this.faceReviews(user);
@@ -34948,10 +34958,11 @@ export class PrimaService {
     if (!f || f.status !== 'approved') throw new BadRequest('This person has no approved face.');
     const text = requireApprovalReason(note, 'remove it');
     const at = this.now();
+    const auditCo = (await this.visibleCompanyIdsOf(user)).includes(f.companyId) ? f.companyId : null; // P133, as decideFace
     await this.store.transaction(async (tx) => {
       await tx.update('staffFaces', personId, { status: 'refused', decidedBy: user.name, decidedById: user.id, decidedAt: at, note: `Removed: ${text}` });
       await tx.update('people', personId, { faceEnrolledOn: null });
-      await tx.audit({ at, actor: user.name, companyId: f.companyId, action: 'staff.face_remove', entity: 'person', entityId: personId, summary: `Face for clock in removed: ${text}` });
+      await tx.audit({ at, actor: user.name, companyId: auditCo, action: 'staff.face_remove', entity: 'person', entityId: personId, summary: `Face for clock in removed${auditCo ? '' : ` (${f.companyId})`}: ${text}` });
     });
     return this.faceReviews(user);
   }
@@ -62417,3 +62428,9 @@ interface MemoCtx {
 
 /** Fortnights for regular meetings are counted from this Monday so every series shares the same two-week blocks. */
 const FORTNIGHT_ANCHOR: IsoDate = '2026-01-05';
+
+/** A database unique-key clash (PostgreSQL 23505), or the in-memory store's "already exists". */
+function isDuplicateKey(e: unknown): boolean {
+  const err = e as { code?: unknown; message?: unknown } | null;
+  return !!err && (err.code === '23505' || (typeof err.message === 'string' && /duplicate key|already exists/i.test(err.message)));
+}

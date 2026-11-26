@@ -305,6 +305,8 @@ export function StaffClockBoardView() {
   const [tab, setTab] = useRouteTab<'clock' | 'home' | 'slips' | 'places' | 'review'>('clock', places ? ['clock', 'home', 'slips', 'places', 'review'] : ['clock', 'home', 'slips']);
   // P107: the team list's search, "who to show" and company filters live in its data table.
   const team = useTableState('staffclock.team');
+  // P133 (Fitri, 26 Nov 2026: "too many users, no filter and search"): the movement list is a searchable data table.
+  const moves = useTableState('staffclock.moves');
   if (error)
     return (
       <div className="page ss">
@@ -421,21 +423,35 @@ export function StaffClockBoardView() {
               sub={`Outside their place for more than ${data.movementRules.outOfStationMin} minutes, a location jump, a fake-looking location, a clock-in far from the place, or location that stopped. Open one for the route and timeline.`}
               flush
             >
-              <ul className="ss-rows">
-                {data.reviews.map((f, i) => (
-                  <li key={`${f.clockId}-${f.kind}-${f.at}-${i}`}>
-                    <button type="button" className="ss-row mv-review" data-tone={MOVE_FLAG[f.kind].tone === 'crit' ? 'crit' : 'warn'} onClick={() => setOpen(f.clockId)}>
-                      <Person name={f.name} sub={f.title.includes(f.company.split(' ')[0]) ? f.title : `${f.title} · ${f.company}`} />
-                      <span className="ss-board-times">
-                        <span className="mv-flag-text">{flagText(f)}</span>
-                      </span>
-                      <span className="ss-row-side">
-                        <Chip tone={MOVE_FLAG[f.kind].tone}>{MOVE_FLAG[f.kind].label}</Chip>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <DataTable
+                label="Movement to look at"
+                control={moves}
+                rows={data.reviews.map((f, i) => ({ ...f, key: `${f.clockId}-${f.kind}-${f.at}-${i}` }))}
+                rowKey={(f) => f.key}
+                searchPlaceholder="Search name, title or company"
+                searchText={(f) => `${f.title} ${f.company} ${flagText(f)}`}
+                onRowClick={(f) => setOpen(f.clockId)}
+                rowTone={(f) => (MOVE_FLAG[f.kind].tone === 'crit' ? 'crit' : 'warn')}
+                empty={<div className="empty">Nothing matches.</div>}
+                filters={[
+                  { id: 'kind', label: 'What happened', value: (f) => MOVE_FLAG[f.kind].label },
+                  { id: 'company', label: 'Company', value: (f) => f.company },
+                ]}
+                columns={[
+                  { id: 'name', label: 'Name', value: (f) => f.name, phone: 'title', render: (f) => <Person name={f.name} sub={f.title} /> },
+                  { id: 'company', label: 'Company', value: (f) => f.company, phone: 'sub', hideBelow: 900 },
+                  { id: 'what', label: 'What', value: (f) => flagText(f), search: false, render: (f) => <span className="mv-flag-text">{flagText(f)}</span> },
+                  { id: 'at', label: 'When', value: (f) => f.at, sort: 'date', hideBelow: 1100, render: (f) => dateTimeLabel(f.at) },
+                  {
+                    id: 'kind',
+                    label: 'Kind',
+                    value: (f) => MOVE_FLAG[f.kind].label,
+                    translate: true,
+                    align: 'right',
+                    render: (f) => <Chip tone={MOVE_FLAG[f.kind].tone}>{MOVE_FLAG[f.kind].label}</Chip>,
+                  },
+                ]}
+              />
             </Card>
           )}
           <Card title="Team today" sub="Clocked in first, then clocked out, then not in. Open a person for their clock record." flush>
@@ -461,6 +477,17 @@ export function StaffClockBoardView() {
                   ],
                 },
                 { id: 'company', label: 'Company', value: (r) => r.company },
+                {
+                  id: 'location',
+                  label: 'Location',
+                  value: (r) => (r.status === 'in' ? r.location : 'not_in'),
+                  options: [
+                    { value: 'followed', label: 'Followed' },
+                    { value: 'away', label: 'Away from base' },
+                    { value: 'unknown', label: 'Location unknown' },
+                    { value: 'not_in', label: 'Not clocked in' },
+                  ],
+                },
               ]}
               columns={[
                 {
@@ -793,16 +820,36 @@ function FaceReviewsPanel() {
   const reviews = (u.role === 'pwvsb_officer' && u.department === 'hr') || u.leadership === 'cos' || u.leadership === 'deputy_cos';
   const list = useLoad(() => (reviews ? api.faceReviews() : Promise.resolve(null)), [reviews]);
   const [note, setNote] = useState<Record<string, string>>({});
+  const [q, setQ] = useState('');
+  const [shown, setShown] = useState(PAGE);
   const act = useAction();
   if (!reviews || !list.data || list.data.pending.length === 0) return null;
+  // P133: many faces at once: search by name, staff number, job or company, 25 at a time; a refusal shows on top.
+  const found = list.data.pending.filter((r) => matches(q, r.name, r.staffNo, r.jobTitle, r.companyId));
   return (
     <Card
       title={`Faces waiting for HR (${list.data.pending.length})`}
       sub="Check the photo is the staff member before approving. The phone does the matching, so spot-check clock-in photos too."
       flush
     >
+      <div className="ss-pad ss-find">
+        <Search
+          value={q}
+          onChange={(v) => {
+            setQ(v);
+            setShown(PAGE);
+          }}
+          placeholder="Search name, staff number, job or company"
+        />
+        {q && <span className="muted small">{`${found.length} of ${list.data.pending.length}`}</span>}
+      </div>
+      {act.error && (
+        <div className="ss-pad">
+          <ErrorNotice error={act.error} />
+        </div>
+      )}
       <ul className="ss-rows">
-        {list.data.pending.map((r) => (
+        {found.slice(0, shown).map((r) => (
           <li key={r.personId} className="ss-face">
             {r.photo ? <img src={r.photo} alt={`Face registered by ${r.name}`} /> : <span className="ss-face-noimg" aria-hidden="true" />}
             <div className="ss-form">
@@ -845,12 +892,31 @@ function FaceReviewsPanel() {
           </li>
         ))}
       </ul>
-      {act.error && (
-        <div className="ss-pad">
-          <ErrorNotice error={act.error} />
-        </div>
-      )}
+      <MoreButton shown={shown} total={found.length} onMore={() => setShown((n) => n + PAGE)} />
     </Card>
+  );
+}
+
+const PAGE = 25;
+
+/** Every word typed appears in one of the fields (case aside). */
+function matches(q: string, ...fields: (string | null | undefined)[]): boolean {
+  const hay = fields.filter(Boolean).join(' ').toLowerCase();
+  return q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((w) => hay.includes(w));
+}
+
+function MoreButton({ shown, total, onMore }: { shown: number; total: number; onMore: () => void }) {
+  if (total <= shown) return null;
+  return (
+    <div className="ss-pad">
+      <button type="button" className="btn btn-sm" onClick={onMore}>
+        {`Show more (${total - shown} more)`}
+      </button>
+    </div>
   );
 }
 
@@ -920,6 +986,8 @@ function TrackingCard({ lastPingAt }: { lastPingAt: string | null }) {
 function ClockPhotoReviews({ onOpen }: { onOpen: (clockId: string) => void }) {
   const list = useLoad(() => api.clockPhotoReviews().catch(() => null), []);
   const [note, setNote] = useState<Record<string, string>>({});
+  const [q, setQ] = useState('');
+  const [shown, setShown] = useState(PAGE);
   const act = useAction();
   const d = list.data;
   if (!d || d.open.length === 0) return null;
@@ -930,10 +998,27 @@ function ClockPhotoReviews({ onOpen }: { onOpen: (clockId: string) => void }) {
     not_live: 'Face did not move',
     no_face: 'No face found',
   };
+  const found = d.open.filter((sn) => matches(q, sn.userName, sn.reason, ...(sn.review?.why ?? []).map((w) => WHY[w] ?? w)));
   return (
     <Card title={`Face photos to look at (${d.open.length})`} sub="Check-ins and check-outs without a photo, with a face that did not match or did not move. Nobody decides their own." flush>
+      <div className="ss-pad ss-find">
+        <Search
+          value={q}
+          onChange={(v) => {
+            setQ(v);
+            setShown(PAGE);
+          }}
+          placeholder="Search name or reason"
+        />
+        {q && <span className="muted small">{`${found.length} of ${d.open.length}`}</span>}
+      </div>
+      {act.error && (
+        <div className="ss-pad">
+          <ErrorNotice error={act.error} />
+        </div>
+      )}
       <ul className="ss-rows">
-        {d.open.map((sn) => (
+        {found.slice(0, shown).map((sn) => (
           <li key={sn.id} className="cph-review">
             {sn.image ? <img className="cph-photo" src={sn.image} alt={`${sn.kind === 'in' ? 'Check-in' : 'Check-out'} photo of ${sn.userName}`} /> : <span className="cph-nophoto" aria-hidden="true" />}
             <div className="ss-form">
@@ -988,11 +1073,7 @@ function ClockPhotoReviews({ onOpen }: { onOpen: (clockId: string) => void }) {
           </li>
         ))}
       </ul>
-      {act.error && (
-        <div className="ss-pad">
-          <ErrorNotice error={act.error} />
-        </div>
-      )}
+      <MoreButton shown={shown} total={found.length} onMore={() => setShown((n) => n + PAGE)} />
     </Card>
   );
 }
