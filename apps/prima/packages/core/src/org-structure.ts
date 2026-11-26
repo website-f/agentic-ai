@@ -494,7 +494,8 @@ export class OrgStructureService {
       const at = this.now();
       const row: OrgLine = { id, kind: 'line', userId: target.id, managerId, until: managerId ? until : null, reason, by: me.name, byId: me.id, at };
       const before = await tx.get('orgLines', id);
-      if (before) await tx.update('orgLines', id, row);
+      // P138 (office): the database store refuses an update that names the row's id; send the fields only.
+      if (before) await tx.update('orgLines', id, withoutId(row));
       else await tx.insert('orgLines', row);
       await tx.audit({
           at,
@@ -535,7 +536,8 @@ export class OrgStructureService {
       const at = this.now();
       const row: OrgLine = { id, kind: 'head', unit, headId: head?.id ?? null, deputyId: deputy?.id ?? null, until: head || deputy ? until : null, reason, by: user.name, byId: user.id, at };
       const before = await tx.get('orgLines', id);
-      if (before) await tx.update('orgLines', id, row);
+      // P138 (office): the database store refuses an update that names the row's id; send the fields only.
+      if (before) await tx.update('orgLines', id, withoutId(row));
       else await tx.insert('orgLines', row);
       await tx.audit({
           at,
@@ -549,4 +551,10 @@ export class OrgStructureService {
       return row;
     });
   }
+}
+
+/** A row's fields without its id, for an update (the PostgreSQL store refuses a patch that names the id). */
+function withoutId<T extends { id: unknown }>(row: T): Omit<T, 'id'> {
+  const { id: _id, ...rest } = row;
+  return rest;
 }
