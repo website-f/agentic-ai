@@ -94,6 +94,15 @@ PUBLIC_HOOK_PATHS = {"/api/integrations/microsoft/notify"}
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if settings.api_role == "prima":
+        # P138 (Fitri, 26 Nov 2026: "the live site is slow and sometimes 503"): the one api
+        # process was at a full core; Prima's calls (most of the traffic) get a process of their
+        # own. It holds no PC sockets, so it never drops their online flags, opens no tunnel and
+        # runs no start-up job: those stay with the main process.
+        yield
+        await close_valkey()
+        await engine.dispose()
+        return
     # Load the embedding model in the background so the first search is not slow.
     warm = asyncio.create_task(embed.warm())
     from ..devices import hub, tunnel  # P58: the egress proxy's way through a company computer

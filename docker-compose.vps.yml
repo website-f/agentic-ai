@@ -87,6 +87,16 @@ services:
       - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
       - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
 
+  api-prima:
+    environment:
+      <<: *prod-env
+      AGENTIC_API_ROLE: prima
+    mem_limit: 1g
+    cpus: 2.0
+    volumes:
+      - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
+      - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
+
   worker:
     # P96 (50 people running ePerolehan at once): two worker processes, 32 steps each. The
     # worker holds no PC sockets (only the api does), Telegram polling and schedules are

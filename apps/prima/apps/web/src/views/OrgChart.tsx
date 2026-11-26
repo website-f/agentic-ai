@@ -54,6 +54,8 @@ function Screen({ c }: { c: Chart }) {
   const [adding, setAdding] = useState<Person | null>(null);
   // P137: a box dropped on another in the chart: who goes under whom, the reason asked in a drawer.
   const [placing, setPlacing] = useState<{ who: Person; boss: Person } | null>(null);
+  // P138: a department's + (or a person dropped on it): head, deputy or member.
+  const [unitEdit, setUnitEdit] = useState<{ unit: Unit; who: Person | null } | null>(null);
   const [naming, setNaming] = useState<Unit | null>(null);
   // P129 (Fitri, 24 Nov 2026): the chart opens as a full-page canvas; Back shows the details (tables, units, notices).
   const [tab, setTab] = useRouteTab<'chart' | 'details'>('chart', ['chart', 'details']);
@@ -88,6 +90,11 @@ function Screen({ c }: { c: Chart }) {
           <AddUnderForm boss={adding} c={c} byId={byId} onDone={() => setAdding(null)} />
         </Drawer>
       )}
+      {unitEdit && (
+        <Drawer title={unitEdit.unit.label} sub="Head, deputy or member" onClose={() => setUnitEdit(null)}>
+          <UnitPersonForm c={c} unit={unitEdit.unit} who={unitEdit.who} onDone={() => setUnitEdit(null)} />
+        </Drawer>
+      )}
       {placing && (
         <Drawer title="Put under" sub={`${placing.who.name} under ${placing.boss.name}`} onClose={() => setPlacing(null)}>
           <MoveForm p={placing.who} c={c} to={placing.boss} onDone={() => setPlacing(null)} />
@@ -103,7 +110,7 @@ function Screen({ c }: { c: Chart }) {
   if (tab === 'chart')
     return (
       <div className="page org">
-        <OrgCanvas c={c} byId={byId} kids={children} unitName={unitName} onMove={setMoving} onAddUnder={setAdding} onPlace={(who, boss) => setPlacing({ who, boss })} onBack={() => setTab('details')}>
+        <OrgCanvas c={c} byId={byId} kids={children} unitName={unitName} onMove={setMoving} onAddUnder={setAdding} onPlace={(who, boss) => setPlacing({ who, boss })} onUnit={(unit, who) => setUnitEdit({ unit, who })} onBack={() => setTab('details')}>
           {drawers}
         </OrgCanvas>
       </div>
@@ -344,6 +351,94 @@ function MoveForm({ p, c, onDone, to: preset }: { p: Person; c: Chart; onDone: (
             Back to the line from the job
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// The Prima departments an office account may have (the office's own list; apps/api prima/client.PRIMA_DEPARTMENTS).
+const OFFICE_DEPARTMENTS = ['transport', 'procurement', 'hr', 'finance', 'chief_of_staff', 'it', 'legal', 'audit', 'operations', 'asset', 'pdpa', 'fwm', 'cms'];
+
+function csrfToken(): string {
+  const m = document.cookie.match(/(?:^|;\s*)agentic_csrf=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+
+/**
+ * P138 (Fitri, 26 Nov 2026: "in Departments, drag and drop people, a + to add and search, fully custom, reflected once
+ * done"): make someone a department's head or deputy (Prima's own POST /api/org/head), or move them into the department.
+ * A member's department is the office's setting for their account (Members and roles, the same rule): changed through
+ * the office's own call, which brings their Prima account to it straight away.
+ */
+function UnitPersonForm({ c, unit, who: preset, onDone }: { c: Chart; unit: Unit; who: Person | null; onDone: () => void }) {
+  const act = useAction();
+  const [who, setWho] = useState(preset?.id ?? '');
+  const dept = unit.key.startsWith('d_') ? unit.key.slice(2) : null;
+  const canMember = !!dept && OFFICE_DEPARTMENTS.includes(dept);
+  const [as, setAs] = useState<'member' | 'head' | 'deputy'>(canMember ? 'member' : 'head');
+  const [reason, setReason] = useState('');
+  const person = c.people.find((p) => p.id === who);
+  const namedHead = unit.heads.find((h) => h.how === 'named')?.id ?? null;
+  const save = async () => {
+    if (as === 'head') return api.orgSetHead({ unit: unit.key, headId: who, deputyId: unit.deputy?.id ?? null, reason });
+    if (as === 'deputy') return api.orgSetHead({ unit: unit.key, headId: namedHead, deputyId: who, reason });
+    if (!who.startsWith('u-off-')) throw new Error(`${person?.name ?? 'This person'} has a Prima-only account: change their department in Accounts and access.`);
+    const r = await fetch(`/api/members/${encodeURIComponent(who.slice('u-off-'.length))}`, {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken() },
+      body: JSON.stringify({ prima_department: dept }),
+    });
+    if (!r.ok) {
+      const b = (await r.json().catch(() => null)) as { message?: string } | null;
+      throw new Error(b?.message ?? `The office refused (${r.status}).`);
+    }
+    // The office brings their Prima account to the new department in the background: a moment, then the chart reloads.
+    await new Promise((res) => setTimeout(res, 2500));
+    return null;
+  };
+  const sorted = [...c.people].sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div className="org-form">
+      <ErrorNotice error={act.error} />
+      <label className="field">
+        <span>Person</span>
+        <Select className="input" value={who} onChange={(e) => setWho(e.target.value)} searchable>
+          <option value="">Search a name…</option>
+          {sorted.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name} ({m.title})
+            </option>
+          ))}
+        </Select>
+      </label>
+      <div className="seg" role="group" aria-label="As">
+        {canMember && (
+          <button type="button" aria-pressed={as === 'member'} onClick={() => setAs('member')}>
+            Member
+          </button>
+        )}
+        <button type="button" aria-pressed={as === 'head'} onClick={() => setAs('head')}>
+          Head
+        </button>
+        <button type="button" aria-pressed={as === 'deputy'} onClick={() => setAs('deputy')}>
+          Deputy
+        </button>
+      </div>
+      {as !== 'member' && (
+        <label className="field">
+          <span>Reason</span>
+          <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Appointed by the CEO" />
+        </label>
+      )}
+      <div className="org-form-actions">
+        <button
+          className="btn btn-primary"
+          disabled={act.busy || !who || (as !== 'member' && reason.trim().length < 3)}
+          onClick={() => act.run(save, as === 'member' ? 'Moved into the department.' : as === 'head' ? 'Head named.' : 'Deputy named.').then((r) => r !== undefined && onDone())}
+        >
+          Save
+        </button>
       </div>
     </div>
   );

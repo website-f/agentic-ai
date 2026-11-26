@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="AGENTIC_", extra="ignore")
 
     env: str = "dev"
+    # P138: "main" holds the PC sockets and the start-up jobs; "prima" is a second process that
+    # serves only Prima's screens (/api/prima/..., deploy/nginx/web.conf) and starts nothing.
+    api_role: str = "main"
     database_url: str = "postgresql+asyncpg://agentic:agentic_dev@localhost:8506/agentic"
     valkey_url: str = "redis://localhost:8507/0"
     temporal_address: str = "localhost:8508"

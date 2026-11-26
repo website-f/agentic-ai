@@ -87,6 +87,7 @@ export function OrgCanvas({
   onMove,
   onAddUnder,
   onPlace,
+  onUnit,
   onBack,
   children,
 }: {
@@ -98,6 +99,8 @@ export function OrgCanvas({
   onAddUnder: (p: Person) => void;
   /** P137: a box dropped on another: put `who` under `boss` (a drawer asks the reason). */
   onPlace?: (who: Person, boss: Person) => void;
+  /** P138: a department's + or a person dropped on it: head, deputy or member (a drawer asks). */
+  onUnit?: (unit: Unit, who: Person | null) => void;
   onBack: () => void;
   /** Drawers opened from the chart, drawn inside it so they sit above the canvas. */
   children?: ReactNode;
@@ -344,7 +347,7 @@ export function OrgCanvas({
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [picked]);
-  const ctx: Ctx = { c, kids, byId, unitName, closed, toggle, focus, canAddUnder, onMove, onAddUnder, openUnits, toggleUnit, dragId, setDragId, canDrop, place, dnd: !!onPlace, picked, pick: setPicked };
+  const ctx: Ctx = { c, kids, byId, unitName, closed, toggle, focus, canAddUnder, onMove, onAddUnder, openUnits, toggleUnit, dragId, setDragId, canDrop, place, dnd: !!onPlace, picked, pick: setPicked, onUnit: c.canNameHeads ? onUnit : undefined };
   return (
     <div className="oc-full" role="dialog" aria-label="Org chart">
       <header className="oc-bar">
@@ -514,6 +517,7 @@ type Ctx = {
   dnd: boolean;
   picked: Person | null;
   pick: (p: Person | null) => void;
+  onUnit?: (unit: Unit, who: Person | null) => void;
 };
 
 function TreeNode({ p, ctx }: { p: Person; ctx: Ctx }) {
@@ -709,9 +713,29 @@ function UnitNode({ u, ctx }: { u: Unit; ctx: Ctx }) {
   const open = !ctx.closed.has(id) && ctx.openUnits.has(u.key);
   const members = useMemo(() => membersOf(u, ctx.c.people), [u, ctx.c.people]);
   const hue = hueOf(u.key);
+  const [over, setOver] = useState(false);
+  const edits = !!ctx.onUnit;
   return (
     <div className="oc-node">
-      <div className="oc-box oc-unit" data-nohead={!u.heads.length || undefined} style={hue == null ? undefined : ({ '--oc-h': hue } as CSSProperties)}>
+      <div
+        className="oc-box oc-unit"
+        data-nohead={!u.heads.length || undefined}
+        data-drop={(over && edits && !!ctx.dragId) || undefined}
+        style={hue == null ? undefined : ({ '--oc-h': hue } as CSSProperties)}
+        onDragOver={(e) => {
+          if (!edits || !ctx.dragId) return;
+          e.preventDefault();
+          if (!over) setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          const who = ctx.dragId ? ctx.byId.get(ctx.dragId) : undefined;
+          ctx.setDragId(null);
+          if (who && ctx.onUnit) ctx.onUnit(u, who);
+        }}
+      >
         <span className="oc-band" aria-hidden="true" />
         <div className="oc-box-main">
           <div className="oc-box-text">
@@ -744,6 +768,11 @@ function UnitNode({ u, ctx }: { u: Unit; ctx: Ctx }) {
             )}
           </div>
         </div>
+        {edits && (
+          <button type="button" className="oc-add" title={`Add to ${u.label}: head, deputy or member`} aria-label={`Add to ${u.label}`} onClick={() => ctx.onUnit?.(u, null)}>
+            <PlusIcon size={13} weight="bold" aria-hidden="true" />
+          </button>
+        )}
         {members.length > 0 && (
           <button type="button" className="oc-toggle" aria-expanded={open} onClick={() => ctx.toggleUnit(u.key)} title={open ? 'Close' : 'Staff'}>
             {open ? <CaretDownIcon size={11} weight="bold" aria-hidden="true" /> : <CaretRightIcon size={11} weight="bold" aria-hidden="true" />}
@@ -770,7 +799,22 @@ function TeamBox({ people, ctx }: { people: Person[]; ctx: Ctx }) {
       </div>
       <ul>
         {people.map((p) => (
-          <li key={p.id} data-pid={p.id} data-focus={ctx.focus === p.id || undefined} data-me={p.id === ctx.c.meId || undefined}>
+          <li
+            key={p.id}
+            data-pid={p.id}
+            data-focus={ctx.focus === p.id || undefined}
+            data-me={p.id === ctx.c.meId || undefined}
+            draggable={ctx.dnd || undefined}
+            onDragStart={
+              ctx.dnd
+                ? (e) => {
+                    e.dataTransfer.setData('text/plain', p.id);
+                    ctx.setDragId(p.id);
+                  }
+                : undefined
+            }
+            onDragEnd={ctx.dnd ? () => ctx.setDragId(null) : undefined}
+          >
             <Avatar name={p.name} size={26} />
             <span className="oc-team-text">
               <strong title={p.name}>{p.name}</strong>

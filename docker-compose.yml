@@ -243,6 +243,34 @@ services:
     networks: [data, edge, llm, browser]
     <<: [*app-hardening, *logging]
 
+  # P138: Prima's screens reach Prima through the office (/api/prima/..., signed per person).
+  # They were most of the one api process's work (a full core, 503s at busy times): this second
+  # process of the same image serves only those (nginx sends /api/prima/ here, falling back to
+  # api), holds no PC sockets and runs no start-up job (AGENTIC_API_ROLE=prima).
+  api-prima:
+    image: agentic-py:dev
+    restart: unless-stopped
+    command: ["sh", "-c", "exec uvicorn agentic.api.main:app --host 0.0.0.0 --port 8501 --proxy-headers --forwarded-allow-ips '${AGENTIC_FORWARDED_ALLOW_IPS:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}'"]
+    environment:
+      <<: *app-env
+      AGENTIC_API_ROLE: prima
+    depends_on:
+      api: { condition: service_healthy }
+    volumes:
+      - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
+      - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
+      - "files:/data/files"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/readyz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 768m
+    cpus: 1.0
+    networks: [data, edge, llm]
+    <<: [*app-hardening, *logging]
+
   worker:
     # Same image as api; the build block lets a fresh clone build it instead of pulling.
     build:
