@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { useRouteTab } from '../App';
 import { PageHead } from '../kit';
 import '../styles/office-members.css';
@@ -18,9 +19,45 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]['id'];
 
+/**
+ * P138e (Fitri: "people don't clear things, just refresh: make it fix itself"): a browser that still has the office's
+ * old offline copy (saved with "never in a frame") shows the frame as refused. The page in the frame is this site's, so
+ * when it cannot be read it was refused: the office's old service worker is dropped (it installs again, current, on
+ * the next office page) and the frame loads once more. Once per visit, so it never loops.
+ */
+async function dropOfficeWorker(): Promise<boolean> {
+  try {
+    const regs = await navigator.serviceWorker?.getRegistrations();
+    let dropped = false;
+    for (const r of regs ?? []) {
+      // The office's worker covers the whole site ("/"); Prima's own is under /prima/ and stays.
+      if (new URL(r.scope).pathname === '/') dropped = (await r.unregister()) || dropped;
+    }
+    return dropped;
+  } catch {
+    return false;
+  }
+}
+
 export function OfficeMembersView() {
   const [tab, setTab] = useRouteTab<Tab>('members', TABS.map((t) => t.id));
   const current = TABS.find((t) => t.id === tab) ?? TABS[1];
+  const frame = useRef<HTMLIFrameElement>(null);
+  const healed = useRef(false);
+  const [attempt, setAttempt] = useState(0);
+  const onLoad = () => {
+    let refused = false;
+    try {
+      // A refused frame shows the browser's own error page, which this site may not read.
+      const href = frame.current?.contentWindow?.location.href ?? '';
+      refused = !href || href.startsWith('chrome-error:') || href === 'about:blank';
+    } catch {
+      refused = true;
+    }
+    if (!refused || healed.current) return;
+    healed.current = true;
+    void dropOfficeWorker().then(() => setAttempt((n) => n + 1));
+  };
   return (
     <div className="page om-page">
       <PageHead
@@ -35,7 +72,15 @@ export function OfficeMembersView() {
           ))}
         </div>
       </PageHead>
-      <iframe key={current.id} className="om-frame" name="office-embed" title={current.label} src={current.src} />
+      <iframe
+        ref={frame}
+        key={`${current.id}-${attempt}`}
+        className="om-frame"
+        name="office-embed"
+        title={current.label}
+        src={attempt ? `${current.src}?fresh=${attempt}` : current.src}
+        onLoad={onLoad}
+      />
     </div>
   );
 }
