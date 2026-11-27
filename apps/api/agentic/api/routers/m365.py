@@ -628,14 +628,17 @@ async def calendar_create(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """An event the person made (invitations go to the guests now)."""
+    """An event the person made (invitations go to the guests now). P143a: in a personal
+    Microsoft account (Outlook.com, Hotmail) it is never a Teams meeting (Teams is work-only);
+    `online` says whether it got a Teams link."""
     start = body.start if body.start.tzinfo else body.start.replace(tzinfo=UTC)
     end = body.end if body.end.tzinfo else body.end.replace(tzinfo=UTC)
     if end <= start:
         raise api_error(
             status.HTTP_400_BAD_REQUEST, "bad_range", "The end must be after the start."
         )
-    _, g = await _mine(db, principal)
+    acct, g = await _mine(db, principal)
+    online = body.online and not graph.is_personal_account(acct)
     try:
         e = await g.create_event(
             body.subject.strip(),
@@ -644,14 +647,14 @@ async def calendar_create(
             attendees=[str(a) for a in body.attendees],
             body_html=hub.text_html(body.body) if body.body.strip() else "",
             location=body.location.strip(),
-            online_meeting=body.online,
+            online_meeting=online,
         )
     except MicrosoftError as e2:
         raise _fail(e2) from e2
     await _sent(
         db, principal, "m365.event_created", str(e.get("id") or ""), guests=len(body.attendees)
     )
-    return {"id": e.get("id"), "web_link": e.get("webLink")}
+    return {"id": e.get("id"), "web_link": e.get("webLink"), "online": online}
 
 
 class RespondIn(BaseModel):

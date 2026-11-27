@@ -283,7 +283,8 @@ export const eventQuery = (id: string) =>
 
 export interface EventIn { subject: string; start: string; end: string; attendees: string[]; location: string; body: string; online: boolean }
 
-export const createEvent = (e: EventIn) => api<{ id: string; web_link: string | null }>("/api/m365/calendar", "POST", e);
+/** P143a: `online` says whether it got a Teams link (never in a personal Microsoft account). */
+export const createEvent = (e: EventIn) => api<{ id: string; web_link: string | null; online?: boolean }>("/api/m365/calendar", "POST", e);
 
 export const respondEvent = (id: string, answer: "accept" | "tentative" | "decline", comment = "") =>
   api<{ answer: string }>(`/api/m365/calendar/${enc(id)}/respond`, "POST", { answer, comment });

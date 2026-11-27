@@ -218,6 +218,8 @@ export interface MsAccount {
   is_sign_in: boolean;
   /** P122: on a company domain or in the company's Microsoft tenant (the main one always). */
   kind?: "work" | "personal";
+  /** P143a: a personal Microsoft account (Outlook.com, Hotmail): mail and calendar, no Teams. */
+  consumer?: boolean;
   /** P124: a work account someone below HOD added waits for approval; nothing reads it yet. */
   pending?: boolean;
   approval?: WorkMailApproval | null;

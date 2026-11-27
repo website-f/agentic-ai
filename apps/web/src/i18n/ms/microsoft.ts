@@ -339,4 +339,8 @@ export const MICROSOFT: Record<string, string> = {
   "Use a personal account (Outlook.com)": "Guna akaun peribadi (Outlook.com)",
   "Microsoft asks you to sign in with your work or personal account (Outlook.com, Hotmail) and allow access, then brings you back here.":
     "Microsoft meminta anda log masuk dengan akaun kerja atau peribadi (Outlook.com, Hotmail) dan membenarkan akses, kemudian membawa anda kembali ke sini.",
+  // P143a: the Calendar tab shows personal Microsoft accounts too.
+  "Which calendar": "Kalendar yang mana",
+  "A personal Microsoft account has no Teams meetings, so this event has no Teams link.":
+    "Akaun Microsoft peribadi tiada mesyuarat Teams, jadi acara ini tiada pautan Teams.",
 };

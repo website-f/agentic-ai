@@ -824,6 +824,8 @@ async def _account_row(
         "shared_with": others,
         "is_sign_in": a.email.lower() == principal.user.email.lower(),
         "kind": kind or ("work" if a.is_primary else "personal"),
+        # P143a: a personal Microsoft account (Outlook.com, Hotmail): mail and calendar, no Teams.
+        "consumer": (a.tenant_id or "").lower() == CONSUMER_TENANT,
     }
 
 

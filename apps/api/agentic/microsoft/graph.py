@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..i18n import Msg
 from ..models import MicrosoftAccount, SharedMailbox
 from . import app, auth, http
+from .domains import CONSUMER_TENANT
 from .errors import GraphError, MicrosoftError, NotConfigured, Throttled, Unauthorized, for_status
 
 GRAPH = "https://graph.microsoft.com/v1.0"
@@ -54,6 +55,10 @@ MESSAGE_META = (
     "ccRecipients,subject,hasAttachments,isRead,isDraft,importance,bodyPreview,webLink"
 )
 TokenFn = Callable[[bool], Awaitable[str]]
+# P143a: a personal Microsoft account (Outlook.com, Hotmail, Live: Microsoft's consumer tenant)
+# has no Teams. Its calendar is read without `onlineMeeting` (Graph may refuse that property for
+# such a mailbox) and a new event there is never a Teams meeting (teamsForBusiness is refused).
+ONLINE_FIELD = "onlineMeeting"
 
 
 def iso(dt: datetime) -> str:
@@ -100,12 +105,16 @@ class MessagePage:
 
 class Graph:
     """Graph for one mailbox. `root` is "/me" or "/users/{address}"; `token(force)` gives
-    an access token (force=True refreshes)."""
+    an access token (force=True refreshes). `personal`: a personal Microsoft account
+    (Outlook.com, Hotmail): mail and calendar, no Teams (P143a)."""
 
-    def __init__(self, token: TokenFn, root: str = "/me", *, tz: str = "UTC") -> None:
+    def __init__(
+        self, token: TokenFn, root: str = "/me", *, tz: str = "UTC", personal: bool = False
+    ) -> None:
         self._token = token
         self.root = root
         self.tz = tz
+        self.personal = personal
 
     # ------------------------------------------------------------ plumbing
 
@@ -170,6 +179,21 @@ class Graph:
 
     def _tz(self, tz: str | None) -> list[str]:
         return [f'outlook.timezone="{tz or self.tz}"']
+
+    async def _calendar_get(self, path: str, params: dict[str, Any], prefer: list[str]) -> Any:
+        """P143a: a calendar read that a personal Microsoft account answers too. Personal: asked
+        without `onlineMeeting`. Any mailbox that refuses the question (400): asked once more in
+        its plainest form (no `onlineMeeting`, no $orderby; the caller sorts)."""
+        plain = _plain_calendar(params)
+        first = plain if self.personal else params
+        if self.personal and "$orderby" in params:
+            first = {**plain, "$orderby": params["$orderby"]}
+        try:
+            return await self.request("GET", path, params=first, prefer=prefer)
+        except GraphError as e:
+            if e.status != 400 or first == plain:
+                raise
+        return await self.request("GET", path, params=plain, prefer=prefer)
 
     # ------------------------------------------------------------ profile and probes
 
@@ -374,10 +398,9 @@ class Graph:
         self, start: datetime, end: datetime, *, top: int = 50, tz: str | None = None
     ) -> list[dict[str, Any]]:
         """Events (recurrences expanded) between start and end, in time order."""
-        body = await self.request(
-            "GET",
+        body = await self._calendar_get(
             f"{self.root}/calendarView",
-            params={
+            {
                 "startDateTime": iso(start),
                 "endDateTime": iso(end),
                 "$orderby": "start/dateTime",
@@ -385,14 +408,16 @@ class Graph:
                 "$select": "id,subject,start,end,location,attendees,organizer,isAllDay,"
                 "isCancelled,showAs,onlineMeeting,webLink,bodyPreview",
             },
-            prefer=self._tz(tz),
+            self._tz(tz),
         )
-        return list(body.get("value") or [])
+        events = list(body.get("value") or [])
+        # P143a: in time order even when asked without $orderby (stable for the ordered answer).
+        events.sort(key=lambda e: str((e.get("start") or {}).get("dateTime") or ""))
+        return events
 
     async def get_event(self, event_id: str, *, tz: str | None = None) -> dict[str, Any]:
         """One event (times in `tz`)."""
-        return await self.request(
-            "GET",
+        return await self._calendar_get(
             f"{self.root}/events/{_q(event_id)}",
             params={
                 "$select": "id,subject,start,end,location,attendees,organizer,isAllDay,"
@@ -489,7 +514,7 @@ class Graph:
             ev["body"] = {"contentType": "HTML", "content": body_html}
         if location:
             ev["location"] = {"displayName": location}
-        if online_meeting:
+        if online_meeting and not self.personal:  # P143a: no Teams for a personal account
             ev["isOnlineMeeting"] = True
             ev["onlineMeetingProvider"] = "teamsForBusiness"
         ev.update(extra or {})
@@ -626,8 +651,7 @@ class Graph:
 
     async def event_detail(self, event_id: str, *, tz: str | None = None) -> dict[str, Any]:
         """One event with its description (HTML) and the person's own answer."""
-        return await self.request(
-            "GET",
+        return await self._calendar_get(
             f"{self.root}/events/{_q(event_id)}",
             params={
                 "$select": "id,subject,start,end,location,attendees,organizer,isAllDay,"
@@ -891,6 +915,22 @@ class Graph:
                 raise
 
 
+def _plain_calendar(params: dict[str, Any]) -> dict[str, Any]:
+    """P143a: a calendar question in its plainest form: no `onlineMeeting`, no $orderby."""
+    out = {k: v for k, v in params.items() if k != "$orderby"}
+    if "$select" in out:
+        out["$select"] = ",".join(
+            f for f in str(out["$select"]).split(",") if f.strip() != ONLINE_FIELD
+        )
+    return out
+
+
+def is_personal_account(acct: MicrosoftAccount) -> bool:
+    """P143a: a personal Microsoft account (Outlook.com, Hotmail, Live): Microsoft's consumer
+    tenant. Mail and calendar only; no Teams."""
+    return (acct.tenant_id or "").strip().lower() == CONSUMER_TENANT
+
+
 def _q(graph_id: str) -> str:
     return urllib.parse.quote(graph_id, safe="")
 
@@ -948,7 +988,7 @@ async def for_account(db: AsyncSession, acct: MicrosoftAccount) -> Graph:
     async def token(force: bool = False) -> str:
         return await auth.access_token(db, acct, force=force)
 
-    return Graph(token, "/me")
+    return Graph(token, "/me", personal=is_personal_account(acct))
 
 
 async def for_mailbox(db: AsyncSession, mailbox: SharedMailbox) -> Graph:

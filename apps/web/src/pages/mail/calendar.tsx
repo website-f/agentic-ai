@@ -62,7 +62,9 @@ const RESPONSE: Record<string, string> = {
 
 const hm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" }) : "");
 
-export function OutlookCalendar() {
+/** P143a: `teams` false for a personal Microsoft account (Outlook.com, Hotmail): its calendar
+ * shows the same, but new events there have no Teams link (Teams is work-only). */
+export function OutlookCalendar({ teams = true }: { teams?: boolean }) {
   const t = useT();
   const wide = useMedia("(min-width: 768px)");
   const [anchor, setAnchor] = useState(() => weekStart(new Date()));
@@ -97,7 +99,7 @@ export function OutlookCalendar() {
         <div className="flex gap-2 max-sm:w-full [&>button]:max-sm:flex-1">
           <Button size="sm" variant="outline" onClick={() => setCreating(true)}><CalendarPlusIcon size={15} /> {t("New event")}</Button>
           {/* P109b: a Teams meeting the AI fills in; Outlook sends the invitations. */}
-          <Button size="sm" onClick={() => openMeeting()}><VideoCameraIcon size={15} /> {t("New Teams meeting")}</Button>
+          {teams ? <Button size="sm" onClick={() => openMeeting()}><VideoCameraIcon size={15} /> {t("New Teams meeting")}</Button> : null}
         </div>
       </div>
       {q.isLoading ? <Skeleton className="h-72 rounded-[var(--radius-md)]" />
@@ -134,7 +136,7 @@ export function OutlookCalendar() {
           </ol>
         )}
       {openId ? <EventSheet id={openId} onClose={() => setOpenId(null)} /> : null}
-      {creating ? <NewEvent onClose={() => setCreating(false)} /> : null}
+      {creating ? <NewEvent teams={teams} onClose={() => setCreating(false)} /> : null}
     </div>
   );
 }
@@ -215,7 +217,7 @@ function EventSheet({ id, onClose }: { id: string; onClose: () => void }) {
   );
 }
 
-function NewEvent({ onClose }: { onClose: () => void }) {
+function NewEvent({ teams, onClose }: { teams: boolean; onClose: () => void }) {
   const t = useT();
   const qc = useQueryClient();
   const start0 = new Date();
@@ -226,7 +228,7 @@ function NewEvent({ onClose }: { onClose: () => void }) {
   const [end, setEnd] = useState(toLocalInput(new Date(start0.getTime() + 3600_000).toISOString()));
   const [guests, setGuests] = useState("");
   const [location, setLocation] = useState("");
-  const [online, setOnline] = useState(true);
+  const [online, setOnline] = useState(teams);
   const [body, setBody] = useState("");
   const [plan, setPlan] = useState("");
   const list = splitAddresses(guests);
@@ -240,12 +242,12 @@ function NewEvent({ onClose }: { onClose: () => void }) {
     if (e.end) setEnd(toLocalInput(e.end));
     if (e.attendees.length) setGuests(e.attendees.join(", "));
     if (e.location) setLocation(e.location);
-    setOnline(e.online);
+    setOnline(teams && e.online);
     if (e.body) setBody(e.body);
     toast.success(t("Filled in. Check it, then press Create."));
   });
   const create = useMutation({
-    mutationFn: () => createEvent({ subject: subject.trim(), start: fromLocalInput(start), end: fromLocalInput(end), attendees: list, location: location.trim(), body, online }),
+    mutationFn: () => createEvent({ subject: subject.trim(), start: fromLocalInput(start), end: fromLocalInput(end), attendees: list, location: location.trim(), body, online: teams && online }),
     onSuccess: () => { toast.success(list.length ? t("Event created. Invitations were sent.") : t("Event created.")); void qc.invalidateQueries({ queryKey: m365Keys.all }); onClose(); },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -273,7 +275,8 @@ function NewEvent({ onClose }: { onClose: () => void }) {
         <Field label={t("Guests (emails, optional)")} value={guests} onChange={(e) => setGuests(e.target.value)} inputMode="email"
           error={!okGuests ? t("Check the email addresses.") : undefined} />
         <Field label={t("Place (optional)")} value={location} maxLength={255} onChange={(e) => setLocation(e.target.value)} />
-        <SwitchField checked={online} onCheckedChange={setOnline} label={t("Teams meeting")} hint={t("Adds a Teams link to join online.")} />
+        {teams ? <SwitchField checked={online} onCheckedChange={setOnline} label={t("Teams meeting")} hint={t("Adds a Teams link to join online.")} />
+          : <p className="text-[12.5px] text-muted">{t("A personal Microsoft account has no Teams meetings, so this event has no Teams link.")}</p>}
         <TextareaField label={t("Agenda (optional)")} rows={3} value={body} onChange={(e) => setBody(e.target.value)} />
       </div>
     </ResponsiveDialog>

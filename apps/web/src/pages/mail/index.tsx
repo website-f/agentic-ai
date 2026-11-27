@@ -66,13 +66,14 @@ import {
   type MailActionKind,
   type MailActivity,
   type MailStatus,
+  type MsAccount,
   type SharedMailbox,
 } from "@/lib/microsoft";
 import { canAssist } from "@/lib/my-ai";
 import { meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 
-import { AccountSwitcher } from "./account-switcher";
+import { AccountSwitcher, CalendarAccountPicker } from "./account-switcher";
 import { M365Frame, type FrameTab } from "./frame";
 import { OutlookInbox } from "./inbox";
 import { useM365Routing, useMailboxPick } from "./mailbox-pick";
@@ -183,6 +184,17 @@ export function MailPage() {
   };
 
   const mainShown = selected === "main";
+  // P143a: the person's own Microsoft accounts the Calendar tab can show (work and personal, main or
+  // extra; a waiting one never), and the one shown now. A personal Microsoft account (Outlook.com,
+  // Hotmail) has no Teams, so no Teams meeting is offered for it.
+  const calAccounts = useMemo(() => (mm.data?.accounts ?? []).filter((a) => a.connected && !a.pending), [mm.data]);
+  const shownMs = extraId ? calAccounts.find((a) => a.id === extraId) : calAccounts.find((a) => a.primary);
+  const teamsHere = !(shownMs?.consumer ?? (!extraId && account.data?.personal));
+  const pickCalendar = (a: MsAccount) => {
+    if (search.box) setBox(undefined);
+    pickMs(a.primary ? null : a.id);
+  };
+  const calendar = <Suspense fallback={tabFallback}><OutlookCalendar key={extraId ?? "main"} teams={teamsHere} /></Suspense>;
   // P109: Outlook itself (live from Microsoft), or what the AI did with each mail.
   const [mailView, setMailView] = useState<"inbox" | "activity">("inbox");
   const app: M365App = APPS.includes(search.app as M365App) ? (search.app as M365App) : "mail";
@@ -227,9 +239,11 @@ export function MailPage() {
 
   const actions = connected ? (
     <>
-      <Button size="sm" onClick={() => openMeeting()} className="max-sm:size-11 max-sm:px-0" aria-label={t("New Teams meeting")} title={t("New Teams meeting")}>
-        <VideoCameraIcon size={16} /> <span className="max-sm:sr-only">{t("New Teams meeting")}</span>
-      </Button>
+      {teamsHere ? (
+        <Button size="sm" onClick={() => openMeeting()} className="max-sm:size-11 max-sm:px-0" aria-label={t("New Teams meeting")} title={t("New Teams meeting")}>
+          <VideoCameraIcon size={16} /> <span className="max-sm:sr-only">{t("New Teams meeting")}</span>
+        </Button>
+      ) : null}
       <Button size="icon" variant="ghost" aria-label={t("Refresh")} title={t("Refresh")} onClick={refresh}><ArrowsClockwiseIcon size={17} /></Button>
     </>
   ) : null;
@@ -257,7 +271,15 @@ export function MailPage() {
             {app === "mail" && inTab && mainShown && connected && account.data ? <MicrosoftAbilities account={account.data} /> : null}
             {app === "mail" || app === "teams" ? <Suspense fallback={null}><WaitingDrafts assist={assist} /></Suspense> : null}
             {app === "teams" ? <NeedsOutlook><Suspense fallback={tabFallback}><TeamsPanel /></Suspense></NeedsOutlook>
-              : app === "calendar" ? <NeedsOutlook><Suspense fallback={tabFallback}><OutlookCalendar /></Suspense></NeedsOutlook>
+              : app === "calendar" ? (
+                <>
+                  {calAccounts.length > 1 || (!connected && calAccounts.length) ? (
+                    <CalendarAccountPicker accounts={calAccounts} shownId={shownMs?.id ?? null} onPick={pickCalendar} />
+                  ) : null}
+                  {/* An extra account picked shows even while the main one needs connecting. */}
+                  {extraId ? calendar : <NeedsOutlook>{calendar}</NeedsOutlook>}
+                </>
+              )
               : app === "approvals" ? <NeedsOutlook><Suspense fallback={tabFallback}><TeamsApprovals /></Suspense></NeedsOutlook>
               : app === "accounts" ? <Suspense fallback={tabFallback}><OtherEmailAccounts /></Suspense>
               : !inTab ? null

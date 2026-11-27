@@ -4,7 +4,7 @@
  * mailbox, marked "Shared with N" when others here connected it too. "Add another Microsoft
  * account" connects one more. The pick is remembered on this device and only applies on this
  * page; everywhere else uses the main account. */
-import { CaretDownIcon, CheckIcon, PlusIcon, TrashIcon, UserIcon, UsersThreeIcon } from "@phosphor-icons/react";
+import { BriefcaseIcon, CaretDownIcon, CheckIcon, PlusIcon, TrashIcon, UserIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
 import { toast } from "sonner";
@@ -22,7 +22,38 @@ import { refreshMsAccounts, useMailboxPick } from "./mailbox-pick";
 /** "Work", "Personal", "Shared" or the person's own word. */
 export function useKindOf() {
   const t = useT();
-  return (a: MsAccount) => a.label || (a.primary || a.kind === "work" ? t("Work") : a.shared_with > 0 ? t("Shared") : t("Personal"));
+  // P143a: a personal Microsoft account (Outlook.com, Hotmail) is Personal, even as the main one.
+  return (a: MsAccount) => a.label || (a.consumer ? t("Personal") : a.primary || a.kind === "work" ? t("Work") : a.shared_with > 0 ? t("Shared") : t("Personal"));
+}
+
+/** P143a (owner, 27 Nov 2026: "Outlook personal accounts can't be found in Microsoft 365 in their
+ * Calendar tab"): the Calendar tab names whose calendar it shows and lists each of the person's own
+ * connected Microsoft accounts, work and personal (Outlook.com, Hotmail), main or extra. Picking
+ * one is the same pick as the account menu beside the title (./mailbox-pick.ts). */
+export function CalendarAccountPicker({ accounts, shownId, onPick }: {
+  accounts: MsAccount[];
+  /** The account shown now; null: none yet (the main one is not connected). */
+  shownId: string | null;
+  onPick: (a: MsAccount) => void;
+}) {
+  const t = useT();
+  const kindOf = useKindOf();
+  return (
+    <div role="radiogroup" aria-label={t("Which calendar")} className="flex min-w-0 flex-wrap gap-1.5">
+      {accounts.map((a) => {
+        const on = a.id === shownId;
+        return (
+          <button key={a.id} type="button" role="radio" aria-checked={on} onClick={() => onPick(a)}
+            className={cn("flex max-w-full min-w-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-left text-[12.5px] transition-colors focus-visible:ring-3 focus-visible:ring-accent/25 focus-visible:outline-none",
+              on ? "border-accent/50 bg-accent-soft text-accent" : "border-border bg-surface hover:border-accent/40")}>
+            {a.consumer || (!a.primary && a.kind !== "work") ?<UserIcon size={14} className="shrink-0" /> : <BriefcaseIcon size={14} className="shrink-0" />}
+            <span className="shrink-0 font-medium">{kindOf(a)}</span>
+            <span className={cn("min-w-0 truncate", on ? "text-accent/80" : "text-muted")}>{a.email}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 /** P122: the pick itself lives in ./mailbox-pick.ts (shared with the Work / Personal tabs), and
