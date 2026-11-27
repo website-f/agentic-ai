@@ -416,6 +416,7 @@ async def test_connect_is_bound_to_the_starting_session(client, llm, temporal, m
         "email": "boss@maju.example.com",
         "display_name": "Boss One",
         "status": "connected",
+        "personal": False,  # P142: a work account
         "mail_ok": True,
         "calendar_ok": True,
         "teams_ok": False,  # P52: connected before Teams was granted (GRANTED has no Chat.Read)

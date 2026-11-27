@@ -2089,3 +2089,8 @@ MS.update({k: v for k, v in MS_ORG_SYNC.items() if k not in MS})
 from .ms_p140 import MS_P140  # noqa: E402
 
 MS.update({k: v for k, v in MS_P140.items() if k not in MS})
+
+# P142: a personal Microsoft account as the main one.
+from .ms_p142 import MS_P142  # noqa: E402
+
+MS.update({k: v for k, v in MS_P142.items() if k not in MS})

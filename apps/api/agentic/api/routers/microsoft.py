@@ -33,6 +33,7 @@ from ...core.valkey import valkey
 from ...i18n import Msg, render, tr
 from ...microsoft import access, app, auth, domains, graph, signin, sync
 from ...microsoft import rules as mail_rules
+from ...microsoft.domains import CONSUMER_TENANT
 from ...microsoft.errors import Forbidden, MicrosoftError, NotConfigured, NotFound
 from ...models import Agent, Branch, MailItem, Membership, MicrosoftAccount, SharedMailbox
 from ...org import requests as asks
@@ -210,6 +211,8 @@ class ConnectIn(BaseModel):
     with_new_chats: bool = False
     # P118: connect another Microsoft account (personal or shared) beside the main one.
     another: bool = False
+    # P142: connect a personal Microsoft account (Outlook.com, Hotmail, Live) as the main one.
+    personal: bool = False
 
 
 @router.post(f"{BASE}/connect")
@@ -239,9 +242,12 @@ async def microsoft_connect(
             with_files=bool(body and body.with_files),
             with_new_chats=bool(body and body.with_new_chats),
             another=bool(body and body.another),
+            personal=bool(body and body.personal),
         )
     except NotConfigured as e:
         raise api_error(status.HTTP_409_CONFLICT, "not_configured", str(e)) from e
+    except MicrosoftError as e:
+        raise api_error(status.HTTP_409_CONFLICT, "personal_off", _say(e)) from e
     if await app.remember_base(db, principal.workspace_id, base, principal.actor):
         await db.commit()
     return {"url": url}
@@ -485,6 +491,8 @@ async def microsoft_account(
         "email": acct.email,
         "display_name": acct.display_name,
         "status": acct.status,
+        # P142: a personal Microsoft account (Outlook.com): mail and calendar only, no Teams.
+        "personal": (acct.tenant_id or "").lower() == CONSUMER_TENANT,
         "mail_ok": auth.has_scope(acct.scopes, "Mail.ReadWrite"),
         "calendar_ok": auth.has_scope(acct.scopes, "Calendars.ReadWrite"),
         # P52: Teams needs a reconnect for connections made before Teams was added.

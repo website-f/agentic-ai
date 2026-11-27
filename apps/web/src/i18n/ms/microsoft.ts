@@ -334,4 +334,9 @@ export const MICROSOFT: Record<string, string> = {
   "Leave it empty and your AI answers what needs answering.": "Biarkan kosong dan AI anda akan menjawab apa yang perlu dijawab.",
   "Your AI writes it; you read it and press Send in Teams under Waiting for your approval. Nothing is sent before that.":
     "AI anda menulisnya; anda baca dan tekan Hantar dalam Teams di bawah Menunggu kelulusan anda. Tiada yang dihantar sebelum itu.",
+  // P142: a personal Microsoft account as the main one.
+  "Use a personal account": "Guna akaun peribadi",
+  "Use a personal account (Outlook.com)": "Guna akaun peribadi (Outlook.com)",
+  "Microsoft asks you to sign in with your work or personal account (Outlook.com, Hotmail) and allow access, then brings you back here.":
+    "Microsoft meminta anda log masuk dengan akaun kerja atau peribadi (Outlook.com, Hotmail) dan membenarkan akses, kemudian membawa anda kembali ke sini.",
 };

@@ -57,6 +57,7 @@ import {
   microsoftConfigQuery,
   myMailboxesQuery,
   startMicrosoftConnect,
+  startPersonalConnect,
   STATUS_LABEL,
   STATUS_TONE,
   WEBHOOK_LABEL,
@@ -326,13 +327,27 @@ function PersonalMailbox() {
     onSuccess: (r) => { window.location.href = r.url; },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  // P142: a personal Microsoft account (Outlook.com, Hotmail) as the main one.
+  const config = useQuery(microsoftConfigQuery);
+  const personal = useMutation({
+    mutationFn: startPersonalConnect,
+    onSuccess: (r) => { window.location.href = r.url; },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
   if (account.isLoading) return <Skeleton className="h-20 rounded-[var(--radius-md)]" />;
   if (account.error) return isMissingApi(account.error) ? <MissingServer /> : <p role="alert" className="text-[13.5px] text-danger">{errorMessage(account.error)}</p>;
   if (!account.data?.connected) {
     return (
       <EmptyState icon={MicrosoftOutlookLogoIcon} title={t("Connect your Outlook")}
         body={t("Your AI then reads new mail as it arrives, sorts it, turns invoices and requests into tasks, saves attachments and drafts replies. Nothing is sent until you approve it.")}
-        action={<Button loading={connect.isPending} onClick={() => connect.mutate()}><MicrosoftOutlookLogoIcon size={16} weight="bold" /> {t("Connect Outlook")}</Button>} />
+        action={
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button loading={connect.isPending} onClick={() => connect.mutate()}><MicrosoftOutlookLogoIcon size={16} weight="bold" /> {t("Connect Outlook")}</Button>
+            {config.data?.personal_accounts ? (
+              <Button variant="outline" loading={personal.isPending} onClick={() => personal.mutate()}>{t("Use a personal account (Outlook.com)")}</Button>
+            ) : null}
+          </div>
+        } />
     );
   }
   if (account.data.status === "reconnect_needed") return <OutlookConnection />;

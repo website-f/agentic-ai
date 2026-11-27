@@ -165,6 +165,7 @@ async def auth_url(
     with_files: bool = False,
     with_new_chats: bool = False,
     another: bool = False,
+    personal: bool = False,
 ) -> str:
     """Microsoft's sign-in page for this person. P118: `another` connects an extra account
     (personal or shared) beside their main one. `base` is the public address the callback
@@ -172,11 +173,28 @@ async def auth_url(
     `with_files` also asks to read their SharePoint / OneDrive files (the Library). P102:
     `with_new_chats` also asks to start new Teams chats (the Teams tab)."""
     cfg = await _configured(db, workspace_id)
+    open_to_personal = cfg.personal_accounts and cfg.multi_tenant
+    if personal and not open_to_personal:
+        raise MicrosoftError(
+            Msg(
+                "Personal Microsoft accounts are switched off here. An owner turns them on in "
+                "Settings, Microsoft 365."
+            )
+        )
     if another:
         # P124: an extra account asks for mail and calendar only, through "common" when the
         # owner allowed personal Microsoft accounts (and the app is multi-tenant).
         scope = app.EXTRA_SCOPES
-        authority = app.COMMON if cfg.personal_accounts and cfg.multi_tenant else cfg.tenant
+        authority = app.COMMON if open_to_personal else cfg.tenant
+    elif open_to_personal and (personal or await _personal_main(db, workspace_id, user_id)):
+        # P142 (Fitri, 27 Nov 2026: "people who sign in with a personal account, because their
+        # work account is sometimes shared, could not connect Outlook.com on the Microsoft 365
+        # page"): the company's own sign-in page refuses a personal Microsoft account, so their
+        # main account signs in through "common" with what a personal account can give (mail
+        # and calendar; Teams and SharePoint are work-only). Chosen on the page, or by itself
+        # when their sign-in email is a personal address or their account already is one.
+        scope = app.EXTRA_SCOPES
+        authority = app.COMMON
     else:
         scope = await scopes_for(db, cfg, workspace_id, user_id, with_files, with_new_chats)
         authority = cfg.tenant
@@ -216,6 +234,27 @@ async def auth_url(
         "prompt": "select_account",
     }
     return f"{app.LOGIN}/{authority}/oauth2/v2.0/authorize?{urllib.parse.urlencode(q)}"
+
+
+async def _personal_main(db: AsyncSession, workspace_id: str, user_id: str) -> bool:
+    """P142: this person's Microsoft side is personal: their sign-in email is a personal
+    Microsoft address (outlook.com and the like), or their main account already is one."""
+    from ..models import User
+    from .domains import CONSUMER_TENANT
+    from .signin import CONSUMER_DOMAINS
+
+    user = await db.get(User, user_id)
+    email = (user.email if user else "").strip().lower()
+    if "@" in email and email.rsplit("@", 1)[-1] in CONSUMER_DOMAINS:
+        return True
+    tid = await db.scalar(
+        select(MicrosoftAccount.tenant_id).where(
+            MicrosoftAccount.workspace_id == workspace_id,
+            MicrosoftAccount.user_id == user_id,
+            MicrosoftAccount.is_primary.is_(True),
+        )
+    )
+    return (tid or "").lower() == CONSUMER_TENANT
 
 
 async def _started(state: str, key: str) -> bool:

@@ -69,6 +69,8 @@ export interface MicrosoftAccount {
   status: "connected" | "reconnect_needed" | "disconnected" | "error";
   mail_ok: boolean;
   calendar_ok: boolean;
+  /** P142: a personal Microsoft account (Outlook.com, Hotmail): mail and calendar only, no Teams. */
+  personal?: boolean;
   /** P52: the connection allows Teams (made after Teams was added; else reconnect once). */
   teams_ok?: boolean;
   /** P63: the connection may read Teams channel posts (an admin turned it on, then a reconnect). */
@@ -254,6 +256,8 @@ export const myMailboxesQuery = queryOptions({
 
 /** "Add another Microsoft account": Microsoft's sign-in page, back on the Microsoft 365 page. */
 export const startAnotherConnect = () => api<{ url: string }>(`${MS_PATH}/connect`, "POST", { another: true });
+/** P142: connect a personal Microsoft account (Outlook.com, Hotmail, Live) as the main one. */
+export const startPersonalConnect = () => api<{ url: string }>(`${MS_PATH}/connect`, "POST", { personal: true });
 export const nameMsAccount = (id: string, label: string) => api<MsAccount>(`${MS_PATH}/accounts/${encodeURIComponent(id)}`, "PATCH", { label });
 export const removeMsAccount = (id: string) => api<void>(`${MS_PATH}/accounts/${encodeURIComponent(id)}`, "DELETE");
 
@@ -515,9 +519,14 @@ export interface Capability { key: CapabilityKey; ok: boolean; fix: CapabilityFi
 export function capabilities(a: MicrosoftAccount | null | undefined): Capability[] {
   if (!a?.connected) return [];
   const teams = a.teams_ok !== false;
-  return [
+  const basics: Capability[] = [
     { key: "mail", ok: a.mail_ok, fix: a.mail_ok ? null : "reconnect" },
     { key: "calendar", ok: a.calendar_ok, fix: a.calendar_ok ? null : "reconnect" },
+  ];
+  // P142: a personal account has no Teams at all: nothing to fix there.
+  if (a.personal) return basics;
+  return [
+    ...basics,
     { key: "teams", ok: teams, fix: teams ? null : "reconnect" },
     { key: "new_chats", ok: a.new_chats_ok === true, fix: a.new_chats_ok === true ? null : teams ? "new_chats" : "reconnect" },
     { key: "channels", ok: a.channels_ok === true, fix: a.channels_ok === true ? null : "admin" },

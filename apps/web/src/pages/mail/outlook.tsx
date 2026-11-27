@@ -50,6 +50,7 @@ import {
   readMsReturn,
   saveMicrosoftPrefs,
   startMicrosoftConnect,
+  startPersonalConnect,
   startNewChatsConnect,
   TASK_CATEGORIES,
   WEBHOOK_LABEL,
@@ -292,6 +293,13 @@ function useOutlook() {
     onSuccess: (r) => { window.location.href = r.url; },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  // P142: a personal Microsoft account (Outlook.com, Hotmail) as the main one, for people whose
+  // work account is shared. Mail and calendar; Teams is work-only.
+  const personal = useMutation({
+    mutationFn: startPersonalConnect,
+    onSuccess: (r) => { window.location.href = r.url; },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
   const disconnect = async () => {
     try {
       await disconnectMicrosoft();
@@ -303,7 +311,7 @@ function useOutlook() {
       toast.error(errorMessage(e));
     }
   };
-  return { config, account, connect, disconnect };
+  return { config, account, connect, personal, disconnect };
 }
 
 /**
@@ -312,7 +320,7 @@ function useOutlook() {
  */
 export function OutlookConnection({ bare, className }: { bare?: boolean; className?: string }) {
   const t = useT();
-  const { config, account, connect, disconnect } = useOutlook();
+  const { config, account, connect, personal, disconnect } = useOutlook();
   const [confirmOff, setConfirmOff] = useState(false);
   const cfg = config.data;
   const acct = account.data?.connected ? account.data : null;
@@ -343,10 +351,19 @@ export function OutlookConnection({ bare, className }: { bare?: boolean; classNa
               : t("{email} waits for approval by your managers. Cancel it on the Microsoft 365 page, or connect your own account instead.", { email: waiting.email ?? "" })}
           </p>
         ) : null}
-        <p className="min-w-0 flex-1 basis-64 text-[13px] text-muted">{t("Microsoft asks you to sign in with your work account and allow access, then brings you back here.")}</p>
-        <Button className="max-sm:w-full" loading={connect.isPending} onClick={() => connect.mutate()}>
-          <MicrosoftOutlookLogoIcon size={16} weight="bold" /> {t("Connect Outlook")}
-        </Button>
+        <p className="min-w-0 flex-1 basis-64 text-[13px] text-muted">{cfg.personal_accounts
+          ? t("Microsoft asks you to sign in with your work or personal account (Outlook.com, Hotmail) and allow access, then brings you back here.")
+          : t("Microsoft asks you to sign in with your work account and allow access, then brings you back here.")}</p>
+        <div className="flex flex-wrap gap-2 max-sm:w-full">
+          <Button className="max-sm:w-full" loading={connect.isPending} onClick={() => connect.mutate()}>
+            <MicrosoftOutlookLogoIcon size={16} weight="bold" /> {t("Connect Outlook")}
+          </Button>
+          {cfg.personal_accounts ? (
+            <Button className="max-sm:w-full" variant="outline" loading={personal.isPending} onClick={() => personal.mutate()}>
+              {t("Use a personal account")}
+            </Button>
+          ) : null}
+        </div>
       </div>
     );
   } else {
