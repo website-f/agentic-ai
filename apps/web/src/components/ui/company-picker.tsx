@@ -28,11 +28,17 @@ export interface CompanyLike {
   id: string;
   name: string;
   slug?: string;
+  /** P144: its departments (a company is found by their names too). */
+  departments?: { name: string }[];
 }
 
-/** Companies as picker options: the name, found by its short name (slug) too. */
+/** Companies as picker options: the name, found by its short name (slug) and (P144) its
+ * departments' names too. */
 export function companyOptions(companies: CompanyLike[]): PickOption[] {
-  return companies.map((b) => ({ value: b.id, label: b.name, keywords: b.slug ? [b.slug] : undefined }));
+  return companies.map((b) => {
+    const keywords = [...(b.slug ? [b.slug] : []), ...(b.departments ?? []).map((d) => d.name)];
+    return { value: b.id, label: b.name, keywords: keywords.length ? keywords : undefined };
+  });
 }
 
 interface Base {

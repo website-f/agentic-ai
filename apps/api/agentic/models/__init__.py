@@ -133,6 +133,9 @@ class Membership(Timestamps, Base):
         String(12), default="company", server_default="company"
     )
     uploads_for_others: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # P144 (migration 0082): extra Library access on top of their role and place (units, whole
+    # companies, departments), never less: knowledge/grants.py. None = none.
+    library_grants: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # P109 (migration 0071): this person's Getting started progress here: steps ticked by hand,
     # page tours seen, the welcome tour's state and where to resume it (api/routers/
     # getting_started.py). None until they first save something.

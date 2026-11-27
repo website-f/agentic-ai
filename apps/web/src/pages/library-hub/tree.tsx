@@ -1,7 +1,7 @@
 /** The Browse tab's folder directory: P143b: the units first (Unit HR, Unit Audit, Unit
  * Kewangan: the central departments' own folders, for the people who read them), then the
  * company's own folders as a tree (several companies: one "Other companies" picker instead of a
- * row each), then the ready-made folders (documents, SOPs, guidelines, templates and quick views of the file
+ * row each; P144: the units are searchable in it too), then the ready-made folders (documents, SOPs, guidelines, templates and quick views of the file
  * store) with their counts. A real folder tree down the side on tablets and desktops (its own
  * scroll, arrow keys, chevrons); in a sheet and as a drill-down list on phones, with a
  * breadcrumb and a back button above the contents. */
@@ -17,7 +17,7 @@ import { locale, useT } from "@/i18n";
 import { docStatsQuery, fileStatsQuery, templatesQuery } from "@/lib/documents";
 import type { StoreView } from "@/lib/file-store";
 import { buildTree, fileTreeQuery, folderChain, folderName, type FolderNode } from "@/lib/intake";
-import { libraryUnitsQuery, unitTreeQuery, type UnitKey } from "@/lib/library-units";
+import { libraryUnitsQuery, pickedUnit, unitOptions, unitTreeQuery, type UnitKey } from "@/lib/library-units";
 import { reviewCountQuery } from "@/lib/provenance";
 import type { Branch } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -227,7 +227,8 @@ export function LibraryTree({ view, folder, branch, branches, unit = null, onVie
           key: folderKey(""), kind: "root" as const, label: branch.name, path: "", count: tree?.total_files ?? root.files, flagged: root.flagged,
           children: root.children.map((c) => folderNode(c)),
         }] : []),
-        ...(branches.length > 1 || !branch ? [{ key: PICKER, kind: "picker" as const, label: t("Other companies"), children: [] }] : []),
+        // P144: the units are in it too ("HR", "Kewangan" find them), for whoever has any.
+        ...(branches.length > 1 || !branch || units.length ? [{ key: PICKER, kind: "picker" as const, label: t("Other companies"), children: [] }] : []),
       ],
     };
     return [...unitGroup, company, ...VIEW_GROUPS.map((g, i): TNode => ({
@@ -367,7 +368,8 @@ export function LibraryTree({ view, folder, branch, branches, unit = null, onVie
               over={over === row.node.key} dnd={dndFor(row.node)}
               picker={row.node.kind === "picker" ? (
                 <CompanyPicker size="sm" className="w-full" label={t("Other companies")} placeholder={t("Other companies")}
-                  companies={branches.filter((b) => b.id !== branch?.id)} value="" onValueChange={onCompany} />
+                  before={unitOptions(units, t)} companies={branches.filter((b) => b.id !== branch?.id)} value=""
+                  onValueChange={(v) => { const u = pickedUnit(v); if (u) onFolder("", u); else onCompany(v); }} />
               ) : undefined}
               onActivate={() => activate(row.node)} onToggle={() => toggle(row.node.key)} onFocus={() => setFocusKey(row.node.key)}
               setEl={(el) => { if (el) els.current.set(row.node.key, el); else els.current.delete(row.node.key); }} />

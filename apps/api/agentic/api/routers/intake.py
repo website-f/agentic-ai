@@ -21,6 +21,7 @@ from ...agents import dispatch
 from ...core.db import get_db
 from ...documents import service
 from ...intake import pipeline, unpack
+from ...knowledge import grants
 from ...models import Department, DocFile, IntakeBatch
 from ...services import audit
 from .. import paging
@@ -117,7 +118,12 @@ async def upload(
     elif branch_id is None and not sc.everything:
         branch_id = sc.branch_id  # an office role files under its own company
     await check_branch(db, principal, branch_id)
-    if not sc.everything and not sc.in_branch(branch_id):
+    if (
+        not sc.everything
+        and not sc.in_branch(branch_id)
+        # P144: a unit or company given to them on the Members page (knowledge/grants.py)
+        and not grants.may_file(principal, branch_id, department_id)
+    ):
         raise api_error(
             status.HTTP_403_FORBIDDEN, "out_of_scope", "You can add documents to your company only."
         )

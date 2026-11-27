@@ -28,6 +28,7 @@ from ..core.config import settings
 from ..core.fence import fence
 from ..models import Agent, DocFile, KnowledgeChunk
 from . import dept_scope, indexer
+from . import grants as grants_
 
 RRF_K = 60
 POOL = 40
@@ -56,6 +57,12 @@ class Reader:
     # read in SQL).
     limit_user: str | None = None
     dept_only: bool | None = False
+    # P144 (knowledge/grants.py): a person's extra Library access (units, companies) and whether
+    # a granted department's restricted files are theirs too (not for staff). An agent's comes
+    # from its owner's membership in SQL (grant_owner).
+    grants: grants_.Grants | None = None
+    grant_restricted: bool = False
+    grant_owner: str | None = None
 
     @property
     def branch_ids(self) -> list[str]:
@@ -71,6 +78,7 @@ def for_agent(agent: Agent) -> Reader:
         personal=bool(getattr(agent, "is_twin", False)),
         limit_user=agent.owner_user_id,
         dept_only=None if agent.owner_user_id else False,
+        grant_owner=agent.owner_user_id,
     )
 
 
@@ -84,6 +92,8 @@ def for_person(principal: Any) -> Reader:
             branch_id=sc.branch_id,
             all_departments=True,
             more_branches=tuple(sorted(sc.branch_ids - {sc.branch_id})),
+            grants=grants_.of(principal),
+            grant_restricted=True,
         )
     return Reader(
         principal.workspace_id,
@@ -93,13 +103,23 @@ def for_person(principal: Any) -> Reader:
         more_branches=tuple(sorted(sc.branch_ids - {sc.branch_id})),
         limit_user=principal.user.id,
         dept_only=bool(getattr(principal, "library_dept_only", False)),
+        grants=grants_.of(principal),
+        grant_restricted=grants_.restricted_ok(principal),
     )
 
 
 def scope_where(r: Reader) -> Any:
-    conds = [KnowledgeChunk.workspace_id == r.workspace_id]
+    ws = KnowledgeChunk.workspace_id == r.workspace_id
     if r.everything:
-        return and_(*conds)
+        return ws
+    # P144: the passages of the units / companies given to the person (or the agent's owner).
+    extra = grants_.chunks_where(r.workspace_id, r.grants, r.grant_restricted, r.grant_owner)
+    base = _scope_where(r)
+    return and_(ws, or_(base, extra)) if extra is not None else base
+
+
+def _scope_where(r: Reader) -> Any:
+    conds = [KnowledgeChunk.workspace_id == r.workspace_id]
     narrow = dept_scope.chunk_cond(r.workspace_id, r.limit_user, r.dept_only)
     if narrow is not None:  # P109: own department only
         conds.append(narrow)
@@ -119,9 +139,13 @@ def scope_where(r: Reader) -> Any:
 def sees_file(r: Reader, f: DocFile) -> bool:
     """P109: `sees` for one library file, with the own-department-only rule."""
     restricted_dept = f.department_id if f.restricted else None
-    return sees(r, f.branch_id, restricted_dept) and (
-        r.everything or dept_scope.file_ok(r.dept_only is True, r.limit_user, r.department_id, f)
-    )
+    return (
+        sees(r, f.branch_id, restricted_dept)
+        and (
+            r.everything
+            or dept_scope.file_ok(r.dept_only is True, r.limit_user, r.department_id, f)
+        )
+    ) or grants_.file_ok(r.grants, r.grant_restricted, f)  # P144
 
 
 def sees_linked(r: Reader, branch_id: str | None) -> bool:

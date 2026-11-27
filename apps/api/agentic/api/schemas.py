@@ -32,6 +32,17 @@ PrimaDepartment = Literal[
 ]  # fmt: skip
 # P109: what of the Library a member reads (knowledge/dept_scope.py).
 LibraryScope = Literal["company", "department"]
+# P144: the Library's units (knowledge/library_units.UNITS).
+UnitKey = Literal["hr", "audit", "finance"]
+
+
+class LibraryGrants(BaseModel):
+    """P144: extra Library access given to one member (knowledge/grants.py): units ("all" or
+    some), companies ("all" or some ids) and departments (ids). Empty lists: none."""
+
+    units: Literal["all"] | list[UnitKey] = Field(default_factory=list, max_length=10)
+    companies: Literal["all"] | list[str] = Field(default_factory=list, max_length=500)
+    departments: list[str] = Field(default_factory=list, max_length=200)
 
 
 class _Password(BaseModel):
@@ -100,6 +111,8 @@ class ScopeOut(BaseModel):
     department_name: str | None = None
     # P98: every branch their scope covers (home first), with names.
     branches: list[BranchRef] = []
+    # P144: the companies given to them in the Library (Members page), with names.
+    library_branches: list[BranchRef] = []
 
 
 class MeOut(BaseModel):
@@ -156,6 +169,8 @@ class MemberOut(BaseModel):
     head_of: list[DepartmentRef] = []
     library_scope: LibraryScope = "company"
     uploads_for_others: bool = False
+    # P144: extra Library access given to them (units, companies, departments); null: none.
+    library_grants: LibraryGrants | None = None
     # P111: their job title (designation) on the organization chart.
     job_title: str | None = None
 
@@ -322,6 +337,8 @@ class LibraryAccessIn(BaseModel):
 
     library_scope: LibraryScope | None = None
     uploads_for_others: bool | None = None
+    # P144: extra Library access (replaces what they had; null or all empty: none).
+    grants: LibraryGrants | None = None
 
 
 class TempPasswordOut(BaseModel):

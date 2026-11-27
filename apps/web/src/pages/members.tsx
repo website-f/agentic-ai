@@ -30,6 +30,7 @@ import {
   memberStatus, membersPageUrl, PAGE_SIZES,
   type MemberSort, type MembersFilters, type MembersPage, type MemberStatus, type PageSize,
 } from "@/lib/members";
+import { libraryUnitsQuery } from "@/lib/library-units";
 import { branchesQuery, keys, meQuery, membersQuery } from "@/lib/queries";
 import { hasAny, ROLE_INFO, SCOPED_ROLES, type Branch, type Me, type Member, type Role } from "@/lib/types";
 import { cn, initials, timeAgo } from "@/lib/utils";
@@ -294,8 +295,17 @@ function AccessDialog({ members, me, open, onOpenChange, onDone, inline }: {
   const headOfStart = one ? (one.head_of?.length ? one.head_of.map((d) => d.id) : one.heads_department && one.department_id ? [one.department_id] : []) : [];
   const [headOf, setHeadOf] = useState<string[]>(headOfStart);
   // P109: what of the Library they read, and whether they may upload for other companies.
-  const editsLibrary = !!one && me.permissions.includes("members.manage") && one.user_id !== me.user.id;
+  // P144: also their own manager (team.manage), as the API allows; never for themselves.
+  const editsLibrary = !!one && one.user_id !== me.user.id
+    && (me.permissions.includes("members.manage") || (me.permissions.includes("team.manage") && one.reports_to_user_id === me.user.id));
   const [libraryValue, setLibraryValue] = useState<LibraryValue>(one ? libraryOf(one) : libraryOf(null));
+  // P144: the units and companies the person setting it may give (what they open themselves).
+  const { data: givableUnits = [] } = useQuery({ ...libraryUnitsQuery, enabled: editsLibrary });
+  const give = {
+    units: givableUnits.map((u) => ({ key: u.key, label: u.label })),
+    companies: branches,
+    every: me.scope?.kind === "all" && me.permissions.includes("members.manage"),
+  };
   // P98: the people they manage, many at once (sets those people's "reports to").
   const [manages, setManages] = useState<string[] | null>(null);
   // P99: what they reach (one person; the ticked people have their own Access button).
@@ -355,7 +365,7 @@ function AccessDialog({ members, me, open, onOpenChange, onDone, inline }: {
           <ManagesField member={one} members={everyone} value={manages} onChange={setManages} />
         ) : null}
         {editsAccess && one ? <AccessFields value={access} onChange={setAccess} member={one} ownerTarget={role === "owner" || one.role === "owner"} /> : null}
-        {editsLibrary ? <LibraryAccessFields value={libraryValue} onChange={setLibraryValue} role={role} /> : null}
+        {editsLibrary ? <LibraryAccessFields value={libraryValue} onChange={setLibraryValue} role={role} give={give} /> : null}
         <FormError message={save.error ? errorMessage(save.error) : null} />
       </div>
   );

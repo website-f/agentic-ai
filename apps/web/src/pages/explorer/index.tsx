@@ -21,7 +21,7 @@ import { useCompanies } from "@/lib/company";
 import type { Clipboard } from "@/lib/explorer";
 import { type StoreView } from "@/lib/file-store";
 import { buildTree, cleanFolder, fileTreeQuery, filesFromDrop, folderName, type PickedFile } from "@/lib/intake";
-import { libraryUnitsQuery, unitTreeQuery, type LibraryUnit, type UnitKey } from "@/lib/library-units";
+import { libraryUnitsQuery, pickedUnit, unitCompany, unitOptions, unitTreeQuery, type LibraryUnit, type UnitKey } from "@/lib/library-units";
 import { meQuery } from "@/lib/queries";
 import { hasAny, type Branch } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -73,7 +73,7 @@ function UnitCards({ units, onPick }: { units: LibraryUnit[]; onPick: (key: Unit
 
 /** Under "All companies": pick the company whose documents to work on. P143b: with many
  * companies, one searchable picker instead of a card (and a folder count) for each. */
-function CompanyPicker({ branches, onPick }: { branches: Branch[]; onPick: (id: string) => void }) {
+function CompanyPicker({ branches, units, onPick, onUnit }: { branches: Branch[]; units: LibraryUnit[]; onPick: (id: string) => void; onUnit: (key: UnitKey) => void }) {
   const t = useT();
   const many = branches.length > MANY_COMPANIES;
   const trees = useQueries({ queries: (many ? [] : branches).map((b) => fileTreeQuery(b.id)) });
@@ -83,7 +83,10 @@ function CompanyPicker({ branches, onPick }: { branches: Branch[]; onPick: (id: 
         <p className="text-[14px] font-semibold">{many ? t("Other companies") : t("Pick a company first")}</p>
         <p className="text-[13px] text-muted">{t("Each company keeps its own documents. Choose the one you are uploading for or want to browse.")}</p>
         {many ? (
-          <CompanySelect className="mt-2.5 max-w-md" companies={branches} value="" onValueChange={onPick}
+          // P144: the units are found here too ("HR", "Audit", "Kewangan"), and a company by its
+          // departments' names.
+          <CompanySelect className="mt-2.5 max-w-md" companies={branches} before={unitOptions(units, t)} value=""
+            onValueChange={(v) => { const u = pickedUnit(v); if (u) onUnit(u); else onPick(v); }}
             label={t("Other companies")} placeholder={t("Search {n} companies", { n: branches.length })} />
         ) : null}
       </div>
@@ -128,7 +131,8 @@ export function ExplorerPage() {
   const { data: units, isLoading: unitsLoading } = useQuery(libraryUnitsQuery);
   const unitKey = view === "folders" ? (search.unit ?? null) : null;
   const unit = (unitKey && units?.find((u) => u.key === unitKey)) || null;
-  const unitBranch = unit ? co.branches.find((b) => b.id === unit.branch_id) ?? null : null;
+  // P144: a unit given to someone of another company: its company is not in their list.
+  const unitBranch = unit ? co.branches.find((b) => b.id === unit.branch_id) ?? (co.isLoading ? null : unitCompany(unit)) : null;
   const { data: unitTree } = useQuery(unitTreeQuery(unit));
   const unitRoot = useMemo(() => buildTree(unitTree?.folders ?? []), [unitTree]);
 
@@ -209,7 +213,7 @@ export function ExplorerPage() {
     );
   } else {
     let inner: ReactNode;
-    if (view === "folders") inner = <><UnitCards units={units ?? []} onPick={(k) => pickFolder("", k)} /><CompanyPicker branches={co.branches} onPick={pickCompany} /></>;
+    if (view === "folders") inner = <><UnitCards units={units ?? []} onPick={(k) => pickFolder("", k)} /><CompanyPicker branches={co.branches} units={units ?? []} onPick={pickCompany} onUnit={(k) => pickFolder("", k)} /></>;
     else if (view === "documents") inner = <DocumentsFolder branch={branch} />;
     else if (view === "sops") inner = <SopsFolder branch={branch} />;
     else if (view === "templates") inner = <TemplatesFolder branch={branch} />;

@@ -118,7 +118,7 @@ async def list_library(
     q = select(DocFile).where(
         DocFile.workspace_id == principal.workspace_id, DocFile.library.is_(True)
     )
-    if not reader.everything:
+    if not reader.everything and reader.grants is None:  # P144: grants: sees_file decides
         q = q.where(
             or_(DocFile.branch_id.is_(None), DocFile.branch_id == reader.branch_id)
             if reader.branch_id
@@ -378,6 +378,90 @@ async def get_unit(
             "Only the people of this unit, their managers and the office's leaders open it.",
         )
     return await _unit_out(db, principal, u)
+
+
+# ---------------------------------------------------------------- P144 company search
+
+
+class PlaceOut(BaseModel):
+    kind: Literal["unit", "company"]
+    id: str  # the unit's key, or the company's id
+    label: str  # "Unit HR · PW Venture Sdn Bhd (PWVSB)", or the company's name
+    branch_id: str
+    department_id: str | None = None
+    # More words that find it: a unit's other names and department; a company's short name and
+    # its departments' names.
+    keywords: list[str] = []
+
+
+def _fold(s: str) -> str:
+    import unicodedata
+
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", s or "") if not unicodedata.combining(c)
+    ).casefold()
+
+
+def _matches(q: str, p: PlaceOut) -> bool:
+    hay = _fold(" ".join([p.label, *p.keywords]))
+    return all(w in hay for w in _fold(q).split())
+
+
+@router.get("/api/library/places")
+async def library_places(
+    q: str = Query(default="", max_length=100),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[PlaceOut]:
+    """P144: the company search of the Library: the units this person opens ("HR", "Audit",
+    "Kewangan" find them) and the companies they see, a company also found by its departments'
+    names. `q` narrows it (every word, accents and case ignored); empty: all of them."""
+    from ...knowledge import grants
+
+    ws = principal.workspace_id
+    out: list[PlaceOut] = []
+    for u in await units.find(db, ws):
+        if not units.may_open(principal, u.department):
+            continue
+        words = {u.key, u.label, render(u.label), u.department.name, u.branch.name}
+        words |= units.ALIASES.get(u.key, set())
+        out.append(
+            PlaceOut(
+                kind="unit",
+                id=u.key,
+                label=f"{render(u.label)} · {u.branch.name}",
+                branch_id=u.branch.id,
+                department_id=u.department.id,
+                keywords=sorted(w.replace("-", " ") for w in words if w),
+            )
+        )
+    bq = select(Branch).where(Branch.workspace_id == ws)
+    sc = principal.scope
+    g = grants.of(principal)
+    if not sc.everything and not (g is not None and g.all_companies):
+        given = sorted(g.companies) if g is not None else []
+        bq = bq.where(or_(sc.branch_col(Branch.id), Branch.id.in_(given)))
+    branches = (await db.scalars(bq.order_by(Branch.name))).all()
+    depts: dict[str, list[str]] = {}
+    if branches:
+        rows = await db.execute(
+            select(Department.branch_id, Department.name).where(
+                Department.workspace_id == ws, Department.branch_id.in_([b.id for b in branches])
+            )
+        )
+        for bid, name in rows.all():
+            depts.setdefault(bid, []).append(name)
+    for b in branches:
+        out.append(
+            PlaceOut(
+                kind="company",
+                id=b.id,
+                label=b.name,
+                branch_id=b.id,
+                keywords=[x for x in [b.slug, *sorted(depts.get(b.id, []))] if x],
+            )
+        )
+    return [p for p in out if _matches(q, p)] if q.strip() else out
 
 
 class PassageOut(BaseModel):

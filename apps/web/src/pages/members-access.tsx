@@ -18,6 +18,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
@@ -27,7 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
-import type { Access, Me, Member } from "@/lib/types";
+import type { Access, LibraryGrants, Me, Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export interface PrimaModule { id: string; title: string; blurb: string; always: boolean }
@@ -530,33 +531,84 @@ export function PrimaOpensAsCard() {
 
 // ---------------------------------------------------------------- P109 Library by department
 
-/** P109: what of the Library a member reads, and whether they may upload for other companies. */
-export interface LibraryValue { scope: "company" | "department"; forOthers: boolean }
+/** P109: what of the Library a member reads, and whether they may upload for other companies.
+ * P144: and what more of it was given to them (units, companies; missing: nothing given). */
+export interface LibraryValue { scope: "company" | "department"; forOthers: boolean; grants?: LibraryGrants }
+
+export const NO_GRANTS: LibraryGrants = { units: [], companies: [], departments: [] };
 
 export const libraryOf = (m: Member | null): LibraryValue => ({
   scope: m?.library_scope ?? "company",
   forOthers: !!m?.uploads_for_others,
+  ...(m?.library_grants ? { grants: m.library_grants } : {}),
 });
 
-/** The body for PUT /api/members/{id}/library: only what changed (null: nothing). */
-export function libraryChanges(before: LibraryValue, after: LibraryValue): { library_scope?: string; uploads_for_others?: boolean } | null {
+/** The same grant written one way (sorted ids), to tell whether it changed. */
+const grantKey = (g: LibraryGrants | undefined) => {
+  const v = g ?? NO_GRANTS;
+  const list = (x: string[] | "all") => (x === "all" ? "all" : [...x].sort().join(","));
+  return `${list(v.units)}|${list(v.companies)}|${[...v.departments].sort().join(",")}`;
+};
+
+const emptyGrants = (g: LibraryGrants) =>
+  (g.units === "all" ? false : !g.units.length) && (g.companies === "all" ? false : !g.companies.length) && !g.departments.length;
+
+/** The body for PUT /api/members/{id}/library: only what changed (null: nothing). P144: the
+ * grant goes whole (null when nothing is given any more). */
+export function libraryChanges(before: LibraryValue, after: LibraryValue): { library_scope?: string; uploads_for_others?: boolean; grants?: LibraryGrants | null } | null {
+  const g = after.grants ?? NO_GRANTS;
   const out = {
     ...(after.scope !== before.scope ? { library_scope: after.scope } : {}),
     ...(after.forOthers !== before.forOthers ? { uploads_for_others: after.forOthers } : {}),
+    ...(grantKey(after.grants) !== grantKey(before.grants) ? { grants: emptyGrants(g) ? null : g } : {}),
   };
   return Object.keys(out).length ? out : null;
+}
+
+export interface GrantUnit { key: "hr" | "audit" | "finance"; label: string }
+
+/** P144: one short line of what they get in the Library: their own part, then what was given. */
+export function librarySummary(value: LibraryValue, units: GrantUnit[], companies: { id: string; name: string }[], t: ReturnType<typeof useT>): string {
+  const g = value.grants ?? NO_GRANTS;
+  const parts = [value.scope === "department" ? t("their own department") : t("their whole company")];
+  if (g.units === "all") parts.push(t("all units"));
+  else if (g.units.length) parts.push(g.units.map((k) => t(units.find((u) => u.key === k)?.label ?? k)).join(", "));
+  if (g.companies === "all") parts.push(t("all companies"));
+  else if (g.companies.length) {
+    const names = g.companies.map((id) => companies.find((c) => c.id === id)?.name).filter((n): n is string => !!n);
+    parts.push(names.length && names.length <= 3 ? names.join(", ") : t("{n} more companies", { n: g.companies.length }));
+  }
+  if (g.departments.length) parts.push(g.departments.length === 1 ? t("1 more department") : t("{n} more departments", { n: g.departments.length }));
+  return t("They read: {what}.", { what: parts.join(" · ") });
 }
 
 // The roles the "own department only" choice narrows (api/knowledge/dept_scope.LIMITABLE_ROLES).
 const LIMITABLE: string[] = ["hod", "supervisor", "staff"];
 
-/** "Library: whole company / own department only" and "May upload for other companies". */
-export function LibraryAccessFields({ value, onChange, role }: { value: LibraryValue; onChange: (v: LibraryValue) => void; role: string }) {
+/** "Library: whole company / own department only" and "May upload for other companies". P144:
+ * with `give`, also the units and companies given to them (extra access, never less): `units`
+ * and `companies` are the ones the person setting it may give; `every`: they may give all
+ * companies (owners and admins). */
+export function LibraryAccessFields({ value, onChange, role, give }: {
+  value: LibraryValue;
+  onChange: (v: LibraryValue) => void;
+  role: string;
+  give?: { units: GrantUnit[]; companies: { id: string; name: string; slug?: string }[]; every: boolean };
+}) {
   const t = useT();
   const limitable = LIMITABLE.includes(role);
+  const g = value.grants ?? NO_GRANTS;
+  const setGrants = (patch: Partial<LibraryGrants>) => onChange({ ...value, grants: { ...g, ...patch } });
+  const unitOn = (k: GrantUnit["key"]) => g.units === "all" || g.units.includes(k);
+  const toggleUnit = (k: GrantUnit["key"], on: boolean) => {
+    const now = g.units === "all" ? (give?.units ?? []).map((u) => u.key) : g.units;
+    const next = on ? [...new Set([...now, k])] : now.filter((x) => x !== k);
+    setGrants({ units: give && give.units.length > 1 && next.length === give.units.length ? "all" : next });
+  };
+  const check = "mt-1 size-4 shrink-0 accent-[var(--accent)]";
   return (
     <fieldset className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3">
-      <legend className="px-1 text-[13px] font-medium">{t("Library")}</legend>
+      <legend className="px-1 text-[13px] font-medium">{give ? t("Library access") : t("Library")}</legend>
       <div className="grid gap-1.5">
         <span className="text-[13px] font-medium">{t("Files they can see")}</span>
         <Select value={value.scope} onValueChange={(v) => onChange({ ...value, scope: v as LibraryValue["scope"] })} label={t("Files they can see")}
@@ -570,14 +622,53 @@ export function LibraryAccessFields({ value, onChange, role }: { value: LibraryV
             : t("They and their AI see their company's files, as before.")}
         </p>
       </div>
+      {give && give.units.length ? (
+        <div className="grid gap-1.5" role="group" aria-label={t("Units")}>
+          <span className="text-[13px] font-medium">{t("Units")}</span>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {give.units.length > 1 ? (
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[13.5px]">
+                <input type="checkbox" className={check} checked={g.units === "all"}
+                  onChange={(e) => setGrants({ units: e.target.checked ? "all" : [] })} />
+                {t("All units")}
+              </label>
+            ) : null}
+            {give.units.map((u) => (
+              <label key={u.key} className="flex min-h-11 cursor-pointer items-center gap-2 text-[13.5px]">
+                <input type="checkbox" className={check} checked={unitOn(u.key)} onChange={(e) => toggleUnit(u.key, e.target.checked)} />
+                {t(u.label)}
+              </label>
+            ))}
+          </div>
+          <p className="text-[12.5px] text-muted">{t("They open the unit in the Library, read its files and add files to it, as its own people do.")}</p>
+        </div>
+      ) : null}
+      {give && (give.every || give.companies.length) ? (
+        <div className="grid gap-1.5">
+          <span className="text-[13px] font-medium">{t("Other companies")}</span>
+          {give.every ? (
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[13.5px]">
+              <input type="checkbox" className={check} checked={g.companies === "all"}
+                onChange={(e) => setGrants({ companies: e.target.checked ? "all" : [] })} />
+              {t("All companies")}
+            </label>
+          ) : null}
+          {g.companies !== "all" ? (
+            <CompanyPicker multiple companies={give.companies} value={g.companies} onValueChange={(ids) => setGrants({ companies: ids })}
+              label={t("Other companies")} placeholder={t("Pick companies")} />
+          ) : null}
+          <p className="text-[12.5px] text-muted">{t("They read each company's shared files (never restricted ones or anyone's own files) and add files to it.")}</p>
+        </div>
+      ) : null}
       <label className="flex min-h-11 cursor-pointer items-start gap-3">
         <input type="checkbox" checked={value.forOthers} onChange={(e) => onChange({ ...value, forOthers: e.target.checked })}
-          className="mt-1 size-4 shrink-0 accent-[var(--accent)]" />
+          className={check} />
         <span className="grid gap-0.5">
           <span className="text-[13.5px] font-medium">{t("May upload files for other companies")}</span>
           <span className="text-[12.5px] text-muted">{t("They upload in Library > For other companies; each file waits for their check, then goes to that company. Its heads of department are told.")}</span>
         </span>
       </label>
+      {give ? <p className="rounded-[var(--radius-sm)] bg-surface-2 px-2.5 py-2 text-[12.5px]">{librarySummary(value, give.units, give.companies, t)}</p> : null}
     </fieldset>
   );
 }

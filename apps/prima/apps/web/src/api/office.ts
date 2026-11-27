@@ -75,6 +75,40 @@ export interface OfficeMember {
   heads_department?: boolean;
   manages?: number;
   job_title?: string | null;
+  /** P109: what of the Library they read, and whether they may upload for other companies. */
+  library_scope?: 'company' | 'department';
+  uploads_for_others?: boolean;
+  /** P144: extra Library access given to them (null or missing: none). */
+  library_grants?: OfficeLibraryGrants | null;
+}
+
+export type OfficeUnitKey = 'hr' | 'audit' | 'finance';
+
+/** P144: extra Library access on top of a member's role and place: units ("all" or some), companies ("all" or some
+ * ids) and departments (ids). */
+export interface OfficeLibraryGrants {
+  units: OfficeUnitKey[] | 'all';
+  companies: string[] | 'all';
+  departments: string[];
+}
+
+/** P144: PUT /api/members/{id}/library. Leave out what does not change; grants null: nothing given. */
+export interface OfficeLibraryAccessIn {
+  library_scope?: 'company' | 'department';
+  uploads_for_others?: boolean;
+  grants?: OfficeLibraryGrants | null;
+}
+
+/** P143b: a Library unit the signed-in person opens (GET /api/library/units). */
+export interface OfficeUnit {
+  key: OfficeUnitKey;
+  label: string;
+  department_id: string;
+  department_name: string;
+  branch_id: string;
+  branch_name: string;
+  files: number;
+  can_upload: boolean;
 }
 
 export interface MembersPage {
@@ -269,6 +303,11 @@ export const office = {
   removeMembers: (userIds: string[]) => officeFetch<BulkOut | Held>('POST', '/api/members/bulk', { user_ids: userIds, action: 'remove' }),
   emailSignin: (userId: string) => officeFetch<{ ok: boolean; to: string } | Held>('POST', `/api/members/${id(userId)}/email-signin`, {}),
   resetMicrosoft: (userId: string) => officeFetch<OfficeMember | Held>('POST', `/api/members/${id(userId)}/reset-microsoft`, {}),
+  /** P144: what of the Library they read, upload for others, and the units and companies given to them. */
+  setLibraryAccess: (userId: string, body: OfficeLibraryAccessIn) =>
+    officeFetch<OfficeMember | Held>('PUT', `/api/members/${id(userId)}/library`, body),
+  /** P143b: the Library units the signed-in person opens (the ones they may give). */
+  libraryUnits: () => officeFetch<{ units: OfficeUnit[] }>('GET', '/api/library/units'),
 
   // Roles and access (routers/role_access.py: owners only)
   roleAccess: () => officeFetch<RoleAccess>('GET', '/api/org/role-access'),

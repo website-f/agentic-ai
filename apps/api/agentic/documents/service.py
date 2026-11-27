@@ -116,7 +116,11 @@ def branch_ok(principal: Any, branch_id: str | None) -> bool:
     sc = principal.scope
     if sc.everything or branch_id is None:
         return True
-    return sc.kind != "branch" or sc.in_branch(branch_id)
+    if sc.kind != "branch" or sc.in_branch(branch_id):
+        return True
+    from ..knowledge import grants
+
+    return grants.reads_branch(principal, branch_id)  # P144: a company or unit given to them
 
 
 def visible_files(query: Any, principal: Any) -> Any:
@@ -141,6 +145,11 @@ def visible_files(query: Any, principal: Any) -> Any:
     narrow = dept_scope.person_files(principal)  # P109: own department only
     if narrow is not None:
         shared = and_(shared, narrow)
+    from ..knowledge import grants
+
+    extra = grants.person_files(principal)  # P144: units / companies given to them
+    if extra is not None:
+        shared = or_(shared, extra)
     return query.where(or_(DocFile.id.in_(mine), shared))
 
 
@@ -203,6 +212,15 @@ def agent_files(agent: Any, task_id: str | None = None) -> ColumnElement[bool]:
     narrow = dept_scope.agent_files(agent)  # P109: its owner reads their department only
     if narrow is not None:
         cond = and_(cond, narrow)
+    from ..knowledge import grants
+
+    # P144: the units / companies its owner was given (never restricted, never personal).
+    extra = grants.owner_files(agent.workspace_id, agent.owner_user_id)
+    if extra is not None:
+        cond = or_(
+            cond,
+            and_(DocFile.workspace_id == agent.workspace_id, not_private, not_personal, extra),
+        )
     if task_id:
         cond = or_(
             cond, and_(DocFile.workspace_id == agent.workspace_id, DocFile.task_id == task_id)

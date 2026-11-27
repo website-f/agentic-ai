@@ -357,6 +357,17 @@ def _company_ok(principal: Principal, branch_id: str | None) -> bool:
     return sc.everything or branch_id is None or sc.in_branch(branch_id)
 
 
+def _granted(principal: Principal, e: dict[str, Any]) -> bool:
+    """P144: a created folder of a company, or of a unit / department, given to them."""
+    from ...knowledge import grants
+
+    g = grants.of(principal)
+    if g is None:
+        return False
+    dept = e.get("department_id")
+    return g.department(dept) if dept else g.company(e["branch_id"])
+
+
 def _saved_seen(
     entries: list[dict[str, Any]],
     principal: Principal,
@@ -369,7 +380,7 @@ def _saved_seen(
     return [
         e
         for e in entries
-        if _company_ok(principal, e["branch_id"])
+        if (_company_ok(principal, e["branch_id"]) or _granted(principal, e))
         and (branch_id is None or e["branch_id"] == branch_id)
         and (department_id is None or e.get("department_id") == department_id)
     ]

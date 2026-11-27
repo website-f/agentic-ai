@@ -123,9 +123,15 @@ async def find(db: AsyncSession, workspace_id: str) -> list[Unit]:
 
 def may_open(principal: object, d: Department) -> bool:
     """Who reads a department's files today (no wider): the workspace roles, a branch manager
-    or group HOD of its company, and the department's own HOD, supervisor and staff."""
+    or group HOD of its company, and the department's own HOD, supervisor and staff. P144: and
+    whoever was given the unit (or its department) on the Members page (knowledge/grants.py)."""
     sc = principal.scope  # type: ignore[attr-defined]
     if sc.everything:
+        return True
+    from . import grants
+
+    g = grants.of(principal)
+    if g is not None and g.department(d.id):
         return True
     if not sc.in_branch(d.branch_id):
         return False

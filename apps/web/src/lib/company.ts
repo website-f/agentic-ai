@@ -22,9 +22,11 @@ export function lockedBranchId(me: Me): string | null {
 export function lockedBranchIds(me: Me): string[] | null {
   const sc = me.scope;
   if (!sc || sc.kind === "all") return null;
-  if (sc.kind === "department") return sc.branch_id ? [sc.branch_id] : [];
+  // P144: and the companies given to them in the Library (Members page).
+  const given = (sc.library_branches ?? []).map((b) => b.id);
+  if (sc.kind === "department") return [...(sc.branch_id ? [sc.branch_id] : []), ...given];
   const ids = (sc.branches ?? []).map((b) => b.id);
-  return ids.length ? ids : sc.branch_id ? [sc.branch_id] : [];
+  return [...(ids.length ? ids : sc.branch_id ? [sc.branch_id] : []), ...given.filter((i) => !ids.includes(i))];
 }
 
 export interface Companies {

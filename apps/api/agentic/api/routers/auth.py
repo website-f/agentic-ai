@@ -51,6 +51,20 @@ async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeO
         if ids
         else {}
     )
+    # P144: the companies given to them in the Library (all of them: every company).
+    from ...knowledge import grants
+
+    g = grants.parse(m.library_grants) if m and not sc.everything else None
+    given: list[BranchRef] = []
+    if g is not None and (g.all_companies or g.companies):
+        bq = select(Branch.id, Branch.name).where(Branch.workspace_id == workspace_id)
+        if not g.all_companies:
+            bq = bq.where(Branch.id.in_(sorted(g.companies)))
+        given = [
+            BranchRef(id=i, name=n)
+            for i, n in (await db.execute(bq.order_by(Branch.name))).all()
+            if i not in sc.branch_ids
+        ]
     return MeOut(
         scope=ScopeOut(
             kind=sc.kind,  # type: ignore[arg-type]
@@ -60,6 +74,7 @@ async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeO
             department_id=sc.department_id,
             department_name=d.name if d else None,
             branches=[BranchRef(id=i, name=found[i]) for i in ids if i in found],
+            library_branches=given,
         ),
         user=UserOut(
             id=user.id,

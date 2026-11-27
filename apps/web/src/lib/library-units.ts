@@ -9,8 +9,11 @@
  * department_id. */
 import { queryOptions } from "@tanstack/react-query";
 
+import type { PickOption } from "@/components/ui/search-select";
+
 import { api } from "./api";
 import { notThere, type FileTree } from "./intake";
+import type { Branch } from "./types";
 
 export type UnitKey = "hr" | "audit" | "finance";
 
@@ -58,4 +61,28 @@ export const unitTreeQuery = (unit: Pick<LibraryUnit, "branch_id" | "department_
 export function unitArchiveUrl(base: string, departmentId: string | null | undefined): string {
   if (!departmentId) return base;
   return `${base}${base.includes("?") ? "&" : "?"}${new URLSearchParams({ department_id: departmentId })}`;
+}
+
+/** P144: the units in a company search ("Other companies", the Library's landing): "Unit HR ·
+ * PW Venture Sdn Bhd (PWVSB)", found by "HR", "Audit", "Kewangan", its department and company.
+ * Their values start with UNIT_PICK; pickedUnit() reads one back. */
+export const UNIT_PICK = "unit:";
+
+export function unitOptions(units: LibraryUnit[], t: (key: string) => string): PickOption[] {
+  return units.map((u) => ({
+    value: `${UNIT_PICK}${u.key}`,
+    label: `${t(u.label)} · ${u.branch_name}`,
+    keywords: [u.key, u.label, u.department_name, u.branch_name],
+    group: t("Units"),
+  }));
+}
+
+export function pickedUnit(value: string): UnitKey | null {
+  return value.startsWith(UNIT_PICK) ? (value.slice(UNIT_PICK.length) as UnitKey) : null;
+}
+
+/** A unit's company when the person's company list does not hold it (a unit given to someone
+ * of another company, P144): enough of it for the unit's folders. */
+export function unitCompany(unit: LibraryUnit): Branch {
+  return { id: unit.branch_id, name: unit.branch_name, slug: "", color: "", isolated: false, created_at: "", departments: [] };
 }

@@ -229,6 +229,10 @@ def place_refused(principal: Principal, branch_id: str | None, department_id: st
     sc = principal.scope
     if sc.everything:
         return None
+    from ...knowledge import grants
+
+    if grants.may_file(principal, branch_id, department_id):  # P144: a unit / company given
+        return None
     if sc.kind == "branch":
         return None if sc.in_branch(branch_id) else "company"
     if not sc.in_branch(branch_id):

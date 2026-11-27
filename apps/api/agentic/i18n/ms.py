@@ -2104,3 +2104,8 @@ MS.update({k: v for k, v in MS_P143B.items() if k not in MS})
 from .ms_p143c import MS_P143C  # noqa: E402
 
 MS.update({k: v for k, v in MS_P143C.items() if k not in MS})
+
+# P144: per-member Library access (units, companies, departments given).
+from .ms_p144 import MS_P144  # noqa: E402
+
+MS.update({k: v for k, v in MS_P144.items() if k not in MS})

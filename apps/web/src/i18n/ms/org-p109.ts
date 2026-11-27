@@ -103,4 +103,19 @@ export const ORG_P109: Record<string, string> = {
   "Pick people to tell": "Pilih orang untuk dimaklumkan",
   "They are told in the app and by email, with a link to this feedback.":
     "Mereka dimaklumkan dalam aplikasi dan melalui e-mel, dengan pautan ke maklum balas ini.",
+  // P144: Library access given on the member's page (units, companies)
+  "Library access": "Akses Perpustakaan",
+  "All units": "Semua unit",
+  "They open the unit in the Library, read its files and add files to it, as its own people do.":
+    "Mereka membuka unit itu dalam Perpustakaan, membaca failnya dan menambah fail ke dalamnya, seperti warga unit itu sendiri.",
+  "They read each company's shared files (never restricted ones or anyone's own files) and add files to it.":
+    "Mereka membaca fail kongsi setiap syarikat (bukan fail terhad atau fail peribadi sesiapa) dan menambah fail ke dalamnya.",
+  "their own department": "jabatan mereka sendiri",
+  "their whole company": "seluruh syarikat mereka",
+  "all units": "semua unit",
+  "all companies": "semua syarikat",
+  "{n} more companies": "{n} syarikat lagi",
+  "1 more department": "1 jabatan lagi",
+  "{n} more departments": "{n} jabatan lagi",
+  "They read: {what}.": "Mereka membaca: {what}.",
 };

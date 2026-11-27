@@ -7,7 +7,15 @@
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import { CopyIcon, EnvelopeSimpleIcon } from '@phosphor-icons/react';
-import { office, saved, type OfficeCompany, type OfficeMember, type OfficeRole } from '../../api/office';
+import {
+  office,
+  saved,
+  type OfficeCompany,
+  type OfficeLibraryGrants,
+  type OfficeMember,
+  type OfficeRole,
+  type OfficeUnitKey,
+} from '../../api/office';
 import { DataTable, type DtColumn, type DtFilter } from '../../DataTable';
 import { Facts, Stat, Stats } from '../../kit';
 import { SearchSelect, type SelectOption } from '../../SearchSelect';
@@ -453,6 +461,8 @@ export function MemberDrawer({
   // The office lets nobody touch a role above what they may give (an admin and an owner).
   const touchable = assignable.includes(member.role);
   const status = memberStatus(member);
+  // P144: the office's rule for Library access: members.manage, or the manager they report to; never themselves.
+  const mayLibrary = !isMe && (p.members || (p.team && member.reports_to_user_id === p.me.user.id));
 
   const nameChanged = name.trim().replace(/\s+/g, ' ') !== member.name;
   const emailChanged = email.trim().toLowerCase() !== member.email.toLowerCase();
@@ -606,12 +616,192 @@ export function MemberDrawer({
                   </button>
                 </div>
               </form>
+              {mayLibrary && <LibraryAccess member={member} companies={companies} />}
             </>
           )}
         </div>
       </Drawer>
       {removing && <RemoveMember member={member} onClose={() => setRemoving(false)} onDone={onClose} />}
       {resettingMs && <ResetMicrosoft member={member} onClose={() => setResettingMs(false)} />}
+    </>
+  );
+}
+
+// ---------- P144: Library access ----------
+
+const NO_GRANTS: OfficeLibraryGrants = { units: [], companies: [], departments: [] };
+
+const grantKey = (g: OfficeLibraryGrants | null | undefined) => {
+  const v = g ?? NO_GRANTS;
+  const list = (x: string[] | 'all') => (x === 'all' ? 'all' : [...x].sort().join(','));
+  return `${list(v.units)}|${list(v.companies)}|${[...v.departments].sort().join(',')}`;
+};
+
+const noGrant = (g: OfficeLibraryGrants) =>
+  (g.units !== 'all' && !g.units.length) && (g.companies !== 'all' && !g.companies.length) && !g.departments.length;
+
+/** P144 (the owner, 27 Nov 2026): what of the Library this member reads (their whole company or own department), the
+ * units and companies given to them on top (extra access, never less), and whether they upload for other companies.
+ * The office checks it again: only units and companies the person setting it opens themselves; all companies only for
+ * owners and admins (routers/members.py set_library_access). */
+function LibraryAccess({ member, companies }: { member: OfficeMember; companies: OfficeCompany[] }) {
+  const p = usePowers();
+  const act = useAction();
+  const units = useLoad(() => office.libraryUnits(), []);
+  const givable = units.data?.units ?? [];
+  const every = p.me.scope?.kind === 'all' && p.members;
+  const [scope, setScope] = useState<'company' | 'department'>(member.library_scope ?? 'company');
+  const [forOthers, setForOthers] = useState(!!member.uploads_for_others);
+  const [grants, setGrants] = useState<OfficeLibraryGrants>(member.library_grants ?? NO_GRANTS);
+  const [pick, setPick] = useState('');
+  const g = grants;
+  const unitOn = (k: OfficeUnitKey) => g.units === 'all' || g.units.includes(k);
+  const toggleUnit = (k: OfficeUnitKey, on: boolean) => {
+    const now = g.units === 'all' ? givable.map((u) => u.key) : g.units;
+    const next = on ? [...new Set([...now, k])] : now.filter((x) => x !== k);
+    setGrants({ ...g, units: givable.length > 1 && next.length === givable.length ? 'all' : next });
+  };
+  const picked = g.companies === 'all' ? [] : g.companies;
+  const nameOf = (cid: string) => companies.find((c) => c.id === cid)?.name ?? cid;
+  const options: SelectOption[] = [
+    { value: '', label: 'Add a company' },
+    ...sortedCompanies(companies)
+      .filter((c) => !picked.includes(c.id))
+      .map((c) => ({ value: c.id, label: c.name })),
+  ];
+
+  const scopeChanged = scope !== (member.library_scope ?? 'company');
+  const othersChanged = forOthers !== !!member.uploads_for_others;
+  const grantsChanged = grantKey(grants) !== grantKey(member.library_grants);
+  const dirty = scopeChanged || othersChanged || grantsChanged;
+
+  const parts = [scope === 'department' ? 'their own department' : 'their whole company'];
+  if (g.units === 'all') parts.push('all units');
+  else if (g.units.length) parts.push(g.units.map((k) => givable.find((u) => u.key === k)?.label ?? k).join(', '));
+  if (g.companies === 'all') parts.push('all companies');
+  else if (g.companies.length) parts.push(g.companies.length <= 3 ? g.companies.map(nameOf).join(', ') : `${g.companies.length} more companies`);
+  if (g.departments.length) parts.push(g.departments.length === 1 ? '1 more department' : `${g.departments.length} more departments`);
+
+  const save = async () => {
+    if (!dirty) return;
+    await act.run(
+      () =>
+        office.setLibraryAccess(member.user_id, {
+          ...(scopeChanged ? { library_scope: scope } : {}),
+          ...(othersChanged ? { uploads_for_others: forOthers } : {}),
+          ...(grantsChanged ? { grants: noGrant(grants) ? null : grants } : {}),
+        }),
+      saved('Library access saved.'),
+    );
+  };
+
+  return (
+    <>
+      <h3 className="oa-h3">Library access</h3>
+      <form
+        className="oa-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <Field label="Files they can see" hint="Heads of department, supervisors and staff only; other roles see more than one department.">
+          <SearchSelect
+            className="select"
+            aria-label="Files they can see"
+            value={scope}
+            onChange={(v) => setScope(v as 'company' | 'department')}
+            options={[
+              { value: 'company', label: 'Whole company' },
+              { value: 'department', label: 'Own department only' },
+            ]}
+          />
+        </Field>
+        {givable.length > 0 && (
+          <fieldset className="field oa-wide" aria-label="Units">
+            <span className="label">Units</span>
+            <div className="row">
+              {givable.length > 1 && (
+                <label className="row">
+                  <input type="checkbox" checked={g.units === 'all'} onChange={(e) => setGrants({ ...g, units: e.target.checked ? 'all' : [] })} />
+                  All units
+                </label>
+              )}
+              {givable.map((u) => (
+                <label key={u.key} className="row">
+                  <input type="checkbox" checked={unitOn(u.key)} onChange={(e) => toggleUnit(u.key, e.target.checked)} />
+                  {u.label}
+                </label>
+              ))}
+            </div>
+            <span className="small muted">They open the unit in the Library, read its files and add files to it, as its own people do.</span>
+          </fieldset>
+        )}
+        <fieldset className="field oa-wide" aria-label="Other companies">
+          <span className="label">Other companies</span>
+          {every && (
+            <label className="row">
+              <input
+                type="checkbox"
+                checked={g.companies === 'all'}
+                onChange={(e) => setGrants({ ...g, companies: e.target.checked ? 'all' : [] })}
+              />
+              All companies
+            </label>
+          )}
+          {g.companies !== 'all' && (
+            <>
+              <SearchSelect
+                className="select"
+                aria-label="Add a company"
+                value={pick}
+                options={options}
+                searchable
+                onChange={(v) => {
+                  setPick('');
+                  if (v) setGrants({ ...g, companies: [...picked, v] });
+                }}
+              />
+              {picked.length > 0 && (
+                <div className="row">
+                  {picked.map((cid) => (
+                    <button
+                      key={cid}
+                      type="button"
+                      className="btn btn-sm"
+                      aria-label={`Remove ${nameOf(cid)}`}
+                      onClick={() => setGrants({ ...g, companies: picked.filter((x) => x !== cid) })}
+                    >
+                      <span data-no-translate>{nameOf(cid)}</span> ×
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+          <span className="small muted">They read each company's shared files (never restricted ones or anyone's own files) and add files to it.</span>
+        </fieldset>
+        <label className="row oa-wide">
+          <input type="checkbox" checked={forOthers} onChange={(e) => setForOthers(e.target.checked)} />
+          May upload files for other companies
+        </label>
+        <p className="notice oa-wide">
+          They read:{' '}
+          {parts.map((t, i) => (
+            <span key={i}>
+              {i > 0 && ' · '}
+              {t}
+            </span>
+          ))}
+          .
+        </p>
+        <ErrorNotice error={act.error} />
+        <div className="oa-form-actions">
+          <button className="btn btn-primary" disabled={act.busy || !dirty}>
+            {act.busy ? 'Saving…' : 'Save Library access'}
+          </button>
+        </div>
+      </form>
     </>
   );
 }

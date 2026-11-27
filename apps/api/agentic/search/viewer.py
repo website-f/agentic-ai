@@ -28,7 +28,7 @@ from sqlalchemy import ColumnElement, and_, false, or_, select, true
 
 from ..core.security import can
 from ..documents import service
-from ..knowledge import dept_scope
+from ..knowledge import dept_scope, grants
 from ..knowledge import search as library
 from ..models import SOP, Agent, BrainPage, Department, DocFile, DocTemplate, Document
 
@@ -61,6 +61,9 @@ class Viewer:
         narrow = dept_scope.person_files(self.principal)  # P109: own department only
         if narrow is not None:
             shared = and_(shared, narrow)
+        extra = grants.person_files(self.principal)  # P144: units / companies given to them
+        if extra is not None:
+            shared = or_(shared, extra)
         mine = service.scoped(select(DocFile.id).where(ws), DocFile, self.principal)
         return and_(open_, or_(DocFile.id.in_(mine), shared))
 

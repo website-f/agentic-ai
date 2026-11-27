@@ -19,6 +19,8 @@ from ...core.security import (
 )
 from ...i18n import Msg, current_lang, render
 from ...i18n.labels import role_label
+from ...knowledge import grants as library_grants
+from ...knowledge import library_units
 from ...models import (
     Agent,
     AuthSession,
@@ -45,6 +47,7 @@ from ..schemas import (
     HierarchyOut,
     HierarchyPerson,
     LibraryAccessIn,
+    LibraryGrants,
     MemberCreateIn,
     MemberCreateOut,
     MemberOut,
@@ -109,8 +112,15 @@ def _out(
         ],
         library_scope=m.library_scope or "company",  # type: ignore[arg-type]
         uploads_for_others=bool(m.uploads_for_others),
+        library_grants=_grants_out(m),
         job_title=m.job_title,
     )
+
+
+def _grants_out(m: Membership) -> LibraryGrants | None:
+    """P144: the extra Library access given to them, as the Members page sends it back."""
+    g = library_grants.parse(m.library_grants)
+    return LibraryGrants(**g.shown()) if g is not None else None
 
 
 class Org:
@@ -1236,12 +1246,24 @@ async def set_library_access(
             "Ask another owner or admin to change your own access.",
         )
     _check_can_touch(principal, m.role)
-    before = {"library_scope": m.library_scope, "uploads_for_others": m.uploads_for_others}
+
+    def state() -> dict:
+        g = library_grants.parse(m.library_grants)
+        return {
+            "library_scope": m.library_scope,
+            "uploads_for_others": m.uploads_for_others,
+            "library_grants": g.shown() if g is not None else None,
+        }
+
+    before = state()
     if body.library_scope is not None:
         m.library_scope = body.library_scope
     if body.uploads_for_others is not None:
         m.uploads_for_others = body.uploads_for_others
-    after = {"library_scope": m.library_scope, "uploads_for_others": m.uploads_for_others}
+    if "grants" in body.model_fields_set:  # P144: replaces what they had (null: none)
+        g = await _resolve_grants(db, principal, body.grants)
+        m.library_grants = g.stored() if g is not None else None
+    after = state()
     if after != before:
         await audit.record(
             db,
@@ -1254,6 +1276,104 @@ async def set_library_access(
         )
     await db.commit()
     return await _one_out(db, principal, user_id)
+
+
+async def _resolve_grants(
+    db: AsyncSession, principal: Principal, body: LibraryGrants | None
+) -> library_grants.Grants | None:
+    """P144: check a Library grant and work out its departments and companies. Units the
+    workspace has, companies and departments of this workspace; and whoever gives it gives only
+    what they open themselves, unless they manage all members across the whole workspace."""
+    if body is None:
+        return None
+    ws = principal.workspace_id
+    wide = can(principal.role, "members.manage") and principal.scope.everything
+    mine = library_grants.of(principal)
+    found = {u.key: u for u in await library_units.find(db, ws)}
+    if body.units == "all":
+        keys = list(found)
+    else:
+        keys = list(dict.fromkeys(body.units))
+        missing = [k for k in keys if k not in found]
+        if missing:
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST,
+                "bad_unit",
+                "This workspace has no {units}.",
+                units=", ".join(missing),
+            )
+    area_depts: set[str] = set()
+    area_branches: set[str] = set()
+    for k in keys:
+        u = found[k]
+        if not wide and not library_units.may_open(principal, u.department):
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "out_of_scope",
+                "You can give only the units and companies you open yourself.",
+            )
+        area_depts.add(u.department.id)
+        area_branches.add(u.branch.id)
+    every = body.companies == "all"
+    companies: set[str] = set()
+    if every:
+        if not wide:
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "out_of_scope",
+                "Only owners and admins give every company.",
+            )
+    else:
+        ids = list(dict.fromkeys(i for i in body.companies if i))
+        if ids:
+            companies = set(
+                (
+                    await db.scalars(
+                        select(Branch.id).where(Branch.workspace_id == ws, Branch.id.in_(ids))
+                    )
+                ).all()
+            )
+            if len(companies) != len(ids):
+                raise api_error(
+                    status.HTTP_400_BAD_REQUEST, "bad_branch", "Pick companies of this workspace."
+                )
+            sc = principal.scope
+            if not wide and not all(sc.in_branch(i) or (mine and mine.company(i)) for i in ids):
+                raise api_error(
+                    status.HTTP_403_FORBIDDEN,
+                    "out_of_scope",
+                    "You can give only the units and companies you open yourself.",
+                )
+    dept_ids = list(dict.fromkeys(i for i in body.departments if i))
+    if dept_ids:
+        depts = (
+            await db.scalars(
+                select(Department).where(Department.workspace_id == ws, Department.id.in_(dept_ids))
+            )
+        ).all()
+        if len(depts) != len(dept_ids):
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST, "bad_department", "Pick departments of this workspace."
+            )
+        for d in depts:
+            if not wide and not library_units.may_open(principal, d):
+                raise api_error(
+                    status.HTTP_403_FORBIDDEN,
+                    "out_of_scope",
+                    "You can give only the units and companies you open yourself.",
+                )
+            area_depts.add(d.id)
+            area_branches.add(d.branch_id)
+    g = library_grants.Grants(
+        units=tuple(keys),
+        all_units=body.units == "all" and bool(keys),
+        companies=frozenset(companies),
+        all_companies=every,
+        departments=tuple(dept_ids),
+        area_depts=frozenset(area_depts),
+        area_branches=frozenset(area_branches),
+    )
+    return None if g.empty else g
 
 
 @router.get("/{user_id}/team")

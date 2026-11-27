@@ -27,6 +27,8 @@ export interface Scope {
   department_name: string | null;
   /** P98: every branch the scope covers (home first). */
   branches?: { id: string; name: string }[];
+  /** P144: the companies given to them in the Library (Members page), with names. */
+  library_branches?: { id: string; name: string }[];
 }
 
 export interface Me {
@@ -84,8 +86,18 @@ export interface Member {
   head_of?: { id: string; name: string; branch_id?: string | null; branch_name?: string | null }[];
   library_scope?: "company" | "department";
   uploads_for_others?: boolean;
+  /** P144: extra Library access given to them (null or missing: none). */
+  library_grants?: LibraryGrants | null;
   /** P111: their job title (designation) on the organization chart. */
   job_title?: string | null;
+}
+
+/** P144: extra Library access given to one member, on top of their role and place: units
+ * ("all" or some), companies ("all" or some ids) and departments (ids). */
+export interface LibraryGrants {
+  units: ("hr" | "audit" | "finance")[] | "all";
+  companies: string[] | "all";
+  departments: string[];
 }
 
 export interface Department {
