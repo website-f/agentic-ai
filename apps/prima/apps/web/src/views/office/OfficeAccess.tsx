@@ -8,13 +8,13 @@
  */
 import { useEffect, useState } from 'react';
 import { ArrowsClockwiseIcon, EnvelopeSimpleIcon, PencilSimpleIcon, SignInIcon, UserMinusIcon, UserPlusIcon } from '@phosphor-icons/react';
-import { office, saved, type OfficeMember, type OfficeRole } from '../../api/office';
+import { heldText, office, saved, type OfficeMember, type OfficeRole, type UnknownAddOut } from '../../api/office';
 import { useApp, type ViewName } from '../../App';
 import { Card, Search } from '../../kit';
 import { SearchSelect } from '../../SearchSelect';
 import { Chip, Drawer, ErrorNotice, Loading, useAction, useLoad } from '../../ui';
 import { EmailSignin, ResetMicrosoft } from './Members';
-import { ConfirmDialog, Field, roleLabel, useChange, usePowers, when } from './shared';
+import { ConfirmDialog, Field, NEEDS_DEPARTMENT, PLACED, allowedCompanies, assignableRoles, placementBody, roleLabel, sortedCompanies, useChange, usePowers, when } from './shared';
 
 const OFFICE_ROLES: OfficeRole[] = ['owner', 'admin', 'it_support'];
 
@@ -348,35 +348,256 @@ function FixIdentity({ member, onClose }: { member: OfficeMember; onClose: () =>
   );
 }
 
-/** Who asked for a sign-in password in the last 7 days with an email nobody here has. */
+/** P141: the name the office makes from an email (routers/prima_master.name_from_email): "zulaikha_zul@…" is "Zulaikha Zul". */
+export function nameFromEmail(email: string): string {
+  const local = email.split('@')[0] ?? '';
+  const words = local.split(/[._\-+]+|\d+/).filter(Boolean);
+  const name = words
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ')
+    .slice(0, 120)
+    .trim();
+  return name || 'New member';
+}
+
+/**
+ * Who asked for a sign-in password in the last 7 days with an email nobody here has. P141 (Fitri, 27 Nov 2026): the office's
+ * admins tick the people they know and add them here, each named from their email (they change it later in their own settings).
+ */
 function NotRegistered() {
   const { go, canOpen } = useApp();
   const q = useLoad(() => office.unknownSignins(), []);
   const rows = Array.isArray(q.data) ? q.data : [];
-  if (!rows.length) return null;
+  const shown = rows.slice(0, 50);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [adding, setAdding] = useState<{ email: string; name: string }[] | null>(null);
+  const chosen = picked.filter((e) => shown.some((r) => r.email === e));
+  const allPicked = shown.length > 0 && chosen.length === shown.length;
+  const nameOf = (email: string) => names[email] ?? nameFromEmail(email);
+  const toggle = (email: string, on: boolean) => setPicked((now) => (on ? [...now.filter((e) => e !== email), email] : now.filter((e) => e !== email)));
+  const drawer = adding && (
+    <AddUnknown
+      people={adding}
+      onClose={() => {
+        setAdding(null);
+        setPicked([]);
+        q.reload();
+      }}
+    />
+  );
+  // The drawer stays in the same place when the list empties after adding, so it keeps showing what happened.
+  if (!rows.length) return <>{null}{drawer}</>;
   return (
-    <div className="oa-warn-box">
-      <b>{`Asked for a sign-in password but not added yet (${rows.length})`}</b>
-      <p className="small muted">
-        No email is sent to these addresses: nobody here has them. Add each person in Prima (People, Add office staff) with this exact email; they can sign in
-        within 30 minutes. A misspelt address is just a typo: ignore it.
-      </p>
-      <ul className="oa-plain-list">
-        {rows.slice(0, 50).map((r) => (
-          <li key={r.email} className="oa-split-line">
-            <b data-no-translate>{r.email}</b>
-            <span className="muted">{when(r.at)}</span>
-          </li>
-        ))}
-      </ul>
-      {(!canOpen || canOpen('people')) && (
-        <div>
-          <button className="btn btn-sm" onClick={() => go({ view: 'people' })}>
-            Open People
-          </button>
+    <>
+      <div className="oa-warn-box">
+        <b>{`Asked for a sign-in password but not added yet (${rows.length})`}</b>
+        <p className="small muted">
+          No email is sent to these addresses until they are added. Tick the people you know, check the name made from their email, then add them here: they
+          can change their name later in their own settings. A misspelt address is just a typo: leave it.
+        </p>
+        <div className="oa-bar">
+          <label className="oa-inline" style={{ flex: '0 1 auto' }}>
+            <input type="checkbox" checked={allPicked} onChange={(e) => setPicked(e.target.checked ? shown.map((r) => r.email) : [])} />
+            <span>Select all</span>
+          </label>
+          <span className="oa-list-actions">
+            {chosen.length > 0 && <span className="small muted">{`${chosen.length} selected`}</span>}
+            <button className="btn btn-primary btn-sm" disabled={!chosen.length} onClick={() => setAdding(chosen.map((email) => ({ email, name: nameOf(email).trim() })))}>
+              <UserPlusIcon size={15} aria-hidden="true" /> Add them
+            </button>
+          </span>
         </div>
+        <ul className="oa-list oa-boxed">
+          {shown.map((r) => (
+            <li key={r.email} className="oa-list-row">
+              <label className="oa-inline" style={{ flex: '1 1 240px' }}>
+                <input type="checkbox" checked={picked.includes(r.email)} onChange={(e) => toggle(r.email, e.target.checked)} />
+                <span className="oa-list-main">
+                  <b data-no-translate>{r.email}</b>
+                  <small>{when(r.at)}</small>
+                </span>
+              </label>
+              <span className="oa-inline" style={{ flex: '1 1 220px' }}>
+                <input
+                  className="input"
+                  aria-label="Name to use"
+                  title="Name to use"
+                  maxLength={120}
+                  value={nameOf(r.email)}
+                  onChange={(e) => setNames((now) => ({ ...now, [r.email]: e.target.value }))}
+                  data-no-translate
+                />
+              </span>
+            </li>
+          ))}
+        </ul>
+        {(!canOpen || canOpen('people')) && (
+          <div>
+            <button className="btn btn-sm" onClick={() => go({ view: 'people' })}>
+              Open People
+            </button>
+          </div>
+        )}
+      </div>
+      {drawer}
+    </>
+  );
+}
+
+/** P141: where the ticked people go (company, department, role) and whether each gets a sign-in password; then what happened to each. */
+function AddUnknown({ people, onClose }: { people: { email: string; name: string }[]; onClose: () => void }) {
+  const p = usePowers();
+  const act = useAction();
+  const roles = assignableRoles(p.me);
+  const [role, setRole] = useState<OfficeRole>(roles.includes('staff') ? 'staff' : (roles[0] ?? 'staff'));
+  const companies = useLoad(() => office.companies(), []);
+  const reach = allowedCompanies(p.me);
+  const list = sortedCompanies((companies.data ?? []).filter((c) => !reach || reach.includes(c.id)));
+  const [companyId, setCompanyId] = useState('');
+  const [deptId, setDeptId] = useState('');
+  const [send, setSend] = useState(true);
+  const [done, setDone] = useState<UnknownAddOut | null>(null);
+  const [heldMsg, setHeldMsg] = useState<string | null>(null);
+  const placed = PLACED.includes(role);
+  const company = list.find((c) => c.id === companyId);
+  const needsDept = NEEDS_DEPARTMENT.includes(role);
+  const canDept = placed && role !== 'branch_manager' && !!company && company.departments.length > 0;
+  const ready = !!people.length && (!placed || !!companyId) && (!needsDept || !!deptId);
+  const add = async () => {
+    const place = placementBody(role, companyId ? [companyId] : [], deptId);
+    const r = await act.run(() =>
+      office.addUnknownSignins({
+        emails: people.map((x) => x.email),
+        names: Object.fromEntries(people.map((x) => [x.email, x.name])),
+        role,
+        branch_id: place.branch_id,
+        department_id: place.department_id,
+        send_signin: send,
+      }),
+    );
+    if (r === undefined) return;
+    const held = heldText(r);
+    if (held) setHeldMsg(held);
+    else setDone(r as UnknownAddOut);
+  };
+  const finished = !!done || !!heldMsg;
+  return (
+    <Drawer
+      title={people.length === 1 ? 'Add 1 person to the office' : `Add ${people.length} people to the office`}
+      sub="Each is added like a new member on the Members page, with the name shown. They can change their name later in their own settings."
+      onClose={onClose}
+    >
+      {finished ? (
+        <div className="oa-stack">
+          {heldMsg && (
+            <p className="notice" data-tone="info">
+              {heldMsg}
+            </p>
+          )}
+          {done && (
+            <>
+              <p className="small">{`${done.added} added, ${done.skipped} already here, ${done.failed} not added, ${done.emailed} emailed a sign-in password.`}</p>
+              <ul className="oa-list oa-boxed">
+                {done.results.map((x) => (
+                  <li key={x.email} className="oa-list-row">
+                    <span className="oa-list-main">
+                      <b data-no-translate>{x.name || x.email}</b>
+                      <small data-no-translate>{x.email}</small>
+                      {x.message && <small data-no-translate>{x.message}</small>}
+                    </span>
+                    <Chip tone={x.ok ? (x.emailed === false ? 'warn' : 'ok') : x.skipped ? 'neutral' : 'crit'}>
+                      {x.ok ? (x.emailed ? 'Added and emailed' : 'Added') : x.skipped ? 'Already here' : 'Not added'}
+                    </Chip>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <div className="oa-form-actions">
+            <button className="btn btn-primary" onClick={onClose}>
+              Done
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form
+          className="oa-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (ready) void add();
+          }}
+        >
+          <ul className="oa-plain-list oa-wide">
+            {people.map((x) => (
+              <li key={x.email} className="oa-split-line">
+                <b data-no-translate>{x.name || nameFromEmail(x.email)}</b>
+                <span className="muted" data-no-translate>
+                  {x.email}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Field label="Role">
+            <SearchSelect
+              className="select"
+              aria-label="Role"
+              value={role}
+              onChange={(v) => {
+                setRole(v as OfficeRole);
+                setDeptId('');
+              }}
+              options={roles.map((r) => ({ value: r, label: roleLabel(r) }))}
+            />
+          </Field>
+          {placed && (
+            <Field label="Company">
+              {companies.error ? (
+                <ErrorNotice error={companies.error} />
+              ) : (
+                <SearchSelect
+                  className="select"
+                  aria-label="Company"
+                  value={companyId}
+                  onChange={(v) => {
+                    setCompanyId(v);
+                    setDeptId('');
+                  }}
+                  options={[{ value: '', label: 'Choose a company' }, ...list.map((c) => ({ value: c.id, label: c.name }))]}
+                />
+              )}
+            </Field>
+          )}
+          {canDept && company && (
+            <Field label={needsDept ? 'Department' : 'Department (optional)'}>
+              <SearchSelect
+                className="select"
+                aria-label="Department"
+                value={deptId}
+                onChange={setDeptId}
+                options={[{ value: '', label: needsDept ? 'Choose a department' : 'No department' }, ...company.departments.map((d) => ({ value: d.id, label: d.name }))]}
+              />
+            </Field>
+          )}
+          <label className="oa-check oa-wide">
+            <input type="checkbox" checked={send} onChange={(e) => setSend(e.target.checked)} />
+            <span>
+              <b>Email each one a sign-in password</b>
+              <small className="muted">The same email as Email a sign-in password: it works once, for 24 hours. Ask them to look in Junk too.</small>
+            </span>
+          </label>
+          <ErrorNotice error={act.error} />
+          <div className="oa-form-actions">
+            <button type="button" className="btn" onClick={onClose}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" disabled={act.busy || !ready}>
+              <UserPlusIcon size={15} aria-hidden="true" /> {act.busy ? 'Adding…' : 'Add them'}
+            </button>
+          </div>
+        </form>
       )}
-    </div>
+    </Drawer>
   );
 }
 

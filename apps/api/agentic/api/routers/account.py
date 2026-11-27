@@ -5,6 +5,9 @@ minutes (the session it made). Then the same rules as an owner correcting anyone
 (members.change_identity): the Microsoft account the old email was linked to is let go of,
 so their next Microsoft sign-in links the account of the new email (Prima follows), and
 every other session of theirs ends. This session stays: they just proved who they are.
+
+P141: anyone signed in changes their own display name (PUT /api/account/name): people added from
+the email they asked for a sign-in password with get a name made from that email, and fix it here.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -146,4 +149,48 @@ async def change_my_email(
         note="Microsoft link reset: their email changed; this device stays signed in",
     )
     await db.commit()
+    return await _me(db, user, principal.workspace_id, principal.role)
+
+
+class NameChangeIn(BaseModel):
+    name: str = Field(max_length=400)
+
+
+NAME_MIN, NAME_MAX = 2, 120
+
+
+@router.put("/name")
+async def change_my_name(
+    body: NameChangeIn,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> MeOut:
+    """P141: the signed-in person's own name, as everyone in the office sees it."""
+    from .auth import _me
+
+    name = " ".join(body.name.split())
+    if not NAME_MIN <= len(name) <= NAME_MAX:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "bad_name",
+            "Type a name of {min} to {max} characters.",
+            min=NAME_MIN,
+            max=NAME_MAX,
+        )
+    user = await db.get(User, principal.user.id)
+    assert user is not None
+    if name != user.name:
+        before = user.name
+        user.name = name
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "account.name_changed",
+            target=user.id,
+            before={"name": before},
+            after={"name": name},
+            note="by themselves",
+        )
+        await db.commit()
     return await _me(db, user, principal.workspace_id, principal.role)

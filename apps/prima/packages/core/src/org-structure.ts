@@ -57,6 +57,32 @@ export interface OrgLine {
   at: IsoDateTime;
 }
 
+/**
+ * P141 (office, Fitri 27 Nov 2026: "add more departments, edit the name of the current department, fully custom, and
+ * every change reflected"): a department's name chosen in the chart, or a department added there. One row per unit,
+ * 'unit-<key>'. A department Prima comes with (d_*, c_*) keeps its key and its rights and only takes the new name; an
+ * added one ('x_<slug>') carries no rights, lists its own people and may have a head and a deputy like any other.
+ * Rows hold account ids, names and the reason only. Module org-units-v1: before it is installed the chart shows the
+ * standard names and these changes are refused with a clear message.
+ */
+export interface OrgUnit {
+  id: Id;
+  key: string;
+  label: string;
+  custom: boolean;
+  removed?: boolean;
+  /** An added department: the accounts in it. */
+  memberIds?: Id[];
+  reason: string;
+  by: string;
+  byId: Id;
+  at: IsoDateTime;
+}
+export const ORG_UNITS_MISSING = 'Adding and renaming departments is not installed in this database yet (module org-units-v1).';
+export function isCustomUnitKey(k: unknown): k is string {
+  return typeof k === 'string' && /^x_[a-z0-9_]{1,44}$/.test(k);
+}
+
 const UNIT_COMPANIES = CENTRAL_EMPLOYER_IDS;
 export function isUnitKey(k: unknown): k is string {
   return typeof k === 'string' && UNIT_HEAD_KEYS.includes(k);
@@ -313,6 +339,22 @@ export class OrgStructureService {
     return this.store.hasTable('orgLines');
   }
 
+  private async unitsInstalled(store: Store = this.store): Promise<boolean> {
+    if (!store.hasTable) return true;
+    return store.hasTable('orgUnits');
+  }
+
+  /** P141: the department names and added departments (none before module org-units-v1). */
+  private async unitRows(store: Store = this.store): Promise<OrgUnit[]> {
+    try {
+      if (!(await this.unitsInstalled(store))) return [];
+      return ((await store.list('orgUnits', {})) ?? []) as OrgUnit[];
+    } catch {
+      // A dataset without the table (older test data) has no names of its own yet.
+      return [];
+    }
+  }
+
   private async people(store: Store = this.store): Promise<User[]> {
     return (await store.list('users', {})).filter((u) => onOrgChart(u, this.today()));
   }
@@ -409,19 +451,36 @@ export class OrgStructureService {
         above: above.some((a) => a.id === u.id),
       };
     });
-    const unitKeys = whole ? [...UNIT_DEPARTMENTS.map((d) => `d_${d}`), ...UNIT_COMPANIES.map((c) => `c_${c}`)] : [...new Set([...myHeads, ...unitsOfMember(me)])];
     const headRows = new Map(lines.filter((l) => l.kind === 'head' && l.unit).map((l) => [l.unit!, l]));
+    // P141: names chosen in the chart and the departments added there.
+    const unitsReady = await this.unitsInstalled();
+    const unitRows = await this.unitRows();
+    const unitRow = new Map(unitRows.map((r) => [r.key, r]));
+    const known = new Set(users.map((u) => u.id));
+    const added = unitRows.filter((r) => r.custom && !r.removed && isCustomUnitKey(r.key));
+    const inAdded = (r: OrgUnit) => (r.memberIds ?? []).filter((id) => known.has(id));
+    const mineAdded = added.filter((r) => inAdded(r).includes(me.id) || headRows.get(r.key)?.headId === me.id || headRows.get(r.key)?.deputyId === me.id);
+    const unitKeys = whole
+      ? [...UNIT_DEPARTMENTS.map((d) => `d_${d}`), ...UNIT_COMPANIES.map((c) => `c_${c}`), ...added.map((r) => r.key)]
+      : [...new Set([...myHeads, ...unitsOfMember(me), ...mineAdded.map((r) => r.key)])];
     const units = unitKeys.map((key) => {
-      const heads = users.filter((u) => chartHeadsOf(u).includes(key));
+      const custom = isCustomUnitKey(key);
       const row = headRows.get(key);
+      const own = unitRow.get(key);
+      const heads = custom ? users.filter((u) => row?.headId === u.id) : users.filter((u) => chartHeadsOf(u).includes(key));
       const deputy = row?.deputyId ? users.find((u) => u.id === row.deputyId) : users.find((u) => (u.deputyOf ?? []).includes(key));
+      const memberIds = custom && own ? inAdded(own) : null;
       return {
         key,
-        label: unitLabel(key),
-        heads: heads.map((h) => ({ id: h.id, name: h.name, title: h.title, how: jobHeadsOf(h).includes(key) ? ('job' as const) : ('named' as const) })),
+        label: own?.label || unitLabel(key),
+        heads: heads.map((h) => ({ id: h.id, name: h.name, title: h.title, how: !custom && jobHeadsOf(h).includes(key) ? ('job' as const) : ('named' as const) })),
         deputy: deputy ? { id: deputy.id, name: deputy.name, title: deputy.title } : null,
-        members: users.filter((u) => unitsOfMember(u).includes(key)).length,
+        members: memberIds ? memberIds.length : users.filter((u) => unitsOfMember(u).includes(key)).length,
         named: row ? { by: row.by, at: row.at, reason: row.reason, until: row.until ?? null } : null,
+        /** P141: a department added in the chart (its people listed here), and the name Prima gives it. */
+        custom,
+        memberIds,
+        standardLabel: custom ? null : unitLabel(key),
       };
     });
     const gaps: string[] = [];
@@ -442,6 +501,9 @@ export class OrgStructureService {
       installed,
       whole,
       canNameHeads: installed && setsWholeChart(me),
+      // P141: add and rename departments (module org-units-v1).
+      canEditUnits: installed && unitsReady && setsWholeChart(me),
+      unitsInstalled: unitsReady,
       meId: me.id,
       people,
       units,
@@ -515,7 +577,10 @@ export class OrgStructureService {
     if (!(await this.installed())) throw new BadRequest(ORG_LINES_MISSING);
     if (!setsWholeChart(user)) throw new AccessDenied('hr.monitor', '(the CEO or the HR Director names heads)');
     const unit = String(input.unit ?? '');
-    if (!isUnitKey(unit)) throw new BadRequest('Choose the department or central company.');
+    const unitRows = await this.unitRows();
+    if (!isUnitKey(unit) && !unitRows.some((r) => r.key === unit && r.custom && !r.removed && isCustomUnitKey(r.key)))
+      throw new BadRequest('Choose the department or central company.');
+    const unitName = unitRows.find((r) => r.key === unit)?.label || unitLabel(unit);
     const reason = String(input.reason ?? '').trim().slice(0, 300);
     if (reason.length < 3) throw new BadRequest('Give the reason (a few words is enough).');
     const until = this.untilOf(input.until);
@@ -546,8 +611,79 @@ export class OrgStructureService {
           action: 'org.head_set',
           entity: 'hr.monitor',
           entityId: id,
-          summary: `${unitLabel(unit)}: head ${head?.name ?? 'not named'}, deputy ${deputy?.name ?? 'none'}${until ? `, until ${until}` : ''}. Reason: ${reason}`,
+          summary: `${unitName}: head ${head?.name ?? 'not named'}, deputy ${deputy?.name ?? 'none'}${until ? `, until ${until}` : ''}. Reason: ${reason}`,
         });
+      return row;
+    });
+  }
+
+  /**
+   * P141: add a department, rename any department, take an added one away, or change who is in an added one. The CEO
+   * or the HR Director (the Chief of Staff or Deputy; the office's owners and global admins open Prima as the CEO).
+   * A department Prima comes with keeps its rights and its people (they join it through their account); only its name
+   * changes. The reason may be left empty: the chart says where the change was made.
+   */
+  async setUnit(user: User, input: { action?: unknown; unit?: unknown; label?: unknown; reason?: unknown; add?: unknown; remove?: unknown }) {
+    if (!(await this.unitsInstalled())) throw new BadRequest(ORG_UNITS_MISSING);
+    if (!setsWholeChart(user)) throw new AccessDenied('hr.monitor', '(the CEO or the HR Director changes departments)');
+    const action = String(input.action ?? '');
+    if (!['add', 'rename', 'remove', 'members'].includes(action)) throw new BadRequest('Choose what to do: add, rename, remove or change the people.');
+    const reason = String(input.reason ?? '').trim().slice(0, 300) || 'Changed in the org chart';
+    const label = String(input.label ?? '').replace(/\s+/g, ' ').trim();
+    const ids = (v: unknown) => (Array.isArray(v) ? [...new Set(v.map(String))].slice(0, 300) : []);
+    return this.oneAtATime(async (tx) => {
+      const rows = await this.unitRows(tx);
+      const live = rows.filter((r) => !r.removed);
+      const at = this.now();
+      const base = { reason, by: user.name, byId: user.id, at };
+      const names = [
+        ...UNIT_HEAD_KEYS.map((k) => ({ key: k, label: live.find((r) => r.key === k)?.label || unitLabel(k) })),
+        ...live.filter((r) => r.custom).map((r) => ({ key: r.key, label: r.label })),
+      ];
+      const checkLabel = (except?: string) => {
+        if (label.length < 2 || label.length > 80) throw new BadRequest('Give the department a name of 2 to 80 characters.');
+        if (names.some((x) => x.key !== except && x.label.toLowerCase() === label.toLowerCase())) throw new BadRequest(`There is already a department called ${label}.`);
+      };
+      let row: OrgUnit;
+      let summary: string;
+      if (action === 'add') {
+        checkLabel();
+        const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 36) || 'dept';
+        let key = `x_${slug}`;
+        for (let n = 2; rows.some((r) => r.key === key); n++) key = `x_${slug}_${n}`;
+        row = { id: `unit-${key}`, key, label, custom: true, removed: false, memberIds: [], ...base };
+        await tx.insert('orgUnits', row);
+        summary = `Department added: ${label}.`;
+      } else {
+        const unit = String(input.unit ?? '');
+        const before = rows.find((r) => r.key === unit);
+        const builtIn = isUnitKey(unit);
+        if (!builtIn && !(before && before.custom && !before.removed)) throw new BadRequest('Choose the department.');
+        if (action === 'rename') {
+          checkLabel(unit);
+          const old = before?.label || unitLabel(unit);
+          row = { id: `unit-${unit}`, key: unit, label, custom: !builtIn, removed: false, memberIds: before?.memberIds ?? [], ...base };
+          summary = `Department renamed: ${old} is now ${label}.`;
+        } else if (action === 'remove') {
+          if (builtIn) throw new BadRequest('A department Prima comes with cannot be taken away; rename it instead.');
+          row = { ...before!, removed: true, ...base };
+          summary = `Department taken away: ${before!.label}. Its people keep their own departments.`;
+        } else {
+          if (builtIn) throw new BadRequest('People join a department Prima comes with through their account (Members and roles).');
+          const users = await this.people(tx);
+          const known = new Set(users.map((u) => u.id));
+          const add = ids(input.add).filter((x) => known.has(x));
+          const drop = new Set(ids(input.remove));
+          if (!add.length && !drop.size) throw new BadRequest('Choose who to add or take out.');
+          const memberIds = [...new Set([...(before!.memberIds ?? []).filter((x) => !drop.has(x)), ...add])];
+          row = { ...before!, memberIds, ...base };
+          const who = (list: string[]) => list.map((x) => users.find((u) => u.id === x)?.name ?? 'someone').join(', ');
+          summary = `${before!.label}: ${[add.length ? `added ${who(add)}` : '', drop.size ? `took out ${who([...drop])}` : ''].filter(Boolean).join('; ')}.`;
+        }
+        if (before) await tx.update('orgUnits', row.id, withoutId(row));
+        else await tx.insert('orgUnits', row);
+      }
+      await tx.audit({ at, actor: user.name, companyId: null, action: 'org.unit_set', entity: 'hr.monitor', entityId: row.id, summary: `${summary} Reason: ${reason}` });
       return row;
     });
   }

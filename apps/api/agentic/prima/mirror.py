@@ -27,6 +27,7 @@ import argparse
 import asyncio
 import json
 import logging
+import re
 import sys
 from dataclasses import dataclass, field
 
@@ -142,6 +143,11 @@ async def _department(
         return None
     rows = (await db.scalars(select(Department).where(Department.branch_id == branch_id))).all()
     hit = next((d for d in rows if d.name.lower() == label.lower()), None)
+    if hit is None:
+        # P141: a department renamed in Prima's org chart (or in Members and roles) keeps the
+        # short name it was made with, so its people stay in it instead of a new copy.
+        want = {re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")[:70], key.replace("_", "-")}
+        hit = next((d for d in rows if d.slug in want), None)
     if hit:
         return hit.id
     slugs = {d.slug for d in rows}

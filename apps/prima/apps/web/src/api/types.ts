@@ -553,6 +553,9 @@ export interface NewQuotation {
 }
 
 /** Everything the screens need. Implemented by the HTTP client and by the in-browser demo. */
+/** P141: add, rename or take away a department, or change who is in an added one (org chart). */
+export type OrgUnitInput = { action: 'add' | 'rename' | 'remove' | 'members'; unit?: string; label?: string; reason?: string; add?: string[]; remove?: string[] };
+
 export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClient, CheckinClient, KeyInClient {
   /** Hand-overs between departments and real-data import (connect-departments, 2 Nov 2026). */
   readonly org: OrgClient;
@@ -969,6 +972,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   orgChart(): Promise<Awaited<ReturnType<PrimaService['org']['chart']>>>;
   orgSetLine(input: { userId: string; managerId: string | null; reason: string; until?: string | null }): Promise<unknown>;
   orgSetHead(input: { unit: string; headId: string | null; deputyId: string | null; reason: string; until?: string | null }): Promise<unknown>;
+  /** P141: add, rename or take away a department, or change who is in an added one. */
+  orgSetUnit(input: OrgUnitInput): Promise<unknown>;
   accountsAct(action: 'submit' | 'decide', input: Record<string, unknown>): Promise<unknown>;
   sharedLogins(): Promise<Awaited<ReturnType<PrimaService['sharedLogins']['board']>>>;
   sharedLoginsLeaver(personId: string): Promise<Awaited<ReturnType<PrimaService['sharedLogins']['leaverList']>>>;

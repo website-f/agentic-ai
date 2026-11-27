@@ -62,6 +62,8 @@ HELD_PREFIXES: tuple[tuple[str, str], ...] = (
     # Microsoft resets, emailed sign-in passwords, who reports to a manager.
     ("/api/members", "members.manage"),
     ("/api/prima-members", "members.manage"),  # a Prima person added as a member
+    # P141: people who asked for a sign-in password but were not here, added as members.
+    ("/api/prima-master/unknown-signins", "members.manage"),
     ("/api/prima/people", "org.manage"),  # office people linked to Prima records
     ("/api/prima/companies", "org.manage"),  # companies mapped to Prima's
     # Organization: companies (branches), departments, starter teams, review rules, the
@@ -491,6 +493,14 @@ def summarize(method: str, path: str, body: Any, names: _Names) -> Msg:
         )
     if head == "auth" and seg[1:3] == ["2fa", "members"] and len(seg) >= 4:
         return Msg("Reset {name}'s two-step sign-in", name=Plain(_person(seg[3], names)))
+    if head == "prima-master" and seg[1:] == ["unknown-signins", "add"]:
+        emails = [str(e) for e in b.get("emails") or []]
+        return Msg(
+            "Add {n} people who asked for a sign-in password, as {role}: {emails}",
+            n=len(emails),
+            role=role_label(str(b.get("role") or "staff")),
+            emails=Plain(_names_list(emails)),
+        )
     if head == "prima" and seg[1:2] == ["people"]:
         return Msg("Link office people to their Prima records")
     fields = ", ".join(list(b)[:12]) if b else ""

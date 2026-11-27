@@ -1,5 +1,5 @@
 {
-  "note": "Agentic Office (P126): Fauzan's off-list modules from main c5268831 (17-23 Nov 2026) that each say 'only with Fauzan's go-ahead'. deploy/prima/prima-setup.cjs runs them, after office-non-release.json, ONLY when PRIMA_PENDING_MODULES=1 is set for that run. accounts-access-v1 goes first (shared-logins and marketing-accounts read prima.acc_companies / replace prima.acc_templates); office-am-buy needs office-am-v1. A module is skipped when its marker holds. P129 (24 Nov 2026): Fauzan's main 329ac72a adds 9 modules (appended, in his checklist order; fin-payments last, run while nobody is paying) and a new office-am-buy-v1 (its marker is now the new function, so it runs again). They wait for the go-ahead like the first 12.",
+  "note": "Agentic Office (P126): Fauzan's off-list modules from main c5268831 (17-23 Nov 2026) that each say 'only with Fauzan's go-ahead'. deploy/prima/prima-setup.cjs runs them, after office-non-release.json, ONLY when PRIMA_PENDING_MODULES=1 is set for that run. accounts-access-v1 goes first (shared-logins and marketing-accounts read prima.acc_companies / replace prima.acc_templates); office-am-buy needs office-am-v1. A module is skipped when its marker holds. P129 (24 Nov 2026): Fauzan's main 329ac72a adds 9 modules (appended, in his checklist order; fin-payments last, run while nobody is paying) and a new office-am-buy-v1 (its marker is now the new function, so it runs again). They wait for the go-ahead like the first 12. P141 (27 Nov 2026): org-units-v1 (department names and added departments in the org chart) after org-lines-v1; the owner gave the go-ahead and it was run on live by itself.",
   "modules": [
     {
       "file": "accounts-access-v1.sql",
@@ -8,6 +8,10 @@
     {
       "file": "org-lines-v1.sql",
       "marker": "to_regclass('prima.org_lines') IS NOT NULL"
+    },
+    {
+      "file": "org-units-v1.sql",
+      "marker": "to_regclass('prima.org_units') IS NOT NULL"
     },
     {
       "file": "archive-v1.sql",

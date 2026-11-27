@@ -4330,6 +4330,13 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.org.setHead(u, { unit: b.unit, headId: b.headId, deputyId: b.deputyId, reason: b.reason, until: b.until }));
   }
 
+  // P141 (office): add, rename or take away a department, or change who is in an added one. Module org-units-v1.
+  @Post('org/unit')
+  orgSetUnit(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send an object');
+    return this.db.asUser(uid, (svc, u) => svc.org.setUnit(u, { action: b.action, unit: b.unit, label: b.label, reason: b.reason, add: b.add, remove: b.remove }));
+  }
+
   // Accounts and Access (Fauzan, 15 Nov 2026): IT or HR prepares; the HR Director or the CEO approves; module accounts-access-v1.
   @Get('accounts')
   accountsBoard(@UserId() uid: string) {

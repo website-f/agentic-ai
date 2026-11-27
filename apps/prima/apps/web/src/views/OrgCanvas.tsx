@@ -10,6 +10,7 @@ import {
   CrosshairIcon,
   MagnifyingGlassIcon,
   MinusIcon,
+  PencilSimpleIcon,
   PlusIcon,
   UserPlusIcon,
   XIcon,
@@ -36,6 +37,11 @@ type Mode = 'lines' | 'units' | 'companies';
 
 /** The people of a Prima unit: its central department's staff, or a central company's (core unitsOfMember). */
 function membersOf(u: Unit, people: Person[]): Person[] {
+  // P141: a department added in the chart lists its own people.
+  if (u.memberIds) {
+    const ids = new Set(u.memberIds);
+    return people.filter((p) => ids.has(p.id)).sort((a, b) => a.name.localeCompare(b.name));
+  }
   const co = u.key.startsWith('c_') ? u.key.slice(2) : null;
   return people.filter((p) => (u.key.startsWith('d_') && `d_${p.department}` === u.key) || (co !== null && p.companyIds.includes(co))).sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -89,6 +95,8 @@ export function OrgCanvas({
   onAddUnder,
   onPlace,
   onUnit,
+  onUnitEdit,
+  onPerson,
   onBack,
   children,
 }: {
@@ -102,6 +110,9 @@ export function OrgCanvas({
   onPlace?: (who: Person, boss: Person) => void;
   /** P138: a department's + or a person dropped on it: head, deputy or member (a drawer asks). */
   onUnit?: (unit: Unit, who: Person | null) => void;
+  /** P141: add a department (null) or rename / take away one; open a person to change their role, place and access. */
+  onUnitEdit?: (unit: Unit | null) => void;
+  onPerson?: (p: Person) => void;
   onBack: () => void;
   /** Drawers opened from the chart, drawn inside it so they sit above the canvas. */
   children?: ReactNode;
@@ -349,7 +360,7 @@ export function OrgCanvas({
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [picked]);
-  const ctx: Ctx = { c, kids, byId, unitName, closed, toggle, focus, canAddUnder, onMove, onAddUnder, openUnits, toggleUnit, dragId, setDragId, canDrop, place, dnd: !!onPlace, picked, pick: setPicked, onUnit: c.canNameHeads ? onUnit : undefined };
+  const ctx: Ctx = { c, kids, byId, unitName, closed, toggle, focus, canAddUnder, onMove, onAddUnder, openUnits, toggleUnit, dragId, setDragId, canDrop, place, dnd: !!onPlace, picked, pick: setPicked, onUnit: c.canNameHeads ? onUnit : undefined, onUnitEdit: c.canEditUnits ? onUnitEdit : undefined, onPerson };
   return (
     <div className="oc-full" role="dialog" aria-label="Org chart">
       <header className="oc-bar">
@@ -525,6 +536,8 @@ type Ctx = {
   picked: Person | null;
   pick: (p: Person | null) => void;
   onUnit?: (unit: Unit, who: Person | null) => void;
+  onUnitEdit?: (unit: Unit | null) => void;
+  onPerson?: (p: Person) => void;
 };
 
 function TreeNode({ p, ctx }: { p: Person; ctx: Ctx }) {
@@ -698,6 +711,11 @@ function UnitsTree({ ctx }: { ctx: Ctx }) {
             </span>
           </div>
         </div>
+        {ctx.onUnitEdit && (
+          <button type="button" className="oc-add" title="Add a department" aria-label="Add a department" onClick={() => ctx.onUnitEdit?.(null)}>
+            <PlusIcon size={13} weight="bold" aria-hidden="true" />
+          </button>
+        )}
       </div>
       {units.length > 0 && (
         <>
@@ -746,9 +764,17 @@ function UnitNode({ u, ctx }: { u: Unit; ctx: Ctx }) {
         <span className="oc-band" aria-hidden="true" />
         <div className="oc-box-main">
           <div className="oc-box-text">
-            <strong className="oc-name" title={u.label}>
-              {u.label}
-            </strong>
+            <span className="oc-unit-title">
+              <strong className="oc-name" title={u.label}>
+                {u.label}
+              </strong>
+              {ctx.onUnitEdit && (
+                <button type="button" className="oc-rename" title={`Rename ${u.label}`} aria-label={`Rename ${u.label}`} onClick={() => ctx.onUnitEdit?.(u)}>
+                  <PencilSimpleIcon size={13} aria-hidden="true" />
+                </button>
+              )}
+            </span>
+            {u.custom && <span className="oc-how">Added department</span>}
             {u.heads.length ? (
               u.heads.map((h) => (
                 <span key={h.id} className="oc-unit-person">
@@ -799,13 +825,29 @@ function UnitNode({ u, ctx }: { u: Unit; ctx: Ctx }) {
 
 /** Six or more people with nobody under them: one list box, as on a paper chart. */
 function TeamBox({ people, ctx }: { people: Person[]; ctx: Ctx }) {
+  // P141 (Fitri, 27 Nov 2026: "when I open the members, a search bar to search as well").
+  const [q, setQ] = useState('');
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = words.length ? people.filter((p) => words.every((w) => `${p.name} ${p.title}`.toLowerCase().includes(w))) : people;
   return (
     <div className="oc-team">
       <div className="oc-team-head">
         <span>Team</span> · <span className="num">{people.length}</span>
       </div>
+      {people.length > 5 && (
+        <label className="oc-team-find">
+          <MagnifyingGlassIcon size={13} aria-hidden="true" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find in this team" aria-label="Find in this team" />
+          {q && (
+            <button type="button" aria-label="Clear" onClick={() => setQ('')}>
+              <XIcon size={12} aria-hidden="true" />
+            </button>
+          )}
+        </label>
+      )}
+      {words.length > 0 && shown.length === 0 && <p className="oc-team-none muted small">Nobody matches.</p>}
       <ul>
-        {people.map((p) => (
+        {shown.map((p) => (
           <li
             key={p.id}
             data-pid={p.id}
@@ -823,12 +865,19 @@ function TeamBox({ people, ctx }: { people: Person[]; ctx: Ctx }) {
             onDragEnd={ctx.dnd ? () => ctx.setDragId(null) : undefined}
           >
             <Avatar name={p.name} size={26} />
-            <span className="oc-team-text">
-              <strong title={p.name}>{p.name}</strong>
-              <span className="muted small" title={p.title}>
-                {p.title}
+            {ctx.onPerson ? (
+              <button type="button" className="oc-team-text oc-team-open" title={`Open ${p.name}: role, place and access`} onClick={() => ctx.onPerson?.(p)}>
+                <strong>{p.name}</strong>
+                <span className="muted small">{p.title}</span>
+              </button>
+            ) : (
+              <span className="oc-team-text">
+                <strong title={p.name}>{p.name}</strong>
+                <span className="muted small" title={p.title}>
+                  {p.title}
+                </span>
               </span>
-            </span>
+            )}
             {p.canMove && (
               <button type="button" className="oc-team-act" title="Change line" aria-label={`Change line: ${p.name}`} onClick={() => ctx.onMove(p)}>
                 <ArrowsClockwiseIcon size={14} aria-hidden="true" />

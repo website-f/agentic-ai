@@ -424,7 +424,7 @@ function AddMember({ companies, onClose }: { companies: OfficeCompany[]; onClose
 
 // ---------- One member: see and change ----------
 
-function MemberDrawer({
+export function MemberDrawer({
   member,
   members,
   companies,

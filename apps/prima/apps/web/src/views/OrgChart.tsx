@@ -1,6 +1,9 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { CaretRightIcon, TreeStructureIcon, UserSwitchIcon, UsersThreeIcon, WarningIcon, ArrowsClockwiseIcon, UserIcon, ArrowsOutSimpleIcon } from '@phosphor-icons/react';
-import { useRouteTab } from '../App';
+import { useApp, useRouteTab } from '../App';
+import { office, type OfficeCompany, type OfficeMember } from '../api/office';
+import { EmailSignin, MemberDrawer } from './office/Members';
+import { PowersCtx, powersOf } from './office/shared';
 import { OrgCanvas } from './OrgCanvas';
 import { api } from '../api';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
@@ -57,6 +60,9 @@ function Screen({ c }: { c: Chart }) {
   // P138: a department's + (or a person dropped on it): head, deputy or member.
   const [unitEdit, setUnitEdit] = useState<{ unit: Unit; who: Person | null } | null>(null);
   const [naming, setNaming] = useState<Unit | null>(null);
+  // P141: add (null) or rename a department; a person opened from the chart.
+  const [unitForm, setUnitForm] = useState<{ unit: Unit | null } | null>(null);
+  const [opened, setOpened] = useState<Person | null>(null);
   // P129 (Fitri, 24 Nov 2026): the chart opens as a full-page canvas; Back shows the details (tables, units, notices).
   const [tab, setTab] = useRouteTab<'chart' | 'details'>('chart', ['chart', 'details']);
   const table = useTableState('org.people');
@@ -100,6 +106,12 @@ function Screen({ c }: { c: Chart }) {
           <MoveForm p={placing.who} c={c} to={placing.boss} onDone={() => setPlacing(null)} />
         </Drawer>
       )}
+      {unitForm && (
+        <Drawer title={unitForm.unit ? `Rename ${unitForm.unit.label}` : 'Add a department'} sub={unitForm.unit ? 'Its people, head and rights stay' : 'Then put people in it, and name its head'} onClose={() => setUnitForm(null)}>
+          <UnitForm c={c} unit={unitForm.unit} onDone={() => setUnitForm(null)} />
+        </Drawer>
+      )}
+      {opened && <PersonPanel c={c} p={opened} onClose={() => setOpened(null)} />}
       {naming && (
         <Drawer title="Name head" sub={naming.label} onClose={() => setNaming(null)}>
           <HeadForm c={c} unit={naming} onDone={() => setNaming(null)} />
@@ -110,7 +122,7 @@ function Screen({ c }: { c: Chart }) {
   if (tab === 'chart')
     return (
       <div className="page org">
-        <OrgCanvas c={c} byId={byId} kids={children} unitName={unitName} onMove={setMoving} onAddUnder={setAdding} onPlace={(who, boss) => setPlacing({ who, boss })} onUnit={(unit, who) => setUnitEdit({ unit, who })} onBack={() => setTab('details')}>
+        <OrgCanvas c={c} byId={byId} kids={children} unitName={unitName} onMove={setMoving} onAddUnder={setAdding} onPlace={(who, boss) => setPlacing({ who, boss })} onUnit={(unit, who) => setUnitEdit({ unit, who })} onUnitEdit={(unit) => setUnitForm({ unit })} onPerson={setOpened} onBack={() => setTab('details')}>
           {drawers}
         </OrgCanvas>
       </div>
@@ -441,6 +453,205 @@ function UnitPersonForm({ c, unit, who: preset, onDone }: { c: Chart; unit: Unit
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * P141 (Fitri, 27 Nov 2026: "add another department, edit the name of the current department, and any change here fully
+ * reflected"): add a department or rename one. A department Prima comes with keeps its people, head and rights; the
+ * office's department of the same name (Members and roles) takes the new name too.
+ */
+function UnitForm({ c, unit, onDone }: { c: Chart; unit: Unit | null; onDone: () => void }) {
+  const act = useAction();
+  const [label, setLabel] = useState(unit?.label ?? '');
+  const [removing, setRemoving] = useState(false);
+  const clean = label.replace(/\s+/g, ' ').trim();
+  const taken = c.units.some((u) => u.key !== unit?.key && u.label.toLowerCase() === clean.toLowerCase());
+  const ok = clean.length >= 2 && clean.length <= 80 && !taken && clean !== unit?.label;
+  const save = async () => {
+    if (!unit) {
+      await api.orgSetUnit({ action: 'add', label: clean });
+      return `${clean} added. Use its + to put people in it and name its head.`;
+    }
+    await api.orgSetUnit({ action: 'rename', unit: unit.key, label: clean });
+    const moved = unit.key.startsWith('d_') ? await renameOfficeDepartments(unit.key.slice(2), unit.label, unit.standardLabel, clean) : 0;
+    return moved ? `Renamed, here and in the office (${moved}).` : 'Renamed.';
+  };
+  const remove = () => api.orgSetUnit({ action: 'remove', unit: unit!.key }).then(() => `${unit!.label} taken away.`);
+  return (
+    <div className="org-form">
+      <ErrorNotice error={act.error} />
+      <label className="field">
+        <span>Department name</span>
+        <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder="For example: Corporate Communications" autoFocus />
+      </label>
+      {taken && <p className="muted small">There is already a department with this name.</p>}
+      {unit?.standardLabel && unit.standardLabel !== unit.label && <p className="muted small">{`Prima's own name: ${unit.standardLabel}`}</p>}
+      <div className="org-form-actions">
+        <button className="btn btn-primary" disabled={act.busy || !ok} onClick={() => act.run(save, (m) => m).then((r) => r !== undefined && onDone())}>
+          {unit ? 'Save the name' : 'Add the department'}
+        </button>
+        {unit?.custom &&
+          (removing ? (
+            <button className="btn btn-danger" disabled={act.busy} onClick={() => act.run(remove, (m) => m).then((r) => r !== undefined && onDone())}>
+              Yes, take it away
+            </button>
+          ) : (
+            <button className="btn btn-ghost" onClick={() => setRemoving(true)}>
+              Take this department away
+            </button>
+          ))}
+      </div>
+      {removing && <p className="muted small">Its people keep their own departments and lines; only this grouping goes.</p>}
+    </div>
+  );
+}
+
+/** The office keeps a department of the same name under the companies it came from: it takes the new name too. */
+async function renameOfficeDepartments(key: string, before: string, standard: string | null, after: string): Promise<number> {
+  try {
+    const companies = await office.companies();
+    const slugOf = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const names = new Set([before, standard ?? before].map((s) => s.toLowerCase()));
+    const slugs = new Set([slugOf(before), slugOf(standard ?? before), key.replace(/_/g, '-')]);
+    let n = 0;
+    for (const co of companies)
+      for (const d of co.departments)
+        if (d.name.toLowerCase() !== after.toLowerCase() && (names.has(d.name.toLowerCase()) || slugs.has(d.slug))) {
+          await office.renameDepartment(d.id, after);
+          n += 1;
+        }
+    return n;
+  } catch {
+    // The chart already has the new name; the office follows at its next change (Members and roles, Organization).
+    return 0;
+  }
+}
+
+/**
+ * P141 (Fitri, 27 Nov 2026: "when I click one of the members I can change their role, what they can access, and all
+ * things about this system"): one person from the chart. Their department and the departments added in the chart here;
+ * their role, company, job title and line in the office's own member settings (an office account), or Accounts and
+ * access (an account Prima keeps itself). Every rule is checked again by the server that keeps it.
+ */
+function PersonPanel({ c, p, onClose }: { c: Chart; p: Person; onClose: () => void }) {
+  const { go } = useApp();
+  const act = useAction();
+  const officeId = p.id.startsWith('u-off-') ? p.id.slice('u-off-'.length) : null;
+  const [account, setAccount] = useState(false);
+  const own = p.department ? `d_${p.department}` : '';
+  const [dept, setDept] = useState(own);
+  const departments = c.units.filter((u) => u.key.startsWith('d_'));
+  const added = c.units.filter((u) => u.custom);
+  const heads = c.units.filter((u) => u.heads.some((h) => h.id === p.id)).map((u) => u.label);
+  const deputy = c.units.filter((u) => u.deputy?.id === p.id).map((u) => u.label);
+  const moveDept = async () => {
+    const key = dept.slice(2);
+    if (!OFFICE_DEPARTMENTS.includes(key)) throw new Error('This department is set in Accounts and access for now.');
+    await office.updateMember(officeId!, { prima_department: key });
+    // The office brings their Prima account to the new department in the background: a moment, then the chart reloads.
+    await new Promise((res) => setTimeout(res, 2500));
+    return null;
+  };
+  const toggle = (u: Unit, inIt: boolean) => api.orgSetUnit({ action: 'members', unit: u.key, ...(inIt ? { remove: [p.id] } : { add: [p.id] }) });
+  if (account && officeId) return <OfficeAccount userId={officeId} name={p.name} onClose={() => setAccount(false)} />;
+  return (
+    <Drawer title={p.name} sub={p.title} onClose={onClose}>
+      <div className="org-form">
+        <ErrorNotice error={act.error} />
+        {(heads.length > 0 || deputy.length > 0) && (
+          <p className="muted small">{[heads.length ? `Head of ${heads.join(', ')}` : '', deputy.length ? `Deputy of ${deputy.join(', ')}` : ''].filter(Boolean).join(' · ')}</p>
+        )}
+        <h3 className="org-form-title">Role, company and access</h3>
+        {officeId ? (
+          <div className="org-form-actions">
+            <button className="btn btn-primary" onClick={() => setAccount(true)}>
+              Change role, company, job title and line
+            </button>
+            <button className="btn btn-ghost" onClick={() => window.open(`/settings/members/${encodeURIComponent(officeId)}`, '_blank', 'noopener')}>
+              Every other setting
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="muted small">An account Prima keeps itself: its name, title and company access change in Accounts and access (approved by the HR Director or the CEO).</p>
+            <div className="org-form-actions">
+              <button className="btn" onClick={() => go({ view: 'accounts' })}>
+                Open Accounts and access
+              </button>
+            </div>
+          </>
+        )}
+        <h3 className="org-form-title">Department</h3>
+        {officeId ? (
+          <div className="org-form-row">
+            <Select className="input" value={dept} onChange={(e) => setDept(e.target.value)} searchable aria-label="Department">
+              <option value="">No department</option>
+              {departments.map((u) => (
+                <option key={u.key} value={u.key}>
+                  {u.label}
+                </option>
+              ))}
+            </Select>
+            <button className="btn" disabled={act.busy || !dept || dept === own} onClick={() => act.run(moveDept, 'Moved into the department.')}>
+              Move
+            </button>
+          </div>
+        ) : (
+          <p className="muted small">{own ? (c.units.find((u) => u.key === own)?.label ?? own) : 'No department'}</p>
+        )}
+        {added.length > 0 && (
+          <>
+            <h3 className="org-form-title">Departments added in the chart</h3>
+            <ul className="org-checks">
+              {added.map((u) => {
+                const inIt = (u.memberIds ?? []).includes(p.id);
+                return (
+                  <li key={u.key}>
+                    <label>
+                      <input type="checkbox" checked={inIt} disabled={act.busy || !c.canEditUnits} onChange={() => act.run(() => toggle(u, inIt), inIt ? `Taken out of ${u.label}.` : `Added to ${u.label}.`)} />
+                      {u.label}
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </div>
+    </Drawer>
+  );
+}
+
+/** The office's own member settings for this person, drawn here (the same screen as Members and roles). */
+function OfficeAccount({ userId, name, onClose }: { userId: string; name: string; onClose: () => void }) {
+  const data = useLoad(async () => {
+    const [me, members, companies] = await Promise.all([office.me(), office.members(), office.companies()]);
+    return { me, members, companies };
+  }, []);
+  const [emailing, setEmailing] = useState(false);
+  if (!data.data)
+    return (
+      <Drawer title={name} onClose={onClose}>
+        {data.error ? <ErrorNotice error={data.error} /> : <Loading what="their settings" />}
+      </Drawer>
+    );
+  const member: OfficeMember | undefined = data.data.members.find((m) => m.user_id === userId);
+  if (!member)
+    return (
+      <Drawer title={name} onClose={onClose}>
+        <ErrorNotice error="The office has no member for this person that you may change." />
+      </Drawer>
+    );
+  const companies: OfficeCompany[] = data.data.companies;
+  return (
+    <PowersCtx.Provider value={powersOf(data.data.me)}>
+      {emailing ? (
+        <EmailSignin member={member} onClose={() => setEmailing(false)} />
+      ) : (
+        <MemberDrawer member={member} members={data.data.members} companies={companies} onClose={onClose} onEmail={() => setEmailing(true)} />
+      )}
+    </PowersCtx.Provider>
   );
 }
 

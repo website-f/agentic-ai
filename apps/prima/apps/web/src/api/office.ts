@@ -6,7 +6,7 @@
  * permission again; the screens only hide what the office would refuse.
  *
  * Shapes follow the office: apps/api/agentic/api/schemas.py and routers/{org,members,role_access,prima_master,
- * role_preview,signin_mail}.py (and the office's own screens in apps/web/src/lib/types.ts).
+ * role_preview,signin_mail,account}.py (and the office's own screens in apps/web/src/lib/types.ts).
  */
 import { savedLang } from '../i18n';
 
@@ -124,6 +124,37 @@ export interface PrimaMaster {
 export interface UnknownSignin {
   email: string;
   at: string;
+}
+
+/** P141: one email of POST /api/prima-master/unknown-signins/add. */
+export interface UnknownAddResult {
+  email: string;
+  ok: boolean;
+  user_id?: string | null;
+  name?: string | null;
+  /** Already a member here: left as they are. */
+  skipped?: boolean;
+  /** null: no sign-in email was asked for. */
+  emailed?: boolean | null;
+  message?: string | null;
+}
+
+export interface UnknownAddOut {
+  results: UnknownAddResult[];
+  added: number;
+  skipped: number;
+  failed: number;
+  emailed: number;
+}
+
+export interface UnknownAddIn {
+  emails: string[];
+  /** The name chosen on the screen for an email (else the office makes one from the email). */
+  names: Record<string, string>;
+  role: OfficeRole;
+  branch_id: string | null;
+  department_id: string | null;
+  send_signin: boolean;
 }
 
 export interface RolePreview {
@@ -248,7 +279,13 @@ export const office = {
   primaRun: () => officeFetch<PrimaMaster>('POST', '/api/prima-master/run', {}),
   primaApplyHeld: () => officeFetch<PrimaMaster>('POST', '/api/prima-master/apply-held', {}),
   unknownSignins: () => officeFetch<UnknownSignin[]>('GET', '/api/prima-master/unknown-signins'),
+  /** P141: add them as office members (IT support's add waits for approval). */
+  addUnknownSignins: (body: UnknownAddIn) => officeFetch<UnknownAddOut | Held>('POST', '/api/prima-master/unknown-signins/add', body),
   rolePreview: () => officeFetch<RolePreview>('GET', '/api/role-preview'),
   startRolePreview: (body: { role: string; branch_id: string | null; department_id: string | null }) =>
     officeFetch<RolePreview>('POST', '/api/role-preview/start', body),
+
+  // The signed-in person's own account (routers/account.py)
+  /** P141: their own name, as everyone in the office sees it. */
+  setMyName: (name: string) => officeFetch<OfficeMe>('PUT', '/api/account/name', { name }),
 };

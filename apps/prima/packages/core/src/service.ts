@@ -34900,11 +34900,15 @@ export class PrimaService {
     if (!this.reviewsFaces(user)) throw new AccessDenied('hr.monitor', '(registered faces)');
     const faces = await this.store.list('staffFaces', {});
     const people = new Map((await this.store.list('people', { id: faces.map((f) => f.personId) })).map((p) => [p.id, p]));
+    // P141 (office, Fitri 27 Nov 2026: faces showed "pr-a90df952912b" instead of a name): HR reviews faces in every
+    // company but may not read the staff record of a company it has no grant for (the company wall), so the name came
+    // back as the record id. The sign-in account (no wall) carries the same name.
+    const accounts = new Map((await this.store.list('users', { id: [...new Set(faces.map((f) => f.userId))] })).map((u) => [u.id, u]));
     const row = (f: StaffFace) => {
       const p = people.get(f.personId);
       return {
         personId: f.personId,
-        name: p?.name ?? f.personId,
+        name: p?.name ?? accounts.get(f.userId)?.name ?? 'Name not on record',
         staffNo: p?.staffNo ?? '',
         jobTitle: p?.jobTitle ?? null,
         companyId: f.companyId,

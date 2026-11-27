@@ -1,4 +1,5 @@
-"""Malay for P131 (Sign in as a role), P132 (kept in Prima) and P140 (the file editors)."""
+"""Malay for P131 (Sign in as a role), P132 (kept in Prima), P140 (the file editors) and P141
+(adding people who asked for a sign-in password; your own name)."""
 
 MS_P140: dict[str, str] = {
     # P140: the file editors' labels ("Wants to: ...")
@@ -12,6 +13,18 @@ MS_P140: dict[str, str] = {
     ),
     "Only an owner can do this.": "Hanya pemilik boleh melakukan ini.",
     "Only the office's admins see this.": "Hanya pentadbir pejabat boleh melihat ini.",
+    # P141: adding the people who asked for a sign-in password, and their own name
+    "Only an owner, a global admin or IT support can add these people.": (
+        "Hanya pemilik, pentadbir global atau sokongan IT boleh menambah mereka."
+    ),
+    "This is not an email address.": "Ini bukan alamat e-mel.",
+    "Added, but the sign-in email was not sent: {why}": (
+        "Ditambah, tetapi e-mel log masuk tidak dihantar: {why}"
+    ),
+    "Add {n} people who asked for a sign-in password, as {role}: {emails}": (
+        "Tambah {n} orang yang meminta kata laluan log masuk, sebagai {role}: {emails}"
+    ),
+    "Type a name of {min} to {max} characters.": "Taip nama antara {min} hingga {max} aksara.",
     # P131: Sign in as a role
     "Try a role in the browser, not the phone app.": (
         "Cuba peranan dalam pelayar, bukan dalam aplikasi telefon."

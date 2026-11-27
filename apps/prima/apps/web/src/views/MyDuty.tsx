@@ -14,6 +14,7 @@ import { MyItemsPanel } from './MyItems';
 import '../styles/selfservice.css';
 import { MyGuardPayslips } from './GuardPay';
 import { PoliciesPanel } from './HrDevelop';
+import { MyOfficeName } from './office/MyOfficeName';
 
 const PERSON_ROLE: Record<string, string> = { guard: 'Guard', supervisor: 'Officer', patrol_officer: 'Patrolling officer', office: 'Office staff' };
 
@@ -58,7 +59,9 @@ export function MyDuty() {
   // Office and central staff have no roster or patrols here: they open straight on their details.
   const staff = data?.person.role === 'office';
   // P121: a link may open a tab (#mine/leave, from the SOP guide); a "My details" tab also opens My details for a guard.
-  const { route } = useApp();
+  const { route, me } = useApp();
+  // P141: an office account (Prima id u-off-…) changes the name the office shows on My details.
+  const officeAccount = me?.user.id.startsWith('u-off-') ?? false;
   const [tab, setTab] = useRouteTab<Tab>('roster', ['roster', 'clock', 'patrol', 'me']);
   const [meTab, setMeTab] = useRouteTab<MeTab>('work', ME_TABS);
   useEffect(() => {
@@ -258,6 +261,7 @@ export function MyDuty() {
 
       {view === 'me' && (
         <>
+          {officeAccount && <MyOfficeName />}
           <div className="tabbar ss-tabs" role="tablist" aria-label="My details sections">
             {(
               [

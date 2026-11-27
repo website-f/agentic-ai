@@ -3677,6 +3677,7 @@ export interface Dataset {
   problemReports: import('./problem-reports').ProblemReport[];
   /** Org chart lines and named unit heads (Fauzan, 23 Nov 2026; module org-lines-v1). */
   orgLines: import('./org-structure').OrgLine[];
+  orgUnits: import('./org-structure').OrgUnit[];
   accountRequests: import('./accounts-access').AccountRequest[];
   archiveFiles: import('./archive').ArchiveFile[];
   /** Prima agent (23 Nov 2026): team and personal skills, and each person's own style. Module assistant-v1. */

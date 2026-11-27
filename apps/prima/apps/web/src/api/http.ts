@@ -2,7 +2,7 @@ import { invalidateDutyContext } from '../duty/context';
 import { type ExtractionStatus, type ExtractionRequest, type ExtractionPreview } from './it-extraction';
 import { type SharePointStatus, type SharePointCheck, type SharePointLibraries, type SharePointItems } from './connections';
 import { type Home, type User, type ClientLostReason, type EvidenceDoc, type ProofInput, type ReportDef, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FinRequestAction, type CmsServiceKind, type GrowthMargin, type GrowthPanel, type FwPaper, type TenderAttendanceKind } from '@prima/core';
-import type { DisciplineAppealDecision, DisciplineAppeals, PolicyCopyInput, RosterActName, StaffLangId } from './types';
+import type { DisciplineAppealDecision, DisciplineAppeals, OrgUnitInput, PolicyCopyInput, RosterActName, StaffLangId } from './types';
 import { type FinControlArea, ApiError, type Api, type WorkAdjustInput, type WorkReassignInput, type ClientAccountInput, type CrmBoard, type CrmClient, type CmsSettingsPatch, type ContractInput, type FollowUpInput, type FwAddFromJaInput, type FwPaperInput, type LeaveInput, type OfficeDeskInput, type Me, type PdpaCaseInput, type PdpaStepName, type VehicleRequestInput, type ExpenseInput, type ProductInput, type ProductCertInput, type VehicleWorkInput, type PhotoInput, type CmsDispatches, type DeviceDispatches, type DispatchInput, type VideoInput, type DutyDevice, type SiteDutyLog, type PostLogInput, type GateInInput, type SiteTaskBoard, type NeedsReviewInput, type SiteTaskInput, type DoSiteTaskInput, type ClientCodeBoard, type ClientCodeInput, type ClientCheckInput, type ClientInspectionInput, type SelfAuditBoard, type SelfAuditInput, type RbaBoard, type RbaTraceBoard, type WorkerFilesBoard, type EthicsBoard, type RbaCommitteeInput, type EthicsInput, type ItEwaste, type ArmsRequestAction, type ArmsRequestStepExtra, type RaiseArmsRequestInput, type SpecialOpsLegalFlags, type ArmsTradingState, type TransportBoard, type AmRentCheck, type AmBuyInput, type AmWhatsAppBoard, type ApprovalLimitsView, type CashStandInView, type StaffLeaveVcView, type VcRecordBody, type CosCoverView, type OfficerHoursInput, type CleaningRecordInput, type CleaningSetupInput, type CleaningProofInput, type StockLineInput, type CleaningSlipInput, type ClientWorkAckInput, type GuardTermsInput, type OpportunityInput, type SourceCheckInput, type WatchFindAnswer, type AmBqActionInput, type PaperReadingResult } from './types';
 import { MicrosoftSignIn, type SignInConfig } from './microsoft';
 
@@ -1343,6 +1343,9 @@ export class HttpApi implements Api {
   }
   orgSetHead(input: { unit: string; headId: string | null; deputyId: string | null; reason: string; until?: string | null }) {
     return this.call<unknown>('POST', '/org/head', input);
+  }
+  orgSetUnit(input: OrgUnitInput) {
+    return this.call<unknown>('POST', '/org/unit', input);
   }
   accountsAct(action: 'submit' | 'decide', input: Record<string, unknown>) {
     return this.call<unknown>('POST', `/accounts/${action}`, input);

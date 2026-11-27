@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { RadioGroup } from "radix-ui";
 
 import { AccountEmailRow } from "@/components/account-email";
+import { AccountNameRow } from "@/components/account-name";
 import { DataPrivacySection } from "@/components/data-privacy";
 import { InstallApp } from "@/components/install-app";
 import { SignInEmailsSection } from "@/components/sign-in-emails";
@@ -99,6 +100,7 @@ export function SettingsPage() {
             <LinkRow to="/settings/roles" icon={UserGearIcon} tone="accent" title={t("Roles and access")} body={t("Set what each role can open and change, permission by permission. Only owners.")} />
           ) : null}
           <LinkRow to="/change-password" icon={KeyIcon} tone="warn" title={t("Change password")} body={t("Your Agentic Office password (also opens Prima here). It is not your email password. Changing it signs out your other devices.")} />
+          <AccountNameRow name={me.user.name} />
           {me.role === "owner" ? <AccountEmailRow email={me.user.email} /> : null}
         </div>
       </Section>
