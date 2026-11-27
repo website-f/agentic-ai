@@ -532,7 +532,9 @@ async def store_new(db: AsyncSession, f: DocFile, data: bytes) -> None:
 
 
 async def replace(db: AsyncSession, f: DocFile, data: bytes) -> None:
-    """New bytes for an existing file, where it lives (a re-export, new minutes)."""
+    """New bytes for an existing file, where it lives (a re-export, new minutes). P143c: what
+    compression recorded is about the old bytes, so it goes (compress.py sets it after)."""
+    f.compression = None
     if f.storage_id:
         t = await db.get(StorageTarget, f.storage_id)
         if t is not None and f.storage_key:

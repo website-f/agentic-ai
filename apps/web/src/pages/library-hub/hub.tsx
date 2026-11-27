@@ -102,7 +102,7 @@ function isOn(pathname: string, tab: LibraryPath) {
 }
 
 /** Where Browse opens again: the folder last open in this visit (from the frame). */
-export interface BrowseSearch { folder?: string; view?: StoreView; task?: string; origin?: "agent" | "uploaded" | "person"; from?: string }
+export interface BrowseSearch { folder?: string; view?: StoreView; task?: string; origin?: "agent" | "uploaded" | "person"; from?: string; unit?: "hr" | "audit" | "finance" }
 
 /** The Library's tabs: links, so each tab is its own address. Scrolls sideways on phones and
  * keeps the open tab in view. `bar`: the full-width row under the Library frame's header. */

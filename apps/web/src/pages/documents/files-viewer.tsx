@@ -422,7 +422,9 @@ export function FileView({ f, branch, folders, canManage, canEdit, page, tab, on
                 <span key="folder" className="inline-flex min-w-0 items-center gap-1"><FolderSimpleIcon size={12} className="shrink-0" /><span className="min-w-0 break-words [overflow-wrap:anywhere]">{f.folder || t("Top level")}</span></span>,
                 kindLabel(f.kind),
                 dept?.name,
-                fileSize(f.size),
+                f.original_size && f.original_size > f.size
+                  ? <span key="size" title={t("Made smaller after upload; same file type and quality.")}>{t("Compressed from {from} to {to}", { from: fileSize(f.original_size), to: fileSize(f.size) })}</span>
+                  : fileSize(f.size),
                 f.pages ? (f.pages > 1 ? t("{n} pages", { n: f.pages }) : t("1 page")) : null,
                 t("added {when}", { when: timeAgo(f.created_at) }),
               ]} />
@@ -539,7 +541,7 @@ export function FileView({ f, branch, folders, canManage, canEdit, page, tab, on
           <dl className="grid grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-1 rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-3 text-[13px] sm:grid-cols-[minmax(7rem,auto)_minmax(0,1fr)] sm:gap-y-1.5 max-sm:[&_dd]:mb-1.5">
             <Row label={t("Folder")}>{f.folder ? f.folder : t("Top level")}</Row>
             {f.source_path && f.source_path !== f.name ? <Row label={t("Uploaded as")}>{f.source_path}</Row> : null}
-            <Row label={t("File")}>{[f.name, fileSize(f.size), f.pages ? (f.pages > 1 ? t("{n} pages", { n: f.pages }) : t("1 page")) : "", f.ocr ? t("read with OCR") : ""].filter(Boolean).join(" · ")}</Row>
+            <Row label={t("File")}>{[f.name, f.original_size && f.original_size > f.size ? t("Compressed from {from} to {to}", { from: fileSize(f.original_size), to: fileSize(f.size) }) : fileSize(f.size), f.pages ? (f.pages > 1 ? t("{n} pages", { n: f.pages }) : t("1 page")) : "", f.ocr ? t("read with OCR") : ""].filter(Boolean).join(" · ")}</Row>
             {kk === "other" && f.kind ? <Row label={t("Read as")}>{kindLabel(f.kind)}</Row> : null}
             {dept ? <Row label={t("Department")}>{dept.name}</Row> : null}
             {Object.entries(f.fields ?? {}).map(([k, v]) => <Row key={k} label={k}>{v}</Row>)}

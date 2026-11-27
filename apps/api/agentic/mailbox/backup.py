@@ -31,7 +31,7 @@ from datetime import UTC, datetime
 from email.message import EmailMessage
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -138,7 +138,11 @@ class _Saver:
                 .where(
                     DocFile.workspace_id == self.job.workspace_id,
                     DocFile.owner_user_id == self.job.user_id,
-                    DocFile.sha256 == digest,
+                    # P143c: a file made smaller since still matches what was saved.
+                    or_(
+                        DocFile.sha256 == digest,
+                        DocFile.compression["original_sha256"].astext == digest,
+                    ),
                     DocFile.folder.like(self.root.replace("%", "\\%") + "/%"),
                 )
                 .limit(1)

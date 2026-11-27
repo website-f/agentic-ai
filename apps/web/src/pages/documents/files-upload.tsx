@@ -57,10 +57,12 @@ export interface IntakeDropHandle {
   upload: (files: PickedFile[], folder: string) => void;
 }
 
-export function IntakeDrop({ branch, folder, onBatch, ref }: {
+export function IntakeDrop({ branch, folder, department, onBatch, ref }: {
   branch: Branch;
   /** The folder being browsed: uploads go into it ("" or absent: the top). */
   folder?: string;
+  /** P143b: a Library unit: every file goes to this department (no AI pick), named as the unit. */
+  department?: { id: string; name: string } | null;
   onBatch: (batchId: string) => void;
   ref?: Ref<IntakeDropHandle>;
 }) {
@@ -93,7 +95,7 @@ export function IntakeDrop({ branch, folder, onBatch, ref }: {
     const one = async (i: number) => {
       const p = files[i]!;
       update(i, { state: "sending" });
-      const params = { branch_id: branch.id, name: p.path, department_id: dept === AUTO ? null : dept, batch, folder: into || null };
+      const params = { branch_id: branch.id, name: p.path, department_id: department?.id ?? (dept === AUTO ? null : dept), batch, folder: into || null };
       const progress = (f: number) => update(i, { progress: f });
       try {
         if (!plain) {
@@ -169,7 +171,7 @@ export function IntakeDrop({ branch, folder, onBatch, ref }: {
         <div className="grid max-w-xl justify-items-center gap-2.5">
           <CloudArrowUpIcon size={36} weight="duotone" className="text-accent" />
           <p className="text-[15px] font-semibold text-balance">
-            {running ? t("Uploading {done} of {total}…", { done, total }) : t("Drop {company}'s documents here", { company: branch.name })}
+            {running ? t("Uploading {done} of {total}…", { done, total }) : t("Drop {company}'s documents here", { company: department?.name ?? branch.name })}
           </p>
           {folder ? (
             <p className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-0.5 text-[12.5px] font-medium text-accent">
@@ -184,11 +186,13 @@ export function IntakeDrop({ branch, folder, onBatch, ref }: {
             <Button size="sm" disabled={running} onClick={() => pickFiles.current?.click()}><FileIcon size={15} /> {t("Choose files")}</Button>
             <Button size="sm" variant="outline" disabled={running} onClick={() => pickFolder.current?.click()}><FolderOpenIcon size={15} /> {t("Choose a folder")}</Button>
           </div>
-          <div className="mt-1 flex w-full max-w-xs items-center gap-2 text-[12.5px] text-muted">
-            <span className="shrink-0">{t("Department")}</span>
-            <Select size="sm" value={dept} onValueChange={setDept} label={t("Department")} className="min-w-0 flex-1" disabled={running}
-              options={[{ value: AUTO, label: t("Let the AI sort it") }, ...branch.departments.map((d) => ({ value: d.id, label: d.name }))]} />
-          </div>
+          {department ? null : (
+            <div className="mt-1 flex w-full max-w-xs items-center gap-2 text-[12.5px] text-muted">
+              <span className="shrink-0">{t("Department")}</span>
+              <Select size="sm" value={dept} onValueChange={setDept} label={t("Department")} className="min-w-0 flex-1" disabled={running}
+                options={[{ value: AUTO, label: t("Let the AI sort it") }, ...branch.departments.map((d) => ({ value: d.id, label: d.name }))]} />
+            </div>
+          )}
         </div>
       </div>
 

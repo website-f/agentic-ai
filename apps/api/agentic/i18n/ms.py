@@ -2094,3 +2094,13 @@ MS.update({k: v for k, v in MS_P140.items() if k not in MS})
 from .ms_p142 import MS_P142  # noqa: E402
 
 MS.update({k: v for k, v in MS_P142.items() if k not in MS})
+
+# P143b: the Library's units (Unit HR, Unit Audit, Unit Kewangan).
+from .ms_p143b import MS_P143B  # noqa: E402
+
+MS.update({k: v for k, v in MS_P143B.items() if k not in MS})
+
+# P143c: uploaded files made smaller in the background, same format.
+from .ms_p143c import MS_P143C  # noqa: E402
+
+MS.update({k: v for k, v in MS_P143C.items() if k not in MS})

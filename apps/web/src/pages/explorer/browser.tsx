@@ -41,6 +41,7 @@ import {
 } from "@/lib/explorer";
 import { archiveUrl, cleanFolder, filesFromDrop, folderChain, folderName, KINDS, kindKey, previewKind, previewUrl, type FolderNode, type KindKey, type PickedFile } from "@/lib/intake";
 import { setLibrary } from "@/lib/library";
+import { unitArchiveUrl, type LibraryUnit } from "@/lib/library-units";
 import { usePagedList, useDebounced } from "@/lib/paged";
 import { fileOrigin, type FileOrigin } from "@/lib/provenance";
 import { meQuery } from "@/lib/queries";
@@ -186,8 +187,9 @@ const TEXT_TARGET = "input, textarea, select, [contenteditable='true'], [content
 
 // ---------------------------------------------------------------- the path row
 
-function PathBar({ branch, folder, searching, onFolder, drop, over }: {
-  branch: Branch;
+function PathBar({ rootName, folder, searching, onFolder, drop, over }: {
+  /** The company, or a Library unit (P143b). */
+  rootName: string;
   folder: string;
   searching: boolean;
   onFolder: (path: string) => void;
@@ -208,7 +210,7 @@ function PathBar({ branch, folder, searching, onFolder, drop, over }: {
     <nav ref={box} aria-label={t("Folder path")}
       className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <button type="button" onClick={() => onFolder("")} {...drop("")} aria-current={!folder && !searching ? "page" : undefined}
-        className={cn(crumb, "max-w-[14rem] truncate", !folder && !searching && "font-semibold", over === "crumb:" && "bg-accent-soft text-accent ring-2 ring-accent")}>{branch.name}</button>
+        className={cn(crumb, "max-w-[14rem] truncate", !folder && !searching && "font-semibold", over === "crumb:" && "bg-accent-soft text-accent ring-2 ring-accent")}>{rootName}</button>
       {chain.map((p, i) => (
         <span key={p} className="flex shrink-0 items-center gap-0.5">
           <CaretRightIcon size={11} className="shrink-0 text-muted" aria-hidden />
@@ -238,7 +240,7 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   );
 }
 
-function FilterButton({ filters, setFilters, branch }: { filters: Filters; setFilters: (f: Filters) => void; branch: Branch }) {
+function FilterButton({ filters, setFilters, branch, unit = false }: { filters: Filters; setFilters: (f: Filters) => void; branch: Branch; unit?: boolean }) {
   const t = useT();
   const { data: labels = [] } = useQuery(labelsQuery(branch.id));
   const n = filterCount(filters);
@@ -287,7 +289,7 @@ function FilterButton({ filters, setFilters, branch }: { filters: Filters; setFi
               </div>
             </div>
           ) : null}
-          {branch.departments.length ? (
+          {branch.departments.length && !unit ? (
             <div className={section}>
               <span className={head}>{t("Department")}</span>
               <div className="flex flex-wrap gap-1.5">
@@ -356,8 +358,10 @@ function ViewSwitch({ layout, onChange, phone }: { layout: Layout; onChange: (l:
 
 // ---------------------------------------------------------------- the file area
 
-export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, ops, clip, setClip, uploadOpen, setUploadOpen, intake, uploadInto, onFolder, onOpenFile, onOpenTree }: {
+export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, root, ops, clip, setClip, uploadOpen, setUploadOpen, intake, uploadInto, onFolder, onOpenFile, onOpenTree }: {
   branch: Branch;
+  /** P143b: a Library unit (one department of `branch`): its files, folders and uploads only. */
+  unit?: LibraryUnit | null;
   folder: string;
   openId?: string;
   initialOrigin?: FileOrigin;
@@ -388,6 +392,11 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
   const [filters, setFilters] = useState<Filters>(() => ({ ...NO_FILTERS, origin: initialOrigin ?? null }));
   const filtering = filterCount(filters) > 0;
   const here = findNode(root, folder) ?? root;
+  // P143b: a unit is its own folder space: its name at the top, its department on every list,
+  // upload, folder and ZIP, and a clipboard of its own.
+  const spaceName = unit ? t(unit.label) : branch.name;
+  const spaceId = unit ? `${branch.id}:${unit.department_id}` : branch.id;
+  const zip = (p: Parameters<typeof archiveUrl>[0]) => unitArchiveUrl(archiveUrl(p), unit?.department_id);
 
   // ---- files from the server: this folder; with filters, everything under it; a search, the
   // whole company. The server filters what it can; the rest is filtered here.
@@ -397,7 +406,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
     origin: filters.origin ?? undefined,
     kind: filters.kinds.length === 1 ? filters.kinds[0] : undefined,
     label: filters.labels[0],
-    department_id: filters.dept ?? undefined,
+    department_id: unit?.department_id ?? filters.dept ?? undefined,
     batch_id: filters.batch ?? undefined,
   }, { pageSize: 200, poll: (rows) => (rows.some((f) => f.status === "reading") ? 2500 : false) });
 
@@ -441,7 +450,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
   const selFiles = selected.flatMap((i) => (i.kind === "file" ? [i.file] : []));
   const current = cursor && byKey.has(cursor) ? cursor : order[0] ?? null;
   const selecting = selectedKeys.length > 0;
-  const cutKeys = new Set(clip?.mode === "cut" && clip.branchId === branch.id
+  const cutKeys = new Set(clip?.mode === "cut" && clip.branchId === spaceId
     ? clip.items.map((c) => (c.kind === "file" ? fileItemKey(c.id) : folderItemKey(c.path))) : []);
 
   // ---- inline rename and the new folder being named
@@ -479,13 +488,13 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
   };
   const toClip = (mode: Clipboard["mode"], its: Item[]) => {
     if (!its.length) return;
-    setClip({ mode, branchId: branch.id, items: its.map(toClipItem) });
+    setClip({ mode, branchId: spaceId, items: its.map(toClipItem) });
     const what = itemsWord(its.filter((i) => i.kind === "file").length, its.filter((i) => i.kind === "folder").length);
     toast(mode === "cut" ? tr("Cut {what}. Open a folder and paste.", { what }) : tr("Copied {what}. Open a folder and paste.", { what }), { duration: 2500 });
   };
   const paste = async (dest: string) => {
     if (!clip || !canEdit) return;
-    if (clip.branchId !== branch.id) {
+    if (clip.branchId !== spaceId) {
       toast.error(tr("Those were cut or copied in another company. Paste them there."));
       return;
     }
@@ -495,7 +504,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
   const askAi = (its: Item[]) => {
     const fs = its.flatMap((i) => (i.kind === "file" ? [i.file] : []));
     const target = its.length === 1 && its[0]?.kind === "folder" ? its[0].path : folder;
-    const name = target || `${branch.name} (${tr("top level")})`;
+    const name = target || `${spaceName} (${tr("top level")})`;
     if (fs.length && fs.length === its.length) {
       openTaskComposer({
         kind: "general",
@@ -516,7 +525,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
     const ds = its.flatMap((i) => (i.kind === "folder" ? [i.path] : []));
     if (fs.length === 1 && !ds.length) download(fileUrl(fs[0]!.id));
     else if (fs.length) download(archiveUrl({ ids: fs.map((f) => f.id) }));
-    for (const d of ds) download(archiveUrl({ branch_id: branch.id, folder: d }));
+    for (const d of ds) download(zip({ branch_id: branch.id, folder: d }));
   };
   const askDelete = (its: Item[]) => {
     if (!canEdit || !its.length) return;
@@ -619,7 +628,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
       acts.push({ id: "ai", label: t("Ask AI to organize this folder"), icon: <SparkleIcon />, run: () => askAi([]) });
     }
     if (order.length) acts.push({ id: "all", label: t("Select all"), icon: <CheckSquareIcon />, run: () => act({ type: "all", order }), keys: `${MOD}A`, sep: true });
-    acts.push({ id: "download", label: folder ? t("Download this folder") : t("Download everything"), icon: <DownloadSimpleIcon />, run: () => download(archiveUrl({ branch_id: branch.id, folder: folder || null })) });
+    acts.push({ id: "download", label: folder ? t("Download this folder") : t("Download everything"), icon: <DownloadSimpleIcon />, run: () => download(zip({ branch_id: branch.id, folder: folder || null })) });
     return acts;
   };
 
@@ -906,7 +915,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
             aria-label={t("Up one folder")} title={`${t("Up one folder")} (Backspace)`}>
             <ArrowUpIcon size={17} weight="bold" />
           </Button>
-          <PathBar branch={branch} folder={folder} searching={searching} onFolder={(p) => { setQ(""); onFolder(p); }} drop={(p) => dropProps(p, `crumb:${p}`)} over={dropOver} />
+          <PathBar rootName={spaceName} folder={folder} searching={searching} onFolder={(p) => { setQ(""); onFolder(p); }} drop={(p) => dropProps(p, `crumb:${p}`)} over={dropOver} />
           <Button size="sm" variant="outline" className="shrink-0 md:hidden pointer-coarse:h-11" onClick={onOpenTree}>
             <TreeStructureIcon size={15} /> <span className="max-[400px]:sr-only">{t("Folders")}</span>
           </Button>
@@ -945,7 +954,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
             </Button>
           </> : null}
           <span className="flex-1" />
-          <FilterButton filters={filters} setFilters={setFilters} branch={branch} />
+          <FilterButton filters={filters} setFilters={setFilters} branch={branch} unit={!!unit} />
           <SortButton sort={prefs.sort} dir={prefs.dir} onChange={(p) => prefs.set(p)} />
           <ViewSwitch layout={layout} onChange={(l) => prefs.set({ layout: l })} phone={phone} />
         </div>
@@ -998,7 +1007,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
                     <p className="text-[13px] font-semibold">{t("Upload into {folder}", { folder: ops.placeName(folder) })}</p>
                     <Button size="icon-sm" variant="ghost" className="pointer-coarse:size-11" aria-label={t("Close")} onClick={() => setUploadOpen(false)}><XIcon size={16} /></Button>
                   </div>
-                  <IntakeDrop ref={intake} branch={branch} folder={folder} onBatch={(id) => setRecent((r) => [id, ...r.filter((x) => x !== id)])} />
+                  <IntakeDrop ref={intake} branch={branch} folder={folder} department={unit ? { id: unit.department_id, name: spaceName } : null} onBatch={(id) => setRecent((r) => [id, ...r.filter((x) => x !== id)])} />
                 </div>
                 {uploadIds.map((id, n) => (
                   <BatchCard key={id} batchId={id} branch={branch} onOpenFile={onOpenFile} onShow={showFilter} defaultOpen={n === 0}
@@ -1008,7 +1017,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
             ) : null}
             {searching ? (
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-4 py-2 text-[12.5px] text-muted">
-                {t("Folders and files named like “{q}” in {company}.", { q: needle, company: branch.name })}
+                {t("Folders and files named like “{q}” in {company}.", { q: needle, company: spaceName })}
                 <Link to="/search" search={{ q: needle }} className="font-medium text-accent hover:underline">{t("Search inside documents")}</Link>
               </p>
             ) : null}
@@ -1049,7 +1058,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
           {canEdit ? <Button size="sm" variant="ghost" className="h-7 text-danger" onClick={() => askDelete(selected)}><TrashIcon size={14} /> {t("Delete")}</Button> : null}
           <Button size="icon-sm" variant="ghost" className="size-7" onClick={() => act({ type: "clear" })} aria-label={t("Clear the selection")} title={`${t("Clear the selection")} (Esc)`}><XIcon size={14} /></Button>
         </> : (
-          <a href={archiveUrl({ branch_id: branch.id, folder: folder || null })} download data-guide="files.download-folder"
+          <a href={zip({ branch_id: branch.id, folder: folder || null })} download data-guide="files.download-folder"
             className="inline-flex items-center gap-1.5 rounded-sm px-2 py-1 hover:bg-surface-2 hover:text-fg">
             <DownloadSimpleIcon size={14} /> {folder ? t("Download folder") : t("Download all")}
           </a>
@@ -1093,7 +1102,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
       ) : null}
 
       {/* ---- dialogs */}
-      <FolderPickerDialog open={!!picker} onOpenChange={(o) => !o && setPicker(null)} mode={picker?.mode ?? "move"} root={root} rootName={branch.name} current={folder}
+      <FolderPickerDialog open={!!picker} onOpenChange={(o) => !o && setPicker(null)} mode={picker?.mode ?? "move"} root={root} rootName={spaceName} current={folder}
         what={picker ? itemsWord(picker.items.filter((i) => i.kind === "file").length, picker.items.filter((i) => i.kind === "folder").length) : ""}
         onPick={(dest) => {
           if (!picker) return;

@@ -206,4 +206,7 @@ export const FILES: Record<string, string> = {
   "An agent downloaded it from {site}.": "Ejen memuat turunnya dari {site}.",
   "a website": "laman web",
   "Downloaded": "Dimuat turun",
+  // P143c: uploads made smaller in the background
+  "Compressed from {from} to {to}": "Dimampatkan daripada {from} kepada {to}",
+  "Made smaller after upload; same file type and quality.": "Dikecilkan selepas dimuat naik; jenis fail dan kualiti yang sama.",
 };

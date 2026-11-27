@@ -55,4 +55,13 @@ export const LIBRARY: Record<string, string> = {
   "No guidelines yet": "Belum ada garis panduan",
   "Take this file out of the guidelines?": "Keluarkan fail ini daripada garis panduan?",
   "Taken out of the guidelines. The file itself is kept.": "Dikeluarkan daripada garis panduan. Failnya tetap disimpan.",
+
+  // P143b: the units first (named Malay first, as the owner wrote them), then one picker for
+  // the other companies.
+  "Units": "Unit",
+  "Unit HR": "Unit HR",
+  "Unit Audit": "Unit Audit",
+  "Unit Kewangan": "Unit Kewangan",
+  "Other companies": "Syarikat lain",
+  "Search {n} companies": "Cari {n} syarikat",
 };

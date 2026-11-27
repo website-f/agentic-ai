@@ -69,10 +69,12 @@ function skippedNote(plan: PastePlan) {
 
 export type ExplorerOps = ReturnType<typeof useExplorerOps>;
 
-export function useExplorerOps(branch: Branch | null, root: FolderNode) {
+/** P143b: `unit` (a department id and its name) keeps every folder change inside a Library unit. */
+export function useExplorerOps(branch: Branch | null, root: FolderNode, unit?: { departmentId: string; name: string } | null) {
   const qc = useQueryClient();
   const branchId = branch?.id ?? null;
-  const placeName = (path: string) => cleanFolder(path) || branch?.name || t("the top level");
+  const deptId = unit?.departmentId ?? null;
+  const placeName = (path: string) => cleanFolder(path) || unit?.name || branch?.name || t("the top level");
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: docKeys.files });
@@ -102,9 +104,10 @@ export function useExplorerOps(branch: Branch | null, root: FolderNode) {
 
   /** A folder and everything in it, copied to `to` (empty folders too). */
   const copyFolder = async (from: string, to: string) => {
-    for (const p of foldersUnder(from)) await createFolder(joinPath(to, p.slice(from.length + 1)), branchId).catch(() => undefined);
+    for (const p of foldersUnder(from)) await createFolder(joinPath(to, p.slice(from.length + 1)), branchId, deptId).catch(() => undefined);
     const q = new URLSearchParams({ folder: from, recursive: "true", limit: "500" });
     if (branchId) q.set("branch_id", branchId);
+    if (deptId) q.set("department_id", deptId);
     const files = await api<ExplorerFile[]>(`/api/files?${q}`);
     const byFolder = new Map<string, string[]>();
     for (const f of files) {
@@ -127,7 +130,7 @@ export function useExplorerOps(branch: Branch | null, root: FolderNode) {
     try {
       if (mode === "cut") {
         if (plan.files.length) await moveFilesTo(plan.files, dest);
-        for (const f of plan.folders) await renameFolder(f.from, f.to, branchId);
+        for (const f of plan.folders) await renameFolder(f.from, f.to, branchId, deptId);
         toast.success(t("Moved {what} to {folder}.", { what: itemsWord(plan.files.length, plan.folders.length), folder: where }), { id });
       } else {
         let skipped = 0;
@@ -152,7 +155,7 @@ export function useExplorerOps(branch: Branch | null, root: FolderNode) {
   const newFolder = async (parent: string, name: string): Promise<string | null> => {
     const path = joinPath(parent, name.trim());
     try {
-      await createFolder(path, branchId);
+      await createFolder(path, branchId, deptId);
       toast.success(t("Folder “{name}” made.", { name: name.trim() }));
       return path;
     } catch (e) {
@@ -167,7 +170,7 @@ export function useExplorerOps(branch: Branch | null, root: FolderNode) {
     const to = joinPath(path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "", name.trim());
     if (to === path) return true;
     try {
-      await renameFolder(path, to, branchId);
+      await renameFolder(path, to, branchId, deptId);
       toast.success(t("Renamed to {name}.", { name: name.trim() }));
       return true;
     } catch (e) {
@@ -219,7 +222,7 @@ export function useExplorerOps(branch: Branch | null, root: FolderNode) {
     let foldersGone = 0;
     for (const p of folders) {
       try {
-        await deleteFolder(p, branchId);
+        await deleteFolder(p, branchId, deptId);
         foldersGone += 1;
       } catch (e) {
         if (e instanceof ApiError && e.status === 409) toast.error(t("{name} is not empty. Move or delete what is inside it first.", { name: p.split("/").pop() ?? p }));

@@ -82,6 +82,8 @@ class FileOut(BaseModel):
     review_status: str | None = None
     # P61: a person's own labels on it.
     labels: list[str] = Field(default_factory=list)
+    # P143c: the size it was uploaded at when it was made smaller since (size is now).
+    original_size: int | None = None
 
 
 def may_manage(principal: Principal) -> bool:
@@ -166,7 +168,15 @@ async def file_out(db: AsyncSession, f: DocFile, *, text: bool = False) -> FileO
         report_id=f.report_id,
         review_status=review,
         labels=list(f.labels or []),
+        original_size=original_size(f),
     )
+
+
+def original_size(f: DocFile) -> int | None:
+    """P143c: the uploaded size when the stored file was made smaller (else None)."""
+    c = f.compression or {}
+    n = c.get("original_size") if c.get("result") == "smaller" else None
+    return int(n) if isinstance(n, int) and n > (f.size or 0) else None
 
 
 async def get_file(

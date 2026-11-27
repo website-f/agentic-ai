@@ -740,6 +740,11 @@ async def process_file(
         f.restricted = sensitive_words(f.kind, f.name, f.folder, f.title)
     f.status = "ready"
     await db.commit()
+    # P143c: the stored bytes made smaller in the same format (never a held-back, restricted
+    # or signed file; the text just read stays, the result is checked before it is kept).
+    from . import compress
+
+    await compress.after_read(db, f)
     if f.quarantined:  # P24: held back files are never searchable
         from ..knowledge import indexer
 

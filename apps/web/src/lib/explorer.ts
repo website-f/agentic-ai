@@ -110,14 +110,20 @@ export const fileViewQuery = (id: string) =>
 export const copyFiles = (ids: string[], folder: string) =>
   api<{ copied: number; ids: string[]; skipped: number | string[] }>("/api/files/copy", "POST", { ids, folder: cleanFolder(folder) });
 
-export const createFolder = (path: string, branchId: string | null) =>
-  api<unknown>("/api/files/folders", "POST", { path: cleanFolder(path), ...(branchId ? { branch_id: branchId } : {}) });
+/** P143b: `departmentId` keeps the folder inside a Library unit (one department's files). */
+const place = (branchId: string | null, departmentId?: string | null) => ({
+  ...(branchId ? { branch_id: branchId } : {}),
+  ...(departmentId ? { department_id: departmentId } : {}),
+});
 
-export const renameFolder = (path: string, to: string, branchId: string | null) =>
-  api<{ moved: number }>("/api/files/folders/rename", "POST", { path: cleanFolder(path), to: cleanFolder(to), ...(branchId ? { branch_id: branchId } : {}) });
+export const createFolder = (path: string, branchId: string | null, departmentId?: string | null) =>
+  api<unknown>("/api/files/folders", "POST", { path: cleanFolder(path), ...place(branchId, departmentId) });
 
-export const deleteFolder = (path: string, branchId: string | null) =>
-  api<unknown>("/api/files/folders/delete", "POST", { path: cleanFolder(path), ...(branchId ? { branch_id: branchId } : {}) });
+export const renameFolder = (path: string, to: string, branchId: string | null, departmentId?: string | null) =>
+  api<{ moved: number }>("/api/files/folders/rename", "POST", { path: cleanFolder(path), to: cleanFolder(to), ...place(branchId, departmentId) });
+
+export const deleteFolder = (path: string, branchId: string | null, departmentId?: string | null) =>
+  api<unknown>("/api/files/folders/delete", "POST", { path: cleanFolder(path), ...place(branchId, departmentId) });
 
 export const renameFile = (id: string, name: string) => api<ExplorerFile>(`/api/files/${id}`, "PATCH", { name });
 

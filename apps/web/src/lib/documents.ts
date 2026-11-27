@@ -55,6 +55,9 @@ export interface DocFile {
   sensitive?: FileSensitive | null;
   /** Held back: kept, but agents never read it until a manager releases it. */
   quarantined?: boolean;
+  /** P143c: the size it was uploaded at, when the server has since made it smaller (same
+   * format); `size` is what is kept now. Absent or null when it was not compressed. */
+  original_size?: number | null;
 }
 
 export interface FileSensitive {

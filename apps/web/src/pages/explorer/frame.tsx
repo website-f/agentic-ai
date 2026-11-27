@@ -122,7 +122,8 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 function browseOf(search: Record<string, unknown>): BrowseSearch {
   const view = (STORE_VIEWS as readonly unknown[]).includes(search.view) ? (search.view as BrowseSearch["view"]) : undefined;
   const origin = search.origin === "agent" || search.origin === "uploaded" || search.origin === "person" ? search.origin : undefined;
-  return { folder: str(search.folder), view, task: str(search.task), origin };
+  const unit = search.unit === "hr" || search.unit === "audit" || search.unit === "finance" ? search.unit : undefined;
+  return { folder: str(search.folder), view, task: str(search.task), origin, unit };
 }
 
 // ---------------------------------------------------------------- the frame
@@ -161,7 +162,7 @@ export function LibraryFrame() {
     if (browsing) {
       void navigate({
         to: "/explorer",
-        search: (s) => ({ ...s, view: undefined, task: undefined, folder: undefined, f: undefined, page: undefined }),
+        search: (s) => ({ ...s, view: undefined, task: undefined, folder: undefined, unit: undefined, f: undefined, page: undefined }),
         resetScroll: false,
       });
     }

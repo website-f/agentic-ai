@@ -5,21 +5,23 @@
  * websites, uploaded); the rest of the screen is the folder you are in (browser.tsx). Any file
  * opens in the file panel (?f=), with its preview, details and actions. /files redirects here
  * with the same address, so older links keep working. */
-import { ArrowRightIcon, BuildingsIcon, CaretRightIcon } from "@phosphor-icons/react";
-import { useQueries, useSuspenseQuery } from "@tanstack/react-query";
+import { ArrowRightIcon, BuildingsIcon, CaretRightIcon, UsersThreeIcon } from "@phosphor-icons/react";
+import { useQueries, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 
 import { EmptyState } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CompanyPicker as CompanySelect } from "@/components/ui/company-picker";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locale, useT } from "@/i18n";
 import { useCompanies } from "@/lib/company";
 import type { Clipboard } from "@/lib/explorer";
 import { type StoreView } from "@/lib/file-store";
-import { cleanFolder, fileTreeQuery, filesFromDrop, folderName, type PickedFile } from "@/lib/intake";
+import { buildTree, cleanFolder, fileTreeQuery, filesFromDrop, folderName, type PickedFile } from "@/lib/intake";
+import { libraryUnitsQuery, unitTreeQuery, type LibraryUnit, type UnitKey } from "@/lib/library-units";
 import { meQuery } from "@/lib/queries";
 import { hasAny, type Branch } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -36,17 +38,56 @@ import { canDropInto, copyKey, draggedItems, endDrag, isFileDrag, isOwnDrag, sta
 
 // ---------------------------------------------------------------- pieces
 
-/** Under "All companies": pick the company whose documents to work on. */
+/** P143b: past this many companies the landing offers one searchable picker, not a card each. */
+const MANY_COMPANIES = 8;
+
+/** P143b: the units this person opens (Unit HR, Unit Audit, Unit Kewangan), first. */
+function UnitCards({ units, onPick }: { units: LibraryUnit[]; onPick: (key: UnitKey) => void }) {
+  const t = useT();
+  if (!units.length) return null;
+  return (
+    <section className="grid gap-3" aria-label={t("Units")}>
+      <h2 className="text-[13px] font-semibold tracking-[0.06em] text-muted uppercase">{t("Units")}</h2>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {units.map((u) => (
+          <Card key={u.key} interactive className="p-0">
+            <button type="button" onClick={() => onPick(u.key)} className="flex min-h-14 w-full items-center gap-3 px-4 py-4 text-left">
+              <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-accent-soft text-accent ring-1 ring-accent/15 ring-inset">
+                <UsersThreeIcon size={20} weight="duotone" />
+              </span>
+              <span className="grid min-w-0 flex-1">
+                <span className="truncate text-[14px] font-semibold">{t(u.label)}</span>
+                <span className="truncate text-[12.5px] text-muted">
+                  {u.files ? (u.files === 1 ? t("1 file") : t("{n} files", { n: u.files.toLocaleString(locale()) })) : t("Open its documents")}
+                  {" · "}{u.department_name}
+                </span>
+              </span>
+              <CaretRightIcon size={15} className="text-muted" />
+            </button>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Under "All companies": pick the company whose documents to work on. P143b: with many
+ * companies, one searchable picker instead of a card (and a folder count) for each. */
 function CompanyPicker({ branches, onPick }: { branches: Branch[]; onPick: (id: string) => void }) {
   const t = useT();
-  const trees = useQueries({ queries: branches.map((b) => fileTreeQuery(b.id)) });
+  const many = branches.length > MANY_COMPANIES;
+  const trees = useQueries({ queries: (many ? [] : branches).map((b) => fileTreeQuery(b.id)) });
   return (
     <section className="grid gap-3" data-guide="files.pick-company">
       <div className="rounded-[var(--radius-md)] border border-accent/25 bg-accent-soft/40 px-4 py-3">
-        <p className="text-[14px] font-semibold">{t("Pick a company first")}</p>
+        <p className="text-[14px] font-semibold">{many ? t("Other companies") : t("Pick a company first")}</p>
         <p className="text-[13px] text-muted">{t("Each company keeps its own documents. Choose the one you are uploading for or want to browse.")}</p>
+        {many ? (
+          <CompanySelect className="mt-2.5 max-w-md" companies={branches} value="" onValueChange={onPick}
+            label={t("Other companies")} placeholder={t("Search {n} companies", { n: branches.length })} />
+        ) : null}
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {many ? null : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {branches.map((b, i) => {
           const n = trees[i]?.data?.total_files ?? 0;
           return (
@@ -64,7 +105,7 @@ function CompanyPicker({ branches, onPick }: { branches: Branch[]; onPick: (id: 
             </Card>
           );
         })}
-      </div>
+      </div>}
     </section>
   );
 }
@@ -83,15 +124,26 @@ export function ExplorerPage() {
   const branch = co.isAll ? null : co.selected;
   const view: StoreView = search.view ?? (search.task ? "tasks" : "folders");
   const folder = view === "folders" ? cleanFolder(search.folder ?? "") : "";
+  // P143b: a unit's folders (Unit HR, Unit Audit, Unit Kewangan): one department of its company.
+  const { data: units, isLoading: unitsLoading } = useQuery(libraryUnitsQuery);
+  const unitKey = view === "folders" ? (search.unit ?? null) : null;
+  const unit = (unitKey && units?.find((u) => u.key === unitKey)) || null;
+  const unitBranch = unit ? co.branches.find((b) => b.id === unit.branch_id) ?? null : null;
+  const { data: unitTree } = useQuery(unitTreeQuery(unit));
+  const unitRoot = useMemo(() => buildTree(unitTree?.folders ?? []), [unitTree]);
 
   const [treeOpen, setTreeOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [clip, setClip] = useState<Clipboard | null>(null);
   const intake = useRef<IntakeDropHandle>(null);
   const { tree, root } = useFolderTree(branch?.id ?? null);
-  const ops = useExplorerOps(branch, root);
-  // A company with no files yet starts with the upload area open.
-  const empty = !!tree && !tree.total_files && !tree.folders.length;
+  // The folder space in view: a unit's (its company, narrowed to its department) or the company's.
+  const space = unit ? unitBranch : branch;
+  const spaceTree = unit ? unitTree : tree;
+  const spaceRoot = unit ? unitRoot : root;
+  const ops = useExplorerOps(space, spaceRoot, unit ? { departmentId: unit.department_id, name: t(unit.label) } : null);
+  // A company (or unit) with no files yet starts with the upload area open.
+  const empty = !!spaceTree && !spaceTree.total_files && !spaceTree.folders.length;
   const [seenEmpty, setSeenEmpty] = useState(false);
   if (empty && !seenEmpty && canEdit) {
     setSeenEmpty(true);
@@ -102,11 +154,12 @@ export function ExplorerPage() {
   const goto = (patch: (s: Search) => Search, replace = false) => void navigate({ search: patch, resetScroll: false, replace });
   const pickView = (v: StoreView) => {
     setTreeOpen(false);
-    goto((s) => ({ ...s, view: v === "folders" ? undefined : v, task: undefined, folder: undefined, origin: undefined, f: undefined, page: undefined }));
+    goto((s) => ({ ...s, view: v === "folders" ? undefined : v, task: undefined, folder: undefined, unit: undefined, origin: undefined, f: undefined, page: undefined }));
   };
-  const pickFolder = (p: string) => {
+  /** A folder of the company in view, or of a unit (`u`). */
+  const pickFolder = (p: string, u?: UnitKey) => {
     setTreeOpen(false);
-    goto((s) => ({ ...s, view: undefined, task: undefined, folder: p || undefined, f: undefined, page: undefined }));
+    goto((s) => ({ ...s, view: undefined, task: undefined, folder: p || undefined, unit: u, f: undefined, page: undefined }));
   };
   const pickCompany = (id: string) => {
     co.select(id);
@@ -120,7 +173,7 @@ export function ExplorerPage() {
     intake.current?.upload(files, path);
   };
 
-  const treeDrop: TreeDrop | undefined = branch && canEdit && view === "folders" ? {
+  const treeDrop: TreeDrop | undefined = space && canEdit && view === "folders" && (!unit || unit.can_upload) ? {
     accepts: (path, e) => (isOwnDrag(e) ? canDropInto(path) : isFileDrag(e)),
     onDrop: (path, e) => {
       if (isOwnDrag(e)) {
@@ -136,11 +189,19 @@ export function ExplorerPage() {
   } : undefined;
 
   const treeEl = (
-    <LibraryTree view={view} folder={folder} branch={branch} branches={co.branches} onView={pickView} onFolder={pickFolder} onCompany={pickCompany} drop={treeDrop} />
+    <LibraryTree view={view} folder={folder} branch={branch} branches={co.branches} unit={unit?.key ?? null} onView={pickView} onFolder={pickFolder} onCompany={pickCompany} drop={treeDrop} />
   );
 
   let body: ReactNode;
-  if (view === "folders" && branch) {
+  if ((unitKey && !unit && unitsLoading) || (unit && !unitBranch && co.isLoading)) {
+    body = <div className="p-4"><Skeleton className="h-48" /></div>;
+  } else if (view === "folders" && unit && unitBranch) {
+    body = (
+      <CompanyExplorer key={`unit:${unit.key}`} branch={unitBranch} unit={unit} folder={folder} openId={search.f} initialOrigin={search.origin} root={unitRoot} ops={ops}
+        clip={clip} setClip={setClip} uploadOpen={uploadOpen} setUploadOpen={setUploadOpen} intake={intake} uploadInto={uploadInto}
+        onFolder={(p) => pickFolder(p, unit.key)} onOpenFile={(id) => openFile(id)} onOpenTree={() => setTreeOpen(true)} />
+    );
+  } else if (view === "folders" && branch) {
     body = (
       <CompanyExplorer key={branch.id} branch={branch} folder={folder} openId={search.f} initialOrigin={search.origin} root={root} ops={ops}
         clip={clip} setClip={setClip} uploadOpen={uploadOpen} setUploadOpen={setUploadOpen} intake={intake} uploadInto={uploadInto}
@@ -148,7 +209,7 @@ export function ExplorerPage() {
     );
   } else {
     let inner: ReactNode;
-    if (view === "folders") inner = <CompanyPicker branches={co.branches} onPick={pickCompany} />;
+    if (view === "folders") inner = <><UnitCards units={units ?? []} onPick={(k) => pickFolder("", k)} /><CompanyPicker branches={co.branches} onPick={pickCompany} /></>;
     else if (view === "documents") inner = <DocumentsFolder branch={branch} />;
     else if (view === "sops") inner = <SopsFolder branch={branch} />;
     else if (view === "templates") inner = <TemplatesFolder branch={branch} />;

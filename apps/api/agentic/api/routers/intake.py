@@ -25,7 +25,7 @@ from ...models import Department, DocFile, IntakeBatch
 from ...services import audit
 from .. import paging
 from ..deps import Principal, api_error, require
-from .files import FileOut, check_branch, clean_folder, file_out
+from .files import FileOut, check_branch, clean_folder, file_out, place_refused
 
 router = APIRouter(prefix="/api/intake", tags=["intake"])
 log = logging.getLogger("agentic.api.intake")
@@ -126,6 +126,14 @@ async def upload(
         if d is None or d.workspace_id != principal.workspace_id or d.branch_id != branch_id:
             raise api_error(
                 status.HTTP_400_BAD_REQUEST, "bad_department", "Pick a department of that company."
+            )
+        # P143b: filing straight into a department (a Library unit) follows the rule of moving
+        # a file there (files.place_refused): a HOD, supervisor or staff member their own only.
+        if place_refused(principal, branch_id, department_id) is not None:
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "out_of_scope",
+                "You can add documents to your department only.",
             )
     base = clean_folder(folder) if folder else ""
     # P29: one buffer for the whole upload (up to 200 MB): a zip is read straight from it,

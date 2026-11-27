@@ -1504,6 +1504,9 @@ class DocFile(Timestamps, Base):
     storage_etag: Mapped[str | None] = mapped_column(String(200))
     # P61: a person's own labels on the file ("urgent", "Q3"): at most 12, 1..30 characters.
     labels: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    # P143c: made smaller after reading (documents/compress.py): {"result": "smaller" | "kept",
+    # "original_size", "original_sha256", "method", "reason", "at"}; None = not tried yet.
+    compression: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
 
 class IntakeBatch(Timestamps, Base):

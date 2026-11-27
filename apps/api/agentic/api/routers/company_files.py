@@ -28,7 +28,7 @@ from ...documents import render_pdf
 from ...documents.extract import sniff
 from ...intake import scan, sort
 from ...knowledge import indexer
-from ...models import Branch, DocFile, IntakeBatch, Workspace
+from ...models import Branch, Department, DocFile, IntakeBatch, Workspace
 from ...services import audit
 from ..deps import Principal, api_error, require
 from .files import (
@@ -40,6 +40,7 @@ from .files import (
     file_out,
     get_file,
     may_manage,
+    place_refused,
     visible_files,
 )
 
@@ -55,20 +56,27 @@ TEXT_KINDS = ("text", "csv")
 STORED = (".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip", ".docx", ".xlsx", ".pptx")
 
 
-def _visible(principal: Principal, branch_id: str | None) -> Any:
+def _visible(principal: Principal, branch_id: str | None, department_id: str | None = None) -> Any:
+    """P143b: `department_id` narrows to one department (a Library unit); never widens."""
     q = select(DocFile).where(DocFile.workspace_id == principal.workspace_id)
     if branch_id:
         q = q.where(DocFile.branch_id == branch_id)
+    if department_id:
+        q = q.where(DocFile.department_id == department_id)
     return visible_files(q, principal)
 
 
-def _changeable(principal: Principal, branch_id: str | None) -> Any:
+def _changeable(
+    principal: Principal, branch_id: str | None, department_id: str | None = None
+) -> Any:
     """Files this person may change (get_file without the shared library guidelines)."""
     from ...documents import service
 
     q = select(DocFile).where(DocFile.workspace_id == principal.workspace_id)
     if branch_id:
         q = q.where(DocFile.branch_id == branch_id)
+    if department_id:
+        q = q.where(DocFile.department_id == department_id)
     return service.scoped(q, DocFile, principal)
 
 
@@ -99,11 +107,13 @@ class TreeOut(BaseModel):
 @router.get("/tree")
 async def tree(
     branch_id: str | None = None,
+    department_id: str | None = Query(default=None, max_length=40),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> TreeOut:
-    """Every folder path (parents included), sorted, with counts of what is under it."""
-    q = _visible(principal, branch_id).with_only_columns(
+    """Every folder path (parents included), sorted, with counts of what is under it.
+    P143b: `department_id` gives one department's folders (a Library unit)."""
+    q = _visible(principal, branch_id, department_id).with_only_columns(
         DocFile.folder, DocFile.kind, DocFile.size, DocFile.sensitive, DocFile.quarantined
     )
     folders: dict[str, dict[str, Any]] = {}
@@ -129,7 +139,7 @@ async def tree(
             if i == len(parts):
                 e["direct"] += 1
     for saved in _saved_seen(
-        await _saved_folders(db, principal.workspace_id), principal, branch_id
+        await _saved_folders(db, principal.workspace_id), principal, branch_id, department_id
     ):
         parts = saved["path"].split("/")
         for i in range(1, len(parts) + 1):  # P61: created folders show while still empty
@@ -276,6 +286,7 @@ async def copy_files(
             origin="person",
             owner_user_id=owner,
             labels=list(f.labels or []),
+            compression=dict(f.compression) if f.compression else None,  # P143c
         )
         await storage.store_new(db, new, data)  # P40: where new files go, like an upload
         db.add(new)
@@ -321,7 +332,13 @@ async def _saved_folders(
     out: list[dict[str, Any]] = []
     for e in settings.get(FOLDERS_KEY) or []:
         if isinstance(e, dict) and isinstance(e.get("path"), str) and e["path"]:
-            out.append({"path": e["path"], "branch_id": e.get("branch_id") or None})
+            out.append(
+                {
+                    "path": e["path"],
+                    "branch_id": e.get("branch_id") or None,
+                    "department_id": e.get("department_id") or None,  # P143b: a unit's
+                }
+            )
     return out
 
 
@@ -329,9 +346,9 @@ async def _save_folders(db: AsyncSession, workspace_id: str, entries: list[dict[
     ws = await db.get(Workspace, workspace_id)
     if ws is None:
         return
-    unique: dict[tuple[str, str | None], dict[str, Any]] = {}
+    unique: dict[tuple[str, str | None, str | None], dict[str, Any]] = {}
     for e in entries:
-        unique.setdefault((e["path"], e["branch_id"]), e)
+        unique.setdefault((e["path"], e["branch_id"], e.get("department_id")), e)
     ws.settings = {**(ws.settings or {}), FOLDERS_KEY: list(unique.values())}
 
 
@@ -341,20 +358,46 @@ def _company_ok(principal: Principal, branch_id: str | None) -> bool:
 
 
 def _saved_seen(
-    entries: list[dict[str, Any]], principal: Principal, branch_id: str | None
+    entries: list[dict[str, Any]],
+    principal: Principal,
+    branch_id: str | None,
+    department_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Created folders this person sees: of their company (or the whole workspace), and of
-    the company asked for when one is."""
+    the company asked for when one is. P143b: with a department, only the folders made in
+    that unit."""
     return [
         e
         for e in entries
         if _company_ok(principal, e["branch_id"])
         and (branch_id is None or e["branch_id"] == branch_id)
+        and (department_id is None or e.get("department_id") == department_id)
     ]
 
 
 def _is_under(path: str, base: str) -> bool:
     return path == base or path.startswith(base + "/")
+
+
+async def _unit_department(
+    db: AsyncSession, principal: Principal, branch_id: str | None, department_id: str | None
+) -> str | None:
+    """P143b: a folder made, renamed or removed inside a Library unit: that department, of
+    the company asked for, and one this person may file under (files.place_refused)."""
+    if not department_id:
+        return None
+    d = await db.get(Department, department_id)
+    if d is None or d.workspace_id != principal.workspace_id or d.branch_id != branch_id:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "bad_department", "Pick a department of that company."
+        )
+    if place_refused(principal, branch_id, department_id) is not None:
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "out_of_scope",
+            "You can add documents to your department only.",
+        )
+    return department_id
 
 
 def _named(raw: str) -> str:
@@ -369,6 +412,8 @@ def _named(raw: str) -> str:
 class FolderIn(BaseModel):
     path: str = Field(min_length=1, max_length=300)
     branch_id: str | None = None
+    # P143b: a folder of a Library unit (one department's files).
+    department_id: str | None = Field(default=None, max_length=40)
 
 
 class FolderSaved(BaseModel):
@@ -380,6 +425,7 @@ class FolderRenameIn(BaseModel):
     path: str = Field(min_length=1, max_length=300)
     to: str = Field(min_length=1, max_length=300)
     branch_id: str | None = None
+    department_id: str | None = Field(default=None, max_length=40)
 
 
 class FolderMovedOut(BaseModel):
@@ -395,21 +441,27 @@ async def create_folder(
     """A new, empty folder (kept in the workspace's settings until files go in it)."""
     path = _named(body.path)
     await check_branch(db, principal, body.branch_id)
+    dept = await _unit_department(db, principal, body.branch_id, body.department_id)
     saved = await _saved_folders(db, principal.workspace_id, lock=True)
     has_files = await db.scalar(
-        _visible(principal, body.branch_id).where(_under(path)).with_only_columns(DocFile.id)
+        _visible(principal, body.branch_id, dept).where(_under(path)).with_only_columns(DocFile.id)
     )
-    if has_files or any(e["path"] == path and e["branch_id"] == body.branch_id for e in saved):
+    if has_files or any(
+        e["path"] == path and e["branch_id"] == body.branch_id and e["department_id"] == dept
+        for e in saved
+    ):
         raise api_error(status.HTTP_409_CONFLICT, "folder_exists", "That folder already exists.")
     await _save_folders(
-        db, principal.workspace_id, [*saved, {"path": path, "branch_id": body.branch_id}]
+        db,
+        principal.workspace_id,
+        [*saved, {"path": path, "branch_id": body.branch_id, "department_id": dept}],
     )
     await audit.record(
         db,
         principal.workspace_id,
         principal.actor,
         "folder.created",
-        after={"path": path, "branch_id": body.branch_id},
+        after={"path": path, "branch_id": body.branch_id, "department_id": dept},
     )
     await db.commit()
     return FolderSaved(path=path, branch_id=body.branch_id)
@@ -440,11 +492,12 @@ async def rename_folder(
             "folder_fixed",
             "This folder cannot be renamed or moved.",
         )
+    dept = await _unit_department(db, principal, body.branch_id, body.department_id)
     saved = await _saved_folders(db, principal.workspace_id, lock=True)
     files = list(
-        (await db.scalars(_changeable(principal, body.branch_id).where(_under(src)))).all()
+        (await db.scalars(_changeable(principal, body.branch_id, dept).where(_under(src)))).all()
     )
-    seen = {id(e) for e in _saved_seen(saved, principal, body.branch_id)}
+    seen = {id(e) for e in _saved_seen(saved, principal, body.branch_id, dept)}
     moved_saved = [e for e in saved if id(e) in seen and _is_under(e["path"], src)]
     if not files and not moved_saved:
         raise api_error(status.HTTP_404_NOT_FOUND, "folder_not_found", "That folder is not here.")
@@ -485,15 +538,18 @@ async def delete_folder(
     file is in it, even one this person cannot see."""
     path = _named(body.path)
     await check_branch(db, principal, body.branch_id)
+    dept = await _unit_department(db, principal, body.branch_id, body.department_id)
     q = select(DocFile.id).where(DocFile.workspace_id == principal.workspace_id, _under(path))
     if body.branch_id:
         q = q.where(DocFile.branch_id == body.branch_id)
+    if dept:
+        q = q.where(DocFile.department_id == dept)
     if await db.scalar(q.limit(1)):
         raise api_error(
             status.HTTP_409_CONFLICT, "folder_not_empty", "This folder still has files."
         )
     saved = await _saved_folders(db, principal.workspace_id, lock=True)
-    seen = {id(e) for e in _saved_seen(saved, principal, body.branch_id)}
+    seen = {id(e) for e in _saved_seen(saved, principal, body.branch_id, dept)}
     gone = [e for e in saved if id(e) in seen and _is_under(e["path"], path)]
     if gone:
         await _save_folders(db, principal.workspace_id, [e for e in saved if e not in gone])
@@ -651,6 +707,7 @@ async def archive(
     folder: str | None = Query(default=None, max_length=300),
     batch_id: str | None = Query(default=None, max_length=40),
     ids: list[str] = Query(default_factory=list),
+    department_id: str | None = Query(default=None, max_length=40),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
@@ -659,7 +716,7 @@ async def archive(
     files (X-Held-Back says how many were left out). At most 1 GB."""
     await check_branch(db, principal, branch_id)
     base = clean_folder(folder) if folder else ""
-    q = _visible(principal, branch_id).with_only_columns(
+    q = _visible(principal, branch_id, department_id).with_only_columns(
         DocFile.id, DocFile.folder, DocFile.name, DocFile.size, DocFile.quarantined
     )
     if base:

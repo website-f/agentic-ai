@@ -367,6 +367,11 @@ async def plan(db: Any, ws: Any, entries: list[Entry], *, force: bool) -> None:
         ).all()
     )
     by_sha = {f.sha256: f for f in sorted(lib, key=lambda f: f.created_at, reverse=True)}
+    # P143c: a Library file made smaller since is still the file this entry was.
+    for f in lib:
+        orig = (f.compression or {}).get("original_sha256")
+        if orig:
+            by_sha.setdefault(orig, f)
     for e in entries:
         if e.problem:
             continue

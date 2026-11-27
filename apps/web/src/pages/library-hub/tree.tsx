@@ -1,19 +1,23 @@
-/** The Browse tab's folder directory: the company's own folders as a tree, then the
- * ready-made folders (documents, SOPs, guidelines, templates and quick views of the file
+/** The Browse tab's folder directory: P143b: the units first (Unit HR, Unit Audit, Unit
+ * Kewangan: the central departments' own folders, for the people who read them), then the
+ * company's own folders as a tree (several companies: one "Other companies" picker instead of a
+ * row each), then the ready-made folders (documents, SOPs, guidelines, templates and quick views of the file
  * store) with their counts. A real folder tree down the side on tablets and desktops (its own
  * scroll, arrow keys, chevrons); in a sheet and as a drill-down list on phones, with a
  * breadcrumb and a back button above the contents. */
 import {
-  ArrowLeftIcon, BuildingsIcon, CaretRightIcon, FolderIcon, FolderOpenIcon, ShieldWarningIcon, TreeStructureIcon, type Icon,
+  ArrowLeftIcon, BuildingsIcon, CaretRightIcon, FolderIcon, FolderOpenIcon, ShieldWarningIcon, TreeStructureIcon, UsersThreeIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type HTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { locale, useT } from "@/i18n";
 import { docStatsQuery, fileStatsQuery, templatesQuery } from "@/lib/documents";
 import type { StoreView } from "@/lib/file-store";
 import { buildTree, fileTreeQuery, folderChain, folderName, type FolderNode } from "@/lib/intake";
+import { libraryUnitsQuery, unitTreeQuery, type UnitKey } from "@/lib/library-units";
 import { reviewCountQuery } from "@/lib/provenance";
 import type { Branch } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -23,14 +27,17 @@ import { sopsForCompany, templatesForCompany, VIEW_GROUPS, VIEW_INFO } from "./v
 
 // ---------------------------------------------------------------- the tree's shape
 
-/** One entry of the tree: a group heading, the company (its top folder), one of its folders,
- * a company to pick (under "All companies") or a ready-made folder. */
+/** One entry of the tree: a group heading, a unit (its top folder), the company (its top
+ * folder), one of their folders, the "Other companies" picker, a company to pick or a
+ * ready-made folder. */
 interface TNode {
   key: string;
-  kind: "group" | "root" | "folder" | "company" | "view";
+  kind: "group" | "unit" | "root" | "folder" | "company" | "picker" | "view";
   label: string;
   children: TNode[];
   path?: string;
+  /** P143b: the unit this folder is in (none: the company's). */
+  unit?: UnitKey;
   view?: StoreView;
   companyId?: string;
   color?: string;
@@ -49,8 +56,11 @@ interface TRow {
 }
 
 const GROUP_COMPANY = "g:company";
+const GROUP_UNITS = "g:units";
+const PICKER = "p:companies";
 const groupKey = (i: number) => `g:${i}`;
 const folderKey = (path: string) => `f:${path}`;
+const unitFolderKey = (unit: UnitKey, path: string) => `u:${unit}:${path}`;
 
 function flatten(nodes: TNode[], level: number, parent: string | null, expanded: Set<string>, out: TRow[]): TRow[] {
   nodes.forEach((node, i) => {
@@ -62,11 +72,12 @@ function flatten(nodes: TNode[], level: number, parent: string | null, expanded:
 }
 
 /** The rows that must be open for this one to show. */
-function ancestorsOf(view: StoreView, folder: string, branch: Branch | null): string[] {
+function ancestorsOf(view: StoreView, folder: string, branch: Branch | null, unit: UnitKey | null): string[] {
   if (view !== "folders") {
     const g = VIEW_GROUPS.findIndex((x) => x.views.includes(view));
     return g >= 0 ? [groupKey(g)] : [];
   }
+  if (unit) return [GROUP_UNITS, unitFolderKey(unit, ""), ...folderChain(folder).slice(0, -1).map((p) => unitFolderKey(unit, p))];
   return [GROUP_COMPANY, ...(branch ? [folderKey(""), ...folderChain(folder).slice(0, -1).map(folderKey)] : [])];
 }
 
@@ -94,8 +105,10 @@ export interface TreeDrop {
   onDragEnd?: () => void;
 }
 
-function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl, over, dnd }: {
+function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl, over, dnd, picker }: {
   row: TRow;
+  /** The "Other companies" row: the picker itself, in place of the label. */
+  picker?: ReactNode;
   selected: boolean;
   tabbable: boolean;
   onActivate: () => void;
@@ -111,6 +124,7 @@ function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl
   const group = node.kind === "group";
   const V = node.view ? VIEW_INFO[node.view] : null;
   const IconCmp: Icon | null = node.kind === "root" ? BuildingsIcon
+    : node.kind === "unit" ? UsersThreeIcon
     : node.kind === "folder" ? (open || selected ? FolderOpenIcon : FolderIcon)
     : V ? V.icon : null;
   // Groups and the company sit flush; folders step in under the company.
@@ -135,10 +149,13 @@ function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl
       ) : <span className="size-7 shrink-0 pointer-coarse:size-11" aria-hidden />}
       {group ? (
         <span className="min-w-0 flex-1 truncate py-1.5 pr-2 text-[10.5px] font-semibold tracking-[0.08em] uppercase">{node.label}</span>
+      ) : node.kind === "picker" ? (
+        // Its own list (a popover): clicks and keys inside it are not the tree's.
+        <span className="flex min-w-0 flex-1 py-1 pr-1" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>{picker}</span>
       ) : (
         <span className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-[13px] pointer-coarse:py-2.5">
           {node.kind === "company" ? <span aria-hidden className="mx-[3px] size-2.5 shrink-0 rounded-full" style={{ background: node.color || "var(--accent)" }} />
-            : IconCmp ? <IconCmp size={16} weight={selected && node.kind === "view" ? "fill" : "duotone"} className={cn("shrink-0", !selected && node.kind !== "root" && "text-muted")} /> : null}
+            : IconCmp ? <IconCmp size={16} weight={selected && node.kind === "view" ? "fill" : "duotone"} className={cn("shrink-0", !selected && node.kind !== "root" && node.kind !== "unit" && "text-muted")} /> : null}
           <span className="min-w-0 flex-1 truncate">{node.label}</span>
           {node.flagged ? (
             <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-warn/14 px-1.5 text-[11px] font-medium text-warn" title={t("{n} held back", { n: node.flagged })}>
@@ -162,13 +179,16 @@ function TreeRow({ row, selected, tabbable, onActivate, onToggle, onFocus, setEl
  * ready-made folders in their groups. Up and Down move, Right opens a folder (or steps into it),
  * Left closes it (or steps out), Enter opens it, Home and End jump. The open folder stays
  * highlighted and in view; the tree scrolls on its own, never the page. */
-export function LibraryTree({ view, folder, branch, branches, onView, onFolder, onCompany, drop }: {
+export function LibraryTree({ view, folder, branch, branches, unit = null, onView, onFolder, onCompany, drop }: {
   view: StoreView;
   folder: string;
   branch: Branch | null;
   branches: Branch[];
+  /** P143b: the unit open (its folders are the ones in view), or none. */
+  unit?: UnitKey | null;
   onView: (v: StoreView) => void;
-  onFolder: (path: string) => void;
+  /** A folder of the company, or of a unit (`unit` set). */
+  onFolder: (path: string, unit?: UnitKey) => void;
   onCompany: (id: string) => void;
   /** Folders take drops (the explorer). */
   drop?: TreeDrop;
@@ -176,42 +196,61 @@ export function LibraryTree({ view, folder, branch, branches, onView, onFolder, 
   const t = useT();
   const counts = useViewCounts(branch);
   const { tree, root } = useFolderTree(branch?.id ?? null);
+  const { data: units = [] } = useQuery(libraryUnitsQuery);
+  const openUnit = units.find((u) => u.key === unit) ?? null;
+  const { data: unitTree } = useQuery(unitTreeQuery(openUnit));
+  const unitRoot = useMemo(() => buildTree(unitTree?.folders ?? []), [unitTree]);
 
   const nodes = useMemo<TNode[]>(() => {
-    const folderNode = (n: FolderNode): TNode => ({
-      key: folderKey(n.path), kind: "folder", label: n.name, path: n.path, count: n.files, flagged: n.flagged, children: n.children.map(folderNode),
+    const folderNode = (n: FolderNode, u?: UnitKey): TNode => ({
+      key: u ? unitFolderKey(u, n.path) : folderKey(n.path), kind: "folder", label: n.name, path: n.path, unit: u,
+      count: n.files, flagged: n.flagged, children: n.children.map((c) => folderNode(c, u)),
     });
-    const company: TNode = branch
-      ? {
-        key: GROUP_COMPANY, kind: "group", label: t("Company folders"),
-        children: [{
-          key: folderKey(""), kind: "root", label: branch.name, path: "", count: tree?.total_files ?? root.files, flagged: root.flagged,
-          children: root.children.map(folderNode),
-        }],
-      }
-      : {
-        key: GROUP_COMPANY, kind: "group", label: t("Company folders"),
-        children: branches.map((b) => ({ key: `c:${b.id}`, kind: "company", label: b.name, companyId: b.id, color: b.color, children: [] })),
-      };
-    return [company, ...VIEW_GROUPS.map((g, i): TNode => ({
+    // P143b: the units first, each its own folder space (the open one shows its folders).
+    const unitGroup: TNode[] = units.length ? [{
+      key: GROUP_UNITS, kind: "group", label: t("Units"),
+      children: units.map((u): TNode => {
+        const open = u.key === openUnit?.key;
+        return {
+          key: unitFolderKey(u.key, ""), kind: "unit", label: t(u.label), path: "", unit: u.key,
+          count: open ? (unitTree?.total_files ?? u.files) : u.files, flagged: open ? unitRoot.flagged : undefined,
+          children: open ? unitRoot.children.map((c) => folderNode(c, u.key)) : [],
+        };
+      }),
+    }] : [];
+    // Then the company in view with its folders; for people who see several companies, one
+    // "Other companies" picker instead of a row for each.
+    const company: TNode = {
+      key: GROUP_COMPANY, kind: "group", label: t("Company folders"),
+      children: [
+        ...(branch ? [{
+          key: folderKey(""), kind: "root" as const, label: branch.name, path: "", count: tree?.total_files ?? root.files, flagged: root.flagged,
+          children: root.children.map((c) => folderNode(c)),
+        }] : []),
+        ...(branches.length > 1 || !branch ? [{ key: PICKER, kind: "picker" as const, label: t("Other companies"), children: [] }] : []),
+      ],
+    };
+    return [...unitGroup, company, ...VIEW_GROUPS.map((g, i): TNode => ({
       key: groupKey(i), kind: "group", label: t(g.title),
       children: g.views.map((v) => ({ key: `v:${v}`, kind: "view", label: t(VIEW_INFO[v].label), view: v, count: counts[v], children: [] })),
     }))];
-  }, [branch, branches, root, tree?.total_files, counts, t]);
+  }, [branch, branches, root, tree?.total_files, counts, t, units, openUnit?.key, unitRoot, unitTree?.total_files]);
 
-  const selectedKey = view === "folders" ? (branch ? folderKey(folder) : null) : `v:${view}`;
+  const selectedKey = view === "folders"
+    ? (openUnit ? unitFolderKey(openUnit.key, folder) : branch ? folderKey(folder) : null)
+    : `v:${view}`;
 
   // Open: every group, the company, and the folders down to the open one; then whatever the
   // person opens or closes. When the open folder changes, the way down to it opens again.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([
-    GROUP_COMPANY, folderKey(""), ...VIEW_GROUPS.map((_, i) => groupKey(i)), ...ancestorsOf(view, folder, branch),
+    GROUP_UNITS, GROUP_COMPANY, folderKey(""), ...VIEW_GROUPS.map((_, i) => groupKey(i)), ...ancestorsOf(view, folder, branch, unit),
   ]));
   const [seen, setSeen] = useState(selectedKey);
   const [focusKey, setFocusKey] = useState<string | null>(selectedKey);
   if (seen !== selectedKey) {
     setSeen(selectedKey);
     setFocusKey(selectedKey);
-    const need = ancestorsOf(view, folder, branch);
+    const need = ancestorsOf(view, folder, branch, openUnit?.key ?? null);
     if (need.some((k) => !expanded.has(k))) setExpanded((s) => new Set([...s, ...need]));
   }
 
@@ -239,7 +278,9 @@ export function LibraryTree({ view, folder, branch, branches, onView, onFolder, 
   // Hovering a closed folder while dragging opens it after a moment, to reach the ones inside.
   const opener = useRef<{ key: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const dndFor = (node: TNode): (HTMLAttributes<HTMLLIElement> & { draggable?: boolean }) | undefined => {
-    if (!drop || node.path === undefined || (node.kind !== "folder" && node.kind !== "root")) return undefined;
+    if (!drop || node.path === undefined || (node.kind !== "folder" && node.kind !== "root" && node.kind !== "unit")) return undefined;
+    // Drops land in the folder space that is open (a unit's or the company's), never across.
+    if ((node.unit ?? null) !== (openUnit?.key ?? null)) return undefined;
     const path = node.path;
     return {
       draggable: node.kind === "folder" && !!drop.onDragStart,
@@ -271,10 +312,11 @@ export function LibraryTree({ view, folder, branch, branches, onView, onFolder, 
     setFocusKey(node.key);
     if (node.kind === "group") toggle(node.key);
     else if (node.kind === "company" && node.companyId) onCompany(node.companyId);
+    else if (node.kind === "picker") els.current.get(node.key)?.querySelector<HTMLButtonElement>("button")?.click();
     else if (node.kind === "view" && node.view) onView(node.view);
     else if (node.path !== undefined) {
       if (node.children.length) toggle(node.key, true);
-      onFolder(node.path);
+      onFolder(node.path, node.unit);
     }
   };
   const focusRow = (key: string | null | undefined) => {
@@ -323,6 +365,10 @@ export function LibraryTree({ view, folder, branch, branches, onView, onFolder, 
           <TreeRowWithHint key={row.node.key} empty={row.node.kind === "root" && !row.node.children.length}>
             <TreeRow row={row} selected={row.node.key === selectedKey} tabbable={row.node.key === active}
               over={over === row.node.key} dnd={dndFor(row.node)}
+              picker={row.node.kind === "picker" ? (
+                <CompanyPicker size="sm" className="w-full" label={t("Other companies")} placeholder={t("Other companies")}
+                  companies={branches.filter((b) => b.id !== branch?.id)} value="" onValueChange={onCompany} />
+              ) : undefined}
               onActivate={() => activate(row.node)} onToggle={() => toggle(row.node.key)} onFocus={() => setFocusKey(row.node.key)}
               setEl={(el) => { if (el) els.current.set(row.node.key, el); else els.current.delete(row.node.key); }} />
           </TreeRowWithHint>

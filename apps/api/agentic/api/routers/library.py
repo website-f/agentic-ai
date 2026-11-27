@@ -17,8 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agents import dispatch
 from ...core.db import get_db
 from ...core.security import can
-from ...i18n import Msg
+from ...i18n import Msg, render
 from ...knowledge import indexer
+from ...knowledge import library_units as units
 from ...knowledge import search as library
 from ...models import SOP, Branch, Department, DocFile
 from ...services import audit
@@ -310,6 +311,73 @@ async def set_library(
         await start_index("file", f.id)  # reading files are indexed when the read finishes
     await db.refresh(f)
     return await file_out(db, f)
+
+
+# ---------------------------------------------------------------- P143b units
+
+
+class UnitOut(BaseModel):
+    key: str  # hr | audit | finance
+    label: str  # "Unit HR", "Unit Audit", "Unit Kewangan"
+    department_id: str
+    department_name: str
+    branch_id: str
+    branch_name: str
+    files: int  # the unit's files this person sees
+    can_upload: bool  # may add files into it (the rule of an upload with a department)
+
+
+class UnitsOut(BaseModel):
+    units: list[UnitOut]
+
+
+async def _unit_out(db: AsyncSession, principal: Principal, u: units.Unit) -> UnitOut:
+    from .files import place_refused
+
+    d = u.department
+    return UnitOut(
+        key=u.key,
+        label=render(u.label),
+        department_id=d.id,
+        department_name=d.name,
+        branch_id=d.branch_id,
+        branch_name=u.branch.name,
+        files=await units.file_count(db, principal, d),
+        can_upload=can(principal.role, "work.write")
+        and place_refused(principal, d.branch_id, d.id) is None,
+    )
+
+
+@router.get("/api/library/units")
+async def list_units(
+    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+) -> UnitsOut:
+    """P143b: the Library's units (HR, Audit, Kewangan) this person may open, first in Browse.
+    A unit the workspace does not have, or whose files this person does not read, is left out."""
+    found = await units.find(db, principal.workspace_id)
+    return UnitsOut(
+        units=[
+            await _unit_out(db, principal, u)
+            for u in found
+            if units.may_open(principal, u.department)
+        ]
+    )
+
+
+@router.get("/api/library/units/{key}")
+async def get_unit(
+    key: str, principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+) -> UnitOut:
+    u = next((x for x in await units.find(db, principal.workspace_id) if x.key == key), None)
+    if u is None:
+        raise api_error(status.HTTP_404_NOT_FOUND, "unit_not_found", "That unit is not here.")
+    if not units.may_open(principal, u.department):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "out_of_scope",
+            "Only the people of this unit, their managers and the office's leaders open it.",
+        )
+    return await _unit_out(db, principal, u)
 
 
 class PassageOut(BaseModel):
