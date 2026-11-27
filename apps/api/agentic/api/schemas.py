@@ -173,6 +173,10 @@ class MemberOut(BaseModel):
     library_grants: LibraryGrants | None = None
     # P111: their job title (designation) on the organization chart.
     job_title: str | None = None
+    # P145: the position they hold in the group structure (null: not sorted yet), and their
+    # work email from the staff lists.
+    position_id: str | None = None
+    work_email: str | None = None
 
 
 class MembersSummary(BaseModel):
@@ -266,6 +270,8 @@ class MemberUpdateIn(BaseModel):
     prima_department: PrimaDepartment | None = None
     # P111: their job title on the organization chart (send "" or null to clear).
     job_title: str | None = Field(default=None, max_length=120)
+    # P145: their work email from the staff lists (send null to clear; members.manage).
+    work_email: EmailStr | None = None
 
 
 class MemberTeamIn(BaseModel):

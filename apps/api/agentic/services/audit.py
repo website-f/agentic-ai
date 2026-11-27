@@ -7,6 +7,9 @@ The DB trigger from migration 0001 also rejects UPDATE/DELETE outright.
 
 import hashlib
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
@@ -14,6 +17,19 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AuditLog
+
+# P145c: a note every entry written inside `noting(...)` carries when it has none of its own (a
+# system run such as the CSV staff sync marks each row it causes, via any service it calls).
+_NOTE: ContextVar[str | None] = ContextVar("audit_note", default=None)
+
+
+@contextmanager
+def noting(note: str) -> Iterator[None]:
+    token = _NOTE.set(note)
+    try:
+        yield
+    finally:
+        _NOTE.reset(token)
 
 
 def _digest(prev_hash: str | None, row: dict[str, Any]) -> str:
@@ -54,6 +70,8 @@ async def record(
     note: str | None = None,
 ) -> None:
     """Append one entry inside the caller's transaction (the caller commits)."""
+    if note is None:
+        note = _NOTE.get()
     # Serialize appends per workspace so two writers can't chain onto the same prev_hash.
     await db.execute(
         text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": f"audit:{workspace_id}"}

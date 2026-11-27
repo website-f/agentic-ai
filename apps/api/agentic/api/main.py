@@ -116,7 +116,12 @@ async def lifespan(_: FastAPI):
     from ..knowledge import prima_pack
 
     pack = asyncio.create_task(prima_pack.run_at_startup())
+    # P145: the group structure (units and positions from the PDFs) for workspaces without one.
+    from ..org import structure as org_structure
+
+    structure = asyncio.create_task(org_structure.run_at_startup())
     yield
+    structure.cancel()
     pack.cancel()
     await tunnel.stop()
     warm.cancel()
@@ -313,6 +318,11 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
 from .routers import signin_mail as signin_mail_router  # noqa: E402
 
 app.include_router(signin_mail_router.router)
+
+# P145: the group structure, and PUT /api/members/{user_id}/position (before members' routes).
+from .routers import org_structure as org_structure_router  # noqa: E402
+
+app.include_router(org_structure_router.router)
 
 for r in (
     system.router,

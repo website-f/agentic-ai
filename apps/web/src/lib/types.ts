@@ -90,6 +90,10 @@ export interface Member {
   library_grants?: LibraryGrants | null;
   /** P111: their job title (designation) on the organization chart. */
   job_title?: string | null;
+  /** P145: the position they hold in the group structure (null: not sorted yet). */
+  position_id?: string | null;
+  /** P145: their work email from the staff lists. */
+  work_email?: string | null;
 }
 
 /** P144: extra Library access given to one member, on top of their role and place: units

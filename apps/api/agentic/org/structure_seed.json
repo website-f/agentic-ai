@@ -1,0 +1,1528 @@
+{
+  "about": "P145 seed of the group structure (agentic/org/structure.py). units, positions, approval_rules and source_notes are copied from the extraction of DIRECTOR OFFICE GORVERNANCE.pdf and GOVERNMENT OPERATION.pdf (no personal data). role_map: the office role each position's holders usually get (owner never). standing_units / standing_positions: the companies and central departments the PDFs leave out. links: the office company (branch name marks, or 'group' for PWVSB) and the PWVSB department (Prima mirror key) a unit stands for. unit_name / unit_ms / unit_kind: short names, Malay names and kinds used instead of the extraction's.",
+  "source_notes": "Both PDFs are Microsoft Loop page prints (DIRECTOR OFFICE GORVERNANCE.pdf = 3 pages, GOVERNMENT OPERATION.pdf = 2 pages). All content is in embedded infographic images (no selectable text apart from the page header). Pages: DOG p1 = cover photo + Loop page header (page author listed; not a role in the structure); DOG p2 = 'Director Office Governance - proposed working model' infographic; DOG p3 = two images: 'Group Director Office - Role & Duty Hierarchy Map' and 'Group Director Office - Consolidated Key Task Map' (T01-T24). GOV p1 = cover photo + 'Goodwill Empire Sdn Bhd - Government Operations' infographic (org structure, approvals, deadlines); GOV p2 = second 'Government Operations' infographic (org structure, 7 regions table, approval workflow). IMPORTANT: every title in both PDFs is in ENGLISH; there are no Malay (jawatan) titles. title_ms therefore holds the exact English title as printed; 'ms_suggested' is OUR suggested Malay rendering for matching (not from the PDFs). Both documents are marked PROPOSED ('proposed governance mapping, not approved reporting changes'; 'subject to approved organisation chart and Delegation of Authority'). No person holding any role is named, so no holder_hint values are filled. 'functional_to' = dotted-line coordination (not line management); 'also_reports_to' = second solid reporting line where the PDF names two bosses. The group root unit (PWVSB) comes from the briefing and the SharePoint tenant name in the print URL, not from the chart itself. Sasa Team, Merdeka Network and Perfect Global Logistics are not mentioned in either PDF.",
+  "role_map": {
+    "chairman": "management",
+    "vice_chairman": "management",
+    "ceo": "management",
+    "chief_of_staff": "hr",
+    "vice_chief_of_staff": "hr",
+    "hr_administrator": "staff",
+    "director_office_administrator": "staff",
+    "head_of_company": "branch_manager",
+    "local_company_administrator": "staff",
+    "director_of_finance": "management",
+    "coo": "management",
+    "director_of_asset_management": "hod",
+    "act_manager": "hod",
+    "ap_administrator": "staff",
+    "cosec_legal_adviser": "staff",
+    "ogm": "hod",
+    "deputy_ogm": "hod",
+    "regional_operations_manager": "hod",
+    "operations_manager": "supervisor",
+    "operations_executive": "staff",
+    "inventory_manager": "hod",
+    "inventory_executive_store_head": "staff",
+    "storekeeper": "staff",
+    "store_helper": "staff",
+    "procurement_executive": "staff",
+    "logistics_head_cleaning_ops_manager": "hod",
+    "cleaning_administration_manager": "supervisor",
+    "goodwill_admin_executive": "staff",
+    "operations_admin_executive": "staff",
+    "admin_executive_third": "staff",
+    "driver": "staff",
+    "patrolling_officer": "operator",
+    "site_officer": "operator",
+    "guard": "staff",
+    "head_of_it": "hod",
+    "dept_it_executive": "staff",
+    "head_of_procurement": "hod",
+    "dept_procurement_executive": "staff",
+    "head_of_transport": "hod",
+    "dept_transport_executive": "staff",
+    "head_of_legal": "hod",
+    "dept_legal_executive": "staff",
+    "head_of_operations": "hod",
+    "dept_operations_executive": "staff",
+    "head_of_pdpa": "hod",
+    "dept_pdpa_executive": "staff",
+    "head_of_fwm": "hod",
+    "dept_fwm_executive": "staff",
+    "head_of_cms": "hod",
+    "dept_cms_executive": "staff",
+    "head_of_marketing": "hod",
+    "dept_marketing_executive": "staff",
+    "dept_finance_executive": "staff",
+    "dept_act_executive": "staff",
+    "dept_asset_executive": "staff",
+    "head_of_human_resources": "hod",
+    "dept_hr_executive": "staff"
+  },
+  "unit_name": {
+    "pwvsb_group": "PWVSB Group",
+    "reserved_governance": "Reserved Governance",
+    "legal_entity_boards": "Legal-Entity Boards",
+    "group_director_office": "Group Director Office",
+    "group_companies": "Group operating companies",
+    "private_sector_department": "Private Sector Department",
+    "act": "ACT",
+    "accounts_payable": "Accounts Payable",
+    "cosec_legal": "Company Secretary / Legal Advisers",
+    "regional_operations": "Regional Operations",
+    "procurement_inventory": "Procurement & Inventory",
+    "admin_executives": "Admin Executives",
+    "site_workforce": "Site workforce (company staff)"
+  },
+  "unit_ms": {
+    "pwvsb_group": "Kumpulan PWVSB",
+    "reserved_governance": "Tadbir Urus Terpelihara",
+    "legal_entity_boards": "Lembaga Pengarah Entiti",
+    "group_director_office": "Pejabat Pengarah Kumpulan",
+    "do_governance_exec_coordination": "Tadbir Urus & Penyelarasan Eksekutif",
+    "do_hr_administration": "Pentadbiran Sumber Manusia",
+    "do_corporate_establishment": "Penubuhan Korporat",
+    "do_company_administration": "Pentadbiran Syarikat",
+    "do_tenders_reports_meetings": "Tender, Laporan & Mesyuarat",
+    "do_evidence_assurance": "Bukti & Jaminan Bebas",
+    "group_companies": "Syarikat Operasi Kumpulan",
+    "finance": "Kewangan",
+    "private_sector_department": "Jabatan Sektor Swasta",
+    "asset_management": "Pengurusan Aset",
+    "act": "ACT",
+    "accounts_payable": "Akaun Belum Bayar",
+    "cosec_legal": "Setiausaha Syarikat / Penasihat Undang-undang",
+    "goodwill_empire": "Goodwill Empire Sdn Bhd",
+    "government_operations": "Operasi Kerajaan",
+    "regional_operations": "Operasi Wilayah",
+    "region_northern": "Wilayah Utara",
+    "region_perak": "Wilayah Perak",
+    "region_central": "Wilayah Tengah",
+    "region_southern": "Wilayah Selatan",
+    "region_eastern": "Wilayah Timur",
+    "region_sarawak": "Wilayah Sarawak",
+    "region_sabah": "Wilayah Sabah",
+    "procurement_inventory": "Perolehan & Inventori",
+    "logistics_cleaning_operations": "Logistik & Operasi Pembersihan",
+    "admin_executives": "Eksekutif Pentadbiran",
+    "transport": "Pengangkutan",
+    "site_workforce": "Tenaga Kerja Tapak"
+  },
+  "unit_kind": {
+    "reserved_governance": "governance",
+    "legal_entity_boards": "governance",
+    "zone": "region"
+  },
+  "links": {
+    "pw_venture": {
+      "branch": "group"
+    },
+    "goodwill_empire": {
+      "branch": [
+        "goodwill empire"
+      ]
+    },
+    "sasa_team": {
+      "branch": [
+        "sasa team"
+      ]
+    },
+    "merdeka_network": {
+      "branch": [
+        "merdeka network"
+      ]
+    },
+    "perfect_global_logistics": {
+      "branch": [
+        "perfect global"
+      ]
+    },
+    "group_director_office": {
+      "department": "director_office"
+    },
+    "do_governance_exec_coordination": {
+      "department": "chief_of_staff"
+    },
+    "do_hr_administration": {
+      "department": "hr"
+    },
+    "finance": {
+      "department": "finance"
+    },
+    "act": {
+      "department": "audit"
+    },
+    "asset_management": {
+      "department": "asset"
+    },
+    "dept_it": {
+      "department": "it"
+    },
+    "dept_procurement": {
+      "department": "procurement"
+    },
+    "dept_transport": {
+      "department": "transport"
+    },
+    "dept_legal": {
+      "department": "legal"
+    },
+    "dept_operations": {
+      "department": "operations"
+    },
+    "dept_pdpa": {
+      "department": "pdpa"
+    },
+    "dept_fwm": {
+      "department": "fwm"
+    },
+    "dept_cms": {
+      "department": "cms"
+    },
+    "dept_marketing": {
+      "department": "marketing"
+    }
+  },
+  "units": [
+    {
+      "key": "pwvsb_group",
+      "name_ms": "Kumpulan PWVSB",
+      "name_en": "PWVSB Group (PW Venture Sdn Bhd)",
+      "parent": null,
+      "kind": "company",
+      "note": "Root from briefing; PDFs say 'Group Director Office' and 'all group companies'."
+    },
+    {
+      "key": "reserved_governance",
+      "name_ms": "Reserved Governance",
+      "name_en": "Reserved Governance (Chairman, Vice Chairman, Legal-Entity Boards)",
+      "parent": "pwvsb_group",
+      "kind": "office",
+      "source": "DOG p3 hierarchy map, left column"
+    },
+    {
+      "key": "legal_entity_boards",
+      "name_ms": "Chairman & Legal-Entity Boards",
+      "name_en": "Legal-Entity Boards (board of each company)",
+      "parent": "reserved_governance",
+      "kind": "office",
+      "note": "Each company board retains its legal duties (DOG p2)."
+    },
+    {
+      "key": "group_director_office",
+      "name_ms": "Group Director Office",
+      "name_en": "Group Director Office (Director Office Management)",
+      "parent": "pwvsb_group",
+      "kind": "office",
+      "source": "DOG p2-p3",
+      "note": "'One control tower, many operators': coordinate, monitor, escalate; departments do the work."
+    },
+    {
+      "key": "do_governance_exec_coordination",
+      "name_ms": "01 Governance & Executive Coordination",
+      "name_en": "Governance & Executive Coordination (lead: COS)",
+      "parent": "group_director_office",
+      "kind": "unit",
+      "note": "Task area T01, T02, T03, T11. Task category, not a separate department.",
+      "source": "DOG p3 task map"
+    },
+    {
+      "key": "do_hr_administration",
+      "name_ms": "02 HR Administration",
+      "name_en": "HR Administration (lead: HR Administrator)",
+      "parent": "group_director_office",
+      "kind": "unit",
+      "note": "Task area T04-T10.",
+      "source": "DOG p3 task map"
+    },
+    {
+      "key": "do_corporate_establishment",
+      "name_ms": "03 Corporaarte Establishment",
+      "name_en": "Corporate Establishment (lead: COS)",
+      "parent": "group_director_office",
+      "kind": "unit",
+      "note": "Task area T12-T14. Title misspelt 'CORPORAARTE' in the PDF.",
+      "source": "DOG p3 task map"
+    },
+    {
+      "key": "do_company_administration",
+      "name_ms": "04 Company Administration",
+      "name_en": "Company Administration (lead: VCOS)",
+      "parent": "group_director_office",
+      "kind": "unit",
+      "note": "Task area T15-T18; executed by Heads of Company and local administrators.",
+      "source": "DOG p3 task map"
+    },
+    {
+      "key": "do_tenders_reports_meetings",
+      "name_ms": "05 Tenders, Reports & Meetings",
+      "name_en": "Tenders, Reports & Meetings (lead: DOA)",
+      "parent": "group_director_office",
+      "kind": "unit",
+      "note": "Task area T19-T22.",
+      "source": "DOG p3 task map"
+    },
+    {
+      "key": "do_evidence_assurance",
+      "name_ms": "06 Evidence & Independent Assurance",
+      "name_en": "Evidence & Independent Assurance (management evidence: VCOS/COS; assurance: ACT)",
+      "parent": "group_director_office",
+      "kind": "unit",
+      "note": "Task area T23-T24.",
+      "source": "DOG p3 task map"
+    },
+    {
+      "key": "group_companies",
+      "name_ms": "Heads of Company (38 companies)",
+      "name_en": "Group operating companies (38 entities)",
+      "parent": "pwvsb_group",
+      "kind": "company",
+      "note": "'38 Heads of Company*' - count and entity allocation require verification.",
+      "source": "DOG p3 hierarchy map"
+    },
+    {
+      "key": "finance",
+      "name_ms": "Director of Finance",
+      "name_en": "Finance",
+      "parent": "pwvsb_group",
+      "kind": "department",
+      "source": "DOG p3 parallel functions"
+    },
+    {
+      "key": "private_sector_department",
+      "name_ms": "COO / Private Sector Department",
+      "name_en": "Private Sector Department (under COO)",
+      "parent": "pwvsb_group",
+      "kind": "department",
+      "note": "Operations & private tenders; private tenders stay here, not with DOA.",
+      "source": "DOG p3"
+    },
+    {
+      "key": "asset_management",
+      "name_ms": "Director of Asset Management",
+      "name_en": "Asset Management",
+      "parent": "pwvsb_group",
+      "kind": "department",
+      "source": "DOG p3 parallel functions"
+    },
+    {
+      "key": "act",
+      "name_ms": "ACT",
+      "name_en": "ACT (independent control assurance / audit)",
+      "parent": "pwvsb_group",
+      "kind": "unit",
+      "note": "Acronym ACT is never expanded in the PDFs.",
+      "source": "DOG p3"
+    },
+    {
+      "key": "accounts_payable",
+      "name_ms": "AP Administrator",
+      "name_en": "Accounts Payable (AP)",
+      "parent": "pwvsb_group",
+      "kind": "unit",
+      "note": "AP assumed = Accounts Payable; not expanded in the PDF.",
+      "source": "DOG p3"
+    },
+    {
+      "key": "cosec_legal",
+      "name_ms": "CoSec / Legal Advisers",
+      "name_en": "Company Secretary / Legal Advisers (external professionals)",
+      "parent": "pwvsb_group",
+      "kind": "office",
+      "source": "DOG p3"
+    },
+    {
+      "key": "goodwill_empire",
+      "name_ms": "Goodwill Empire Sdn Bhd",
+      "name_en": "Goodwill Empire Sdn Bhd",
+      "parent": "pwvsb_group",
+      "kind": "company",
+      "source": "GOV p1-p2"
+    },
+    {
+      "key": "government_operations",
+      "name_ms": "Government Operations (OGM)",
+      "name_en": "Government Operations",
+      "parent": "goodwill_empire",
+      "kind": "division",
+      "note": "Government sites only; covers all group companies; does not cover private sites. 'Company owns, Goodwill operates'.",
+      "source": "GOV p1-p2"
+    },
+    {
+      "key": "regional_operations",
+      "name_ms": "Regional Operations Managers (7)",
+      "name_en": "Regional Operations (7 regions)",
+      "parent": "government_operations",
+      "kind": "unit",
+      "source": "GOV p1-p2"
+    },
+    {
+      "key": "region_northern",
+      "name_ms": "Northern",
+      "name_en": "Northern Region",
+      "parent": "regional_operations",
+      "kind": "zone",
+      "headcount": {
+        "regional_om": 1,
+        "oms": 2,
+        "executives": 3
+      },
+      "source": "GOV p2 7 regions table"
+    },
+    {
+      "key": "region_perak",
+      "name_ms": "Perak",
+      "name_en": "Perak Region",
+      "parent": "regional_operations",
+      "kind": "zone",
+      "headcount": {
+        "regional_om": 1,
+        "oms": 2,
+        "executives": 2
+      },
+      "source": "GOV p2"
+    },
+    {
+      "key": "region_central",
+      "name_ms": "Central",
+      "name_en": "Central Region",
+      "parent": "regional_operations",
+      "kind": "zone",
+      "headcount": {
+        "regional_om": 1,
+        "oms": 1,
+        "executives": 1
+      },
+      "source": "GOV p2"
+    },
+    {
+      "key": "region_southern",
+      "name_ms": "Southern",
+      "name_en": "Southern Region",
+      "parent": "regional_operations",
+      "kind": "zone",
+      "headcount": {
+        "regional_om": 1,
+        "oms": 3,
+        "executives": 6
+      },
+      "source": "GOV p2"
+    },
+    {
+      "key": "region_eastern",
+      "name_ms": "Eastern",
+      "name_en": "Eastern Region",
+      "parent": "regional_operations",
+      "kind": "zone",
+      "headcount": {
+        "regional_om": 1,
+        "oms": 3,
+        "executives": 4
+      },
+      "source": "GOV p2"
+    },
+    {
+      "key": "region_sarawak",
+      "name_ms": "Sarawak",
+      "name_en": "Sarawak Region",
+      "parent": "regional_operations",
+      "kind": "zone",
+      "headcount": {
+        "regional_om": 1,
+        "oms": 2,
+        "executives": 2
+      },
+      "source": "GOV p2"
+    },
+    {
+      "key": "region_sabah",
+      "name_ms": "Sabah",
+      "name_en": "Sabah Region",
+      "parent": "regional_operations",
+      "kind": "zone",
+      "headcount": {
+        "regional_om": 1,
+        "oms": 2,
+        "executives": 2
+      },
+      "source": "GOV p2"
+    },
+    {
+      "key": "procurement_inventory",
+      "name_ms": "Procurement & Inventory",
+      "name_en": "Procurement & Inventory (Store team)",
+      "parent": "government_operations",
+      "kind": "unit",
+      "source": "GOV p1-p2"
+    },
+    {
+      "key": "logistics_cleaning_operations",
+      "name_ms": "Logistics & Cleaning Operations",
+      "name_en": "Logistics & Cleaning Operations",
+      "parent": "government_operations",
+      "kind": "unit",
+      "source": "GOV p1-p2"
+    },
+    {
+      "key": "admin_executives",
+      "name_ms": "Admin Executives (3)",
+      "name_en": "Admin Executives (3 roles)",
+      "parent": "government_operations",
+      "kind": "unit",
+      "source": "GOV p1-p2"
+    },
+    {
+      "key": "transport",
+      "name_ms": "Transport (Under OGM)",
+      "name_en": "Transport",
+      "parent": "government_operations",
+      "kind": "unit",
+      "note": "'Overseen by OGM' / 'OGM oversees, COO monitors'. Open question: full management or monitoring only?",
+      "source": "GOV p1-p2"
+    },
+    {
+      "key": "site_workforce",
+      "name_ms": "Not under OGM (company staff)",
+      "name_en": "Site workforce employed by the owning companies",
+      "parent": "group_companies",
+      "kind": "unit",
+      "note": "Guards, Patrolling Officers, Site Officers: employed by each company; OGM team directs their work at government sites; the company handles discipline and final case closure.",
+      "source": "GOV p1-p2"
+    }
+  ],
+  "positions": [
+    {
+      "key": "chairman",
+      "title_ms": "Chairman",
+      "title_en": "Chairman",
+      "ms_suggested": [
+        "PENGERUSI"
+      ],
+      "unit": "reserved_governance",
+      "reports_to": null,
+      "level": 1,
+      "aliases": [
+        "Chairman & Legal-Entity Boards"
+      ],
+      "duties": "Strategic/corporate reserved powers, board resolutions and statutory authority (authority stays entity-specific); exercises reserved oversight over the Vice Chairman.",
+      "holder_hint": null,
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3 (hierarchy map)"
+    },
+    {
+      "key": "vice_chairman",
+      "title_ms": "Vice Chairman",
+      "title_en": "Vice Chairman",
+      "ms_suggested": [
+        "NAIB PENGERUSI"
+      ],
+      "unit": "reserved_governance",
+      "reports_to": "chairman",
+      "level": 2,
+      "aliases": [
+        "VC"
+      ],
+      "duties": "Final reserved HR approvals: headcount, recruitment, remuneration, KPI and material placement (HR cases come via COS; CEO review does not replace this approval).",
+      "holder_hint": null,
+      "note": "Link to Chairman is a dashed 'reserved oversight (as applicable)' line.",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3"
+    },
+    {
+      "key": "ceo",
+      "title_ms": "CEO",
+      "title_en": "Chief Executive Officer",
+      "ms_suggested": [
+        "KETUA PEGAWAI EKSEKUTIF"
+      ],
+      "unit": "group_director_office",
+      "reports_to": "chairman",
+      "level": 2,
+      "aliases": [
+        "Chief Executive Officer",
+        "CEO (Sees everything)"
+      ],
+      "duties": "Executive oversight, operational SOP approval and management decisions; final escalation point for government operations cases; approves purchases after COO.",
+      "holder_hint": null,
+      "note": "Chart does not draw a line from CEO to Chairman; reports_to chairman is inferred (directors 'report to CEO & Chairman').",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3; GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "chief_of_staff",
+      "title_ms": "Chief of Staff (COS)",
+      "title_en": "Chief of Staff",
+      "ms_suggested": [
+        "KETUA STAF"
+      ],
+      "unit": "group_director_office",
+      "reports_to": "ceo",
+      "level": 3,
+      "aliases": [
+        "COS",
+        "Chief of Staff"
+      ],
+      "duties": "Leads HR & administrative governance, CoSec liaison, coordinates incorporation, initial licences and bank setup, consolidates CEO reporting; routes HR cases to Vice Chairman; coordinates (not supervises) the parallel functions.",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p2-p3; leads task areas 01 and 03"
+    },
+    {
+      "key": "vice_chief_of_staff",
+      "title_ms": "Vice Chief of Staff (VCOS)",
+      "title_en": "Vice Chief of Staff",
+      "ms_suggested": [
+        "NAIB KETUA STAF",
+        "TIMBALAN KETUA STAF"
+      ],
+      "unit": "do_company_administration",
+      "reports_to": "chief_of_staff",
+      "level": 4,
+      "aliases": [
+        "VCOS"
+      ],
+      "duties": "Renewal & obligation monitoring, company administration exceptions, business proposal tracking; coordinates Heads of Company; management evidence for audit (T15-T18, T23).",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3"
+    },
+    {
+      "key": "hr_administrator",
+      "title_ms": "HR Administrator",
+      "title_en": "HR Administrator",
+      "ms_suggested": [
+        "PENTADBIR SUMBER MANUSIA",
+        "EKSEKUTIF HR"
+      ],
+      "unit": "do_hr_administration",
+      "reports_to": "chief_of_staff",
+      "level": 4,
+      "aliases": [
+        "HR"
+      ],
+      "duties": "Employee records, attendance & leave, placement & training administration, verified payroll inputs, implements approved HR decisions (T04-T10).",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p2-p3"
+    },
+    {
+      "key": "director_office_administrator",
+      "title_ms": "Director Office Administrator (DOA)",
+      "title_en": "Director Office Administrator",
+      "ms_suggested": [
+        "PENTADBIR PEJABAT PENGARAH"
+      ],
+      "unit": "do_tenders_reports_meetings",
+      "reports_to": "chief_of_staff",
+      "level": 4,
+      "aliases": [
+        "DOA"
+      ],
+      "duties": "Government tender monitoring (monitors only; teams prepare bids), CEO report receipt & follow-up, minutes for Director Office meetings, decision & action tracking (T19-T22).",
+      "note": "Management reporting to COS; monitoring information to COS & CEO.",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p2-p3"
+    },
+    {
+      "key": "head_of_company",
+      "title_ms": "38 Heads of Company*",
+      "title_en": "Head of Company",
+      "ms_suggested": [
+        "KETUA SYARIKAT"
+      ],
+      "unit": "group_companies",
+      "reports_to": null,
+      "functional_to": "vice_chief_of_staff",
+      "level": 5,
+      "aliases": [
+        "Heads of Company",
+        "HOC"
+      ],
+      "duties": "Own entity-level execution, validate submissions, assign local task owners.",
+      "note": "One position for 38 entities (single box). Only a dotted 'functional coordination (not line-management)' link to VCOS is drawn; real line manager not shown. Level is visual depth.",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3"
+    },
+    {
+      "key": "local_company_administrator",
+      "title_ms": "Local Company Administrators",
+      "title_en": "Local Company Administrator",
+      "ms_suggested": [
+        "PENTADBIR SYARIKAT"
+      ],
+      "unit": "group_companies",
+      "reports_to": "head_of_company",
+      "level": 6,
+      "aliases": [
+        "local administrators"
+      ],
+      "duties": "Prepare filings & renewal packs, maintain entity records, upload certificates & evidence.",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3"
+    },
+    {
+      "key": "director_of_finance",
+      "title_ms": "Director of Finance",
+      "title_en": "Director of Finance",
+      "ms_suggested": [
+        "PENGARAH KEWANGAN"
+      ],
+      "unit": "finance",
+      "reports_to": "ceo",
+      "also_reports_to": [
+        "chairman"
+      ],
+      "functional_to": "chief_of_staff",
+      "level": 3,
+      "aliases": [
+        "FD",
+        "Finance",
+        "Finance Director"
+      ],
+      "duties": "Banking controls, payroll, financial validation & approved payments; validates financial material for government bids.",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3; GOVERNMENT OPERATION.pdf p1-p2 ('Finance, FD or CEO')"
+    },
+    {
+      "key": "coo",
+      "title_ms": "COO / Private Sector Department",
+      "title_en": "Chief Operating Officer",
+      "ms_suggested": [
+        "KETUA PEGAWAI OPERASI"
+      ],
+      "unit": "private_sector_department",
+      "reports_to": "ceo",
+      "also_reports_to": [
+        "chairman"
+      ],
+      "functional_to": "chief_of_staff",
+      "level": 3,
+      "aliases": [
+        "COO",
+        "COO (Monitors Operations, Goodwill & Inventory)"
+      ],
+      "duties": "Operations & private tenders; monitors government operations (Goodwill & Inventory); approves purchases before CEO and staff salaries after COS; monitors transport.",
+      "note": "Same COO appears in both PDFs (assumed one person/role).",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3; GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "director_of_asset_management",
+      "title_ms": "Director of Asset Management",
+      "title_en": "Director of Asset Management",
+      "ms_suggested": [
+        "PENGARAH PENGURUSAN ASET"
+      ],
+      "unit": "asset_management",
+      "reports_to": "chairman",
+      "also_reports_to": [
+        "vice_chairman"
+      ],
+      "functional_to": "chief_of_staff",
+      "level": 2,
+      "aliases": [],
+      "duties": "Assets & operational readiness; reports to Chairman & Vice Chairman with CEO oversight.",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3"
+    },
+    {
+      "key": "act_manager",
+      "title_ms": "ACT Manager",
+      "title_en": "ACT Manager (independent control assurance)",
+      "ms_suggested": [
+        "PENGURUS ACT"
+      ],
+      "unit": "act",
+      "reports_to": "ceo",
+      "functional_to": "chief_of_staff",
+      "level": 3,
+      "aliases": [
+        "ACT",
+        "ACT Director"
+      ],
+      "duties": "Independent control assurance and testing of controls (T24); management owns remediation; can approve guard salary formulas (as 'ACT Director').",
+      "note": "GOV PDF says 'ACT Director' while DOG PDF says 'ACT Manager' - treated as one role, needs confirmation.",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3; GOVERNMENT OPERATION.pdf p1"
+    },
+    {
+      "key": "ap_administrator",
+      "title_ms": "AP Administrator",
+      "title_en": "Accounts Payable Administrator",
+      "ms_suggested": [
+        "PENTADBIR AKAUN BELUM BAYAR"
+      ],
+      "unit": "accounts_payable",
+      "reports_to": "ceo",
+      "functional_to": "chief_of_staff",
+      "level": 3,
+      "aliases": [
+        "AP"
+      ],
+      "duties": "Reports directly to CEO; duties require confirmation (not defined in the PDF).",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3"
+    },
+    {
+      "key": "cosec_legal_adviser",
+      "title_ms": "CoSec / Legal Advisers",
+      "title_en": "Company Secretary / Legal Adviser",
+      "ms_suggested": [
+        "SETIAUSAHA SYARIKAT",
+        "PENASIHAT UNDANG-UNDANG"
+      ],
+      "unit": "cosec_legal",
+      "reports_to": null,
+      "functional_to": "chief_of_staff",
+      "level": 4,
+      "aliases": [
+        "CoSec",
+        "Company Secretary"
+      ],
+      "duties": "Professional statutory filings, resolutions and legal advice, coordinated through COS (external advisers).",
+      "source": "DIRECTOR OFFICE GORVERNANCE.pdf p3"
+    },
+    {
+      "key": "ogm",
+      "title_ms": "OGM",
+      "title_en": "Operations General Manager - Government Operations",
+      "ms_suggested": [
+        "PENGURUS BESAR OPERASI"
+      ],
+      "unit": "government_operations",
+      "reports_to": "coo",
+      "level": 4,
+      "aliases": [
+        "OGM",
+        "OGM Government Operations",
+        "Project Director (for new site surveys)"
+      ],
+      "duties": "Runs government-site operations for all group companies: monitor operations, manage & resolve escalations, review & plan, approve with written reason within limits (see approval_rules).",
+      "note": "Acronym OGM is never expanded; 'Operations General Manager' is our reading.",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "deputy_ogm",
+      "title_ms": "Deputy OGM",
+      "title_en": "Deputy Operations General Manager",
+      "ms_suggested": [
+        "TIMBALAN PENGURUS BESAR OPERASI"
+      ],
+      "unit": "government_operations",
+      "reports_to": "ogm",
+      "level": 5,
+      "aliases": [
+        "Deputy OGM (Acts for OGM)"
+      ],
+      "duties": "Acts for the OGM; approval limits not yet defined (open question).",
+      "note": "GOV p1 draws Deputy OGM as a side box; GOV p2 draws it in line between OGM and the seven units.",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "regional_operations_manager",
+      "title_ms": "Regional Operations Managers (7)",
+      "title_en": "Regional Operations Manager",
+      "ms_suggested": [
+        "PENGURUS OPERASI WILAYAH",
+        "PENGURUS OPERASI SERANTAU"
+      ],
+      "unit": "regional_operations",
+      "reports_to": "ogm",
+      "level": 5,
+      "aliases": [
+        "ROM",
+        "Regional OM",
+        "Regional Operations Manager"
+      ],
+      "headcount": 7,
+      "headcount_by_region": {
+        "region_northern": 1,
+        "region_perak": 1,
+        "region_central": 1,
+        "region_southern": 1,
+        "region_eastern": 1,
+        "region_sarawak": 1,
+        "region_sabah": 1
+      },
+      "duties": "One per region; last escalation level before OGM; approves wage advances with OM.",
+      "note": "One box in the chart; per-region counts from the 7 regions table.",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "operations_manager",
+      "title_ms": "Operations Managers (15)",
+      "title_en": "Operations Manager",
+      "ms_suggested": [
+        "PENGURUS OPERASI"
+      ],
+      "unit": "regional_operations",
+      "reports_to": "regional_operations_manager",
+      "level": 6,
+      "aliases": [
+        "OM",
+        "OMs",
+        "Operations Manager (OM)"
+      ],
+      "headcount": 15,
+      "headcount_by_region": {
+        "region_northern": 2,
+        "region_perak": 2,
+        "region_central": 1,
+        "region_southern": 3,
+        "region_eastern": 3,
+        "region_sarawak": 2,
+        "region_sabah": 2
+      },
+      "duties": "Handles site escalations after the Patrolling Officer, confirms receipt of Goodwill items in Prima, publishes daily cleaning plans, raises wage advances; may step in on absent guards after 15 minutes.",
+      "note": "Open question: OMs by fixed state or named sites?",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "operations_executive",
+      "title_ms": "Operations Executives (20)",
+      "title_en": "Operations Executive",
+      "ms_suggested": [
+        "EKSEKUTIF OPERASI"
+      ],
+      "unit": "regional_operations",
+      "reports_to": "operations_manager",
+      "level": 7,
+      "aliases": [
+        "Executives",
+        "OE"
+      ],
+      "headcount": 20,
+      "headcount_by_region": {
+        "region_northern": 3,
+        "region_perak": 2,
+        "region_central": 1,
+        "region_southern": 6,
+        "region_eastern": 4,
+        "region_sarawak": 2,
+        "region_sabah": 2
+      },
+      "duties": "Regional operations support; duties not yet defined (open question 'Operations Executive & admin duties?').",
+      "note": "Shown in the ROM box below OMs; reports_to OM is inferred.",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "inventory_manager",
+      "title_ms": "Inventory Manager",
+      "title_en": "Inventory Manager",
+      "ms_suggested": [
+        "PENGURUS INVENTORI"
+      ],
+      "unit": "procurement_inventory",
+      "reports_to": "ogm",
+      "level": 5,
+      "aliases": [],
+      "duties": "Heads the Procurement & Inventory (Store) team for government operations.",
+      "note": "Internal order of the store team is inferred from the list order.",
+      "source": "GOVERNMENT OPERATION.pdf p2"
+    },
+    {
+      "key": "inventory_executive_store_head",
+      "title_ms": "Inventory Executive / Store Head",
+      "title_en": "Inventory Executive / Store Head",
+      "ms_suggested": [
+        "EKSEKUTIF INVENTORI",
+        "KETUA STOR"
+      ],
+      "unit": "procurement_inventory",
+      "reports_to": "inventory_manager",
+      "level": 6,
+      "aliases": [
+        "Store Head",
+        "Inventory Executive",
+        "Store"
+      ],
+      "duties": "Runs the store; issues items in the Store -> OM -> Patrolling Officer -> Guard handover flow.",
+      "source": "GOVERNMENT OPERATION.pdf p2"
+    },
+    {
+      "key": "storekeeper",
+      "title_ms": "Storekeeper",
+      "title_en": "Storekeeper",
+      "ms_suggested": [
+        "PENJAGA STOR"
+      ],
+      "unit": "procurement_inventory",
+      "reports_to": "inventory_executive_store_head",
+      "level": 7,
+      "aliases": [],
+      "duties": "Keeps store stock.",
+      "source": "GOVERNMENT OPERATION.pdf p2"
+    },
+    {
+      "key": "store_helper",
+      "title_ms": "Store Helper",
+      "title_en": "Store Helper",
+      "ms_suggested": [
+        "PEMBANTU STOR"
+      ],
+      "unit": "procurement_inventory",
+      "reports_to": "storekeeper",
+      "level": 8,
+      "aliases": [],
+      "duties": "Assists in the store.",
+      "source": "GOVERNMENT OPERATION.pdf p2"
+    },
+    {
+      "key": "procurement_executive",
+      "title_ms": "Procurement Executive",
+      "title_en": "Procurement Executive",
+      "ms_suggested": [
+        "EKSEKUTIF PEROLEHAN"
+      ],
+      "unit": "procurement_inventory",
+      "reports_to": "inventory_manager",
+      "level": 6,
+      "aliases": [
+        "Procurement staff"
+      ],
+      "duties": "Purchases with 3 supplier quotes, checks online/marketplace prices; time slips approved by OGM (within 30 days, 4-hour cap).",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "logistics_head_cleaning_ops_manager",
+      "title_ms": "Logistics & Head of Cleaning Operations Manager",
+      "title_en": "Logistics Manager & Head of Cleaning Operations",
+      "ms_suggested": [
+        "PENGURUS LOGISTIK",
+        "KETUA OPERASI PEMBERSIHAN"
+      ],
+      "unit": "logistics_cleaning_operations",
+      "reports_to": "ogm",
+      "level": 5,
+      "aliases": [
+        "Head of Cleaning Operations",
+        "Head of Cleaning",
+        "Logistics Manager"
+      ],
+      "duties": "Leads logistics and cleaning operations at government sites (daily plans, supply use, client acknowledgements).",
+      "note": "Printed as one bullet; may be one combined role or two roles (Logistics Manager + Head of Cleaning Operations). Open question: does Head of Cleaning direct OMs or only advise?",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "cleaning_administration_manager",
+      "title_ms": "Cleaning Administration Manager",
+      "title_en": "Cleaning Administration Manager",
+      "ms_suggested": [
+        "PENGURUS PENTADBIRAN PEMBERSIHAN"
+      ],
+      "unit": "logistics_cleaning_operations",
+      "reports_to": "logistics_head_cleaning_ops_manager",
+      "level": 6,
+      "aliases": [],
+      "duties": "Cleaning administration: supply-use monitoring, client acknowledgements by the 10th, site maps, budgets and cleaning reports.",
+      "note": "reports_to inferred from list order.",
+      "source": "GOVERNMENT OPERATION.pdf p2"
+    },
+    {
+      "key": "goodwill_admin_executive",
+      "title_ms": "Goodwill Admin Executive",
+      "title_en": "Goodwill Admin Executive",
+      "ms_suggested": [
+        "EKSEKUTIF PENTADBIRAN GOODWILL"
+      ],
+      "unit": "admin_executives",
+      "reports_to": "ogm",
+      "level": 5,
+      "aliases": [],
+      "duties": "Administration for Goodwill Empire (duties not detailed).",
+      "source": "GOVERNMENT OPERATION.pdf p2"
+    },
+    {
+      "key": "operations_admin_executive",
+      "title_ms": "Operations Admin Executive",
+      "title_en": "Operations Admin Executive",
+      "ms_suggested": [
+        "EKSEKUTIF PENTADBIRAN OPERASI"
+      ],
+      "unit": "admin_executives",
+      "reports_to": "ogm",
+      "level": 5,
+      "aliases": [],
+      "duties": "Operations administration (duties not detailed).",
+      "source": "GOVERNMENT OPERATION.pdf p2"
+    },
+    {
+      "key": "admin_executive_third",
+      "title_ms": "Admin Executive (third)",
+      "title_en": "Admin Executive",
+      "ms_suggested": [
+        "EKSEKUTIF PENTADBIRAN"
+      ],
+      "unit": "admin_executives",
+      "reports_to": "ogm",
+      "level": 5,
+      "aliases": [
+        "Admin Executive"
+      ],
+      "duties": "Third admin executive role; duties not detailed.",
+      "source": "GOVERNMENT OPERATION.pdf p2"
+    },
+    {
+      "key": "driver",
+      "title_ms": "Driver",
+      "title_en": "Driver",
+      "ms_suggested": [
+        "PEMANDU"
+      ],
+      "unit": "transport",
+      "reports_to": "ogm",
+      "level": 5,
+      "aliases": [],
+      "duties": "Vehicle in/out log with odometer, fuel/subsidy cards; consents to dashcam/health monitoring.",
+      "note": "Only mentioned in Transport Operations text, not as an org-chart box; reports_to OGM inferred from 'Transport (Under OGM)'.",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "patrolling_officer",
+      "title_ms": "Patrolling Officer",
+      "title_en": "Patrolling Officer",
+      "ms_suggested": [
+        "PEGAWAI RONDAAN"
+      ],
+      "unit": "site_workforce",
+      "reports_to": "operations_manager",
+      "level": 7,
+      "aliases": [
+        "Patrolling officers"
+      ],
+      "duties": "Patrols sites; second escalation step after Site Officer; signs item handovers (app or slip).",
+      "note": "Employed by the owning company (NOT under OGM); OGM team directs work at government sites. reports_to OM = escalation path, not employment line.",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "site_officer",
+      "title_ms": "Site Officer",
+      "title_en": "Site Officer",
+      "ms_suggested": [
+        "PEGAWAI TAPAK",
+        "PENYELIA TAPAK"
+      ],
+      "unit": "site_workforce",
+      "reports_to": "patrolling_officer",
+      "level": 8,
+      "aliases": [
+        "Site officers",
+        "Site Officer (where stationed)"
+      ],
+      "duties": "Stationed at a site; first escalation level for site cases.",
+      "note": "Company staff, not under OGM.",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    },
+    {
+      "key": "guard",
+      "title_ms": "Guards",
+      "title_en": "Security Guard",
+      "ms_suggested": [
+        "PENGAWAL KESELAMATAN"
+      ],
+      "unit": "site_workforce",
+      "reports_to": "site_officer",
+      "level": 9,
+      "aliases": [
+        "Guard",
+        "Security"
+      ],
+      "duties": "Guards government sites; signs for uniforms/items (app or slip + photo).",
+      "note": "Company staff, not under OGM. reports_to Site Officer is inferred (escalation starts at Site Officer).",
+      "source": "GOVERNMENT OPERATION.pdf p1-p2"
+    }
+  ],
+  "standing_units": [
+    {
+      "key": "pw_venture",
+      "name_en": "PW Venture Sdn Bhd (PWVSB)",
+      "name_ms": "PW Venture Sdn Bhd (PWVSB)",
+      "parent": "pwvsb_group",
+      "kind": "company"
+    },
+    {
+      "key": "sasa_team",
+      "name_en": "Sasa Team Sdn Bhd",
+      "name_ms": "Sasa Team Sdn Bhd",
+      "parent": "group_companies",
+      "kind": "company"
+    },
+    {
+      "key": "merdeka_network",
+      "name_en": "Merdeka Network Sdn Bhd",
+      "name_ms": "Merdeka Network Sdn Bhd",
+      "parent": "group_companies",
+      "kind": "company"
+    },
+    {
+      "key": "perfect_global_logistics",
+      "name_en": "Perfect Global Logistics",
+      "name_ms": "Perfect Global Logistics",
+      "parent": "group_companies",
+      "kind": "company"
+    },
+    {
+      "key": "dept_it",
+      "name_en": "IT",
+      "name_ms": "IT",
+      "parent": "pw_venture",
+      "kind": "department"
+    },
+    {
+      "key": "dept_procurement",
+      "name_en": "Procurement and Inventory",
+      "name_ms": "Perolehan dan Inventori",
+      "parent": "pw_venture",
+      "kind": "department"
+    },
+    {
+      "key": "dept_transport",
+      "name_en": "Transport",
+      "name_ms": "Pengangkutan",
+      "parent": "pw_venture",
+      "kind": "department"
+    },
+    {
+      "key": "dept_legal",
+      "name_en": "Legal",
+      "name_ms": "Undang-undang",
+      "parent": "pw_venture",
+      "kind": "department"
+    },
+    {
+      "key": "dept_operations",
+      "name_en": "Operations",
+      "name_ms": "Operasi",
+      "parent": "pw_venture",
+      "kind": "department"
+    },
+    {
+      "key": "dept_pdpa",
+      "name_en": "PDPA",
+      "name_ms": "PDPA",
+      "parent": "pw_venture",
+      "kind": "department"
+    },
+    {
+      "key": "dept_fwm",
+      "name_en": "Foreign Worker Management",
+      "name_ms": "Pengurusan Pekerja Asing",
+      "parent": "pw_venture",
+      "kind": "department"
+    },
+    {
+      "key": "dept_cms",
+      "name_en": "CMS command centre",
+      "name_ms": "Pusat Arahan CMS",
+      "parent": "pw_venture",
+      "kind": "department"
+    },
+    {
+      "key": "dept_marketing",
+      "name_en": "Marketing",
+      "name_ms": "Pemasaran",
+      "parent": "pw_venture",
+      "kind": "department"
+    }
+  ],
+  "standing_positions": [
+    {
+      "key": "head_of_it",
+      "title_en": "Head of IT",
+      "title_ms": "Ketua IT",
+      "unit": "dept_it",
+      "reports_to": "ceo",
+      "level": 3,
+      "aliases": [
+        "HOD IT",
+        "Ketua Jabatan IT"
+      ],
+      "duties": "Leads the IT department of the group employer (PWVSB)."
+    },
+    {
+      "key": "dept_it_executive",
+      "title_en": "IT Executive",
+      "title_ms": "Eksekutif IT",
+      "unit": "dept_it",
+      "reports_to": "head_of_it",
+      "level": 4,
+      "aliases": [],
+      "duties": null
+    },
+    {
+      "key": "head_of_procurement",
+      "title_en": "Head of Procurement",
+      "title_ms": "Ketua Perolehan",
+      "unit": "dept_procurement",
+      "reports_to": "ceo",
+      "level": 3,
+      "aliases": [
+        "HOD Procurement and Inventory",
+        "Ketua Jabatan Perolehan dan Inventori"
+      ],
+      "duties": "Leads the Procurement and Inventory department of the group employer (PWVSB)."
+    },
+    {
+      "key": "dept_procurement_executive",
+      "title_en": "Group Procurement Executive",
+      "title_ms": "Eksekutif Perolehan Kumpulan",
+      "unit": "dept_procurement",
+      "reports_to": "head_of_procurement",
+      "level": 4,
+      "aliases": [],
+      "duties": null
+    },
+    {
+      "key": "head_of_transport",
+      "title_en": "Head of Transport",
+      "title_ms": "Ketua Pengangkutan",
+      "unit": "dept_transport",
+      "reports_to": "ceo",
+      "level": 3,
+      "aliases": [
+        "HOD Transport",
+        "Ketua Jabatan Pengangkutan"
+      ],
+      "duties": "Leads the Transport department of the group employer (PWVSB)."
+    },
+    {
+      "key": "dept_transport_executive",
+      "title_en": "Transport Executive",
+      "title_ms": "Eksekutif Pengangkutan",
+      "unit": "dept_transport",
+      "reports_to": "head_of_transport",
+      "level": 4,
+      "aliases": [],
+      "duties": null
+    },
+    {
+      "key": "head_of_legal",
+      "title_en": "Head of Legal",
+      "title_ms": "Ketua Undang-undang",
+      "unit": "dept_legal",
+      "reports_to": "ceo",
+      "level": 3,
+      "aliases": [
+        "HOD Legal",
+        "Ketua Jabatan Undang-undang"
+      ],
+      "duties": "Leads the Legal department of the group employer (PWVSB)."
+    },
+    {
+      "key": "dept_legal_executive",
+      "title_en": "Legal Executive",
+      "title_ms": "Eksekutif Undang-undang",
+      "unit": "dept_legal",
+      "reports_to": "head_of_legal",
+      "level": 4,
+      "aliases": [],
+      "duties": null
+    },
+    {
+      "key": "head_of_operations",
+      "title_en": "Head of Operations",
+      "title_ms": "Ketua Operasi",
+      "unit": "dept_operations",
+      "reports_to": "ceo",
+      "level": 3,
+      "aliases": [
+        "HOD Operations",
+        "Ketua Jabatan Operasi"
+      ],
+      "duties": "Leads the Operations department of the group employer (PWVSB)."
+    },
+    {
+      "key": "dept_operations_executive",
+      "title_en": "Group Operations Executive",
+      "title_ms": "Eksekutif Operasi Kumpulan",
+      "unit": "dept_operations",
+      "reports_to": "head_of_operations",
+      "level": 4,
+      "aliases": [],
+      "duties": null
+    },
+    {
+      "key": "head_of_pdpa",
+      "title_en": "Head of PDPA",
+      "title_ms": "Ketua PDPA",
+      "unit": "dept_pdpa",
+      "reports_to": "ceo",
+      "level": 3,
+      "aliases": [
+        "HOD PDPA",
+        "Ketua Jabatan PDPA"
+      ],
+      "duties": "Leads the PDPA department of the group employer (PWVSB)."
+    },
+    {
+      "key": "dept_pdpa_executive",
+      "title_en": "PDPA Executive",
+      "title_ms": "Eksekutif PDPA",
+      "unit": "dept_pdpa",
+      "reports_to": "head_of_pdpa",
+      "level": 4,
+      "aliases": [],
+      "duties": null
+    },
+    {
+      "key": "head_of_fwm",
+      "title_en": "Head of FWM",
+      "title_ms": "Ketua FWM",
+      "unit": "dept_fwm",
+      "reports_to": "ceo",
+      "level": 3,
+      "aliases": [
+        "HOD Foreign Worker Management",
+        "Ketua Jabatan Pengurusan Pekerja Asing"
+      ],
+      "duties": "Leads the Foreign Worker Management department of the group employer (PWVSB)."
+    },
+    {
+      "key": "dept_fwm_executive",
+      "title_en": "FWM Executive",
+      "title_ms": "Eksekutif FWM",
+      "unit": "dept_fwm",
+      "reports_to": "head_of_fwm",
+      "level": 4,
+      "aliases": [],
+      "duties": null
+    },
+    {
+      "key": "head_of_cms",
+      "title_en": "Head of CMS",
+      "title_ms": "Ketua CMS",
+      "unit": "dept_cms",
+      "reports_to": "ceo",
+      "level": 3,
+      "aliases": [
+        "HOD CMS command centre",
+        "Ketua Jabatan Pusat Arahan CMS"
+      ],
+      "duties": "Leads the CMS command centre department of the group employer (PWVSB)."
+    },
+    {
+      "key": "dept_cms_executive",
+      "title_en": "CMS Executive",
+      "title_ms": "Eksekutif CMS",
+      "unit": "dept_cms",
+      "reports_to": "head_of_cms",
+      "level": 4,
+      "aliases": [],
+      "duties": null
+    },
+    {
+      "key": "head_of_marketing",
+      "title_en": "Head of Marketing",
+      "title_ms": "Ketua Pemasaran",
+      "unit": "dept_marketing",
+      "reports_to": "ceo",
+      "level": 3,
+      "aliases": [
+        "HOD Marketing",
+        "Ketua Jabatan Pemasaran"
+      ],
+      "duties": "Leads the Marketing department of the group employer (PWVSB)."
+    },
+    {
+      "key": "dept_marketing_executive",
+      "title_en": "Marketing Executive",
+      "title_ms": "Eksekutif Pemasaran",
+      "unit": "dept_marketing",
+      "reports_to": "head_of_marketing",
+      "level": 4,
+      "aliases": [],
+      "duties": null
+    },
+    {
+      "key": "dept_finance_executive",
+      "title_en": "Finance Executive",
+      "title_ms": "Eksekutif Kewangan",
+      "unit": "finance",
+      "reports_to": "director_of_finance",
+      "level": 4,
+      "aliases": [
+        "EKSEKUTIF KEWANGAN",
+        "Finance Exec"
+      ],
+      "duties": "Accounts, payments and finance records under the Director of Finance."
+    },
+    {
+      "key": "dept_act_executive",
+      "title_en": "ACT Executive (Internal Audit)",
+      "title_ms": "Eksekutif Audit Dalaman",
+      "unit": "act",
+      "reports_to": "act_manager",
+      "level": 4,
+      "aliases": [
+        "EKSEKUTIF AUDIT DALAMAN",
+        "AUDIT DALAMAN SPECIALIST",
+        "Internal Audit Executive"
+      ],
+      "duties": "Internal audit and control checks for the ACT Manager."
+    },
+    {
+      "key": "dept_asset_executive",
+      "title_en": "Asset Executive",
+      "title_ms": "Eksekutif Aset",
+      "unit": "asset_management",
+      "reports_to": "director_of_asset_management",
+      "level": 3,
+      "aliases": [
+        "EKSEKUTIF ASET",
+        "EKSEKUTIF PENYELENGGARAAN",
+        "Maintenance Executive"
+      ],
+      "duties": "Asset records, maintenance and readiness."
+    },
+    {
+      "key": "head_of_human_resources",
+      "title_en": "HR Manager",
+      "title_ms": "Pengurus HR",
+      "unit": "do_hr_administration",
+      "reports_to": "chief_of_staff",
+      "level": 4,
+      "aliases": [
+        "PENGURUS HR",
+        "HR Manager",
+        "Head of Human Resources"
+      ],
+      "duties": "Leads HR administration under the Chief of Staff."
+    },
+    {
+      "key": "dept_hr_executive",
+      "title_en": "HR Executive",
+      "title_ms": "Eksekutif HR",
+      "unit": "do_hr_administration",
+      "reports_to": "head_of_human_resources",
+      "level": 5,
+      "aliases": [],
+      "duties": "Employee records, attendance and leave, payroll inputs."
+    }
+  ],
+  "approval_rules": [
+    {
+      "rule": "Approvals stay with authorised decision-makers; tracking work does not transfer responsibility; a readiness checklist supports a decision but does not replace approval.",
+      "source": "DOG p2"
+    },
+    {
+      "rule": "Administrators (HR Admin, DOA, AP, local company admins) do not gain HR approval, payment-release, board or tender-signing authority. ACT assurance remains independent.",
+      "source": "DOG p3"
+    },
+    {
+      "rule": "Vice Chairman: final reserved HR decisions (headcount, recruitment, remuneration, KPI, material placement); HR cases go via COS; CEO review does not replace it.",
+      "source": "DOG p3"
+    },
+    {
+      "rule": "Finance: banking, payroll and payments under approved mandates. Boards / authorised management: statutory, tender and expenditure approvals. Each company board keeps its legal duties.",
+      "source": "DOG p2-p3"
+    },
+    {
+      "rule": "Government bids: assigned operational teams prepare; Finance validates financial material; authorised management approves; DOA monitors only. Private tenders stay with COO / Private Sector Department.",
+      "source": "DOG p3"
+    },
+    {
+      "rule": "CEO: operational SOP approval and management decisions.",
+      "source": "DOG p3"
+    },
+    {
+      "rule": "OGM approves (with written reason, within limits): extra man-hours (add-only, with cause), wage advances (1/month, <= last month's wages, raised by OM/ROM), government hostel bills (after FWM checks, company pays), payment requests (department step; then Finance/FD/CEO approve payment), procurement staff time slips (within 30 days, 4-hour cap), item losses & disposals (Goodwill items), client reports (per government client), new site surveys (as Project Director), public holiday list (11 days per company by 10 December).",
+      "source": "GOV p1-p2"
+    },
+    {
+      "rule": "OGM does NOT approve: purchases (COO then CEO; 3 supplier quotes), payments (Finance, FD or CEO), staff salaries (Chief of Staff, then COO), guard salary formulas (ACT Director or CEO), management fee amounts (FD or CEO), anything on private sites.",
+      "source": "GOV p1-p2"
+    },
+    {
+      "rule": "Every approval needs a written reason; nobody approves their own work; proof at every step (photo or document); app suggests discipline but never issues it; companies own guards, sites and contracts.",
+      "source": "GOV p1-p2"
+    },
+    {
+      "rule": "Case escalation: Site Officer -> Patrolling Officer -> Operations Manager -> Regional Operations Manager -> OGM -> COO -> CEO; resolve at the lowest level; ROM is the last level before OGM. Proposed case time limits (up to ROM): P1 15 min, P2 1 hour, P3 4 hours, P4 1 day.",
+      "source": "GOV p1-p2"
+    }
+  ]
+}

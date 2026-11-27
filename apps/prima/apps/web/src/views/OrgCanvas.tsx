@@ -12,6 +12,7 @@ import {
   MinusIcon,
   PencilSimpleIcon,
   PlusIcon,
+  TrayIcon,
   UserPlusIcon,
   XIcon,
 } from '@phosphor-icons/react';
@@ -20,6 +21,7 @@ import { Avatar } from '../kit';
 import { Chip, dateLabel } from '../ui';
 import '../styles/org-canvas.css';
 import { CompaniesTree } from './OrgCompanies';
+import { StructurePanels, StructureTree, useStructure, type PrimaBridge } from './OrgStructure';
 
 /**
  * P129 (Fitri, 24 Nov 2026: "the org chart in Prima, make it visually nice with a canvas, draggable, zoom in and out like
@@ -177,11 +179,15 @@ export function OrgCanvas({
   const openAll = () => {
     setClosed(new Set());
     setOpenUnits(new Set(c.units.map((u) => u.key)));
+    st.openAll();
   };
   const closeAll = () => {
     setClosed(new Set(c.people.filter((p) => (kids.get(p.id) ?? []).length).map((p) => p.id)));
     setOpenUnits(new Set());
+    st.closeAll();
   };
+  // P145: the group's structure (units, roles, who holds them) for the Departments view, from the office.
+  const st = useStructure();
 
   // ---------- moving and zooming ----------
   const zoomAt = useCallback((factor: number, cx?: number, cy?: number) => {
@@ -294,7 +300,7 @@ export function OrgCanvas({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName ?? '';
-      if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || document.querySelector('.drawer')) return;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || document.querySelector('.drawer, .oc-side')) return;
       if (e.key === '+' || e.key === '=') zoomAt(1.2);
       else if (e.key === '-') zoomAt(1 / 1.2);
       else if (e.key === '0') fit();
@@ -361,6 +367,18 @@ export function OrgCanvas({
     return () => window.removeEventListener('keydown', key);
   }, [picked]);
   const ctx: Ctx = { c, kids, byId, unitName, closed, toggle, focus, canAddUnder, onMove, onAddUnder, openUnits, toggleUnit, dragId, setDragId, canDrop, place, dnd: !!onPlace, picked, pick: setPicked, onUnit: c.canNameHeads ? onUnit : undefined, onUnitEdit: c.canEditUnits ? onUnitEdit : undefined, onPerson };
+  const bridge: PrimaBridge = {
+    units: c.units,
+    byId,
+    dragId,
+    setDragId,
+    onUnit: ctx.onUnit,
+    onUnitEdit: ctx.onUnitEdit,
+    renderUnit: (u) => <UnitNode u={u} ctx={ctx} />,
+    renderTeam: (people) => <TeamBox people={people} ctx={ctx} />,
+    membersOf: (u) => membersOf(u, c.people),
+  };
+  const unsortedCount = st.model?.unsorted.length ?? 0;
   return (
     <div className="oc-full" role="dialog" aria-label="Org chart">
       <header className="oc-bar">
@@ -436,6 +454,12 @@ export function OrgCanvas({
             <ArrowsInIcon size={16} aria-hidden="true" />
             <span className="hide-sm">Close all</span>
           </button>
+          {mode === 'units' && st.model?.s.can_edit && (
+            <button type="button" className="btn btn-sm oc-unsorted-btn" aria-pressed={st.unsorted} data-some={unsortedCount > 0 || undefined} onClick={() => st.setUnsorted(!st.unsorted)} title="People with no role yet: sort them">
+              <TrayIcon size={16} aria-hidden="true" />
+              <span>Unsorted</span> <span className="num">({unsortedCount})</span>
+            </button>
+          )}
         </div>
       </header>
       {picked && (
@@ -474,7 +498,14 @@ export function OrgCanvas({
           {mode === 'companies' ? (
             <CompaniesTree />
           ) : mode === 'units' ? (
-            <UnitsTree ctx={ctx} />
+            st.model ? (
+              <StructureTree st={st} prima={bridge} />
+            ) : st.load.error ? (
+              // The office's structure could not be read: Prima's own departments, as before.
+              <UnitsTree ctx={ctx} />
+            ) : (
+              <p className="muted">Loading the structure…</p>
+            )
           ) : roots.length ? (
             <div className="oc-roots">
               {roots.map((p) => (
@@ -510,6 +541,7 @@ export function OrgCanvas({
           )}
         </div>
       </div>
+      {mode === 'units' && <StructurePanels st={st} prima={bridge} />}
       {children}
     </div>
   );

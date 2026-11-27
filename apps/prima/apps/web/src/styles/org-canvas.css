@@ -887,3 +887,402 @@ button.oc-team-open:hover strong,
 button.oc-team-open:focus-visible strong {
   color: var(--accent);
 }
+
+/* P145: the group structure in the Departments view: units joined by lines, each with its roles as a sub-tree. */
+.oc-struct {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+}
+.oc-struct-error {
+  width: min(560px, 90vw);
+}
+.oc-sunit {
+  width: 268px;
+}
+.oc-sunit[data-kind='company'] .oc-band,
+.oc-sunit[data-kind='governance'] .oc-band {
+  height: 7px;
+}
+.oc-sunit-prima {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+}
+.oc-sunit-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.oc-sunit-team[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.oc-roles {
+  width: 340px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 8px 20px -16px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+}
+.oc-roles-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px 7px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.oc-roles-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--line));
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+.oc-roles-add:hover {
+  background: color-mix(in oklab, var(--accent) 12%, var(--surface));
+}
+.oc-roles-none {
+  margin: 0;
+  padding: 10px 12px;
+}
+/* The roles of a unit as an indented tree, a line to each role from the one it reports to. */
+.oc-ptree,
+.oc-ptree ul {
+  margin: 0;
+  list-style: none;
+}
+.oc-ptree {
+  padding: 6px;
+}
+.oc-ptree ul {
+  padding: 0 0 0 16px;
+}
+.oc-ptree ul > li {
+  position: relative;
+}
+.oc-ptree ul > li::before {
+  content: '';
+  position: absolute;
+  left: -9px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: color-mix(in oklab, var(--muted) 30%, transparent);
+}
+.oc-ptree ul > li:last-child::before {
+  bottom: auto;
+  height: 20px;
+}
+.oc-ptree ul > li::after {
+  content: '';
+  position: absolute;
+  left: -9px;
+  top: 19px;
+  width: 8px;
+  height: 2px;
+  background: color-mix(in oklab, var(--muted) 30%, transparent);
+}
+.oc-pos {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+  padding: 5px 6px 5px 8px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.oc-pos[data-vacant] {
+  border-left-color: hsl(38 85% 55%);
+  border-left-style: dashed;
+}
+.oc-pos[draggable='true'] {
+  cursor: grab;
+}
+.oc-pos[data-dragging] {
+  opacity: 0.45;
+}
+.oc-pos[data-drop] {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
+}
+.oc-pos-title {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+.oc-pos-title > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc-pos-title:hover > strong {
+  color: var(--accent);
+}
+.oc-pos-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.oc-pos-people {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 0.72rem;
+}
+.oc-pos-faces {
+  display: inline-flex;
+  align-items: center;
+}
+.oc-pos-face + .oc-pos-face {
+  margin-left: -7px;
+}
+.oc-pos-face .k-avatar {
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.oc-pos-name {
+  max-width: 90px;
+  margin-left: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc-pos-count {
+  color: var(--muted);
+  font-weight: 700;
+}
+.oc-pos-count[data-full] {
+  color: var(--accent);
+}
+.oc-pos-acts {
+  display: inline-flex;
+  gap: 2px;
+  flex: none;
+}
+.oc-pos-acts button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.oc-pos-acts button:hover,
+.oc-pos-acts button:focus-visible {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+/* Drawers: add a role or sub-unit, a role's facts and its people. */
+.oc-choices,
+.oc-choices-prima {
+  display: grid;
+  gap: 8px;
+}
+.oc-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 0.88rem;
+}
+.oc-facts dt {
+  color: var(--muted);
+}
+.oc-facts dd {
+  margin: 0;
+}
+.oc-duties {
+  white-space: pre-wrap;
+}
+.oc-holders {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.oc-holders > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.oc-holder-text {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 0.84rem;
+  line-height: 1.3;
+}
+.oc-holder-text > strong,
+.oc-holder-text > .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc-profile {
+  flex: none;
+}
+
+/* The Unsorted panel: beside the canvas (no backdrop), so its people can be dragged onto a role. */
+.oc-unsorted-btn[data-some] {
+  border-color: hsl(38 85% 55%);
+}
+.oc-side {
+  position: absolute;
+  top: 64px;
+  left: 12px;
+  bottom: 12px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(380px, calc(100vw - 24px));
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 18px 40px -20px rgb(0 0 0 / 0.5);
+}
+.oc-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.oc-side-head .oc-find-clear {
+  position: static;
+  transform: none;
+}
+.oc-side-note {
+  margin: 0;
+}
+.oc-side-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.oc-side-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+}
+.oc-side-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.oc-side-list > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 10px;
+}
+.oc-side-list > li[draggable='true'] {
+  cursor: grab;
+}
+.oc-side-list > li[data-picked] {
+  background: var(--accent-soft);
+}
+.oc-side-none {
+  justify-content: center;
+}
+.oc-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  max-width: 100%;
+  margin-top: 3px;
+  padding: 2px 8px;
+  border: 1px dashed color-mix(in oklab, var(--accent) 55%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 7%, var(--surface));
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.oc-tip:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--accent) 14%, var(--surface));
+}
+.oc-side-foot {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.oc-side-foot > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .oc-side {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    height: 70vh;
+  }
+}

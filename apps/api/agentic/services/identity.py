@@ -84,3 +84,45 @@ async def prima_follows(
         link.relink_needed = True
         return f"{link.prima_user_id} relinked on their next visit"
     return None  # set by the owner: kept
+
+
+async def keep_microsoft_as_extra(
+    db: AsyncSession, workspace_id: str, user_id: str
+) -> dict[str, Any] | None:
+    """P145c: their sign-in email moves to a personal one (the CSV staff sync), and the work
+    Microsoft account they connected stays as an EXTRA account: still connected, its mail kept,
+    read on the Microsoft 365 page; it is no longer their main account (AI, Teams, Prima) nor
+    their Microsoft identity (Membership.ms_oid cleared, so their next Microsoft sign-in links
+    their own account as the main one; microsoft/signin never links an extra account as it).
+    An admin's change: it does not wait for approval (work_mail). None, changing nothing, when
+    nothing is connected or they have no room for another extra account (the caller lets go as
+    before). Caller commits."""
+    from ..microsoft.auth import MAX_EXTRA_ACCOUNTS
+
+    rows = (
+        await db.scalars(
+            select(MicrosoftAccount).where(
+                MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
+            )
+        )
+    ).all()
+    main = [a for a in rows if a.is_primary and a.status != "disconnected"]
+    if not main:
+        return None
+    extras = sum(1 for a in rows if not a.is_primary)
+    if extras + len(main) > MAX_EXTRA_ACCOUNTS:
+        return None
+    for a in main:
+        a.is_primary = False
+        a.label = a.label or "Work"
+    await db.flush()
+    done: dict[str, Any] = {"kept_as_extra": [a.id for a in main]}
+    m = await db.get(Membership, (workspace_id, user_id))
+    if m is not None and (m.ms_oid or m.ms_tenant_id):
+        m.ms_oid = None
+        m.ms_tenant_id = None
+        done["microsoft_link"] = "cleared"
+    prima = await prima_follows(db, workspace_id, user_id)
+    if prima:
+        done["prima"] = prima
+    return done

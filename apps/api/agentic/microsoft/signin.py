@@ -334,9 +334,24 @@ async def finish(db: AsyncSession, state: str, code: str) -> SignedIn:
         user = await db.get(User, user.id)
         assert membership is not None and user is not None
     # P66: the verified account, for Prima (agentic/prima links its staff by object ID).
+    # P145c: never one of their EXTRA accounts (a work mailbox kept beside their own account
+    # when their sign-in email became a personal one): it signs them in, it is not who they are.
+    extra = (
+        await db.scalar(
+            select(MicrosoftAccount.id).where(
+                MicrosoftAccount.workspace_id == ws_id,
+                MicrosoftAccount.user_id == user.id,
+                MicrosoftAccount.ms_user_id == oid,
+                MicrosoftAccount.is_primary.is_(False),
+            )
+        )
+        if oid
+        else None
+    )
     if (
         oid
         and tid
+        and extra is None
         and (membership.ms_oid, membership.ms_tenant_id) != (oid, tid)
         and await auth.own_microsoft(db, ws_id, user.id, oid, trusted)
     ):

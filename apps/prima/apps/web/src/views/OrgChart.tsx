@@ -3,6 +3,7 @@ import { CaretRightIcon, TreeStructureIcon, UserSwitchIcon, UsersThreeIcon, Warn
 import { useApp, useRouteTab } from '../App';
 import { office, type OfficeCompany, type OfficeMember } from '../api/office';
 import { EmailSignin, MemberDrawer } from './office/Members';
+import { openMember } from './office/member-route';
 import { PowersCtx, powersOf } from './office/shared';
 import { OrgCanvas } from './OrgCanvas';
 import { api } from '../api';
@@ -567,6 +568,9 @@ function PersonPanel({ c, p, onClose }: { c: Chart; p: Person; onClose: () => vo
           <div className="org-form-actions">
             <button className="btn btn-primary" onClick={() => setAccount(true)}>
               Change role, company, job title and line
+            </button>
+            <button className="btn" onClick={() => openMember(go, officeId)}>
+              Open profile
             </button>
             <button className="btn btn-ghost" onClick={() => window.open(`/settings/members/${encodeURIComponent(officeId)}`, '_blank', 'noopener')}>
               Every other setting

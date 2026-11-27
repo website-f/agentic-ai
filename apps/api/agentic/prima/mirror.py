@@ -220,6 +220,17 @@ async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool
         ).all()
     }
     by_email = {m.user.email.lower(): m for m in members.values() if m.user and m.user.email}
+    # P145c: a member's work email (the staff lists' company or shared mailbox) is theirs too, so
+    # moving their sign-in to a personal email never makes a second member from the old address.
+    # Sign-in emails come first; a work email several members share finds nobody's account (only
+    # the staff-record pass below skips it).
+    worked: dict[str, list[Membership]] = {}
+    for mm in members.values():
+        if mm.work_email:
+            worked.setdefault(mm.work_email.strip().lower(), []).append(mm)
+    for addr, ms in worked.items():
+        if len(ms) == 1:
+            by_email.setdefault(addr, ms[0])
     by_oid = {m.ms_oid.lower(): m for m in members.values() if m.ms_oid}
     held: list[dict] = []
     for r in staff:
@@ -383,7 +394,12 @@ async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool
         if r.person_id and (r.id in links or r.id.startswith(OFFICE_ACCOUNT_PREFIX))
     }
     for rec in await client.people():
-        if rec.id in taken or rec.email in by_email or rec.email.endswith(PREVIEW_DOMAIN):
+        if (
+            rec.id in taken
+            or rec.email in by_email
+            or rec.email in worked
+            or rec.email.endswith(PREVIEW_DOMAIN)
+        ):
             continue
         home = (office_of.get(rec.company_id) or [None])[0]
         if home is None:

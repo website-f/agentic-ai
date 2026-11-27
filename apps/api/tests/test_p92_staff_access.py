@@ -260,6 +260,9 @@ def crashes(res: dict[str, tuple[int, str]]) -> list[str]:
 # Every GET that answers a staff member (2xx). A new one fails this test until someone checks
 # what it returns to staff and adds it here.
 STAFF_OK = {
+    # P144/P145: the Library units and places they may open (scoped), and the group structure
+    # (units, positions, and only the members their scope shows).
+    "/api/library/places", "/api/library/units", "/api/org/structure",
     "/api/agents", "/api/agents/templates", "/api/agents/tools", "/api/ai/groups",
     "/api/approvals", "/api/assistants", "/api/auth/2fa", "/api/auth/2fa/policy", "/api/auth/me",
     "/api/auth/setup-status", "/api/auth/sso", "/api/blueprints", "/api/branches",

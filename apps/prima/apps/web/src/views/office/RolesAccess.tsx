@@ -13,7 +13,7 @@ import { SearchSelect } from '../../SearchSelect';
 import { Chip, ErrorNotice, Loading, useLoad } from '../../ui';
 import { ConfirmDialog, ROLES, ROLE_INFO, roleLabel, useChange, usePowers } from './shared';
 
-interface Area {
+export interface Area {
   key: string;
   section: string;
   label: string;
@@ -25,9 +25,9 @@ const WORK = 'Office and daily work';
 const AI = 'AI team and knowledge';
 const PEOPLE = 'People and organisation';
 const SYSTEM = 'System and connections';
-const SECTIONS = [WORK, AI, PEOPLE, SYSTEM];
+export const SECTIONS = [WORK, AI, PEOPLE, SYSTEM];
 
-const AREAS: Area[] = [
+export const AREAS: Area[] = [
   {
     key: 'office',
     section: WORK,

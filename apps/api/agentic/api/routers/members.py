@@ -114,6 +114,8 @@ def _out(
         uploads_for_others=bool(m.uploads_for_others),
         library_grants=_grants_out(m),
         job_title=m.job_title,
+        position_id=m.position_id,  # P145
+        work_email=m.work_email,
     )
 
 
@@ -877,7 +879,12 @@ async def update_member(
     prima_change = body.access is not None or bool(
         {"prima_modules", "prima_department"} & body.model_fields_set
     )
-    unchanged = body.role is None and body.name is None and body.email is None
+    unchanged = (
+        body.role is None
+        and body.name is None
+        and body.email is None
+        and "work_email" not in body.model_fields_set
+    )
     # P132: once Prima keeps the people, the office changes only its own: the owners', global
     # admins' and IT support's access level, the email they sign in with, and Prima screens.
     current = await db.get(Membership, (principal.workspace_id, user_id))
@@ -917,6 +924,8 @@ async def update_member(
             body.prima_department,
             "prima_department" in body.model_fields_set,
         )
+    if "work_email" in body.model_fields_set:  # P145
+        await set_work_email(db, principal, user_id, body.work_email)
     # P92: a name or email typed wrong (in the form or an import) is corrected here. Last:
     # every check runs before anything is saved.
     if body.name is not None or body.email is not None:
@@ -927,6 +936,38 @@ async def update_member(
         # now, after the answer, not only on their next Prima open (the same path: ensure).
         autolink.later(background, principal.workspace_id, [user_id])
     return await _one_out(db, principal, user_id)
+
+
+async def set_work_email(
+    db: AsyncSession, principal: Principal, user_id: str, email: str | None
+) -> None:
+    """P145: their work email from the staff lists (None: none). members.manage only; the
+    caller commits."""
+    if not can(principal.role, "members.manage"):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Only owners, admins, management and HR set a work email.",
+        )
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    _check_can_touch(principal, m.role)
+    want = email.strip().lower() if email else None
+    if want == m.work_email:
+        return
+    before = m.work_email
+    m.work_email = want
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "member.work_email_changed",
+        target=user_id,
+        before={"work_email": before},
+        after={"work_email": want},
+    )
+    await db.flush()
 
 
 async def _one_out(db: AsyncSession, principal: Principal, user_id: str) -> MemberOut:
@@ -1462,10 +1503,17 @@ async def change_identity(
     user_id: str,
     name: str | None,
     email: str | None,
+    *,
+    keep_microsoft: bool = False,
 ) -> Membership:
     """P92: correct someone's name or sign-in email (members.manage; only an owner corrects
     an owner). A new email lets go of the Microsoft account the old one was linked to and
-    signs them out everywhere (services/identity); the caller commits."""
+    signs them out everywhere (services/identity); the caller commits.
+
+    P145c `keep_microsoft` (the CSV staff sync: a company login becomes a personal one): their
+    connected Microsoft account is kept as an EXTRA account (mail and connection stay) and only
+    the link to their identity is cleared (identity.keep_microsoft_as_extra); when that cannot
+    be (nothing connected, or no room for another extra account) it lets go as above."""
     if not can(principal.role, "members.manage"):
         raise api_error(
             status.HTTP_403_FORBIDDEN,
@@ -1522,7 +1570,22 @@ async def change_identity(
         before=before,
         after=after,
     )
-    if email_changed:
+    kept = None
+    if email_changed and keep_microsoft:
+        kept = await identity.keep_microsoft_as_extra(db, principal.workspace_id, user_id)
+    if kept is not None:
+        sessions = await identity.sign_out_everywhere(db, user_id)
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "member.microsoft_kept_as_extra",
+            target=user_id,
+            after={**kept, "sessions_ended": sessions},
+            note="Microsoft account kept as an extra account: their email changed; the next "
+            "Microsoft sign-in links their own account; they sign in again",
+        )
+    elif email_changed:
         await _let_go(db, principal, user_id, "member.microsoft_reset", "their email changed")
     else:
         await identity.prima_follows(db, principal.workspace_id, user_id, name_only=True)

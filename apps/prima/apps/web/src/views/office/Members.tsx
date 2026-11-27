@@ -4,9 +4,12 @@
  * their role, company, department, job title, who they report to, name or email, email them a sign-in password and
  * remove them, one or many. The roles offered are the ones the office lets this person give (assignable_roles). The
  * office checks every change again (routers/members.py, signin_mail.py).
+ * P145b (owner, 27 Nov 2026: "open a FULL PAGE instead of the off-canvas drawer"): a row opens the member's own page
+ * (MemberPage.tsx, #members/member/<id>); the drawer stays for the org chart's person panel.
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import { CopyIcon, EnvelopeSimpleIcon } from '@phosphor-icons/react';
+import { useApp } from '../../App';
 import {
   office,
   saved,
@@ -20,6 +23,7 @@ import { DataTable, type DtColumn, type DtFilter } from '../../DataTable';
 import { Facts, Stat, Stats } from '../../kit';
 import { SearchSelect, type SelectOption } from '../../SearchSelect';
 import { Chip, Drawer, ErrorNotice, dateLabel, useAction, useLoad, useToast, type Tone } from '../../ui';
+import { openMember } from './member-route';
 import {
   ConfirmDialog,
   Field,
@@ -42,17 +46,18 @@ import {
   type MemberStatus,
 } from './shared';
 
-const STATUS_TONE: Record<MemberStatus, Tone> = { active: 'ok', pending: 'warn', disabled: 'neutral' };
+export const STATUS_TONE: Record<MemberStatus, Tone> = { active: 'ok', pending: 'warn', disabled: 'neutral' };
 
 export function MembersTab() {
   const p = usePowers();
+  const { go } = useApp();
   const members = useLoad(() => office.members(), []);
   const companies = useLoad(() => office.companies(), []);
-  const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [emailing, setEmailing] = useState<OfficeMember | null>(null);
   const list = members.data;
-  const opened = list?.find((m) => m.user_id === open) ?? null;
+  // P145b: their own full page (refresh-safe, deep-linkable), not a drawer.
+  const open = (m: OfficeMember) => openMember(go, m.user_id);
   const isMe = (m: OfficeMember) => m.user_id === p.me.user.id;
 
   const columns: DtColumn<OfficeMember>[] = [
@@ -143,8 +148,10 @@ export function MembersTab() {
         loadingWhat="members"
         error={members.error}
         recordName={(m) => m.name}
-        onView={(m) => setOpen(m.user_id)}
-        onEdit={p.people ? (m) => setOpen(m.user_id) : undefined}
+        onView={open}
+        viewLabel="Open profile"
+        onEdit={p.people ? open : undefined}
+        editLabel="Edit profile and access"
         actions={(m) => [
           {
             label: 'Email a sign-in password',
@@ -175,9 +182,6 @@ export function MembersTab() {
         importLabel="Import from Excel"
         exportName="members"
       />
-      {opened && (
-        <MemberDrawer member={opened} members={list ?? []} companies={companies.data ?? []} onClose={() => setOpen(null)} onEmail={() => setEmailing(opened)} />
-      )}
       {adding && <AddMember companies={companies.data ?? []} onClose={() => setAdding(false)} />}
       {emailing && <EmailSignin member={emailing} onClose={() => setEmailing(null)} />}
     </div>
@@ -211,24 +215,27 @@ export function EmailSignin({ member, onClose }: { member: Pick<OfficeMember, 'u
 
 // ---------- Where they sit: role, company, department ----------
 
-interface Place {
+export interface Place {
   role: OfficeRole;
   companyIds: string[];
   departmentId: string;
 }
 
-function PlaceFields({
+export function PlaceFields({
   value,
   onChange,
   roles,
   companies,
   lockedRole,
+  hideRole,
 }: {
   value: Place;
   onChange: (p: Place) => void;
   roles: OfficeRole[];
   companies: OfficeCompany[];
   lockedRole?: string;
+  /** P145b: the role is chosen elsewhere on the page; only the company and department here. */
+  hideRole?: boolean;
 }) {
   const p = usePowers();
   const allowed = allowedCompanies(p.me);
@@ -248,22 +255,24 @@ function PlaceFields({
   const shown = pool.filter((c) => c.id !== home?.id && (!find.trim() || c.name.toLowerCase().includes(find.trim().toLowerCase())));
   return (
     <>
-      <Field label="Role" hint={lockedRole ?? ROLE_INFO[value.role]?.blurb} wide>
-        <SearchSelect
-          className="select"
-          aria-label="Role"
-          value={value.role}
-          disabled={!!lockedRole}
-          options={roleOptions}
-          onChange={(r) =>
-            onChange({
-              ...value,
-              role: r as OfficeRole,
-              companyIds: PLACED.includes(r as OfficeRole) && !value.companyIds.length && pool[0] ? [pool[0].id] : value.companyIds,
-            })
-          }
-        />
-      </Field>
+      {!hideRole && (
+        <Field label="Role" hint={lockedRole ?? ROLE_INFO[value.role]?.blurb} wide>
+          <SearchSelect
+            className="select"
+            aria-label="Role"
+            value={value.role}
+            disabled={!!lockedRole}
+            options={roleOptions}
+            onChange={(r) =>
+              onChange({
+                ...value,
+                role: r as OfficeRole,
+                companyIds: PLACED.includes(r as OfficeRole) && !value.companyIds.length && pool[0] ? [pool[0].id] : value.companyIds,
+              })
+            }
+          />
+        </Field>
+      )}
       {placed ? (
         <>
           <Field label="Company" hint={others.length ? `Also in ${others.length} other ${others.length === 1 ? 'company' : 'companies'}.` : undefined}>
@@ -312,10 +321,10 @@ function PlaceFields({
   );
 }
 
-const placeOf = (m: OfficeMember): Place => ({ role: m.role, companyIds: companyIdsOf(m), departmentId: m.department_id ?? '' });
-const samePlace = (a: Place, b: Place) => a.role === b.role && a.departmentId === b.departmentId && a.companyIds.join() === b.companyIds.join();
+export const placeOf = (m: OfficeMember): Place => ({ role: m.role, companyIds: companyIdsOf(m), departmentId: m.department_id ?? '' });
+export const samePlace = (a: Place, b: Place) => a.role === b.role && a.departmentId === b.departmentId && a.companyIds.join() === b.companyIds.join();
 
-function placeProblem(pl: Place): string | null {
+export function placeProblem(pl: Place): string | null {
   if (!PLACED.includes(pl.role)) return null;
   if (!pl.companyIds.length) return 'Choose a company.';
   if (NEEDS_DEPARTMENT.includes(pl.role) && !pl.departmentId) return 'A head of department or supervisor needs a department.';
@@ -644,7 +653,7 @@ const noGrant = (g: OfficeLibraryGrants) =>
  * units and companies given to them on top (extra access, never less), and whether they upload for other companies.
  * The office checks it again: only units and companies the person setting it opens themselves; all companies only for
  * owners and admins (routers/members.py set_library_access). */
-function LibraryAccess({ member, companies }: { member: OfficeMember; companies: OfficeCompany[] }) {
+export function LibraryAccess({ member, companies, bare }: { member: OfficeMember; companies: OfficeCompany[]; bare?: boolean }) {
   const p = usePowers();
   const act = useAction();
   const units = useLoad(() => office.libraryUnits(), []);
@@ -697,7 +706,7 @@ function LibraryAccess({ member, companies }: { member: OfficeMember; companies:
 
   return (
     <>
-      <h3 className="oa-h3">Library access</h3>
+      {!bare && <h3 className="oa-h3">Library access</h3>}
       <form
         className="oa-form"
         onSubmit={(e) => {
@@ -806,7 +815,7 @@ function LibraryAccess({ member, companies }: { member: OfficeMember; companies:
   );
 }
 
-function RemoveMember({ member, onClose, onDone }: { member: OfficeMember; onClose: () => void; onDone: () => void }) {
+export function RemoveMember({ member, onClose, onDone }: { member: OfficeMember; onClose: () => void; onDone: () => void }) {
   const change = useChange();
   return (
     <ConfirmDialog

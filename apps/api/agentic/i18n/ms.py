@@ -2109,3 +2109,8 @@ MS.update({k: v for k, v in MS_P143C.items() if k not in MS})
 from .ms_p144 import MS_P144  # noqa: E402
 
 MS.update({k: v for k, v in MS_P144.items() if k not in MS})
+
+# P145: the group structure (units, positions, who holds which position).
+from .ms_p145 import MS_P145  # noqa: E402
+
+MS.update({k: v for k, v in MS_P145.items() if k not in MS})

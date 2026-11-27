@@ -142,6 +142,12 @@ class Membership(Timestamps, Base):
     getting_started: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # P111 (migration 0072): their job title (designation) on the organization chart.
     job_title: Mapped[str | None] = mapped_column(String(120))
+    # P145 (migration 0083): the position (job role) they hold in the group structure
+    # (org/structure.py; None = not sorted yet), and their work email from the staff lists.
+    position_id: Mapped[str | None] = mapped_column(
+        ForeignKey("org_positions.id", ondelete="SET NULL")
+    )
+    work_email: Mapped[str | None] = mapped_column(String(254))
 
     user: Mapped[User] = relationship(lazy="joined", foreign_keys=[user_id])
     # P98: every branch this member works in (the home branch_id included; loaded with the
@@ -2384,6 +2390,9 @@ from ..org.held_models import HeldChange  # noqa: E402, F401
 
 # P109: who heads which departments, and files uploaded for other companies (org/models.py).
 from ..org.models import DepartmentHead, FileHandoff, PersonRequest  # noqa: E402, F401
+
+# P145: the group structure, units and positions (org/structure_models.py).
+from ..org.structure_models import OrgPosition, OrgUnit  # noqa: E402, F401
 
 # P127: the organization hierarchy kept in step with Prima's org chart (prima/org_sync.py).
 from ..prima.org_sync_models import PrimaOrgSync, PrimaOrgSyncRun  # noqa: E402, F401

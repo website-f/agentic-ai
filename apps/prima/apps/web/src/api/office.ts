@@ -80,6 +80,89 @@ export interface OfficeMember {
   uploads_for_others?: boolean;
   /** P144: extra Library access given to them (null or missing: none). */
   library_grants?: OfficeLibraryGrants | null;
+  /** P99: the office and Prima, or Prima only; their chosen Prima screens (null: all their Prima role allows). */
+  access?: OfficeAccessKind;
+  prima_modules?: string[] | null;
+  /** P106: the Prima department of their own Prima account. */
+  prima_department?: PrimaDepartment | null;
+  /** P145: the job role (position) they hold in the group structure (api/structure.ts). */
+  position_id?: string | null;
+  /** P145: a shared or work mailbox, used only on the Microsoft 365 page (they sign in with `email`). */
+  work_email?: string | null;
+}
+
+export type OfficeAccessKind = 'agentic' | 'prima_only';
+
+/** P106/P125: the Prima departments a member's own Prima account may be in (the office's own list). */
+export const PRIMA_DEPARTMENTS = [
+  'operations',
+  'finance',
+  'procurement',
+  'hr',
+  'chief_of_staff',
+  'it',
+  'legal',
+  'audit',
+  'transport',
+  'asset',
+  'pdpa',
+  'fwm',
+  'cms',
+] as const;
+export type PrimaDepartment = (typeof PRIMA_DEPARTMENTS)[number];
+
+/** P99: GET /api/members/prima-modules: Prima's screens in its own apps and groups. */
+export interface PrimaModuleRow {
+  id: string;
+  title: string;
+  blurb: string;
+  always: boolean;
+}
+export interface PrimaCatalog {
+  enabled: boolean;
+  /** Screens everyone keeps (the home screen and their own things). */
+  always: string[];
+  /** The screens the signed-in person may give (null: all of Prima). */
+  mine: string[] | null;
+  apps: { id: string; title: string; blurb: string; groups: { title: string; modules: PrimaModuleRow[] }[] }[];
+}
+
+/** P128: what a ticked screen Prima will not open for them still needs (office prima/screen_access.py). */
+export interface PrimaNeed {
+  id: string;
+  title: string;
+  kind: 'department' | 'branch_manager' | 'central_staff' | 'job' | 'leadership' | 'none';
+  departments: PrimaDepartment[];
+  jobs: string[];
+}
+
+/** P128: what they really get in Prima, by Prima's own menu rule. */
+export interface PrimaEffective {
+  role: string;
+  role_label: string;
+  department: PrimaDepartment | null;
+  how: 'chosen' | 'none' | 'refused' | 'top';
+  screens: { id: string; title: string }[];
+  needs: PrimaNeed[];
+  company_access: { id: string; title: string }[];
+  suggestion: { department: PrimaDepartment; adds: { id: string; title: string }[]; sensitive: boolean } | null;
+}
+
+/** P99/P128: GET /api/members/{id}/prima: their Prima role, where it is set, and what they get there. */
+export interface PrimaRoleInfo {
+  enabled: boolean;
+  role: string | null;
+  role_label: string | null;
+  where: string;
+  record: string | null;
+  effective: PrimaEffective | null;
+}
+
+/** P99: PUT /api/members/{id}/prima-access. Leave out what does not change. */
+export interface PrimaAccessIn {
+  access?: OfficeAccessKind;
+  prima_modules?: string[] | null;
+  prima_department?: PrimaDepartment | null;
 }
 
 export type OfficeUnitKey = 'hr' | 'audit' | 'finance';
@@ -306,6 +389,22 @@ export const office = {
   /** P144: what of the Library they read, upload for others, and the units and companies given to them. */
   setLibraryAccess: (userId: string, body: OfficeLibraryAccessIn) =>
     officeFetch<OfficeMember | Held>('PUT', `/api/members/${id(userId)}/library`, body),
+  /** P120: one member (their own page), with the same rules as the list. */
+  member: (userId: string) => officeFetch<OfficeMember>('GET', `/api/members/${id(userId)}`),
+  /** P99: Prima's screens to choose from (members.manage). */
+  primaModules: () => officeFetch<PrimaCatalog>('GET', '/api/members/prima-modules'),
+  /** P128: what they get in Prima; `modules` and `department` explain the form before it is saved. */
+  memberPrima: (userId: string, preview?: { modules: string[] | null; department: PrimaDepartment | null }) => {
+    const q = new URLSearchParams();
+    if (preview) {
+      q.set('modules', preview.modules === null ? 'all' : preview.modules.join(','));
+      q.set('department', preview.department ?? 'none');
+    }
+    const qs = q.toString();
+    return officeFetch<PrimaRoleInfo>('GET', `/api/members/${id(userId)}/prima${qs ? `?${qs}` : ''}`);
+  },
+  /** P99: what one member reaches (the office and Prima, or Prima only), their Prima screens and department. */
+  setPrimaAccess: (userId: string, body: PrimaAccessIn) => officeFetch<OfficeMember | Held>('PUT', `/api/members/${id(userId)}/prima-access`, body),
   /** P143b: the Library units the signed-in person opens (the ones they may give). */
   libraryUnits: () => officeFetch<{ units: OfficeUnit[] }>('GET', '/api/library/units'),
 
