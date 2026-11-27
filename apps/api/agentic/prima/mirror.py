@@ -342,6 +342,9 @@ async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool
         # Prima's role, company and department.
         if lk is None or lk.linked_by != ACTOR:
             continue
+        # P145: someone placed in the group structure (a position) is the office's to manage.
+        if m.position_id:
+            continue
         # Place: Prima's company and central department. The owner, global admins and IT support
         # keep theirs (their place scopes nothing). Someone in several companies keeps them all:
         # only when none of their office companies is one of their Prima companies does their home
