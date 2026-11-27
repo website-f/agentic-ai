@@ -78,6 +78,11 @@ async def stream(
     async def gen() -> AsyncIterator[str]:
         q = await hub.join(ws)  # listen first so nothing falls in the gap
         try:
+            # P143 (live, 27 Nov 2026): read what was missed, then let the connection go BEFORE
+            # sending it. Yielding inside the session kept a transaction open while a slow or
+            # reconnecting browser read the replay; after a restart every tab reconnected at
+            # once and the pool ran dry ("QueuePool limit reached", the api unhealthy).
+            rows: list[tuple[int, str, str, dict]] = []
             async with SessionLocal() as db:
                 if start is None:
                     cursor = (
@@ -86,23 +91,23 @@ async def stream(
                     )
                 else:
                     cursor = start
-                    rows = (
-                        await db.scalars(
-                            select(Event)
-                            .where(Event.workspace_id == ws, Event.seq > start)
-                            .order_by(Event.seq)
-                            .limit(REPLAY_LIMIT)
-                        )
-                    ).all()
-                    for e in rows:
-                        cursor = e.seq
-                        if not await ok(e.type, e.data):
-                            continue
-                        data = watch_view(e.type, e.data or {}, seen["ids"])
-                        yield _frame(
-                            e.seq,
-                            {"seq": e.seq, "ts": e.ts.isoformat(), "type": e.type, "data": data},
-                        )
+                    rows = [
+                        (e.seq, e.ts.isoformat(), e.type, e.data or {})
+                        for e in (
+                            await db.scalars(
+                                select(Event)
+                                .where(Event.workspace_id == ws, Event.seq > start)
+                                .order_by(Event.seq)
+                                .limit(REPLAY_LIMIT)
+                            )
+                        ).all()
+                    ]
+            for seq, ts, type_, raw in rows:
+                cursor = seq
+                if not await ok(type_, raw):
+                    continue
+                data = watch_view(type_, raw, seen["ids"])
+                yield _frame(seq, {"seq": seq, "ts": ts, "type": type_, "data": data})
             yield f": connected at {cursor}\nretry: 3000\n\n"
             while not await request.is_disconnected():
                 try:
