@@ -292,6 +292,137 @@ async def ensure(db: AsyncSession, ws: str, *, only_if_empty: bool = False) -> S
     return out
 
 
+# ---------------------------------------------------------------- P146: every office company
+
+
+def _plain(s: str | None) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).split())
+
+
+@dataclass
+class CompaniesDone:
+    companies: int = 0
+    departments: int = 0
+    linked: int = 0
+
+
+async def ensure_companies(db: AsyncSession, ws: str) -> CompaniesDone:
+    """P146 (the owner, 28 Nov 2026: "In the org chart I can set and sort by department, but in
+    Companies why not the same?"): every office company (branch) has a unit of kind "company"
+    and each of its departments a unit under it, so the Companies view edits the same tree.
+
+    Additive and idempotent: a company is found by a unit already standing for it (branch_id and
+    no department), else by an unlinked company unit with the same name (its empty link is
+    filled), else one is made (key office_co_<branch id>) under the seed's Group companies. A
+    department likewise (key office_dept_<department id>), under its company's unit; the seed's
+    own department links are filled first so PWVSB's departments keep their seeded units. Nothing
+    is renamed, moved or removed. The caller commits."""
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"org-structure:{ws}"}
+    )
+    out = CompaniesDone()
+    places = await _Places.load(db, ws)
+    if not places.branches:
+        return out
+    units = list((await db.scalars(select(OrgUnit).where(OrgUnit.workspace_id == ws))).all())
+    # The seed's empty links first (a department added since gets its seeded unit, not a new one).
+    for u in units:
+        if (u.branch_id is None or u.department_id is None) and _link(u, places):
+            out.linked += 1
+    by_key = {u.key: u for u in units}
+    parent = by_key.get("group_companies")
+    last = max((u.sort for u in units), default=0)
+    company_of: dict[str, OrgUnit] = {}
+    for u in sorted(units, key=lambda x: (x.kind != "company", x.sort, x.key)):
+        if u.branch_id and u.department_id is None:
+            company_of.setdefault(u.branch_id, u)
+    for b in places.branches:
+        if b.id in company_of:
+            continue
+        same = next(
+            (
+                u
+                for u in units
+                if u.kind == "company"
+                and u.branch_id is None
+                and u.department_id is None
+                and _plain(u.name) == _plain(b.name)
+                and u.key not in ("pwvsb_group", "group_companies")
+            ),
+            None,
+        )
+        if same is not None:
+            same.branch_id = b.id
+            company_of[b.id] = same
+            out.linked += 1
+            continue
+        key = f"office_co_{b.id}"[:80]
+        if key in by_key:  # its link was cleared by hand: leave it as it is
+            company_of[b.id] = by_key[key]
+            continue
+        last += 1
+        u = OrgUnit(
+            workspace_id=ws,
+            key=key,
+            name=b.name[:160],
+            parent_id=parent.id if parent else None,
+            kind="company",
+            branch_id=b.id,
+            sort=last,
+            custom=False,
+        )
+        db.add(u)
+        units.append(u)
+        by_key[key] = u
+        company_of[b.id] = u
+        out.companies += 1
+    await db.flush()
+    has_dept = {u.department_id for u in units if u.department_id}
+    for d in places.depts:
+        if d.id in has_dept or d.branch_id not in company_of:
+            continue
+        co = company_of[d.branch_id]
+        same = next(
+            (
+                u
+                for u in units
+                if u.parent_id == co.id
+                and u.department_id is None
+                and u.kind == "department"
+                and _plain(u.name) == _plain(d.name)
+            ),
+            None,
+        )
+        if same is not None:
+            same.department_id = d.id
+            same.branch_id = same.branch_id or d.branch_id
+            has_dept.add(d.id)
+            out.linked += 1
+            continue
+        key = f"office_dept_{d.id}"[:80]
+        if key in by_key:
+            continue
+        last += 1
+        u = OrgUnit(
+            workspace_id=ws,
+            key=key,
+            name=d.name[:160],
+            parent_id=co.id,
+            kind="department",
+            branch_id=d.branch_id,
+            department_id=d.id,
+            sort=last,
+            custom=False,
+        )
+        db.add(u)
+        units.append(u)
+        by_key[key] = u
+        has_dept.add(d.id)
+        out.departments += 1
+    await db.flush()
+    return out
+
+
 async def run_at_startup() -> None:
     """At the API's start: every workspace without a structure gets the seed. Never fails."""
     try:

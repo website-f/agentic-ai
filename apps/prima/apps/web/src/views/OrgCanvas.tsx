@@ -13,7 +13,9 @@ import {
   PencilSimpleIcon,
   PlusIcon,
   TrayIcon,
+  TreeStructureIcon,
   UserPlusIcon,
+  UsersIcon,
   XIcon,
 } from '@phosphor-icons/react';
 import type { api } from '../api';
@@ -21,7 +23,8 @@ import { Avatar } from '../kit';
 import { Chip, dateLabel } from '../ui';
 import '../styles/org-canvas.css';
 import { CompaniesTree } from './OrgCompanies';
-import { StructurePanels, StructureTree, useStructure, type PrimaBridge } from './OrgStructure';
+import { CompanyStructure, StructurePanels, StructureTree, useStructure, type PrimaBridge } from './OrgStructure';
+import { canvas, clearChartReturn, saveChart, takeChartReturn } from './org-memory';
 
 /**
  * P129 (Fitri, 24 Nov 2026: "the org chart in Prima, make it visually nice with a canvas, draggable, zoom in and out like
@@ -99,6 +102,7 @@ export function OrgCanvas({
   onUnit,
   onUnitEdit,
   onPerson,
+  onQuick,
   onBack,
   children,
 }: {
@@ -115,19 +119,24 @@ export function OrgCanvas({
   /** P141: add a department (null) or rename / take away one; open a person to change their role, place and access. */
   onUnitEdit?: (unit: Unit | null) => void;
   onPerson?: (p: Person) => void;
+  /** P146: a member's settings in a drawer over the chart (Quick edit), the chart staying as it is. */
+  onQuick?: (userId: string, name: string) => void;
   onBack: () => void;
   /** Drawers opened from the chart, drawn inside it so they sit above the canvas. */
   children?: ReactNode;
 }) {
   const view = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
-  const [t, setT] = useState({ s: 1, x: 0, y: 0 });
+  // P146: back from a member's page opened here, the chart is where it was (view, zoom and pan, open boxes, Unsorted).
+  const [memory] = useState(takeChartReturn);
+  const [t, setT] = useState(() => memory?.t ?? { s: 1, x: 0, y: 0 });
   const tRef = useRef(t);
   tRef.current = t;
   const [focus, setFocus] = useState<string | null>(null);
   const [q, setQ] = useState('');
   // P129: Prima's own structure (its departments and central companies, each with its head and deputy) or the lines.
   const [mode, setModeState] = useState<Mode>(() => {
+    if (memory) return memory.mode;
     try {
       const saved = localStorage.getItem('prima.org.mode');
       return saved === 'units' || saved === 'companies' ? saved : 'lines';
@@ -160,6 +169,7 @@ export function OrgCanvas({
 
   // Closed boxes: from the third level down, except the path to the signed-in person.
   const [closed, setClosed] = useState<Set<string>>(() => {
+    if (memory) return new Set(memory.closed);
     const open = new Set([c.meId, ...pathTo(c.meId)]);
     const s = new Set<string>();
     const walk = (id: string, depth: number) => {
@@ -187,7 +197,7 @@ export function OrgCanvas({
     st.closeAll();
   };
   // P145: the group's structure (units, roles, who holds them) for the Departments view, from the office.
-  const st = useStructure();
+  const st = useStructure(memory);
 
   // ---------- moving and zooming ----------
   const zoomAt = useCallback((factor: number, cx?: number, cy?: number) => {
@@ -241,8 +251,8 @@ export function OrgCanvas({
   useLayoutEffect(() => {
     if (started.current) return;
     started.current = true;
-    fitWidth();
-  }, [fitWidth]);
+    if (!memory) fitWidth();
+  }, [fitWidth, memory]);
 
   // The wheel zooms at the pointer (the page itself does not scroll under the canvas).
   useEffect(() => {
@@ -332,7 +342,7 @@ export function OrgCanvas({
   };
 
   const roots = kids.get('') ?? [];
-  const [openUnits, setOpenUnits] = useState<Set<string>>(new Set());
+  const [openUnits, setOpenUnits] = useState<Set<string>>(() => new Set(memory?.openUnits ?? []));
   const toggleUnit = (key: string) =>
     setOpenUnits((s) => {
       const n = new Set(s);
@@ -366,6 +376,31 @@ export function OrgCanvas({
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [picked]);
+  // P146: where the chart is, kept for this tab while it is shown (a member's page opened from it comes back here).
+  const snapshot = useRef<() => void>(() => undefined);
+  snapshot.current = () =>
+    saveChart({
+      mode,
+      t,
+      closed: [...closed],
+      openUnits: [...openUnits],
+      open: st.open ? [...st.open] : null,
+      unsorted: st.unsorted,
+      unsortedCompany: st.unsortedCompany,
+    });
+  useEffect(() => {
+    canvas.shown = true;
+    clearChartReturn();
+    return () => {
+      canvas.shown = false;
+      // Leaving (a member's page opened from here): exactly as it is now.
+      snapshot.current();
+    };
+  }, []);
+  useEffect(() => {
+    const id = setTimeout(() => snapshot.current(), 250);
+    return () => clearTimeout(id);
+  }, [mode, t, closed, openUnits, st.open, st.unsorted, st.unsortedCompany]);
   const ctx: Ctx = { c, kids, byId, unitName, closed, toggle, focus, canAddUnder, onMove, onAddUnder, openUnits, toggleUnit, dragId, setDragId, canDrop, place, dnd: !!onPlace, picked, pick: setPicked, onUnit: c.canNameHeads ? onUnit : undefined, onUnitEdit: c.canEditUnits ? onUnitEdit : undefined, onPerson };
   const bridge: PrimaBridge = {
     units: c.units,
@@ -377,6 +412,7 @@ export function OrgCanvas({
     renderUnit: (u) => <UnitNode u={u} ctx={ctx} />,
     renderTeam: (people) => <TeamBox people={people} ctx={ctx} />,
     membersOf: (u) => membersOf(u, c.people),
+    onQuick,
   };
   const unsortedCount = st.model?.unsorted.length ?? 0;
   return (
@@ -454,8 +490,28 @@ export function OrgCanvas({
             <ArrowsInIcon size={16} aria-hidden="true" />
             <span className="hide-sm">Close all</span>
           </button>
-          {mode === 'units' && st.model?.s.can_edit && (
-            <button type="button" className="btn btn-sm oc-unsorted-btn" aria-pressed={st.unsorted} data-some={unsortedCount > 0 || undefined} onClick={() => st.setUnsorted(!st.unsorted)} title="People with no role yet: sort them">
+          {mode !== 'lines' && st.model && (
+            // P146: every unit by its roles or by its people (each unit can still switch on its own).
+            <span className="seg oc-layout-all" role="group" aria-label="Units shown">
+              <button type="button" aria-pressed={st.layout.all === 'role' && !Object.values(st.layout.units).includes('people')} onClick={() => st.setLayout(null, 'role')} title="Every unit by its roles">
+                <TreeStructureIcon size={15} aria-hidden="true" />
+                <span className="hide-sm">By role</span>
+              </button>
+              <button type="button" aria-pressed={st.layout.all === 'people' && !Object.values(st.layout.units).includes('role')} onClick={() => st.setLayout(null, 'people')} title="Every unit by its people: who reports to whom, pairs side by side">
+                <UsersIcon size={15} aria-hidden="true" />
+                <span className="hide-sm">By people</span>
+              </button>
+            </span>
+          )}
+          {mode !== 'lines' && st.model?.s.can_edit && (
+            <button
+              type="button"
+              className="btn btn-sm oc-unsorted-btn"
+              aria-pressed={st.unsorted}
+              data-some={unsortedCount > 0 || undefined}
+              onClick={() => (st.unsorted ? st.setUnsorted(false) : st.openUnsorted(''))}
+              title="People with no role yet: sort them"
+            >
               <TrayIcon size={16} aria-hidden="true" />
               <span>Unsorted</span> <span className="num">({unsortedCount})</span>
             </button>
@@ -496,7 +552,14 @@ export function OrgCanvas({
       >
         <div className="oc-inner" ref={inner} style={{ transform: `translate(${t.x}px, ${t.y}px) scale(${t.s})` }}>
           {mode === 'companies' ? (
-            <CompaniesTree />
+            // P146: the companies as the same structure editor as Departments (the office's list if it cannot be read).
+            st.model ? (
+              <CompanyStructure st={st} prima={bridge} />
+            ) : st.load.error ? (
+              <CompaniesTree />
+            ) : (
+              <p className="muted">Loading the structure…</p>
+            )
           ) : mode === 'units' ? (
             st.model ? (
               <StructureTree st={st} prima={bridge} />
@@ -541,7 +604,7 @@ export function OrgCanvas({
           )}
         </div>
       </div>
-      {mode === 'units' && <StructurePanels st={st} prima={bridge} />}
+      {mode !== 'lines' && <StructurePanels st={st} prima={bridge} />}
       {children}
     </div>
   );

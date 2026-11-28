@@ -64,6 +64,8 @@ function Screen({ c }: { c: Chart }) {
   // P141: add (null) or rename a department; a person opened from the chart.
   const [unitForm, setUnitForm] = useState<{ unit: Unit | null } | null>(null);
   const [opened, setOpened] = useState<Person | null>(null);
+  // P146: a member's settings over the chart (Quick edit from the structure), the chart staying where it is.
+  const [quick, setQuick] = useState<{ userId: string; name: string } | null>(null);
   // P129 (Fitri, 24 Nov 2026): the chart opens as a full-page canvas; Back shows the details (tables, units, notices).
   const [tab, setTab] = useRouteTab<'chart' | 'details'>('chart', ['chart', 'details']);
   const table = useTableState('org.people');
@@ -113,6 +115,7 @@ function Screen({ c }: { c: Chart }) {
         </Drawer>
       )}
       {opened && <PersonPanel c={c} p={opened} onClose={() => setOpened(null)} />}
+      {quick && <OfficeAccount userId={quick.userId} name={quick.name} onClose={() => setQuick(null)} />}
       {naming && (
         <Drawer title="Name head" sub={naming.label} onClose={() => setNaming(null)}>
           <HeadForm c={c} unit={naming} onDone={() => setNaming(null)} />
@@ -123,7 +126,7 @@ function Screen({ c }: { c: Chart }) {
   if (tab === 'chart')
     return (
       <div className="page org">
-        <OrgCanvas c={c} byId={byId} kids={children} unitName={unitName} onMove={setMoving} onAddUnder={setAdding} onPlace={(who, boss) => setPlacing({ who, boss })} onUnit={(unit, who) => setUnitEdit({ unit, who })} onUnitEdit={(unit) => setUnitForm({ unit })} onPerson={setOpened} onBack={() => setTab('details')}>
+        <OrgCanvas c={c} byId={byId} kids={children} unitName={unitName} onMove={setMoving} onAddUnder={setAdding} onPlace={(who, boss) => setPlacing({ who, boss })} onUnit={(unit, who) => setUnitEdit({ unit, who })} onUnitEdit={(unit) => setUnitForm({ unit })} onPerson={setOpened} onQuick={(userId, name) => setQuick({ userId, name })} onBack={() => setTab('details')}>
           {drawers}
         </OrgCanvas>
       </div>
@@ -629,6 +632,7 @@ function PersonPanel({ c, p, onClose }: { c: Chart; p: Person; onClose: () => vo
 
 /** The office's own member settings for this person, drawn here (the same screen as Members and roles). */
 function OfficeAccount({ userId, name, onClose }: { userId: string; name: string; onClose: () => void }) {
+  const { go } = useApp();
   const data = useLoad(async () => {
     const [me, members, companies] = await Promise.all([office.me(), office.members(), office.companies()]);
     return { me, members, companies };
@@ -653,7 +657,7 @@ function OfficeAccount({ userId, name, onClose }: { userId: string; name: string
       {emailing ? (
         <EmailSignin member={member} onClose={() => setEmailing(false)} />
       ) : (
-        <MemberDrawer member={member} members={data.data.members} companies={companies} onClose={onClose} onEmail={() => setEmailing(true)} />
+        <MemberDrawer member={member} members={data.data.members} companies={companies} onClose={onClose} onEmail={() => setEmailing(true)} onProfile={() => openMember(go, userId)} />
       )}
     </PowersCtx.Provider>
   );

@@ -1,29 +1,38 @@
 import { useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
 import {
   ArrowUpIcon,
+  BuildingsIcon,
   CaretDownIcon,
   CaretRightIcon,
   CheckIcon,
+  HandshakeIcon,
   MagnifyingGlassIcon,
+  NotePencilIcon,
   PencilSimpleIcon,
   PlusIcon,
   SparkleIcon,
   TrashIcon,
+  TrayIcon,
   TreeStructureIcon,
   UserCircleIcon,
   UserMinusIcon,
+  UserPlusIcon,
+  UsersIcon,
   UsersThreeIcon,
   XIcon,
 } from '@phosphor-icons/react';
 import type { api } from '../api';
 import { useApp } from '../App';
-import { structure, type OrgUnitRow, type PositionRow, type Structure, type StructureMember, type UnitKind } from '../api/structure';
+import { office, officeFetch } from '../api/office';
+import { structure, type OrgUnitRow, type PositionRow, type Structure, type StructureMember, type UnitKind, type WorkGroup } from '../api/structure';
 import { useLang } from '../i18n';
 import { Avatar } from '../kit';
 import { Select } from '../SearchSelect';
 import { Chip, Drawer, ErrorNotice, useAction, useLoad } from '../ui';
+import { CompaniesTree } from './OrgCompanies';
 import { openMember } from './office/member-route';
 import { ROLES, roleLabel } from './office/shared';
+import type { ChartMemory } from './org-memory';
 
 /** Opens a member's own page (P145b) from the chart. */
 function ProfileButton({ userId, name }: { userId: string; name: string }) {
@@ -32,6 +41,17 @@ function ProfileButton({ userId, name }: { userId: string; name: string }) {
     <button type="button" className="btn btn-sm btn-ghost oc-profile" title={`Open profile: ${name}`} aria-label={`Open profile: ${name}`} onClick={() => openMember(go, userId)}>
       <UserCircleIcon size={14} aria-hidden="true" />
       <span className="hide-sm">Open profile</span>
+    </button>
+  );
+}
+
+/** P146: a member's settings in a drawer over the chart (the chart stays as it is), with Open full profile there. */
+function QuickButton({ userId, name, prima }: { userId: string; name: string; prima: PrimaBridge }) {
+  if (!prima.onQuick) return null;
+  return (
+    <button type="button" className="btn btn-sm btn-ghost oc-profile" title={`Quick edit: ${name}`} aria-label={`Quick edit: ${name}`} onClick={() => prima.onQuick?.(userId, name)}>
+      <NotePencilIcon size={14} aria-hidden="true" />
+      <span className="hide-sm">Quick edit</span>
     </button>
   );
 }
@@ -54,13 +74,19 @@ type Chart = Awaited<ReturnType<typeof api.orgChart>>;
 type Person = Chart['people'][number];
 type PrimaUnit = Chart['units'][number];
 
-export type Drag = { kind: 'member'; userId: string } | { kind: 'position'; id: string } | null;
+export type Drag = { kind: 'member'; userId: string } | { kind: 'position'; id: string } | { kind: 'group'; id: string } | null;
 
 type Panel =
   | { kind: 'unit'; unit: OrgUnitRow | null; parent: OrgUnitRow | null }
   | { kind: 'add'; unit: OrgUnitRow }
   | { kind: 'position'; pos: PositionRow | null; unit: OrgUnitRow; reportsTo: PositionRow | null }
-  | { kind: 'holders'; pos: PositionRow };
+  | { kind: 'holders'; pos: PositionRow }
+  // P146: put people in a unit; one person or one work group of the "By people" layout; the office's company tools.
+  | { kind: 'people'; unit: OrgUnitRow }
+  | { kind: 'person'; userId: string; unit: OrgUnitRow }
+  | { kind: 'group'; group: WorkGroup; unit: OrgUnitRow }
+  | { kind: 'company' }
+  | { kind: 'officeDept'; unit: OrgUnitRow };
 
 /** What the chart (Prima's own data and boxes) lends the structure view. */
 export interface PrimaBridge {
@@ -75,6 +101,8 @@ export interface PrimaBridge {
   renderUnit: (u: PrimaUnit) => ReactNode;
   renderTeam: (people: Person[]) => ReactNode;
   membersOf: (u: PrimaUnit) => Person[];
+  /** P146: a member's settings in a drawer over the chart. */
+  onQuick?: (userId: string, name: string) => void;
 }
 
 // ---------------------------------------------------------------- the model
@@ -93,6 +121,10 @@ interface Model {
   byPrima: Map<string, StructureMember>;
   people: Map<string, number>;
   placeName: Map<string, string>;
+  /** P146: work groups, the people holding a role in each unit (not its sub-units), one unit per office company. */
+  groups: WorkGroup[];
+  unitPeople: Map<string, StructureMember[]>;
+  companies: OrgUnitRow[];
 }
 
 const push = <T,>(m: Map<string, T[]>, k: string, v: T) => m.set(k, [...(m.get(k) ?? []), v]);
@@ -130,6 +162,20 @@ function buildModel(s: Structure): Model {
     if (m.branch_id && m.branch_name) placeName.set(m.branch_id, m.branch_name);
     if (m.department_id && m.department_name) placeName.set(m.department_id, m.department_name);
   }
+  const unitPeople = new Map<string, StructureMember[]>();
+  for (const [pid, list] of holders) {
+    const p = pos.get(pid);
+    if (p) for (const h of list) push(unitPeople, p.unit_id, h);
+  }
+  // P146: the unit standing for each office company (a company unit first, as the office made them).
+  const companies: OrgUnitRow[] = [];
+  const seenBranch = new Set<string>();
+  for (const u of [...s.units].sort((a, b) => Number(a.kind !== 'company') - Number(b.kind !== 'company') || a.sort - b.sort)) {
+    if (!u.branch_id || u.department_id || seenBranch.has(u.branch_id)) continue;
+    seenBranch.add(u.branch_id);
+    companies.push(u);
+  }
+  companies.sort((a, b) => a.name.localeCompare(b.name));
   return {
     s,
     unit,
@@ -144,17 +190,53 @@ function buildModel(s: Structure): Model {
     byPrima: new Map(s.members.filter((m) => m.prima_id).map((m) => [m.prima_id as string, m])),
     people,
     placeName,
+    groups: s.groups ?? [],
+    unitPeople,
+    companies,
   };
 }
 
-export function useStructure() {
+/** P146: each unit shown by its roles (default) or by its people (who reports to whom, pairs and teams side by side). */
+export type Layout = 'role' | 'people';
+const LAYOUT_KEY = 'prima.org.layout';
+
+function readLayout(): { all: Layout; units: Record<string, Layout> } {
+  try {
+    const v = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? 'null') as { all?: unknown; units?: unknown } | null;
+    if (v && (v.all === 'role' || v.all === 'people')) return { all: v.all, units: v.units && typeof v.units === 'object' ? (v.units as Record<string, Layout>) : {} };
+  } catch {
+    /* this browser only */
+  }
+  return { all: 'role', units: {} };
+}
+
+export function useStructure(memory?: ChartMemory | null) {
   const load = useLoad(() => structure.get(), []);
   const model = useMemo(() => (load.data ? buildModel(load.data) : null), [load.data]);
-  // Open units (null: only the top of the tree).
-  const [open, setOpen] = useState<Set<string> | null>(null);
+  // Open units (null: only the top of the tree). P146: as they were when the chart comes back from a member's page.
+  const [open, setOpen] = useState<Set<string> | null>(() => (memory?.open ? new Set(memory.open) : null));
   const [panel, setPanel] = useState<Panel | null>(null);
-  const [unsorted, setUnsorted] = useState(false);
+  const [unsorted, setUnsorted] = useState(!!memory?.unsorted);
+  // P146: the company the Unsorted panel shows ('' all, '-' none).
+  const [unsortedCompany, setUnsortedCompany] = useState(memory?.unsortedCompany ?? '');
+  const openUnsorted = (company: string) => {
+    setUnsortedCompany(company);
+    setUnsorted(true);
+  };
   const [drag, setDrag] = useState<Drag>(null);
+  const [layout, setLayoutState] = useState(readLayout);
+  const layoutOf = (unitId: string): Layout => layout.units[unitId] ?? layout.all;
+  /** One unit (or every unit, null) by role or by people; remembered in this browser. */
+  const setLayout = (unitId: string | null, v: Layout) =>
+    setLayoutState((o) => {
+      const n = unitId === null ? { all: v, units: {} } : { all: o.all, units: { ...o.units, [unitId]: v } };
+      try {
+        localStorage.setItem(LAYOUT_KEY, JSON.stringify(n));
+      } catch {
+        /* this browser only */
+      }
+      return n;
+    });
   const isOpen = (id: string, depth: number) => (open === null ? depth === 0 : open.has(id));
   const toggle = (id: string, depth: number) =>
     setOpen((o) => {
@@ -165,7 +247,7 @@ export function useStructure() {
     });
   const openAll = () => setOpen(new Set(model?.s.units.map((u) => u.id) ?? []));
   const closeAll = () => setOpen(new Set());
-  return { load, model, isOpen, toggle, openAll, closeAll, setOpen, panel, setPanel, unsorted, setUnsorted, drag, setDrag };
+  return { load, model, open, isOpen, toggle, openAll, closeAll, setOpen, panel, setPanel, unsorted, setUnsorted, unsortedCompany, setUnsortedCompany, openUnsorted, drag, setDrag, layout, layoutOf, setLayout };
 }
 export type StructureState = ReturnType<typeof useStructure>;
 
@@ -294,9 +376,27 @@ type X = {
   place: (userId: string, positionId: string) => void;
   reportTo: (positionId: string, bossId: string) => void;
   busy: boolean;
+  // P146: people inside a unit (the "By people" layout).
+  personReportsTo: (userId: string, bossId: string | null) => void;
+  pair: (unitId: string, userId: string, withId: string) => void;
+  joinGroup: (g: WorkGroup, userId: string) => void;
+  leaveGroup: (g: WorkGroup, userId: string) => void;
+  groupLead: (g: WorkGroup, userId: string | null) => void;
 };
 
-export function StructureTree({ st, prima }: { st: StructureState; prima: PrimaBridge }) {
+/** Whether `boss` is `userId` or reports (through anyone) to them: `userId` may not report to `boss` then. */
+function personUnder(userId: string, boss: string, m: Model): boolean {
+  for (let at: string | null | undefined = boss, n = 0; at && n < 60; at = m.byUser.get(at)?.reports_to_user_id, n++) if (at === userId) return true;
+  return false;
+}
+
+/** The work group of this unit that a member is in, if any. */
+function groupIn(unitId: string, userId: string, m: Model): WorkGroup | undefined {
+  return m.groups.find((g) => g.unit_id === unitId && g.member_ids.includes(userId));
+}
+
+/** P146: what the tree's boxes do (Departments and Companies views alike). */
+function useTreeX(st: StructureState, prima: PrimaBridge) {
   const m = st.model!;
   const names = useNames();
   const act = useAction();
@@ -319,7 +419,40 @@ export function StructureTree({ st, prima }: { st: StructureState; prima: PrimaB
       if (rolesUnder(positionId, m).has(bossId)) return;
       void act.run(() => structure.updatePosition(positionId, { reports_to_id: bossId }), 'Reporting line saved.');
     },
+    personReportsTo: (userId, bossId) => {
+      const who = m.byUser.get(userId);
+      if (!who || (who.reports_to_user_id ?? null) === bossId || (bossId && personUnder(userId, bossId, m))) return;
+      void act.run(() => structure.setReportsTo(userId, bossId), 'Reporting line saved.');
+    },
+    pair: (unitId, userId, withId) => {
+      if (userId === withId) return;
+      const g = groupIn(unitId, withId, m);
+      if (g?.member_ids.includes(userId)) return;
+      if (g) void act.run(() => structure.updateGroup(g.id, { member_ids: [...g.member_ids, userId], move: true }), 'Paired.');
+      else void act.run(() => structure.addGroup({ unit_id: unitId, member_ids: [withId, userId], move: true }), 'Paired.');
+    },
+    joinGroup: (g, userId) => {
+      if (g.member_ids.includes(userId) || g.lead_user_id === userId) return;
+      void act.run(() => structure.updateGroup(g.id, { member_ids: [...g.member_ids, userId], move: true }), 'Paired.');
+    },
+    leaveGroup: (g, userId) => {
+      const rest = g.member_ids.filter((i) => i !== userId);
+      if (rest.length === g.member_ids.length) return;
+      // A group of one is kept only when it works with someone (a manager and the one person they work with).
+      if (!rest.length || (rest.length === 1 && !g.lead_user_id)) void act.run(() => structure.removeGroup(g.id).then(() => null), 'Unpaired.');
+      else void act.run(() => structure.updateGroup(g.id, { member_ids: rest }), 'Unpaired.');
+    },
+    groupLead: (g, userId) => {
+      if (g.lead_user_id === userId || (userId && g.member_ids.includes(userId))) return;
+      void act.run(() => structure.updateGroup(g.id, { lead_user_id: userId }), 'Reporting line saved.');
+    },
   };
+  return { x, act, rest };
+}
+
+export function StructureTree({ st, prima }: { st: StructureState; prima: PrimaBridge }) {
+  const m = st.model!;
+  const { x, act, rest } = useTreeX(st, prima);
   const roots = m.subUnits.get('') ?? [];
   return (
     <div className="oc-struct">
@@ -361,10 +494,11 @@ export function StructureTree({ st, prima }: { st: StructureState; prima: PrimaB
   );
 }
 
-function UnitTree({ u, depth, x }: { u: OrgUnitRow; depth: number; x: X }) {
+function UnitTree({ u, depth, x, company, extra }: { u: OrgUnitRow; depth: number; x: X; /** P146: the Companies view: this office company. */ company?: string; /** Its departments kept elsewhere in the tree. */ extra?: OrgUnitRow[] }) {
   const open = x.st.isOpen(u.id, depth);
-  const subs = x.m.subUnits.get(u.id) ?? [];
+  const subs = [...(x.m.subUnits.get(u.id) ?? []), ...(extra ?? [])];
   const roles = x.m.rootRoles.get(u.id) ?? [];
+  const byPeople = x.st.layoutOf(u.id) === 'people';
   const pu = x.primaOf.get(u.id) ?? [];
   const staff = useMemo(() => {
     const seen = new Map<string, Person>();
@@ -374,13 +508,14 @@ function UnitTree({ u, depth, x }: { u: OrgUnitRow; depth: number; x: X }) {
   const [team, setTeam] = useState(false);
   return (
     <div className="oc-node">
-      <UnitBox u={u} depth={depth} x={x} open={open} pu={pu} staff={staff} team={team} onTeam={() => setTeam((t) => !t)} />
-      {open && (roles.length > 0 || x.edit) && (
+      <UnitBox u={u} depth={depth} x={x} open={open} pu={pu} staff={staff} team={team} onTeam={() => setTeam((t) => !t)} company={company} extra={extra?.length ?? 0} />
+      {open && (roles.length > 0 || x.edit || (x.m.unitPeople.get(u.id)?.length ?? 0) > 0) && (
         <>
           <span className="oc-stem" aria-hidden="true" />
-          <RolesCard u={u} roles={roles} x={x} />
+          {byPeople ? <PeopleCard u={u} x={x} /> : <RolesCard u={u} roles={roles} x={x} />}
         </>
       )}
+      {open && company && <AwayRolesCard top={u} extra={extra ?? []} company={company} x={x} />}
       {open && team && staff.length > 0 && (
         <>
           <span className="oc-stem" aria-hidden="true" />
@@ -403,11 +538,14 @@ function UnitTree({ u, depth, x }: { u: OrgUnitRow; depth: number; x: X }) {
   );
 }
 
-function UnitBox({ u, depth, x, open, pu, staff, team, onTeam }: { u: OrgUnitRow; depth: number; x: X; open: boolean; pu: PrimaUnit[]; staff: Person[]; team: boolean; onTeam: () => void }) {
+function UnitBox({ u, depth, x, open, pu, staff, team, onTeam, company, extra = 0 }: { u: OrgUnitRow; depth: number; x: X; open: boolean; pu: PrimaUnit[]; staff: Person[]; team: boolean; onTeam: () => void; company?: string; extra?: number }) {
   const [over, setOver] = useState(false);
   const roles = x.m.s.positions.filter((p) => p.unit_id === u.id).length;
-  const subs = (x.m.subUnits.get(u.id) ?? []).length;
-  const people = x.m.people.get(u.id) ?? 0;
+  const subs = (x.m.subUnits.get(u.id) ?? []).length + extra;
+  // P146: in the Companies view, everyone whose company it is (by their office company), and those with no role yet.
+  const coPeople = company ? x.m.s.members.filter((p) => p.branch_id === company) : null;
+  const people = coPeople ? coPeople.length : (x.m.people.get(u.id) ?? 0);
+  const coUnsorted = coPeople ? coPeople.filter((p) => !p.position_id || !x.m.pos.has(p.position_id)).length : 0;
   const where = [u.branch_id, u.department_id].map((id) => (id ? x.m.placeName.get(id) : undefined)).filter(Boolean) as string[];
   const primaDrop = !!x.prima.onUnit && pu.length > 0;
   return (
@@ -452,6 +590,12 @@ function UnitBox({ u, depth, x, open, pu, staff, team, onTeam }: { u: OrgUnitRow
             </span>
             {u.custom && <span className="oc-how">Added here</span>}
           </span>
+          {company && x.edit && coUnsorted > 0 && (
+            <button type="button" className="oc-sunit-team oc-co-unsorted" onClick={() => x.st.openUnsorted(company)} title="People of this company with no role yet: sort them">
+              <TrayIcon size={13} aria-hidden="true" />
+              <span>Unsorted</span> <span className="num">{coUnsorted}</span>
+            </button>
+          )}
           {where.length > 0 && (
             <span className="oc-heads" title={where.join(' · ')}>
               {where.join(' · ')}
@@ -508,6 +652,7 @@ function RolesCard({ u, roles, x }: { u: OrgUnitRow; roles: PositionRow[]; x: X 
       <div className="oc-roles-head">
         <TreeStructureIcon size={13} aria-hidden="true" />
         <span>Roles</span>
+        <LayoutSwitch u={u} x={x} />
         {x.edit && (
           <button type="button" className="oc-roles-add" onClick={() => x.st.setPanel({ kind: 'position', pos: null, unit: u, reportsTo: null })}>
             <PlusIcon size={12} weight="bold" aria-hidden="true" />
@@ -528,11 +673,12 @@ function RolesCard({ u, roles, x }: { u: OrgUnitRow; roles: PositionRow[]; x: X 
   );
 }
 
-function RoleItem({ p, x }: { p: PositionRow; x: X }) {
-  const kids = x.m.subRoles.get(p.id) ?? [];
-  const holders = x.m.holders.get(p.id) ?? [];
+function RoleItem({ p, x, flat, only }: { p: PositionRow; x: X; /** P146: no sub-roles, and the unit's name (a group unit's role in a company). */ flat?: boolean; /** Only these holders (a company's own). */ only?: (h: StructureMember) => boolean }) {
+  const kids = flat ? [] : (x.m.subRoles.get(p.id) ?? []);
+  const holders = (x.m.holders.get(p.id) ?? []).filter((h) => !only || only(h));
   const boss = p.reports_to_id ? x.m.pos.get(p.reports_to_id) : undefined;
-  const away = boss && boss.unit_id !== p.unit_id ? boss : undefined;
+  const away = flat ? undefined : boss && boss.unit_id !== p.unit_id ? boss : undefined;
+  const inUnit = flat ? x.m.unit.get(p.unit_id) : undefined;
   const [over, setOver] = useState(false);
   const d = x.st.drag;
   const takes = (): boolean => {
@@ -595,6 +741,12 @@ function RoleItem({ p, x }: { p: PositionRow; x: X }) {
             <span className="oc-pos-up" title="Reports to">
               <ArrowUpIcon size={11} aria-hidden="true" />
               {x.names.role(away)}
+            </span>
+          )}
+          {inUnit && (
+            <span className="oc-pos-up" title="Unit">
+              <TreeStructureIcon size={11} aria-hidden="true" />
+              {x.names.unit(inUnit)}
             </span>
           )}
         </button>
@@ -662,24 +814,59 @@ export function StructurePanels({ st, prima }: { st: StructureState; prima: Prim
   const pu = pnl?.kind === 'add' ? matchPrima(prima.units, m).byUnit.get(pnl.unit.id) ?? [] : [];
   return (
     <>
-      {st.unsorted && <UnsortedPanel st={st} m={m} onClose={() => st.setUnsorted(false)} />}
+      {st.unsorted && <UnsortedPanel st={st} m={m} prima={prima} onClose={() => st.setUnsorted(false)} />}
       {pnl?.kind === 'unit' && (
-        <Drawer title={pnl.unit ? 'Edit unit' : 'Add a sub-unit'} sub={pnl.unit?.name ?? pnl.parent?.name} onClose={close}>
+        <Drawer title={pnl.unit ? 'Edit unit' : 'Add a sub-department'} sub={pnl.unit?.name ?? pnl.parent?.name} onClose={close}>
           <UnitForm m={m} unit={pnl.unit} parent={pnl.parent} onDone={close} />
         </Drawer>
       )}
+      {pnl?.kind === 'people' && (
+        <Drawer title="Add people" sub={pnl.unit.name} onClose={close}>
+          <AddPeopleForm m={m} unit={pnl.unit} onDone={close} />
+        </Drawer>
+      )}
+      {pnl?.kind === 'person' && m.byUser.get(pnl.userId) && (
+        <Drawer title={m.byUser.get(pnl.userId)!.name} sub={pnl.unit.name} onClose={close}>
+          <PersonForm st={st} m={m} prima={prima} userId={pnl.userId} unit={pnl.unit} onClose={close} />
+        </Drawer>
+      )}
+      {pnl?.kind === 'group' && (
+        <Drawer title={pnl.group.name || (pnl.group.member_ids.length === 2 ? 'Pair' : 'Team')} sub={pnl.unit.name} onClose={close}>
+          <GroupForm m={m} group={m.groups.find((g) => g.id === pnl.group.id) ?? pnl.group} onDone={close} />
+        </Drawer>
+      )}
+      {pnl?.kind === 'company' && (
+        <Drawer title="Add a company" sub="A company of the office; its unit appears here" onClose={close}>
+          <OfficeNameForm what="company" onDone={close} />
+        </Drawer>
+      )}
+      {pnl?.kind === 'officeDept' && pnl.unit.branch_id && (
+        <Drawer title="Add an office department" sub={pnl.unit.name} onClose={close}>
+          <OfficeNameForm what="department" branchId={pnl.unit.branch_id} onDone={close} />
+        </Drawer>
+      )}
       {pnl?.kind === 'add' && (
-        <Drawer title={pnl.unit.name} sub="Add a role or a sub-unit" onClose={close}>
+        <Drawer title={pnl.unit.name} sub="Add a sub-department, a role or people" onClose={close}>
           <div className="org-form">
             <div className="oc-choices">
-              <button type="button" className="btn btn-primary" onClick={() => st.setPanel({ kind: 'position', pos: null, unit: pnl.unit, reportsTo: null })}>
+              <button type="button" className="btn btn-primary" onClick={() => st.setPanel({ kind: 'unit', unit: null, parent: pnl.unit })}>
+                <PlusIcon size={14} aria-hidden="true" />
+                Add a sub-department
+              </button>
+              <button type="button" className="btn" onClick={() => st.setPanel({ kind: 'position', pos: null, unit: pnl.unit, reportsTo: null })}>
                 <PlusIcon size={14} aria-hidden="true" />
                 Add a role
               </button>
-              <button type="button" className="btn" onClick={() => st.setPanel({ kind: 'unit', unit: null, parent: pnl.unit })}>
-                <PlusIcon size={14} aria-hidden="true" />
-                Add a sub-unit
+              <button type="button" className="btn" onClick={() => st.setPanel({ kind: 'people', unit: pnl.unit })}>
+                <UserPlusIcon size={14} aria-hidden="true" />
+                Add people
               </button>
+              {pnl.unit.branch_id && !pnl.unit.department_id && (
+                <button type="button" className="btn btn-ghost" onClick={() => st.setPanel({ kind: 'officeDept', unit: pnl.unit })}>
+                  <BuildingsIcon size={14} aria-hidden="true" />
+                  Add an office department
+                </button>
+              )}
               {pu.map((p) => (
                 <span key={p.key} className="oc-choices-prima">
                   {prima.onUnit && (
@@ -705,7 +892,7 @@ export function StructurePanels({ st, prima }: { st: StructureState; prima: Prim
       )}
       {pnl?.kind === 'holders' && (
         <Drawer title={pnl.pos.title} sub={m.unit.get(pnl.pos.unit_id)?.name} onClose={close}>
-          <HoldersForm st={st} m={m} pos={m.pos.get(pnl.pos.id) ?? pnl.pos} onClose={close} />
+          <HoldersForm st={st} m={m} prima={prima} pos={m.pos.get(pnl.pos.id) ?? pnl.pos} onClose={close} />
         </Drawer>
       )}
     </>
@@ -755,16 +942,30 @@ function UnitForm({ m, unit, parent, onDone }: { m: Model; unit: OrgUnitRow | nu
   const act = useAction();
   const [name, setName] = useState(unit?.name ?? '');
   const [nameMs, setNameMs] = useState(unit?.name_ms ?? '');
-  const [kind, setKind] = useState<UnitKind>(unit?.kind ?? (parent?.kind === 'company' ? 'department' : 'unit'));
+  // P146: under a department or a company, a department (a sub-department).
+  const [kind, setKind] = useState<UnitKind>(unit?.kind ?? (parent?.kind === 'company' || parent?.kind === 'department' ? 'department' : 'unit'));
   const [parentId, setParentId] = useState(unit ? (unit.parent_id ?? '') : (parent?.id ?? ''));
   const [removing, setRemoving] = useState(false);
+  // P146: the office company above (its departments may be linked), and renaming the office's own company or department.
+  const branchId = unit?.branch_id ?? (parentId ? chainOf(parentId, m).find((u) => u.branch_id)?.branch_id : null) ?? null;
+  const isCompany = !!unit?.branch_id && !unit.department_id;
+  const [deptId, setDeptId] = useState(unit?.department_id ?? '');
+  const [alsoOffice, setAlsoOffice] = useState(true);
+  const companies = useLoad(() => (branchId && !isCompany ? office.companies() : Promise.resolve([])), [branchId, isCompany]);
+  const depts = (companies.data ?? []).find((c) => c.id === branchId)?.departments ?? [];
   const clean = name.replace(/\s+/g, ' ').trim();
   const leave = unit ? unitsUnder(unit.id, m) : undefined;
   const empty = unit ? !(m.subUnits.get(unit.id) ?? []).length && !m.s.positions.some((p) => p.unit_id === unit.id) : false;
+  const renamed = !!unit && clean !== unit.name;
   const save = async () => {
-    const body = { name: clean, name_ms: nameMs.trim() || null, kind, parent_id: parentId || null };
+    const link = isCompany ? {} : { department_id: deptId || null, ...(deptId && branchId ? { branch_id: branchId } : {}) };
+    const body = { name: clean, name_ms: nameMs.trim() || null, kind, parent_id: parentId || null, ...link };
     if (unit) await structure.updateUnit(unit.id, body);
     else await structure.addUnit(body);
+    if (unit && renamed && alsoOffice) {
+      if (isCompany && unit.branch_id) await office.updateCompany(unit.branch_id, { name: clean.slice(0, 120) });
+      else if (unit.department_id && unit.department_id === (deptId || null)) await office.renameDepartment(unit.department_id, clean.slice(0, 120));
+    }
     return null;
   };
   return (
@@ -795,6 +996,25 @@ function UnitForm({ m, unit, parent, onDone }: { m: Model; unit: OrgUnitRow | nu
           {unitOptions(m, leave)}
         </Select>
       </label>
+      {branchId && !isCompany && (
+        <label className="field">
+          <span>Stands for an office department (optional)</span>
+          <Select className="input" value={deptId} onChange={(e) => setDeptId(e.target.value)} searchable>
+            <option value="">None: only in the chart</option>
+            {depts.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+      )}
+      {renamed && (isCompany || !!unit?.department_id) && (
+        <label className="oc-check">
+          <input type="checkbox" checked={alsoOffice} onChange={(e) => setAlsoOffice(e.target.checked)} />
+          <span>{isCompany ? 'Also rename the office company' : 'Also rename the office department'}</span>
+        </label>
+      )}
       <div className="org-form-actions">
         <button className="btn btn-primary" disabled={act.busy || clean.length < 1} onClick={() => act.run(save, unit ? 'Unit saved.' : 'Unit added.').then((r) => r !== undefined && onDone())}>
           {unit ? 'Save' : 'Add the unit'}
@@ -824,12 +1044,27 @@ function PositionForm({ m, pos, unit, reportsTo, onDone }: { m: Model; pos: Posi
   const [title, setTitle] = useState(pos?.title ?? '');
   const [titleMs, setTitleMs] = useState(pos?.title_ms ?? '');
   const [unitId, setUnitId] = useState(pos?.unit_id ?? unit.id);
-  const firstBoss = pos ? (pos.reports_to_id ?? '') : (reportsTo?.id ?? (m.rootRoles.get(unit.id) ?? [])[0]?.id ?? '');
+  const firstBoss = pos ? (pos.reports_to_id ?? '') : (reportsTo?.id ?? topRoleFor(unit.id, m) ?? '');
   const [boss, setBoss] = useState(firstBoss);
   const [role, setRole] = useState(pos?.default_role ?? (pos ? '' : 'staff'));
   const [headcount, setHeadcount] = useState(pos?.headcount != null ? String(pos.headcount) : '');
   const [duties, setDuties] = useState(pos?.duties ?? '');
   const [removing, setRemoving] = useState(false);
+  // P146 (owner, 28 Nov 2026: "When I click add role I have no role selection"): a new role starts from the roles
+  // already defined anywhere; picking one copies its titles, office role, duties and other names.
+  const [picking, setPicking] = useState(!pos && m.s.positions.length > 0);
+  const [from, setFrom] = useState<RoleTitle | null>(null);
+  const [aliases, setAliases] = useState<string[]>([]);
+  const pick = (t: RoleTitle) => {
+    setFrom(t);
+    setTitle(t.title);
+    setTitleMs(t.title_ms ?? '');
+    setRole(t.default_role ?? '');
+    setDuties(t.duties ?? '');
+    setAliases(t.aliases);
+    setBoss(reportsTo?.id ?? bossFor(t, unitId, m) ?? firstBoss);
+    setPicking(false);
+  };
   const holders = pos ? (m.holders.get(pos.id) ?? []) : [];
   const clean = title.replace(/\s+/g, ' ').trim();
   const hc = headcount.trim() === '' ? null : Number(headcount);
@@ -846,13 +1081,29 @@ function PositionForm({ m, pos, unit, reportsTo, onDone }: { m: Model; pos: Posi
       duties: duties.trim() || null,
     };
     if (pos) await structure.updatePosition(pos.id, body);
-    else await structure.addPosition(body);
+    else await structure.addPosition({ ...body, ...(from && aliases.length ? { aliases } : {}) });
     return null;
   };
   const remove = () => structure.removePosition(pos!.id, holders.length > 0).then(() => null);
+  if (picking) return <RolePicker m={m} unit={unit} onPick={pick} onNew={() => setPicking(false)} />;
   return (
     <div className="org-form">
       <ErrorNotice error={act.error} />
+      {!pos && (
+        <div className="oc-picked">
+          {from ? (
+            <span className="muted small">
+              <span>Copied from</span> <strong>{from.title}</strong>: <span>its Malay title, office role, duties and other names. Change anything before adding.</span>
+            </span>
+          ) : (
+            <span className="muted small">A new role, typed here.</span>
+          )}
+          <button type="button" className="btn btn-sm" onClick={() => setPicking(true)}>
+            <MagnifyingGlassIcon size={14} aria-hidden="true" />
+            Pick a role
+          </button>
+        </div>
+      )}
       <label className="field">
         <span>Role title</span>
         <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} placeholder="For example: Payroll Executive" autoFocus />
@@ -923,7 +1174,7 @@ function PositionForm({ m, pos, unit, reportsTo, onDone }: { m: Model; pos: Posi
   );
 }
 
-function HoldersForm({ st, m, pos, onClose }: { st: StructureState; m: Model; pos: PositionRow; onClose: () => void }) {
+function HoldersForm({ st, m, prima, pos, onClose }: { st: StructureState; m: Model; prima: PrimaBridge; pos: PositionRow; onClose: () => void }) {
   const act = useAction();
   const names = useNames();
   const [who, setWho] = useState('');
@@ -978,6 +1229,7 @@ function HoldersForm({ st, m, pos, onClose }: { st: StructureState; m: Model; po
                 <strong>{h.name}</strong>
                 <span className="muted small">{[h.job_title, h.branch_name].filter(Boolean).join(' · ')}</span>
               </span>
+              <QuickButton userId={h.user_id} name={h.name} prima={prima} />
               <ProfileButton userId={h.user_id} name={h.name} />
               {m.s.can_edit && (
                 <button type="button" className="btn btn-sm btn-ghost" title="Take out of this role (to Unsorted)" disabled={act.busy} onClick={() => act.run(() => structure.setPosition(h.user_id, null, false), 'Moved to Unsorted.')}>
@@ -1027,11 +1279,13 @@ function HoldersForm({ st, m, pos, onClose }: { st: StructureState; m: Model; po
  * Everyone with no role yet: search, filter by company, tick many, pick a role and Assign. A suggestion shows when the
  * job title names a role (one click accepts it; Accept all takes every suggestion shown). Rows drag onto a role too.
  */
-function UnsortedPanel({ st, m, onClose }: { st: StructureState; m: Model; onClose: () => void }) {
+function UnsortedPanel({ st, m, prima, onClose }: { st: StructureState; m: Model; prima: PrimaBridge; onClose: () => void }) {
   const act = useAction();
   const names = useNames();
   const [q, setQ] = useState('');
-  const [company, setCompany] = useState('');
+  // P146: opened from a company in the Companies view, it shows that company's people.
+  const company = st.unsortedCompany;
+  const setCompany = st.setUnsortedCompany;
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [to, setTo] = useState('');
   const companies = useMemo(() => {
@@ -1134,6 +1388,7 @@ function UnsortedPanel({ st, m, onClose }: { st: StructureState; m: Model; onClo
                   </button>
                 )}
               </span>
+              <QuickButton userId={x.user_id} name={x.name} prima={prima} />
               <ProfileButton userId={x.user_id} name={x.name} />
             </li>
           );
@@ -1152,5 +1407,809 @@ function UnsortedPanel({ st, m, onClose }: { st: StructureState; m: Model; onClo
         </footer>
       )}
     </aside>
+  );
+}
+
+// ---------------------------------------------------------------- P146: picking a role defined elsewhere
+
+/** One role title as defined anywhere (the places that have it, the first one's details). */
+interface RoleTitle {
+  key: string;
+  title: string;
+  title_ms: string | null;
+  default_role: string | null;
+  duties: string | null;
+  aliases: string[];
+  places: PositionRow[];
+}
+
+function roleTitles(m: Model): RoleTitle[] {
+  const out = new Map<string, RoleTitle>();
+  for (const p of m.s.positions) {
+    const key = norm(p.title);
+    if (!key) continue;
+    const t = out.get(key);
+    if (!t) {
+      out.set(key, { key, title: p.title, title_ms: p.title_ms, default_role: p.default_role, duties: p.duties, aliases: [...p.aliases], places: [p] });
+      continue;
+    }
+    t.places.push(p);
+    t.title_ms ??= p.title_ms;
+    t.default_role ??= p.default_role;
+    t.duties ??= p.duties;
+    for (const a of p.aliases) if (!t.aliases.includes(a)) t.aliases.push(a);
+  }
+  return [...out.values()].sort((a, b) => b.places.length - a.places.length || a.title.localeCompare(b.title));
+}
+
+/** The first role of a unit, else of the nearest unit above it that has roles. */
+function topRoleFor(unitId: string, m: Model): string | null {
+  for (const u of chainOf(unitId, m)) {
+    const top = (m.rootRoles.get(u.id) ?? [])[0];
+    if (top) return top.id;
+  }
+  return null;
+}
+
+/**
+ * Who a role copied into `unitId` reports to: a role with the same title as the one it reports to elsewhere, in this unit
+ * or a unit above (Operations Manager of Zone B under Zone B's own Zone Head), else that same boss when it sits above this
+ * unit too, else this unit's first role (or the nearest above).
+ */
+function bossFor(t: RoleTitle, unitId: string, m: Model): string | null {
+  const chain = new Set(chainOf(unitId, m).map((u) => u.id));
+  for (const src of t.places) {
+    const b = src.reports_to_id ? m.pos.get(src.reports_to_id) : undefined;
+    if (!b) continue;
+    const same = m.s.positions.find((p) => chain.has(p.unit_id) && norm(p.title) === norm(b.title));
+    if (same) return same.id;
+    if (chain.has(b.unit_id)) return b.id;
+  }
+  return topRoleFor(unitId, m);
+}
+
+function RolePicker({ m, unit, onPick, onNew }: { m: Model; unit: OrgUnitRow; onPick: (t: RoleTitle) => void; onNew: () => void }) {
+  const names = useNames();
+  const [q, setQ] = useState('');
+  const all = useMemo(() => roleTitles(m), [m]);
+  const words = norm(q).split(' ').filter(Boolean);
+  const shown = all.filter((t) => words.every((w) => norm(`${t.title} ${t.title_ms ?? ''} ${t.aliases.join(' ')} ${t.places.map((p) => m.unit.get(p.unit_id)?.name ?? '').join(' ')}`).includes(w)));
+  const here = new Set(m.s.positions.filter((p) => p.unit_id === unit.id).map((p) => norm(p.title)));
+  return (
+    <div className="org-form">
+      <p className="muted small">Pick a role already used in the group: its title, Malay title, office role and duties are copied into this unit. Or type a new one.</p>
+      <label className="oco-find">
+        <MagnifyingGlassIcon size={14} aria-hidden="true" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a role, in English or Malay" aria-label="Find a role" autoFocus />
+      </label>
+      <ul className="oc-pick-list">
+        {shown.slice(0, 80).map((t) => {
+          const units = [...new Set(t.places.map((p) => m.unit.get(p.unit_id)).filter((u): u is OrgUnitRow => !!u).map((u) => names.unit(u)))];
+          return (
+            <li key={t.key}>
+              <button type="button" onClick={() => onPick(t)}>
+                <span className="oc-pick-text">
+                  <strong>{t.title}</strong>
+                  {t.title_ms && t.title_ms !== t.title && <span className="muted"> · {t.title_ms}</span>}
+                  <span className="muted small oc-pick-units" title={units.join(', ')}>
+                    {[t.default_role ? roleLabel(t.default_role) : '', units.slice(0, 3).join(', ') + (units.length > 3 ? ' …' : '')].filter(Boolean).join(' · ')}
+                  </span>
+                </span>
+                {here.has(t.key) && <Chip tone="neutral">In this unit</Chip>}
+                <span className="oc-pick-n num" title="Places that have this role">
+                  {t.places.length}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+        {!shown.length && <li className="oc-side-none muted small">No role matches. Type it as a new role.</li>}
+      </ul>
+      <div className="org-form-actions">
+        <button type="button" className="btn" onClick={onNew}>
+          <PlusIcon size={14} aria-hidden="true" />
+          New role (type it)
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- P146: a unit by its people
+
+function LayoutSwitch({ u, x }: { u: OrgUnitRow; x: X }) {
+  const v = x.st.layoutOf(u.id);
+  return (
+    <span className="oc-layout" role="group" aria-label="Show this unit">
+      <button type="button" aria-pressed={v === 'role'} onClick={() => x.st.setLayout(u.id, 'role')} title="Its roles, who holds each">
+        By role
+      </button>
+      <button type="button" aria-pressed={v === 'people'} onClick={() => x.st.setLayout(u.id, 'people')} title="Its people: who reports to whom, pairs and teams side by side">
+        By people
+      </button>
+    </span>
+  );
+}
+
+type PNode = { kind: 'person'; id: string; who: StructureMember; kids: PNode[] } | { kind: 'group'; id: string; g: WorkGroup; who: StructureMember[]; kids: PNode[] };
+
+/**
+ * The people holding a role in this unit as a tree by who they report to. The people of one work group are one node
+ * (side by side), under the person the group works with (its lead), else under the manager they share.
+ */
+function peopleTree(u: OrgUnitRow, m: Model): PNode[] {
+  const people = m.unitPeople.get(u.id) ?? [];
+  const inUnit = new Map(people.map((p) => [p.user_id, p]));
+  const groupOf = new Map<string, WorkGroup>();
+  for (const g of m.groups) if (g.unit_id === u.id) for (const id of g.member_ids) if (inUnit.has(id) && !groupOf.has(id)) groupOf.set(id, g);
+  const keyOf = (uid: string) => (groupOf.has(uid) ? `g:${groupOf.get(uid)!.id}` : `p:${uid}`);
+  const level = (p: StructureMember) => (p.position_id ? (m.pos.get(p.position_id)?.level ?? 99) : 99);
+  const nodes = new Map<string, PNode>();
+  for (const p of [...people].sort((a, b) => level(a) - level(b) || a.name.localeCompare(b.name))) {
+    const k = keyOf(p.user_id);
+    if (nodes.has(k)) continue;
+    const g = groupOf.get(p.user_id);
+    nodes.set(
+      k,
+      g
+        ? { kind: 'group', id: k, g, who: g.member_ids.map((i) => inUnit.get(i)).filter((w): w is StructureMember => !!w && groupOf.get(w.user_id) === g), kids: [] }
+        : { kind: 'person', id: k, who: p, kids: [] },
+    );
+  }
+  const up = (uid: string | null | undefined, self: string) => (uid && inUnit.has(uid) && keyOf(uid) !== self ? keyOf(uid) : null);
+  const parentOf = (n: PNode): string | null => {
+    if (n.kind === 'person') return up(n.who.reports_to_user_id, n.id);
+    const lead = up(n.g.lead_user_id, n.id);
+    if (lead) return lead;
+    const bosses = [...new Set(n.who.map((w) => w.reports_to_user_id ?? ''))];
+    return bosses.length === 1 ? up(bosses[0], n.id) : null;
+  };
+  const kids = new Map<string, PNode[]>();
+  const roots: PNode[] = [];
+  for (const n of nodes.values()) {
+    const at = parentOf(n);
+    if (at) push(kids, at, n);
+    else roots.push(n);
+  }
+  const seen = new Set<string>();
+  const attach = (n: PNode) => {
+    seen.add(n.id);
+    n.kids = (kids.get(n.id) ?? []).filter((k) => !seen.has(k.id));
+    n.kids.forEach((k) => seen.add(k.id));
+    n.kids.forEach(attach);
+  };
+  roots.forEach(attach);
+  // People in a loop of lines (A under B under A): the first of them at the top.
+  for (const n of nodes.values())
+    if (!seen.has(n.id)) {
+      roots.push(n);
+      attach(n);
+    }
+  return roots;
+}
+
+function PeopleCard({ u, x }: { u: OrgUnitRow; x: X }) {
+  const roots = useMemo(() => peopleTree(u, x.m), [u, x.m]);
+  const [over, setOver] = useState(false);
+  const d = x.st.drag;
+  const loose = d?.kind === 'member' ? groupIn(u.id, d.userId, x.m) : undefined;
+  return (
+    <div className="oc-roles oc-people">
+      <div className="oc-roles-head">
+        <UsersIcon size={13} aria-hidden="true" />
+        <span>People</span>
+        <LayoutSwitch u={u} x={x} />
+        {x.edit && (
+          <button type="button" className="oc-roles-add" onClick={() => x.st.setPanel({ kind: 'people', unit: u })}>
+            <UserPlusIcon size={12} weight="bold" aria-hidden="true" />
+            Add people
+          </button>
+        )}
+      </div>
+      {x.edit && loose && (
+        <div
+          className="oc-people-loose"
+          data-drop={over || undefined}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!over) setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setOver(false);
+            if (d?.kind === 'member') x.leaveGroup(loose, d.userId);
+            x.st.setDrag(null);
+          }}
+        >
+          Drop here to take them out of their pair or team
+        </div>
+      )}
+      {roots.length ? (
+        <ul className="oc-ptree oc-ppl">
+          {roots.map((n) => (
+            <PeopleNode key={n.id} n={n} u={u} x={x} />
+          ))}
+        </ul>
+      ) : (
+        <p className="oc-roles-none muted small">Nobody holds a role in this unit yet.</p>
+      )}
+      {x.edit && roots.length > 0 && <p className="oc-people-tip muted small">Drag a person onto another: they report to them. Drag onto the handshake: they work side by side.</p>}
+    </div>
+  );
+}
+
+function PeopleNode({ n, u, x }: { n: PNode; u: OrgUnitRow; x: X }) {
+  return (
+    <li>
+      {n.kind === 'person' ? <PersonChip who={n.who} u={u} x={x} /> : <GroupBox n={n} u={u} x={x} />}
+      {n.kids.length > 0 && (
+        <ul>
+          {n.kids.map((k) => (
+            <PeopleNode key={k.id} n={k} u={u} x={x} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function PersonChip({ who, u, x, group }: { who: StructureMember; u: OrgUnitRow; x: X; group?: WorkGroup }) {
+  const [over, setOver] = useState<'line' | 'pair' | null>(null);
+  const d = x.st.drag;
+  const role = who.position_id ? x.m.pos.get(who.position_id) : undefined;
+  const boss = who.reports_to_user_id ? x.m.byUser.get(who.reports_to_user_id) : undefined;
+  const bossAway = boss && !(x.m.unitPeople.get(u.id) ?? []).some((p) => p.user_id === boss.user_id) ? boss : undefined;
+  const takesLine = (): boolean => {
+    if (!x.edit) return false;
+    if (d?.kind === 'member') return d.userId !== who.user_id && x.m.byUser.get(d.userId)?.reports_to_user_id !== who.user_id && !personUnder(d.userId, who.user_id, x.m);
+    if (d?.kind === 'group') {
+      const g = x.m.groups.find((y) => y.id === d.id);
+      return !!g && !g.member_ids.includes(who.user_id) && g.lead_user_id !== who.user_id;
+    }
+    return false;
+  };
+  const takesPair = (): boolean => x.edit && d?.kind === 'member' && d.userId !== who.user_id && !(group?.member_ids.includes(d.userId) ?? false);
+  const dropLine = (e: DragEvent) => {
+    setOver(null);
+    if (!takesLine()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (d?.kind === 'member') x.personReportsTo(d.userId, who.user_id);
+    else if (d?.kind === 'group') {
+      const g = x.m.groups.find((y) => y.id === d.id);
+      if (g) x.groupLead(g, who.user_id);
+    }
+    x.st.setDrag(null);
+  };
+  const dropPair = (e: DragEvent) => {
+    setOver(null);
+    if (!takesPair() || d?.kind !== 'member') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (group) x.joinGroup(group, d.userId);
+    else x.pair(u.id, d.userId, who.user_id);
+    x.st.setDrag(null);
+  };
+  return (
+    <div
+      className="oc-pcard"
+      data-drop={over === 'line' || undefined}
+      data-dragging={(d?.kind === 'member' && d.userId === who.user_id) || undefined}
+      draggable={x.edit || undefined}
+      onDragStart={
+        x.edit
+          ? (e) => {
+              e.stopPropagation();
+              e.dataTransfer.setData('text/plain', who.user_id);
+              e.dataTransfer.effectAllowed = 'move';
+              x.st.setDrag({ kind: 'member', userId: who.user_id });
+            }
+          : undefined
+      }
+      onDragEnd={() => x.st.setDrag(null)}
+      onDragOver={(e) => {
+        if (!takesLine()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (over !== 'line') setOver('line');
+      }}
+      onDragLeave={() => setOver(null)}
+      onDrop={dropLine}
+    >
+      <button type="button" className="oc-pcard-main" onClick={() => x.st.setPanel({ kind: 'person', userId: who.user_id, unit: u })} title={who.email}>
+        <Avatar name={who.name} size={26} />
+        <span className="oc-pcard-text">
+          <strong>{who.name}</strong>
+          <span className="muted small">{role ? x.names.role(role) : (who.job_title ?? '')}</span>
+          {bossAway && (
+            <span className="oc-pos-up" title="Reports to">
+              <ArrowUpIcon size={11} aria-hidden="true" />
+              {bossAway.name}
+            </span>
+          )}
+        </span>
+      </button>
+      {group && x.edit && (
+        <button type="button" className="oc-pcard-x" title="Take out of this pair or team" aria-label={`Take ${who.name} out of this pair or team`} onClick={() => x.leaveGroup(group, who.user_id)}>
+          <XIcon size={12} aria-hidden="true" />
+        </button>
+      )}
+      {takesPair() && (
+        <span
+          className="oc-pair-drop"
+          data-drop={over === 'pair' || undefined}
+          title="Work side by side with this person"
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (over !== 'pair') setOver('pair');
+          }}
+          onDragLeave={() => setOver(null)}
+          onDrop={dropPair}
+        >
+          <HandshakeIcon size={16} aria-hidden="true" />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function GroupBox({ n, u, x }: { n: Extract<PNode, { kind: 'group' }>; u: OrgUnitRow; x: X }) {
+  const [over, setOver] = useState(false);
+  const d = x.st.drag;
+  const lead = n.g.lead_user_id ? x.m.byUser.get(n.g.lead_user_id) : undefined;
+  const takes = x.edit && d?.kind === 'member' && !n.g.member_ids.includes(d.userId) && n.g.lead_user_id !== d.userId;
+  return (
+    <div
+      className="oc-pair"
+      data-drop={(over && takes) || undefined}
+      data-dragging={(d?.kind === 'group' && d.id === n.g.id) || undefined}
+      draggable={x.edit || undefined}
+      onDragStart={
+        x.edit
+          ? (e) => {
+              e.stopPropagation();
+              e.dataTransfer.setData('text/plain', n.g.id);
+              x.st.setDrag({ kind: 'group', id: n.g.id });
+            }
+          : undefined
+      }
+      onDragEnd={() => x.st.setDrag(null)}
+      onDragOver={(e) => {
+        if (!takes) return;
+        e.preventDefault();
+        if (!over) setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        setOver(false);
+        if (!takes || d?.kind !== 'member') return;
+        e.preventDefault();
+        e.stopPropagation();
+        x.joinGroup(n.g, d.userId);
+        x.st.setDrag(null);
+      }}
+    >
+      <button type="button" className="oc-pair-head" onClick={() => x.st.setPanel({ kind: 'group', group: n.g, unit: u })} title="Name, who they work with, its people">
+        <HandshakeIcon size={13} aria-hidden="true" />
+        <strong>{n.g.name || (n.who.length === 2 ? 'Pair' : 'Team')}</strong>
+        {lead && (
+          <span className="muted">
+            {' '}
+            · <span>with</span> {lead.name}
+          </span>
+        )}
+      </button>
+      <div className="oc-pair-row">
+        {n.who.map((w) => (
+          <PersonChip key={w.user_id} who={w} u={u} x={x} group={n.g} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A company's people who hold a role in a group unit (Head of Company, Local Company Administrator): shown in their own company too. */
+function AwayRolesCard({ top, extra, company, x }: { top: OrgUnitRow; extra: OrgUnitRow[]; company: string; x: X }) {
+  const roles = useMemo(() => {
+    const inside = new Set<string>();
+    for (const u of [top, ...extra]) for (const id of unitsUnder(u.id, x.m)) inside.add(id);
+    const ids = new Set<string>();
+    for (const p of x.m.s.members) {
+      if (p.branch_id !== company || !p.position_id) continue;
+      const pos = x.m.pos.get(p.position_id);
+      if (pos && !inside.has(pos.unit_id)) ids.add(pos.id);
+    }
+    return x.m.s.positions.filter((p) => ids.has(p.id));
+  }, [top, extra, company, x.m]);
+  if (!roles.length) return null;
+  return (
+    <>
+      <span className="oc-stem" aria-hidden="true" />
+      <div className="oc-roles oc-away">
+        <div className="oc-roles-head">
+          <TreeStructureIcon size={13} aria-hidden="true" />
+          <span>Their roles in group units</span>
+        </div>
+        <ul className="oc-ptree">
+          {roles.map((p) => (
+            <RoleItem key={p.id} p={p} x={x} flat only={(h) => h.branch_id === company} />
+          ))}
+        </ul>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- P146: people, one person, a work group
+
+function AddPeopleForm({ m, unit, onDone }: { m: Model; unit: OrgUnitRow; onDone: () => void }) {
+  const act = useAction();
+  const names = useNames();
+  const here = m.s.positions.filter((p) => p.unit_id === unit.id);
+  const branch = chainOf(unit.id, m).find((u) => u.branch_id)?.branch_id ?? null;
+  const [q, setQ] = useState('');
+  const [mine, setMine] = useState(!!branch);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [to, setTo] = useState(here[0]?.id ?? '__member');
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = [...m.s.members]
+    .filter((p) => (!mine || p.branch_id === branch) && words.every((w) => `${p.name} ${p.email} ${p.job_title ?? ''} ${p.branch_name ?? ''}`.toLowerCase().includes(w)))
+    .sort((a, b) => Number(!!a.position_id) - Number(!!b.position_id) || a.name.localeCompare(b.name));
+  const flip = (id: string) =>
+    setPicked((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const add = async () => {
+    let pid = to;
+    if (pid === '__member') {
+      // One click: a "Member" role in this unit (made once), under the unit's first role.
+      const have = here.find((p) => norm(p.title) === 'member');
+      pid = have ? have.id : (await structure.addPosition({ title: 'Member', title_ms: 'Ahli', unit_id: unit.id, reports_to_id: topRoleFor(unit.id, m), default_role: 'staff' })).id;
+    }
+    return structure.assign([...picked], pid);
+  };
+  const said = (r: { done: number; skipped: unknown[] }) => (r.skipped.length ? `${r.done} placed, ${r.skipped.length} skipped.` : `${r.done} placed.`);
+  const hasMember = here.some((p) => norm(p.title) === 'member');
+  return (
+    <div className="org-form">
+      <ErrorNotice error={act.error} />
+      <label className="oco-find">
+        <MagnifyingGlassIcon size={14} aria-hidden="true" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a name, email or job title" aria-label="Find a person" autoFocus />
+      </label>
+      {branch && (
+        <label className="oc-check">
+          <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />
+          <span>Only this company&apos;s people</span>
+        </label>
+      )}
+      <ul className="oc-side-list oc-add-list">
+        {shown.slice(0, 200).map((p) => {
+          const now = p.position_id ? m.pos.get(p.position_id) : undefined;
+          return (
+            <li key={p.user_id} data-picked={picked.has(p.user_id) || undefined}>
+              <input type="checkbox" checked={picked.has(p.user_id)} onChange={() => flip(p.user_id)} aria-label={`Select ${p.name}`} />
+              <Avatar name={p.name} size={26} />
+              <span className="oc-holder-text">
+                <strong>{p.name}</strong>
+                <span className="muted small">{[now ? names.role(now) : 'No role yet', p.branch_name].filter(Boolean).join(' · ')}</span>
+              </span>
+            </li>
+          );
+        })}
+        {!shown.length && <li className="oc-side-none muted small">Nobody matches.</li>}
+      </ul>
+      <label className="field">
+        <span>Their role in this unit</span>
+        <Select className="input" value={to} onChange={(e) => setTo(e.target.value)} searchable>
+          {here.map((p) => (
+            <option key={p.id} value={p.id}>
+              {names.role(p)}
+            </option>
+          ))}
+          {!hasMember && <option value="__member">Member (a new role here)</option>}
+        </Select>
+      </label>
+      <p className="muted small">Someone already in another role moves here; their job title becomes this role&apos;s title.</p>
+      <div className="org-form-actions">
+        <button type="button" className="btn btn-primary" disabled={act.busy || !picked.size} onClick={() => act.run(add, said).then((r) => r !== undefined && onDone())}>
+          <span>Add</span> <span className="num">({picked.size})</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PersonForm({ st, m, prima, userId, unit, onClose }: { st: StructureState; m: Model; prima: PrimaBridge; userId: string; unit: OrgUnitRow; onClose: () => void }) {
+  const act = useAction();
+  const names = useNames();
+  const who = m.byUser.get(userId)!;
+  const role = who.position_id ? m.pos.get(who.position_id) : undefined;
+  const group = groupIn(unit.id, userId, m);
+  const [boss, setBoss] = useState(who.reports_to_user_id ?? '');
+  const [mate, setMate] = useState('');
+  const everyone = [...m.s.members].filter((p) => p.user_id !== userId).sort((a, b) => a.name.localeCompare(b.name));
+  const mates = (m.unitPeople.get(unit.id) ?? []).filter((p) => p.user_id !== userId && !group?.member_ids.includes(p.user_id));
+  const mateNames = group
+    ? group.member_ids
+        .filter((i) => i !== userId)
+        .map((i) => m.byUser.get(i)?.name)
+        .filter(Boolean)
+        .join(', ')
+    : '';
+  const pairWith = async () => {
+    const g = groupIn(unit.id, mate, m);
+    if (g) return structure.updateGroup(g.id, { member_ids: [...g.member_ids, userId], move: true });
+    return structure.addGroup({ unit_id: unit.id, member_ids: [mate, userId], move: true });
+  };
+  return (
+    <div className="org-form">
+      <ErrorNotice error={act.error} />
+      <dl className="oc-facts">
+        <dt>Role</dt>
+        <dd>{role ? names.role(role) : <span className="muted">No role yet</span>}</dd>
+        {who.branch_name && (
+          <>
+            <dt>Company</dt>
+            <dd>{who.branch_name}</dd>
+          </>
+        )}
+        {group && (
+          <>
+            <dt>Works with</dt>
+            <dd>{mateNames || <span className="muted">Nobody else yet</span>}</dd>
+          </>
+        )}
+      </dl>
+      <div className="org-form-actions">
+        <QuickButton userId={userId} name={who.name} prima={prima} />
+        <ProfileButton userId={userId} name={who.name} />
+      </div>
+      {m.s.can_edit && (
+        <>
+          <h3 className="org-form-title">Reports to</h3>
+          <div className="org-form-row">
+            <Select className="input" value={boss} onChange={(e) => setBoss(e.target.value)} searchable aria-label="Reports to">
+              <option value="">Nobody</option>
+              {everyone.map((p) => (
+                <option key={p.user_id} value={p.user_id}>
+                  {`${p.name}${p.job_title ? ` (${p.job_title})` : ''}`}
+                </option>
+              ))}
+            </Select>
+            <button type="button" className="btn btn-primary" disabled={act.busy || boss === (who.reports_to_user_id ?? '')} onClick={() => act.run(() => structure.setReportsTo(userId, boss || null), 'Reporting line saved.')}>
+              Save
+            </button>
+          </div>
+          <h3 className="org-form-title">Works side by side with</h3>
+          <div className="org-form-row">
+            <Select className="input" value={mate} onChange={(e) => setMate(e.target.value)} searchable aria-label="Works side by side with">
+              <option value="">Someone in this unit…</option>
+              {mates.map((p) => (
+                <option key={p.user_id} value={p.user_id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+            <button type="button" className="btn" disabled={act.busy || !mate} onClick={() => act.run(pairWith, 'Paired.').then((r) => r !== undefined && setMate(''))}>
+              <HandshakeIcon size={14} aria-hidden="true" />
+              Pair
+            </button>
+          </div>
+          {group && (
+            <div className="org-form-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => st.setPanel({ kind: 'group', group, unit })}>
+                <PencilSimpleIcon size={14} aria-hidden="true" />
+                Edit the pair or team
+              </button>
+            </div>
+          )}
+        </>
+      )}
+      <div className="org-form-actions">
+        <button type="button" className="btn btn-ghost" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GroupForm({ m, group, onDone }: { m: Model; group: WorkGroup; onDone: () => void }) {
+  const act = useAction();
+  const [name, setName] = useState(group.name ?? '');
+  const [lead, setLead] = useState(group.lead_user_id ?? '');
+  const [removing, setRemoving] = useState(false);
+  const people = group.member_ids.map((i) => m.byUser.get(i)).filter((p): p is StructureMember => !!p);
+  const others = [...m.s.members].filter((p) => !group.member_ids.includes(p.user_id)).sort((a, b) => a.name.localeCompare(b.name));
+  const save = () => structure.updateGroup(group.id, { name: name.trim() || null, lead_user_id: lead || null });
+  const drop = (uid: string) => {
+    const rest = group.member_ids.filter((i) => i !== uid);
+    return rest.length ? structure.updateGroup(group.id, { member_ids: rest }) : structure.removeGroup(group.id).then(() => null);
+  };
+  return (
+    <div className="org-form">
+      <ErrorNotice error={act.error} />
+      <label className="field">
+        <span>Name (optional)</span>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={160} placeholder="For example: Night patrol pair" />
+      </label>
+      <label className="field">
+        <span>Works with (reports to)</span>
+        <Select className="input" value={lead} onChange={(e) => setLead(e.target.value)} searchable>
+          <option value="">Nobody set</option>
+          {others.map((p) => (
+            <option key={p.user_id} value={p.user_id}>
+              {p.name}
+            </option>
+          ))}
+        </Select>
+      </label>
+      <div className="org-form-actions">
+        <button type="button" className="btn btn-primary" disabled={act.busy} onClick={() => act.run(save, 'Saved.').then((r) => r !== undefined && onDone())}>
+          Save
+        </button>
+      </div>
+      <h3 className="org-form-title">Its people</h3>
+      <ul className="oc-holders">
+        {people.map((p) => (
+          <li key={p.user_id}>
+            <Avatar name={p.name} size={30} />
+            <span className="oc-holder-text">
+              <strong>{p.name}</strong>
+              <span className="muted small">{p.job_title ?? ''}</span>
+            </span>
+            <button type="button" className="btn btn-sm btn-ghost" disabled={act.busy} onClick={() => act.run(() => drop(p.user_id), 'Unpaired.')}>
+              <UserMinusIcon size={14} aria-hidden="true" />
+              <span className="hide-sm">Take out</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="org-form-actions">
+        {removing ? (
+          <button type="button" className="btn btn-danger" disabled={act.busy} onClick={() => act.run(() => structure.removeGroup(group.id).then(() => null), 'Unpaired.').then((r) => r !== undefined && onDone())}>
+            Yes, separate them
+          </button>
+        ) : (
+          <button type="button" className="btn btn-ghost" onClick={() => setRemoving(true)}>
+            <TrashIcon size={14} aria-hidden="true" />
+            Separate this pair or team
+          </button>
+        )}
+      </div>
+      <p className="muted small">Their roles and reporting lines stay as they are.</p>
+    </div>
+  );
+}
+
+/** P139's company tools from the Companies view: a new office company, or a department of one. */
+function OfficeNameForm({ what, branchId, onDone }: { what: 'company' | 'department'; branchId?: string; onDone: () => void }) {
+  const act = useAction();
+  const [name, setName] = useState('');
+  const clean = name.replace(/\s+/g, ' ').trim();
+  const save = () => (what === 'company' ? officeFetch<unknown>('POST', '/api/branches', { name: clean }) : office.addDepartment(branchId!, clean));
+  return (
+    <div className="org-form">
+      <ErrorNotice error={act.error} />
+      <label className="field">
+        <span>Name</span>
+        <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} maxLength={120} placeholder={what === 'company' ? 'e.g. Sasa Security Services Sdn Bhd' : 'e.g. Operations'} />
+      </label>
+      <p className="muted small">{what === 'company' ? 'The office keeps the company; it shows here as a unit with its departments.' : 'The office keeps the department; it shows here as a unit under its company.'}</p>
+      <div className="org-form-actions">
+        <button type="button" className="btn btn-primary" disabled={act.busy || clean.length < 2} onClick={() => act.run(save, 'Saved.').then((r) => r !== undefined && onDone())}>
+          {what === 'company' ? 'Add the company' : 'Add the department'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- P146: the Companies view
+
+/**
+ * P146 (owner, 28 Nov 2026: "In the org chart I can set and sort by department, but in Companies why not the same? Do it
+ * exactly like the Departments side, editing tree as well."): every office company as its unit of the group structure,
+ * its departments under it, their roles and people, edited the same way as Departments (+ sub-department, + role, add
+ * people, rename, move, drag people and roles, By people). A company's people who hold a role in a group unit (Head of
+ * Company, Local Company Administrator) show in their own company too; Unsorted opens on that company's people. The
+ * office's own list (P139: people by office department, moved by dragging) stays one switch away.
+ */
+export function CompanyStructure({ st, prima }: { st: StructureState; prima: PrimaBridge }) {
+  const m = st.model!;
+  const { x, act } = useTreeX(st, prima);
+  const [q, setQ] = useState('');
+  const [plain, setPlain] = useState(false);
+  const words = norm(q).split(' ').filter(Boolean);
+  const people = useMemo(() => {
+    const out = new Map<string, StructureMember[]>();
+    for (const p of m.s.members) if (p.branch_id) push(out, p.branch_id, p);
+    return out;
+  }, [m]);
+  const shown = m.companies.filter(
+    (c) =>
+      !words.length ||
+      words.every((w) => norm(`${c.name} ${c.name_ms ?? ''}`).includes(w)) ||
+      (people.get(c.branch_id ?? '') ?? []).some((p) => words.every((w) => norm(`${p.name} ${p.email} ${p.job_title ?? ''}`).includes(w))),
+  );
+  // A company's departments kept elsewhere in the tree (PWVSB's central departments): shown under it too.
+  const extraOf = useMemo(() => {
+    const out = new Map<string, OrgUnitRow[]>();
+    for (const c of m.companies) {
+      const inside = unitsUnder(c.id, m);
+      const away = m.s.units.filter((u) => u.branch_id === c.branch_id && u.department_id && !inside.has(u.id));
+      const awayIds = new Set(away.map((u) => u.id));
+      out.set(
+        c.id,
+        away.filter((u) => !(u.parent_id ? chainOf(u.parent_id, m) : []).some((a) => awayIds.has(a.id))),
+      );
+    }
+    return out;
+  }, [m]);
+  const switcher = (
+    <div className="seg oc-co-switch" role="group" aria-label="Companies shown as">
+      <button type="button" aria-pressed={!plain} onClick={() => setPlain(false)}>
+        Structure
+      </button>
+      <button type="button" aria-pressed={plain} onClick={() => setPlain(true)}>
+        Office departments
+      </button>
+    </div>
+  );
+  if (plain)
+    return (
+      <div className="oc-struct">
+        {switcher}
+        <CompaniesTree />
+      </div>
+    );
+  return (
+    <div className="oc-struct">
+      {switcher}
+      {act.error && (
+        <div className="oc-struct-error">
+          <ErrorNotice error={act.error} />
+        </div>
+      )}
+      <div className="oc-node oco">
+        <div className="oc-box oc-group oco-root">
+          <span className="oc-band" aria-hidden="true" />
+          <div className="oc-box-main">
+            <div className="oc-box-text">
+              <strong className="oc-name">All companies</strong>
+              <span className="oc-role">
+                <span className="num">{m.companies.length}</span> <span>companies</span> · <span className="num">{m.s.members.filter((p) => p.branch_id).length}</span> <span>people</span>
+              </span>
+              <label className="oco-find">
+                <MagnifyingGlassIcon size={15} aria-hidden="true" />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a company or a person" aria-label="Find a company or a person" />
+              </label>
+            </div>
+          </div>
+          {x.edit && (
+            <button type="button" className="oc-add" title="Add a company" aria-label="Add a company" onClick={() => st.setPanel({ kind: 'company' })}>
+              <PlusIcon size={13} weight="bold" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        <span className="oc-stem" aria-hidden="true" />
+        <ul className="oc-kids oc-wrap">
+          {shown.map((c) => (
+            <li key={c.id}>
+              <UnitTree u={c} depth={1} x={x} company={c.branch_id ?? undefined} extra={extraOf.get(c.id)} />
+            </li>
+          ))}
+          {!shown.length && <li className="muted small">No company matches.</li>}
+        </ul>
+      </div>
+    </div>
   );
 }

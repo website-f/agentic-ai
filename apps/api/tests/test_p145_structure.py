@@ -72,7 +72,9 @@ async def test_seed_once_linked_and_again_by_key(client):
     o = await group(client)
     s = await read(client)
     assert s["can_edit"] is True
-    assert len(s["units"]) == len(structure.seed_units()) == 45
+    # P146: the office companies and departments the seed has no unit for are units too.
+    seeded = [x for x in s["units"] if not x["key"].startswith("office_")]
+    assert len(seeded) == len(structure.seed_units()) == 45
     assert len(s["positions"]) == len(structure.seed_positions()) == 57
     u, p = s["unit"], s["pos"]
     # The tree is connected: every unit but the group has a parent; positions report upward.
@@ -124,7 +126,7 @@ async def test_changes_and_who_may(client):
     s = await read(client)
     staff = await as_role(client, "sam@example.com", "staff", branch_id=o["pw"]["id"])
     seen = await read(staff)
-    assert seen["can_edit"] is False and len(seen["units"]) == 45
+    assert seen["can_edit"] is False and len(seen["units"]) == len(s["units"])
     assert {m["email"] for m in seen["members"]} == {"sam@example.com"}  # their own scope
     r = await staff.post("/api/org/structure/units", json={"name": "Mine"}, headers=jh(staff))
     assert r.status_code == 403

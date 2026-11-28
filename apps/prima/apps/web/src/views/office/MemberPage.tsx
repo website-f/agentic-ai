@@ -81,7 +81,7 @@ function useSettled(value: string, ms = 400): string {
   return v;
 }
 
-export function MemberPage({ userId, onBack }: { userId: string; onBack: () => void }) {
+export function MemberPage({ userId, onBack, backLabel }: { userId: string; onBack: () => void; /** P146: "Back to the org chart" when opened from it. */ backLabel?: string }) {
   const p = usePowers();
   const member = useLoad(() => office.member(userId), [userId]);
   const members = useLoad(() => office.members(), []);
@@ -91,7 +91,7 @@ export function MemberPage({ userId, onBack }: { userId: string; onBack: () => v
 
   const back = (
     <button type="button" className="btn btn-ghost btn-sm mp-back" onClick={onBack}>
-      <ArrowLeftIcon size={16} aria-hidden="true" /> Back to members
+      <ArrowLeftIcon size={16} aria-hidden="true" /> {backLabel ?? 'Back to members'}
     </button>
   );
   if (!m)

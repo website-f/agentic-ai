@@ -17,6 +17,16 @@
  *   POST   /api/org/structure/seed                 owners: put back the units and positions from the PDFs that are missing
  *   PUT    /api/members/{user_id}/position         {position_id: string | null, set_job_title?: boolean} -> {ok: true}
  *   POST   /api/org/structure/assign               {user_ids: string[], position_id: string | null} -> {done: number, skipped: {user_id, message}[]}
+ *
+ * P146 (owner, 28 Nov 2026): every office company (branch) and its departments are units too (kind "company" with
+ * branch_id; "department" with department_id), made by the office on read when missing. A new role may carry the other
+ * names of a role it was picked from (aliases). Each member's reports_to_user_id is in the read (set with PATCH
+ * /api/members/{id} {reports_to_user_id}, api/office.ts updateMember). Work groups: people of one unit who work
+ * together (a pair or a small team), drawn side by side; lead_user_id is the person they work with. One group per
+ * member per unit: a member already in another group of the unit is refused (409 group_member_taken) unless move=true.
+ *   POST   /api/org/structure/groups               {unit_id, member_ids, name?, lead_user_id?, move?} -> WorkGroup
+ *   PATCH  /api/org/structure/groups/{id}          {name?, lead_user_id?, member_ids?, sort?, move?} -> WorkGroup
+ *   DELETE /api/org/structure/groups/{id}          (its people stay where they are) -> 204
  */
 import { officeFetch } from './office';
 
@@ -70,12 +80,27 @@ export interface StructureMember {
   position_id: string | null;
   /** Their Prima account (the org chart's person id), when the office linked one. */
   prima_id?: string | null;
+  /** P146: the person they report to (any member), or null. */
+  reports_to_user_id?: string | null;
+}
+
+/** P146: people of one unit who work together (a pair or a small team). */
+export interface WorkGroup {
+  id: string;
+  unit_id: string;
+  name: string | null;
+  /** The person the group works with (reports to), or null. */
+  lead_user_id: string | null;
+  member_ids: string[];
+  sort: number;
 }
 
 export interface Structure {
   units: OrgUnitRow[];
   positions: PositionRow[];
   members: StructureMember[];
+  /** P146: work groups (older offices send none). */
+  groups?: WorkGroup[];
   /** Whoever may change units, positions and who holds them (org.manage or members.manage). */
   can_edit: boolean;
 }
@@ -89,7 +114,7 @@ export const structure = {
   updateUnit: (unitId: string, body: Partial<Pick<OrgUnitRow, 'name' | 'name_ms' | 'parent_id' | 'kind' | 'branch_id' | 'department_id' | 'sort'>>) =>
     officeFetch<OrgUnitRow>('PATCH', `/api/org/structure/units/${id(unitId)}`, body),
   removeUnit: (unitId: string) => officeFetch<void>('DELETE', `/api/org/structure/units/${id(unitId)}`, {}),
-  addPosition: (body: { title: string; title_ms?: string | null; unit_id: string; reports_to_id?: string | null; default_role?: string | null; headcount?: number | null; duties?: string | null }) =>
+  addPosition: (body: { title: string; title_ms?: string | null; unit_id: string; reports_to_id?: string | null; default_role?: string | null; headcount?: number | null; duties?: string | null; aliases?: string[] }) =>
     officeFetch<PositionRow>('POST', '/api/org/structure/positions', body),
   updatePosition: (positionId: string, body: Partial<Pick<PositionRow, 'title' | 'title_ms' | 'unit_id' | 'reports_to_id' | 'default_role' | 'headcount' | 'duties' | 'sort'>>) =>
     officeFetch<PositionRow>('PATCH', `/api/org/structure/positions/${id(positionId)}`, body),
@@ -99,5 +124,11 @@ export const structure = {
     officeFetch<{ ok: true }>('PUT', `/api/members/${id(userId)}/position`, { position_id: positionId, set_job_title: setJobTitle }),
   assign: (userIds: string[], positionId: string | null) =>
     officeFetch<{ done: number; skipped: { user_id: string; message: string }[] }>('POST', '/api/org/structure/assign', { user_ids: userIds, position_id: positionId }),
+  addGroup: (body: { unit_id: string; member_ids: string[]; name?: string | null; lead_user_id?: string | null; move?: boolean }) => officeFetch<WorkGroup>('POST', '/api/org/structure/groups', body),
+  updateGroup: (groupId: string, body: { name?: string | null; lead_user_id?: string | null; member_ids?: string[]; sort?: number; move?: boolean }) =>
+    officeFetch<WorkGroup>('PATCH', `/api/org/structure/groups/${id(groupId)}`, body),
+  removeGroup: (groupId: string) => officeFetch<void>('DELETE', `/api/org/structure/groups/${id(groupId)}`, {}),
+  /** P146: who a member reports to (null: nobody). */
+  setReportsTo: (userId: string, bossId: string | null) => officeFetch<unknown>('PATCH', `/api/members/${id(userId)}`, { reports_to_user_id: bossId }),
   seed: () => officeFetch<{ units: number; positions: number; linked: number }>('POST', '/api/org/structure/seed', {}),
 };

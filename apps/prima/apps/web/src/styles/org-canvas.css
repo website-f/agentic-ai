@@ -1286,3 +1286,280 @@ button.oc-team-open:focus-visible strong {
     height: 70vh;
   }
 }
+
+/* P146: a unit by role or by people; people as a tree by who they report to, pairs and teams side by side. */
+.oc-layout {
+  display: inline-flex;
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.oc-layout button {
+  padding: 2px 8px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.68rem;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+.oc-layout button[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+.oc-layout + .oc-roles-add {
+  margin-left: 4px;
+}
+.oc-layout-all button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.oc-people {
+  width: 380px;
+}
+.oc-ppl > li + li {
+  margin-top: 4px;
+}
+.oc-pcard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 2px 0;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.oc-pcard[draggable='true'] {
+  cursor: grab;
+}
+.oc-pcard[data-dragging] {
+  opacity: 0.45;
+}
+.oc-pcard[data-drop] {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
+}
+.oc-pcard-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.oc-pcard-text {
+  display: grid;
+  min-width: 0;
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+.oc-pcard-text > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc-pcard-main:hover strong {
+  color: var(--accent);
+}
+.oc-pcard-x {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.oc-pcard-x:hover,
+.oc-pcard-x:focus-visible {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+.oc-pair-drop {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1px dashed color-mix(in oklab, var(--accent) 60%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--accent) 6%, var(--surface));
+  color: var(--accent);
+}
+.oc-pair-drop[data-drop] {
+  border-style: solid;
+  background: var(--accent-soft);
+}
+/* A pair or team: one joined box, its people side by side. */
+.oc-pair {
+  margin: 2px 0;
+  padding: 4px 6px 6px;
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--line));
+  border-radius: 11px;
+  background: color-mix(in oklab, var(--accent) 5%, var(--surface));
+}
+.oc-pair[draggable='true'] {
+  cursor: grab;
+}
+.oc-pair[data-dragging] {
+  opacity: 0.45;
+}
+.oc-pair[data-drop] {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+.oc-pair-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.72rem;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.oc-pair-row {
+  display: flex;
+  gap: 6px;
+}
+.oc-pair-row > .oc-pcard {
+  flex: 1 1 0;
+  margin: 0;
+}
+.oc-people-loose {
+  margin: 6px;
+  padding: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+.oc-people-loose[data-drop] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.oc-people-tip {
+  margin: 0;
+  padding: 0 10px 8px;
+  font-size: 0.7rem;
+}
+.oc-away .oc-roles-head {
+  background: color-mix(in oklab, var(--accent) 6%, var(--surface-2));
+}
+
+/* Pick a role already used in the group. */
+.oc-pick-list {
+  display: grid;
+  gap: 4px;
+  max-height: min(52vh, 460px);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.oc-pick-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.oc-pick-list button:hover,
+.oc-pick-list button:focus-visible {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 6%, var(--surface));
+}
+.oc-pick-text {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 0.86rem;
+  line-height: 1.3;
+}
+.oc-pick-units {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc-pick-n {
+  flex: none;
+  min-width: 24px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+.oc-picked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.oc-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+.oc-add-list {
+  max-height: min(40vh, 360px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* The Companies view: the structure, or the office's own list. */
+.oc-co-switch {
+  justify-self: center;
+}
+.oc-co-unsorted {
+  border-color: hsl(38 85% 55%);
+}
+@media (max-width: 520px) {
+  .oc-people {
+    width: min(380px, 88vw);
+  }
+  .oc-pair-row {
+    flex-wrap: wrap;
+  }
+}

@@ -4,6 +4,8 @@
   unit may stand for an office company (branch_id) or department (department_id).
 - org_positions: the job roles in a unit, each reporting to another position (reports_to_id).
 memberships.position_id says which position a member holds (org/structure.py).
+- org_work_groups (P146, migration 0084): people of one unit who work together (a pair or a
+  small team), drawn side by side on the chart, and the person they work with (lead_user_id).
 """
 
 from typing import Any
@@ -75,3 +77,19 @@ class OrgPosition(Timestamps, Base):
     aliases: Mapped[list[Any]] = mapped_column(JSONB, default=list, server_default="[]")
     sort: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     custom: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+
+class OrgWorkGroup(Timestamps, Base):
+    """P146: a pair or team inside a unit. A member is in at most one group per unit (the API
+    keeps that); member_ids is the list of their user ids in the order they are drawn."""
+
+    __tablename__ = "org_work_groups"
+    __table_args__ = (Index("ix_org_work_groups_ws_unit", "workspace_id", "unit_id"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("owg"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    unit_id: Mapped[str] = mapped_column(ForeignKey("org_units.id", ondelete="CASCADE"))
+    name: Mapped[str | None] = mapped_column(String(160))
+    lead_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    member_ids: Mapped[list[Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    sort: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

@@ -2114,3 +2114,8 @@ MS.update({k: v for k, v in MS_P144.items() if k not in MS})
 from .ms_p145 import MS_P145  # noqa: E402
 
 MS.update({k: v for k, v in MS_P145.items() if k not in MS})
+
+# P146: companies as units, sub-departments, copied roles and work groups (pairs, teams).
+from .ms_p146 import MS_P146  # noqa: E402
+
+MS.update({k: v for k, v in MS_P146.items() if k not in MS})

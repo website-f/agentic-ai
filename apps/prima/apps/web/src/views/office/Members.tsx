@@ -447,12 +447,15 @@ export function MemberDrawer({
   companies,
   onClose,
   onEmail,
+  onProfile,
 }: {
   member: OfficeMember;
   members: OfficeMember[];
   companies: OfficeCompany[];
   onClose: () => void;
   onEmail: () => void;
+  /** P146: opened over the org chart (Quick edit): their full page from here. */
+  onProfile?: () => void;
 }) {
   const p = usePowers();
   const act = useAction();
@@ -550,6 +553,13 @@ export function MemberDrawer({
     <>
       <Drawer title={<span data-no-translate>{member.name}</span>} sub={<span data-no-translate>{member.email}</span>} onClose={onClose}>
         <div className="oa-stack">
+          {onProfile && (
+            <div className="row">
+              <button className="btn btn-sm" onClick={onProfile}>
+                Open full profile
+              </button>
+            </div>
+          )}
           <Facts items={facts} />
           {p.people && (
             <>

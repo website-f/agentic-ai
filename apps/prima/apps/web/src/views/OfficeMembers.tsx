@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { splitHash, useApp, useRouteTab } from '../App';
+import { splitHash, useApp, useRouteTab, type ViewName } from '../App';
 import { backClosedSheet } from '../back-close';
 import { office } from '../api/office';
 import { Card, PageHead } from '../kit';
@@ -9,7 +9,7 @@ import { MembersTab } from './office/Members';
 import { OfficeAccessTab } from './office/OfficeAccess';
 import { OrganizationTab } from './office/Organization';
 import { RolesAccessTab } from './office/RolesAccess';
-import { backToMembers, forgetPushed, memberIdOf } from './office/member-route';
+import { backToMembers, forgetPushed, forgetReturn, isReturnAddress, memberIdOf, memberReturn } from './office/member-route';
 import { PowersCtx, powersOf } from './office/shared';
 import '../styles/office-admin.css';
 
@@ -31,7 +31,7 @@ const TABS = [
 type Tab = (typeof TABS)[number]['id'];
 
 export function OfficeMembersView() {
-  const { route, go } = useApp();
+  const { route, go, apps } = useApp();
   const [tab, setTab] = useRouteTab<Tab>(
     'members',
     TABS.map((t) => t.id),
@@ -44,13 +44,22 @@ export function OfficeMembersView() {
     const onPop = (e: PopStateEvent) => {
       if (backClosedSheet(e)) return;
       const at = splitHash(location.hash);
-      if (at.view !== 'members') return;
+      if (at.view !== 'members') {
+        // P146: Back to the screen the member's page was opened from (the org chart as it was). Prima with apps opens
+        // it itself; without, that screen is opened here.
+        if (isReturnAddress(location.hash)) {
+          forgetReturn();
+          forgetPushed();
+          if (!apps) go(at.tab ? { view: at.view as ViewName, tab: at.tab } : { view: at.view as ViewName });
+        }
+        return;
+      }
       if (!memberIdOf(at.tab)) forgetPushed();
       go({ view: 'members', tab: at.tab || 'members' });
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [go]);
+  }, [go, apps]);
 
   const waiting = !powers ? (
     me.error ? (
@@ -72,7 +81,7 @@ export function OfficeMembersView() {
       <div className="page oa-page">
         {powers ? (
           <PowersCtx.Provider value={powers}>
-            <MemberPage key={memberId} userId={memberId} onBack={() => backToMembers(go, memberId)} />
+            <MemberPage key={memberId} userId={memberId} onBack={() => backToMembers(go, memberId)} backLabel={memberReturn()?.label} />
           </PowersCtx.Provider>
         ) : (
           waiting

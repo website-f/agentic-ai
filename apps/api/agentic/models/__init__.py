@@ -2392,7 +2392,7 @@ from ..org.held_models import HeldChange  # noqa: E402, F401
 from ..org.models import DepartmentHead, FileHandoff, PersonRequest  # noqa: E402, F401
 
 # P145: the group structure, units and positions (org/structure_models.py).
-from ..org.structure_models import OrgPosition, OrgUnit  # noqa: E402, F401
+from ..org.structure_models import OrgPosition, OrgUnit, OrgWorkGroup  # noqa: E402, F401
 
 # P127: the organization hierarchy kept in step with Prima's org chart (prima/org_sync.py).
 from ..prima.org_sync_models import PrimaOrgSync, PrimaOrgSyncRun  # noqa: E402, F401

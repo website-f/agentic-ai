@@ -12,7 +12,13 @@ Contract (apps/prima/apps/web/src/api/structure.ts):
   POST   /api/org/structure/positions           PATCH/DELETE /api/org/structure/positions/{id}
   PUT    /api/members/{user_id}/position        one member's position (and job title)
   POST   /api/org/structure/assign              many members to one position (or none)
+  POST   /api/org/structure/groups              PATCH/DELETE /api/org/structure/groups/{id}
 Changes: whoever has org.manage or members.manage, and the head of HR. Every change is audited.
+
+P146 (the owner, 28 Nov 2026): every office company and its departments are units too (made on
+read, org/structure.py ensure_companies), a new role may copy another's other names (aliases),
+each member's reports_to_user_id is in the read, and work groups (pairs and small teams inside a
+unit, drawn side by side; one group per member per unit) are read as `groups` and changed here.
 """
 
 import secrets
@@ -34,6 +40,7 @@ from ...models import (
     Membership,
     OrgPosition,
     OrgUnit,
+    OrgWorkGroup,
     PrimaLink,
 )
 from ...org import structure as seed
@@ -102,12 +109,24 @@ class StructureMemberOut(BaseModel):
     position_id: str | None
     # Their Prima account (the org chart's person id), when linked.
     prima_id: str | None = None
+    # P146: the person they report to (memberships.reports_to_user_id).
+    reports_to_user_id: str | None = None
+
+
+class GroupOut(BaseModel):
+    id: str
+    unit_id: str
+    name: str | None
+    lead_user_id: str | None
+    member_ids: list[str]
+    sort: int
 
 
 class StructureOut(BaseModel):
     units: list[UnitOut]
     positions: list[PositionOut]
     members: list[StructureMemberOut]
+    groups: list[GroupOut] = []
     can_edit: bool
 
 
@@ -138,6 +157,8 @@ class PositionIn(BaseModel):
     default_role: DefaultRole | None = None
     headcount: int | None = Field(default=None, ge=0, le=100_000)
     duties: str | None = Field(default=None, max_length=4000)
+    # P146: copied from a role picked from another unit (its other names).
+    aliases: list[str] | None = Field(default=None, max_length=30)
 
 
 class PositionPatch(BaseModel):
@@ -159,6 +180,23 @@ class SetPositionIn(BaseModel):
 class AssignIn(BaseModel):
     user_ids: list[str] = Field(min_length=1, max_length=1000)
     position_id: str | None = Field(default=None, max_length=40)
+
+
+class GroupIn(BaseModel):
+    unit_id: str = Field(min_length=1, max_length=40)
+    name: str | None = Field(default=None, max_length=160)
+    lead_user_id: str | None = Field(default=None, max_length=40)
+    member_ids: list[str] = Field(min_length=1, max_length=50)
+    # Take these people out of another group of this unit first (else they are refused).
+    move: bool = False
+
+
+class GroupPatch(BaseModel):
+    name: str | None = Field(default=None, max_length=160)
+    lead_user_id: str | None = Field(default=None, max_length=40)
+    member_ids: list[str] | None = Field(default=None, min_length=1, max_length=50)
+    sort: int | None = Field(default=None, ge=-100_000, le=100_000)
+    move: bool = False
 
 
 class Skipped(BaseModel):
@@ -213,12 +251,32 @@ def _position_out(p: OrgPosition) -> PositionOut:
     )
 
 
+def _group_out(g: OrgWorkGroup, seen: set[str] | None = None) -> GroupOut:
+    ids = [i for i in (g.member_ids or []) if isinstance(i, str)]
+    lead = g.lead_user_id
+    if seen is not None:
+        ids = [i for i in ids if i in seen]
+        lead = lead if lead in seen else None
+    return GroupOut(
+        id=g.id, unit_id=g.unit_id, name=g.name, lead_user_id=lead, member_ids=ids, sort=g.sort
+    )
+
+
 def _text(s: str | None, limit: int) -> str | None:
     """One line, trimmed; empty is none."""
     if s is None:
         return None
     out = " ".join("".join(ch for ch in s if ch.isprintable()).split())[:limit]
     return out or None
+
+
+def _aliases(items: list[str] | None) -> list[str]:
+    out: list[str] = []
+    for a in items or []:
+        t = _text(a, 160)
+        if t and t not in out:
+            out.append(t)
+    return out[:30]
 
 
 def _duties(s: str | None) -> str | None:
@@ -385,6 +443,10 @@ async def get_structure(
         # A workspace made after the API started: its structure on the first read.
         await seed.ensure(db, ws, only_if_empty=True)
         await db.commit()
+    # P146: every office company and department as a unit (only what is missing).
+    if await _companies_missing(db, ws):
+        await seed.ensure_companies(db, ws)
+        await db.commit()
     units = (
         await db.scalars(
             select(OrgUnit).where(OrgUnit.workspace_id == ws).order_by(OrgUnit.sort, OrgUnit.name)
@@ -429,15 +491,44 @@ async def get_structure(
             job_title=m.job_title,
             position_id=m.position_id,
             prima_id=links.get(m.user_id),
+            reports_to_user_id=m.reports_to_user_id,
         )
         for m in seen
     ]
+    editor = await can_edit(db, principal)
+    seen_ids = {m.user_id for m in seen}
+    rows_g = (
+        await db.scalars(
+            select(OrgWorkGroup)
+            .where(OrgWorkGroup.workspace_id == ws)
+            .order_by(OrgWorkGroup.sort, OrgWorkGroup.created_at)
+        )
+    ).all()
+    groups = [_group_out(g, None if editor else seen_ids) for g in rows_g]
     return StructureOut(
         units=[_unit_out(u) for u in units],
         positions=[_position_out(p) for p in positions],
         members=members,
-        can_edit=await can_edit(db, principal),
+        groups=[g for g in groups if g.member_ids],
+        can_edit=editor,
     )
+
+
+async def _companies_missing(db: AsyncSession, ws: str) -> bool:
+    """Whether an office company or department has no unit yet (a cheap check before the
+    locked pass)."""
+    branches = set((await db.scalars(select(Branch.id).where(Branch.workspace_id == ws))).all())
+    depts = set(
+        (await db.scalars(select(Department.id).where(Department.workspace_id == ws))).all()
+    )
+    rows = (
+        await db.execute(
+            select(OrgUnit.branch_id, OrgUnit.department_id).where(OrgUnit.workspace_id == ws)
+        )
+    ).all()
+    have_b = {b for b, d in rows if b and d is None}
+    have_d = {d for _, d in rows if d}
+    return bool(branches - have_b or depts - have_d)
 
 
 @router.post("/api/org/structure/seed")
@@ -452,6 +543,7 @@ async def seed_structure(
             status.HTTP_403_FORBIDDEN, "owner_only", "Only an owner can put the defaults back."
         )
     done = await seed.ensure(db, principal.workspace_id)
+    await seed.ensure_companies(db, principal.workspace_id)
     await audit.record(
         db,
         principal.workspace_id,
@@ -617,7 +709,7 @@ async def add_position(
         default_role=body.default_role,
         headcount=body.headcount,
         duties=_duties(body.duties),
-        aliases=[],
+        aliases=_aliases(body.aliases),
         sort=(last or 0) + 1,
         custom=True,
     )
@@ -824,3 +916,173 @@ async def assign(
             skipped.append(Skipped(user_id=uid, message=render(message or Msg("Not changed."))))
     await db.commit()
     return AssignOut(done=done, skipped=skipped)
+
+
+# ---------------------------------------------------------------- P146: work groups
+
+
+def _group_state(g: OrgWorkGroup) -> dict:
+    return {
+        "unit_id": g.unit_id,
+        "name": g.name,
+        "lead_user_id": g.lead_user_id,
+        "member_ids": list(g.member_ids or []),
+        "sort": g.sort,
+    }
+
+
+async def _group(db: AsyncSession, ws: str, group_id: str) -> OrgWorkGroup:
+    g = await db.get(OrgWorkGroup, group_id)
+    if g is None or g.workspace_id != ws:
+        raise api_error(status.HTTP_404_NOT_FOUND, "group_not_found", "That group is not here.")
+    return g
+
+
+async def _group_people(
+    db: AsyncSession,
+    principal: Principal,
+    group_id: str | None,
+    unit_id: str,
+    member_ids: list[str],
+    lead_user_id: str | None,
+    move: bool,
+) -> list[str]:
+    """Checks a group's people (members here, in the editor's scope, not the lead too) and keeps
+    one group per member per unit: someone in another group of this unit is refused, or with
+    `move` taken out of it (a group left empty goes). Returns the ids, in order, once each."""
+    ws = principal.workspace_id
+    ids = list(dict.fromkeys(i for i in member_ids if i))
+    if not ids:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "group_empty", "Put at least one person in it."
+        )
+    for uid in [*ids, *([lead_user_id] if lead_user_id else [])]:
+        m = await db.get(Membership, (ws, uid))
+        if m is None or not _member_in_scope(principal, m):
+            raise api_error(
+                status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here."
+            )
+    if lead_user_id and lead_user_id in ids:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "group_lead_inside",
+            "The person a group works with is not one of its own people.",
+        )
+    others = (
+        await db.scalars(
+            select(OrgWorkGroup).where(
+                OrgWorkGroup.workspace_id == ws,
+                OrgWorkGroup.unit_id == unit_id,
+                OrgWorkGroup.id != (group_id or ""),
+            )
+        )
+    ).all()
+    taken = [(g, [i for i in (g.member_ids or []) if i in ids]) for g in others]
+    taken = [(g, hit) for g, hit in taken if hit]
+    if taken and not move:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "group_member_taken",
+            "Someone here is already in another group of this unit. Take them out of it first.",
+        )
+    for g, hit in taken:
+        before = _group_state(g)
+        rest = [i for i in (g.member_ids or []) if i not in hit]
+        if rest:
+            g.member_ids = rest
+            await audit.record(
+                db,
+                ws,
+                principal.actor,
+                "org.group_changed",
+                target=g.id,
+                before=before,
+                after=_group_state(g),
+            )
+        else:
+            await db.delete(g)
+            await audit.record(
+                db, ws, principal.actor, "org.group_removed", target=g.id, before=before
+            )
+    return ids
+
+
+@router.post("/api/org/structure/groups", status_code=status.HTTP_201_CREATED)
+async def add_group(
+    body: GroupIn,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> GroupOut:
+    """People of one unit who work together (a pair or a small team), and whom they work
+    with."""
+    await _editor(db, principal)
+    ws = principal.workspace_id
+    await _unit(db, ws, body.unit_id)
+    ids = await _group_people(
+        db, principal, None, body.unit_id, body.member_ids, body.lead_user_id, body.move
+    )
+    last = await db.scalar(
+        select(func.max(OrgWorkGroup.sort)).where(OrgWorkGroup.workspace_id == ws)
+    )
+    g = OrgWorkGroup(
+        workspace_id=ws,
+        unit_id=body.unit_id,
+        name=_text(body.name, 160),
+        lead_user_id=body.lead_user_id,
+        member_ids=ids,
+        sort=(last or 0) + 1,
+    )
+    db.add(g)
+    await db.flush()
+    await audit.record(
+        db, ws, principal.actor, "org.group_added", target=g.id, after=_group_state(g)
+    )
+    await db.commit()
+    return _group_out(g)
+
+
+@router.patch("/api/org/structure/groups/{group_id}")
+async def update_group(
+    group_id: str,
+    body: GroupPatch,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> GroupOut:
+    await _editor(db, principal)
+    ws = principal.workspace_id
+    g = await _group(db, ws, group_id)
+    before = _group_state(g)
+    sent = body.model_fields_set
+    if "name" in sent:
+        g.name = _text(body.name, 160)
+    lead = body.lead_user_id if "lead_user_id" in sent else g.lead_user_id
+    ids = body.member_ids if "member_ids" in sent and body.member_ids else list(g.member_ids or [])
+    if "lead_user_id" in sent or "member_ids" in sent:
+        g.member_ids = await _group_people(db, principal, g.id, g.unit_id, ids, lead, body.move)
+        g.lead_user_id = lead
+    if "sort" in sent and body.sort is not None:
+        g.sort = body.sort
+    after = _group_state(g)
+    if after != before:
+        await audit.record(
+            db, ws, principal.actor, "org.group_changed", target=g.id, before=before, after=after
+        )
+    await db.commit()
+    return _group_out(g)
+
+
+@router.delete("/api/org/structure/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_group(
+    group_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """The group goes; its people stay where they are (their roles and lines unchanged)."""
+    await _editor(db, principal)
+    ws = principal.workspace_id
+    g = await _group(db, ws, group_id)
+    before = _group_state(g)
+    await db.delete(g)
+    await audit.record(db, ws, principal.actor, "org.group_removed", target=group_id, before=before)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
