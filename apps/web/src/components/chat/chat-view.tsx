@@ -39,6 +39,7 @@ import { clearAsk, peekAsk, taskIdIn } from "./links";
 import { ReplyLanguage } from "./reply-language";
 import { type Recalled, Remembered } from "./remembered";
 import { channelOf, SessionList, useSessions } from "./sessions";
+import { EMPTY_LIVE, type Live, streamChat } from "./stream";
 import { TASK_TOOLS, toolLook } from "./tools";
 
 export interface ChatMessage {
@@ -164,8 +165,21 @@ export function ChatView({
   const lastMsg = thread.data?.[thread.data.length - 1];
   const [openedAt] = useState(() => Date.now());
   const recentAsk = !!lastMsg && lastMsg.role === "user" && !!lastMsg.created_at && openedAt - Date.parse(lastMsg.created_at) < 5 * 60_000;
+  // P148c: the answer is shown as the model writes it (POST .../chat/stream); the saved
+  // answer replaces it when it is done.
+  const [live, setLive] = useState<Live>(EMPTY_LIVE);
+  const streamed = useRef<string | null>(null);
   const send = useMutation({
-    mutationFn: (text: string) => api<ChatReply>(`/api/agents/${agent.id}/chat`, "POST", { message: text, session_id: current, ...(replyIn ? { reply_in: replyIn } : {}) }),
+    mutationFn: async (text: string): Promise<ChatReply> => {
+      streamed.current = null;
+      setLive(EMPTY_LIVE);
+      return streamChat(agent.id, { message: text, session_id: current, ...(replyIn ? { reply_in: replyIn } : {}) }, {
+        start: (id) => {
+          streamed.current = id;
+        },
+        live: setLive,
+      });
+    },
     onMutate: (text) => {
       setAsked(text);
       setLocal((l) => [...l, { id: `u${Date.now()}`, role: "user", content: text }]);
@@ -190,8 +204,13 @@ export function ChatView({
         // The message reached the server and the agent is still on it: watch for the answer.
         setLocal([]);
         setWaiting(true);
-        if (current) void qc.invalidateQueries({ queryKey: workKeys.messages(current) });
-        else void qc.invalidateQueries({ queryKey: workKeys.sessions(agent.id) });
+        const id = current ?? streamed.current;
+        if (!current && id) {
+          setSessionId(id);
+          setPicked(true);
+        }
+        if (id) void qc.invalidateQueries({ queryKey: workKeys.messages(id) });
+        void qc.invalidateQueries({ queryKey: workKeys.sessions(agent.id) });
         return;
       }
       toast.error(errorMessage(e));
@@ -199,6 +218,7 @@ export function ChatView({
       // Nothing typed is lost: the message goes back in the box.
       setDraft((d) => (d.trim() ? d : text));
     },
+    onSettled: () => setLive(EMPTY_LIVE),
   });
   const watching = !send.isPending && (waiting || recentAsk);
   const progress = useQuery({
@@ -213,8 +233,8 @@ export function ChatView({
       }
       return r;
     },
-    enabled: !!current && (send.isPending || watching),
-    refetchInterval: (q) => (send.isPending || waiting || q.state.data?.busy ? 1500 : false),
+    enabled: !!current && watching,
+    refetchInterval: (q) => (waiting || q.state.data?.busy ? 1500 : false),
   });
   const stillWorking = watching && !!progress.data?.busy;
   const working = send.isPending || stillWorking;
@@ -228,6 +248,11 @@ export function ChatView({
     if (stick.current) toBottom(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- toBottom only reads refs
   }, [messages.length, send.isPending]);
+  // The answer being written stays in view as it grows (unless you scrolled up to read).
+  useEffect(() => {
+    if (stick.current && live.text) toBottom(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- toBottom only reads refs
+  }, [live.text]);
   // Another conversation: start at its latest message.
   useEffect(() => {
     stick.current = true;
@@ -390,7 +415,7 @@ export function ChatView({
   const copy = (text: string) =>
     void navigator.clipboard?.writeText(text).then(() => toast.success(tr("Copied.")), () => toast.error(tr("Copy blocked by the browser.")));
 
-  const lastTool = progress.data?.tools[progress.data.tools.length - 1];
+  const lastTool = send.isPending ? live.tools[live.tools.length - 1] : progress.data?.tools[progress.data.tools.length - 1];
   const doing = lastTool ? toolLook(lastTool)?.label : undefined;
   const thinkingText = doing
     ? t("{name} is working: {step}…", { name: agent.name, step: t(doing) })
@@ -525,7 +550,15 @@ export function ChatView({
                 ];
               })}
             </AnimatePresence>
-            {working ? (
+            {send.isPending && live.text ? (
+              <li className="flex min-w-0 gap-3" aria-busy="true">
+                <AgentAvatar name={agent.name} color={agent.color} size="sm" working className="mt-0.5 max-sm:hidden" />
+                <div className="min-w-0 flex-1">
+                  <Markdown className="text-[15px] leading-7 [&_pre]:text-[13px] [&_pre]:leading-relaxed [&_table]:text-[13px]">{live.text}</Markdown>
+                  <span aria-hidden className="ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 rounded-sm bg-accent/70 motion-safe:animate-pulse" />
+                </div>
+              </li>
+            ) : working ? (
               <li className="flex items-center gap-3">
                 <AgentAvatar name={agent.name} color={agent.color} size="sm" working />
                 <span className="flex items-center gap-2 rounded-[var(--radius-lg)] bg-surface-2/70 px-3.5 py-2.5 text-[13px] text-muted">

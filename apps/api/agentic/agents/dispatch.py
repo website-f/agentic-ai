@@ -27,10 +27,25 @@ from ..workflows.teams_workflows import MeetingWorkflow, ScheduledTaskWorkflow
 async def start_task(task_id: str, run: int) -> str:
     client = await temporal_client()
     workflow_id = f"task-{task_id}-{run}"
+    await _note_dispatch(task_id)
     await client.start_workflow(
         AgentTaskWorkflow.run, task_id, id=workflow_id, task_queue=settings.temporal_task_queue
     )
     return workflow_id
+
+
+async def _note_dispatch(task_id: str) -> None:
+    """P148c: when the task was handed to Temporal, so its first step can log how long the
+    hand-over took (runtime.dispatch_lag). Timing only: never in the way."""
+    import time
+
+    from ..agents.runtime import DISPATCH_KEY
+    from ..core.valkey import valkey
+
+    try:
+        await valkey().set(DISPATCH_KEY.format(task_id), int(time.time() * 1000), ex=3600)
+    except Exception:  # noqa: BLE001, S110
+        pass
 
 
 async def start_deferred(task_id: str, run: int, at: datetime) -> str:

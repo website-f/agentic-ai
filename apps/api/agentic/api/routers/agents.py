@@ -2,12 +2,14 @@
 
 import asyncio
 import contextlib
+import json
 import logging
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,8 +22,8 @@ from ...assistants import access as assistant_access
 from ...core.db import SessionLocal, get_db
 from ...core.security import role_permissions
 from ...core.valkey import valkey
-from ...engine import gateway
-from ...i18n import Msg
+from ...engine import gateway, stream, timing
+from ...i18n import Msg, tr
 from ...i18n import notes as lang_notes
 from ...i18n.labels import agent_status_label, role_label
 from ...models import SOP, Agent, AgentMessage, Branch, ChatSession, Department, Task, User
@@ -734,13 +736,11 @@ def _dormant_error(a: Agent) -> Exception:
     )
 
 
-@router.post("/agents/{agent_id}/chat")
-async def chat(
-    agent_id: str,
-    body: ChatIn,
-    principal: Principal = Depends(require("work.write")),
-    db: AsyncSession = Depends(get_db),
-) -> ChatOut:
+async def _chat_target(
+    db: AsyncSession, principal: Principal, agent_id: str, body: ChatIn
+) -> tuple[Agent, ChatSession, str | None]:
+    """The agent, the conversation (a new one when none is named) and the reply language of
+    one chat message, after every check."""
     # sees_agent, not observes_agent: staff only watch the rest of their office (view_only),
     # and nobody but its owner reaches a private assistant.
     a = await get_agent(db, principal, agent_id)
@@ -776,6 +776,17 @@ async def chat(
         )
         db.add(s)
         await db.commit()
+    return a, s, pick
+
+
+@router.post("/agents/{agent_id}/chat")
+async def chat(
+    agent_id: str,
+    body: ChatIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> ChatOut:
+    a, s, pick = await _chat_target(db, principal, agent_id, body)
     # P64: the turn runs on its own (its own database session), so a page reload, a dropped
     # connection or a proxy timeout never cancels it half way: the answer is saved anyway and
     # the page picks it up from the conversation (GET .../progress, then .../messages).
@@ -795,6 +806,83 @@ async def chat(
     )
 
 
+@router.post("/agents/{agent_id}/chat/stream")
+async def chat_stream(
+    agent_id: str,
+    body: ChatIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """P148c: the same chat turn, the answer sent word by word as the model writes it. One
+    JSON object per line (engine/stream.py): "start" (the conversation), then "delta",
+    "reset" and "tool" while it works, then "done" (the saved answer, as POST .../chat
+    answers) or "error". Like POST .../chat (P64) the turn runs on its own: a closed page
+    does not stop it, and the answer is saved either way."""
+    trace, token = timing.begin("chat", agent_id=agent_id, streamed=True)
+    try:
+        with timing.step("target"):
+            a, s, pick = await _chat_target(db, principal, agent_id, body)
+        sink = stream.Sink()
+        # The turn copies this context: the trace goes with it (the sink is attached inside).
+        work = asyncio.create_task(_turn(a.id, s.id, body.message, pick, sink=sink))
+    except BaseException:
+        timing.end(trace, token)
+        raise
+    timing.detach(token)  # the turn's copy of the context carries the trace on
+    _TURNS.add(work)
+    work.add_done_callback(_TURNS.discard)
+    work.add_done_callback(lambda w: _close_stream(w, s.id, sink, trace))
+    await db.close()  # P148c: the request's own connection is not held while the model writes
+
+    async def lines() -> AsyncIterator[bytes]:
+        yield _line({"t": "start", "session_id": s.id})
+        while True:
+            ev = await sink.queue.get()
+            if ev.get("t") == "_end":
+                return
+            if ev.get("t") == "delta":
+                trace.mark("first_shown")
+            yield _line(ev)
+
+    return StreamingResponse(
+        lines(),
+        media_type="application/x-ndjson",
+        # Every line leaves at once: no proxy buffering, no compression holding it back.
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"},
+    )
+
+
+def _line(ev: dict[str, Any]) -> bytes:
+    return (json.dumps(ev, ensure_ascii=False, default=str) + "\n").encode()
+
+
+def _close_stream(
+    work: asyncio.Task[runtime.ChatReply], session_id: str, sink: stream.Sink, trace: timing.Trace
+) -> None:
+    """The turn ended: its answer (or what went wrong) is the stream's last line."""
+    again = tr("Reload the page and try again.")
+    if work.cancelled():
+        sink.close({"t": "error", "code": "cancelled", "message": again})
+    elif (e := work.exception()) is not None:
+        code = "no_model_available" if isinstance(e, gateway.GatewayUnavailable) else "chat_failed"
+        msg = str(e) if code != "chat_failed" else again
+        sink.close({"t": "error", "code": code, "message": msg})
+    else:
+        r = work.result()
+        sink.close(
+            {
+                "t": "done",
+                "session_id": session_id,
+                "reply": r.content,
+                "provider": r.provider_name,
+                "model": r.model,
+                "tools_used": r.tools_used,
+                "message_id": r.message_id,
+            }
+        )
+    timing.end(trace, None)
+
+
 _TURNS: set[asyncio.Task[Any]] = set()  # running turns, kept so none is garbage-collected
 BUSY_FOR = 300  # seconds a turn counts as running at most (a crash never leaves it stuck)
 
@@ -804,22 +892,29 @@ def _busy_key(session_id: str) -> str:
 
 
 async def _turn(
-    agent_id: str, session_id: str, message: str, pick: str | None = None
+    agent_id: str,
+    session_id: str,
+    message: str,
+    pick: str | None = None,
+    sink: stream.Sink | None = None,
 ) -> runtime.ChatReply:
-    with contextlib.suppress(Exception):
-        await valkey().set(_busy_key(session_id), "1", ex=BUSY_FOR)
+    # P148c: the "busy" flag (for a page that reloads meanwhile) goes out beside the turn.
+    busy = asyncio.create_task(_set_busy(session_id))
     try:
-        async with SessionLocal() as db:
-            a = await db.get(Agent, agent_id)
-            s = await db.get(ChatSession, session_id)
-            assert a is not None and s is not None
-            reply = await runtime.chat_turn(db, a, s, message, pick)
-            s.title = s.title or message[:80]
-            # Every turn moves the conversation up the list (nothing else on the row
-            # changes, so the updated_at onupdate would not fire by itself).
-            s.updated_at = datetime.now(UTC)
-            await db.commit()
+        with stream.attach(sink), timing.step("turn"):
+            async with SessionLocal() as db:
+                a = await db.get(Agent, agent_id)
+                s = await db.get(ChatSession, session_id)
+                assert a is not None and s is not None
+                reply = await runtime.chat_turn(db, a, s, message, pick)
+                s.title = s.title or message[:80]
+                # Every turn moves the conversation up the list (nothing else on the row
+                # changes, so the updated_at onupdate would not fire by itself).
+                s.updated_at = datetime.now(UTC)
+                await db.commit()
     finally:
+        with contextlib.suppress(Exception):
+            await busy
         with contextlib.suppress(Exception):
             await valkey().delete(_busy_key(session_id))
     if reply.message_id is not None:
@@ -828,6 +923,11 @@ async def _turn(
         except Exception:  # noqa: BLE001
             log.warning("could not start chat learning", exc_info=True)
     return reply
+
+
+async def _set_busy(session_id: str) -> None:
+    with contextlib.suppress(Exception):
+        await valkey().set(_busy_key(session_id), "1", ex=BUSY_FOR)
 
 
 @router.get("/chat/sessions/{session_id}/progress")

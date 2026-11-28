@@ -1,6 +1,7 @@
 """Database and Valkey helpers shared by the gateway, the tester and the API."""
 
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -283,6 +284,44 @@ async def models_cooling(provider_id: str) -> dict[str, int]:
 async def cool_model(provider_id: str, model: str, seconds: int) -> None:
     if seconds > 0:
         await valkey().set(f"ai_cooldown:{provider_id}:{model}", "1", ex=seconds)
+
+
+@dataclass(frozen=True)
+class MemberState:
+    cooling: int = 0  # seconds the provider rests
+    model_cooling: int = 0  # seconds this model rests (P29)
+    quirks: frozenset[str] = frozenset()
+    reasoning: bool = False
+
+
+async def member_state(provider_id: str, model: str) -> MemberState:
+    """P148c: cooling_for, model_cooling_for, quirks and is_reasoning in one round trip (the
+    gateway asked them one by one before every model call)."""
+    pipe = valkey().pipeline(transaction=False)
+    pipe.ttl(f"ai_cooldown:{provider_id}")
+    pipe.ttl(f"ai_cooldown:{provider_id}:{model}")
+    pipe.smembers(f"ai_quirks:{provider_id}:{model}")
+    pipe.exists(f"ai_reasoning:{provider_id}:{model}")
+    cool, model_cool, found, reasoning = await pipe.execute()
+    return MemberState(
+        cooling=max(int(cool), 0),
+        model_cooling=max(int(model_cool), 0),
+        quirks=frozenset(x.decode() if isinstance(x, bytes) else str(x) for x in found or set()),
+        reasoning=bool(reasoning),
+    )
+
+
+async def cooling_many(members: list[tuple[str, str]]) -> list[tuple[int, int]]:
+    """(provider rest, model rest) in seconds for each (provider id, model), in one round
+    trip."""
+    if not members:
+        return []
+    pipe = valkey().pipeline(transaction=False)
+    for provider_id, model in members:
+        pipe.ttl(f"ai_cooldown:{provider_id}")
+        pipe.ttl(f"ai_cooldown:{provider_id}:{model}")
+    got = await pipe.execute()
+    return [(max(int(got[i]), 0), max(int(got[i + 1]), 0)) for i in range(0, len(got), 2)]
 
 
 async def is_reasoning(provider_id: str, model: str) -> bool:

@@ -9,7 +9,9 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import re
+import time
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -29,7 +31,7 @@ from ..core.redact import redact
 from ..core.workspace_settings import max_task_model_calls
 from ..devices.core import PC_TOOLS, pc_ready
 from ..devices.core import personal as pc_personal
-from ..engine import acting, copilot_first, gateway
+from ..engine import acting, copilot_first, gateway, stream, timing
 from ..i18n import explicit_lang
 from ..i18n import notes as lang_notes
 from ..microsoft import copilot as m365_copilot
@@ -551,7 +553,58 @@ async def _has_mcp(db: AsyncSession, workspace_id: str) -> bool:
     )
 
 
+# P148c: the tool list (hundreds of JSON schemas) is the same for every call with the same
+# modes and the same circumstances: built once, then reused. The key holds everything the
+# choice below depends on, so a changed mode or a newly linked mailbox is a new key.
+_OFFERED: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+OFFERED_MAX = 512
+offered_stats = {"hits": 0, "misses": 0}
+
+
 def offered_tools(
+    agent: Agent,
+    task: Task | None = None,
+    *,
+    mcp: bool = False,
+    pc: bool = False,
+    mail: bool = False,
+    teams: bool = False,
+    m365: bool = False,
+) -> list[dict[str, Any]]:
+    """`_offered_tools`, cached (P148c). A new list each time; the schemas are shared and
+    never changed by the callers."""
+    key = (
+        json.dumps(agent.tools or {}, sort_keys=True, default=str),
+        len(TOOLS),
+        sum(map(id, TOOLS.values())),  # a tool replaced (tests) is a new list
+        id(GLOBAL_DENY),
+        bool(settings.sandbox_url),
+        bool(settings.browser_url),
+        bool(agent.private),
+        mcp,
+        bool(pc and pc_personal(agent)),
+        mail,
+        teams,
+        m365,
+        prima_ready(agent.workspace_id),
+        delegation.can_delegate(agent, task),
+        task is None,
+        delegation.can_split(agent, task),
+        task is None or task.depth >= colleague.MAX_DEPTH,
+    )
+    hit = _OFFERED.get(key)
+    if hit is not None:
+        offered_stats["hits"] += 1
+        return list(hit)
+    offered_stats["misses"] += 1
+    out = _offered_tools(agent, task, mcp=mcp, pc=pc, mail=mail, teams=teams, m365=m365)
+    if len(_OFFERED) >= OFFERED_MAX:
+        _OFFERED.clear()
+    _OFFERED[key] = out
+    return list(out)
+
+
+def _offered_tools(
     agent: Agent,
     task: Task | None = None,
     *,
@@ -1323,12 +1376,38 @@ async def _task_chat(
 
 
 async def run_task_step(task_id: str) -> StepResult:
-    """One step of a task, its model calls logged against the person it is for (P36)."""
-    async with SessionLocal() as db:
-        task = await db.get(Task, task_id)
-        person = await allowance.person_of_task(db, task) if task is not None else None
-    with acting.person(person):
-        return await _run_task_step(task_id)
+    """One step of a task, its model calls logged against the person it is for (P36).
+    P148c: timed step by step (engine/timing.py), with how long Temporal took to start it."""
+    with timing.trace("task", task_id=task_id) as tr:
+        with timing.step("dispatch.lag"):
+            lag = await dispatch_lag(task_id)
+        if lag is not None:
+            tr.info["dispatch_ms"] = lag
+        async with SessionLocal() as db:
+            task = await db.get(Task, task_id)
+            person = await allowance.person_of_task(db, task) if task is not None else None
+        with acting.person(person):
+            return await _run_task_step(task_id)
+
+
+DISPATCH_KEY = "ai:dispatched:{}"
+
+
+async def dispatch_lag(task_id: str) -> int | None:
+    """ms from the API asking Temporal to start the task (dispatch.start_task) to its first
+    step starting in the worker; None after the first step or without the note."""
+    from ..core.valkey import valkey
+
+    try:
+        raw = await valkey().getdel(DISPATCH_KEY.format(task_id))
+    except Exception:  # noqa: BLE001 - timing only
+        return None
+    if not raw:
+        return None
+    try:
+        return max(0, int(time.time() * 1000) - int(raw))
+    except ValueError:
+        return None
 
 
 def browser_focus(schemas: list[dict[str, Any]], history: list[Any]) -> list[dict[str, Any]]:
@@ -1344,6 +1423,7 @@ async def _run_task_step(task_id: str) -> StepResult:
             return StepResult("done", task.result)
         ctx = ToolContext(db=db, agent=agent, workspace=ws, task=task)
         history = await _history(db, task_id=task.id)
+        t_first = time.perf_counter()
         if not history:
             # P94: ePerolehan work that reached the agent another way (a routine's run, a
             # schedule) gets the browser tools now, or stops with the plain reason.
@@ -1394,19 +1474,36 @@ async def _run_task_step(task_id: str) -> StepResult:
             history = await _history(db, task_id=task.id)
         elif await _refresh_memory(db, task, agent, ws, history):
             history = await _history(db, task_id=task.id)
+        timing.record("first_message", t_first)
 
         await agent_status(agent, "working", task)
-        pending = await _resolve_calls(db, ctx, task, history)
+        with timing.step("pending_calls"):
+            pending = await _resolve_calls(db, ctx, task, history)
         if pending:
             return pending
         # P36: a job the office learned is done its learned way, without the paid model; any
         # trouble hands it to the agent below with everything done so far.
-        gate = await _budget_gate(db, task, agent, ws)
+        with timing.step("budget"):
+            gate = await _budget_gate(db, task, agent, ws)
         if gate:
             return gate
-        routine = await routines.step(db, ctx, task, agent, ws, await _history(db, task_id=task.id))
+        with timing.step("routines"):
+            routine = await routines.step(
+                db, ctx, task, agent, ws, await _history(db, task_id=task.id)
+            )
         if routine is not None:
             return routine
+        # P148c: what the agent may be offered does not change within one step: asked once,
+        # not once per model call (owner_asks was asked four times per call).
+        with timing.step("tools.flags"):
+            mine = await owner_asks(db, agent, task)
+            flags = {
+                "mcp": await _has_mcp(db, ws.id),
+                "pc": await pc_ready(db, agent) and mine,
+                "mail": await mail_ready(db, agent) and mine,
+                "teams": await teams_ready(db, agent) and mine,
+                "m365": await m365_copilot.search_ready(db, agent) and mine,
+            }
 
         task_call_limit = max_task_model_calls(ws.settings)
         for _ in range(MAX_CALLS_PER_STEP):
@@ -1414,56 +1511,49 @@ async def _run_task_step(task_id: str) -> StepResult:
                 return StepResult(
                     "failed", f"Stopped after {task_call_limit} model calls without finishing."
                 )
-            gate = await _budget_gate(db, task, agent, ws)
+            with timing.step("budget"):
+                gate = await _budget_gate(db, task, agent, ws)
             if gate:
                 return gate
-            history = await _history(db, task_id=task.id)
-            if task.memory_snapshot is None:
-                task.memory_snapshot = await core_memory.snapshot(db, agent)
-            prompt = await system_prompt(db, agent, "task", task.memory_snapshot)
-            messages = [{"role": "system", "content": prompt}]
-            # P12: long runs send a checkpoint + recent turns, not the whole history.
-            group = task.model_group or agent.model_group  # P38: a person may pick another AI
-            window = await context.plan(
-                db,
-                task,
-                history,
-                workspace_id=ws.id,
-                group=group,
-                pinned_first=True,
-                window=await context.group_window(db, ws.id, group),
-                agent_id=agent.id,
-                task_id=task.id,
-            )
-            messages += context.render(history, window, to_openai, pinned_first=True)
-            await agent_thinking(agent, True)
-            try:
-                reply = await _task_chat(
+            with timing.step("prompt"):
+                history = await _history(db, task_id=task.id)
+                if task.memory_snapshot is None:
+                    task.memory_snapshot = await core_memory.snapshot(db, agent)
+                prompt = await system_prompt(db, agent, "task", task.memory_snapshot)
+                messages = [{"role": "system", "content": prompt}]
+                # P12: long runs send a checkpoint + recent turns, not the whole history.
+                group = task.model_group or agent.model_group  # P38: a person may pick an AI
+                window = await context.plan(
                     db,
-                    ws,
                     task,
-                    group,
-                    messages,
-                    task="agent.task",
-                    tools=browser_focus(  # P97: short non-browser tools mid-browsing
-                        offered_tools(
-                            agent,
-                            task,
-                            mcp=await _has_mcp(db, ws.id),
-                            pc=await pc_ready(db, agent) and await owner_asks(db, agent, task),
-                            mail=await mail_ready(db, agent) and await owner_asks(db, agent, task),
-                            teams=await teams_ready(db, agent)
-                            and await owner_asks(db, agent, task),
-                            m365=await m365_copilot.search_ready(db, agent)
-                            and await owner_asks(db, agent, task),
-                        ),
-                        history,
-                    ),
-                    max_tokens=TASK_REPLY_TOKENS,
+                    history,
+                    workspace_id=ws.id,
+                    group=group,
+                    pinned_first=True,
+                    window=await context.group_window(db, ws.id, group),
                     agent_id=agent.id,
                     task_id=task.id,
-                    branch_id=task.branch_id or agent.branch_id,
                 )
+                messages += context.render(history, window, to_openai, pinned_first=True)
+            with timing.step("tools"):
+                # P97: short non-browser tools mid-browsing
+                tools = browser_focus(offered_tools(agent, task, **flags), history)
+            thinking = _thinking_on(agent)
+            try:
+                with timing.step("model"):
+                    reply = await _task_chat(
+                        db,
+                        ws,
+                        task,
+                        group,
+                        messages,
+                        task="agent.task",
+                        tools=tools,
+                        max_tokens=TASK_REPLY_TOKENS,
+                        agent_id=agent.id,
+                        task_id=task.id,
+                        branch_id=task.branch_id or agent.branch_id,
+                    )
             except gateway.GatewayUnavailable as e:
                 if e.retry_in and await _ai_rests(db, task) < AI_RESTS:
                     # P96: every model is only resting (a provider's rate limit, which 50
@@ -1477,7 +1567,7 @@ async def _run_task_step(task_id: str) -> StepResult:
                 )
                 return StepResult("failed", f"{e}{' (' + why + ')' if why else ''}")
             finally:
-                await agent_thinking(agent, False)
+                await _thinking_off(thinking, agent)
             task.steps_used += 1
             await activity(
                 agent,
@@ -2298,142 +2388,281 @@ async def chat_turn(
     """Direct conversation. Runs in the request (no Temporal): only tools the policy allows
     outright are executed; anything needing approval is declined with a pointer to tasks.
     P36: billed to the person talking, within their daily AI allowance. P97: `pick` is the
-    conversation's own reply language (en, ms or a dialect), else the person's setting."""
-    with acting.person(session.user_id):
+    conversation's own reply language (en, ms or a dialect), else the person's setting.
+    P148c: timed step by step (engine/timing.py); streamed when the caller opened a sink."""
+    own = timing.current() is None
+    with (
+        acting.person(session.user_id),
+        timing.trace("chat", agent_id=agent.id) if own else contextlib.nullcontext(),
+    ):
         return await _chat_turn(db, agent, session, text, pick)
+
+
+# P148c: memory for a chat turn may take this long (from the start of the turn) before the
+# answer goes ahead without it. It runs beside the other preparation, so it usually costs
+# nothing; a slow embedding or vector search no longer holds the first word back.
+RECALL_BUDGET = float(os.environ.get("AGENTIC_RECALL_BUDGET_MS", "800")) / 1000
+# A greeting or a thank-you: nothing in memory makes the answer better.
+_TRIVIAL = re.compile(
+    r"^\s*(hi+|hello|hey|hai|helo|halo|salam|assalamualaikum|good (morning|afternoon|evening)"
+    r"|selamat (pagi|petang|malam)|thanks?( you)?( so much)?|thank u|thx|tq|ty|terima kasih"
+    r"|tqvm|ok thanks?|noted|cool|nice|great)\b[\s!.,:)\-]*$",
+    re.I,
+)
+_LATE: set[asyncio.Task[Any]] = set()  # lanes that outran their budget, left to finish
+
+
+def trivial(text: str) -> bool:
+    return bool(_TRIVIAL.match(text or ""))
+
+
+async def _recall_lane(
+    agent_id: str, session_id: str, asked_id: int, text: str, tz: str
+) -> tuple[str, str, str, list[dict[str, Any]]]:
+    """Memory for this turn (facts, wiki pages, library passages, lessons), on a connection
+    of its own so it runs beside the rest of the preparation. (query, memory, lessons,
+    what was recalled)."""
+    recalled: list[dict[str, Any]] = []
+    async with SessionLocal() as db:
+        a = await db.get(Agent, agent_id)
+        if a is None:
+            return text, "", "", recalled
+        with timing.step("recall.query"):
+            query = await _recall_query(db, session_id, asked_id, text)
+        with timing.step("recall.memory"):
+            block, _, _ = await recall_block(
+                db, a, query, tz, exclude_session_id=session_id, used=recalled
+            )
+        with timing.step("recall.lessons"):
+            taught = await brain_lessons.block_for_chat(db, a, query)
+    return query, block, taught, recalled
+
+
+@dataclass
+class _Gate:
+    limits: budget.BudgetState | None = None
+    allowance: Any = None  # allowance.Allowance when the person is over theirs
+    verdict: scope_guard.Verdict | None = None
+
+
+async def _gate_lane(agent_id: str, user_id: str | None, text: str) -> _Gate:
+    """On a connection of its own: the limits (P51: first, so someone over theirs costs no
+    model call), then P36's work-scope check (often a model call of its own)."""
+    async with SessionLocal() as db:
+        a = await db.get(Agent, agent_id)
+        ws = await db.get(Workspace, a.workspace_id) if a is not None else None
+        if a is None or ws is None:
+            return _Gate(verdict=scope_guard.Verdict(True))
+        with timing.step("limits"):
+            st = await budget.state(db, a, ws.timezone)
+            left = await allowance.check(db, ws, user_id)
+        if st.over or left is not None:
+            return _Gate(st, left)
+        with timing.step("scope_check"):
+            return _Gate(st, None, await scope_guard.check(db, ws, user_id, text, "chat"))
+
+
+async def _prompt_lane(agent_id: str, snapshot: str | None) -> str | None:
+    """The chat system prompt, on a connection of its own."""
+    async with SessionLocal() as db:
+        a = await db.get(Agent, agent_id)
+        if a is None:
+            return None
+        with timing.step("prompt"):
+            return await system_prompt(db, a, "chat", snapshot)
+
+
+async def _within(job: asyncio.Task[Any], until: float, default: Any) -> Any:
+    """The job's result, or `default` when it is not done by `until` (loop time); the job is
+    left to finish on its own (its bookkeeping still lands)."""
+    left = until - asyncio.get_running_loop().time()
+    try:
+        return await asyncio.wait_for(asyncio.shield(job), max(left, 0.01))
+    except TimeoutError:
+        log.info("chat memory skipped: not ready within %.0f ms", RECALL_BUDGET * 1000)
+        _LATE.add(job)
+        job.add_done_callback(_LATE.discard)
+        return default
+    except Exception:  # noqa: BLE001 - memory is a help, never a reason to fail the answer
+        log.warning("chat memory failed", exc_info=True)
+        return default
+
+
+def _thinking_on(agent: Agent) -> asyncio.Task[None]:
+    """P148c: the "..." bubble goes out beside the model call, not before it."""
+    return asyncio.create_task(agent_thinking(agent, True))
+
+
+async def _thinking_off(on: asyncio.Task[None], agent: Agent) -> None:
+    with contextlib.suppress(Exception):
+        await on  # in order: never an "off" before its "on"
+    await agent_thinking(agent, False)
+
+
+def _cancel(*jobs: asyncio.Task[Any] | None) -> None:
+    for j in jobs:
+        if j is not None and not j.done():
+            j.cancel()
 
 
 async def _chat_turn(
     db: AsyncSession, agent: Agent, session: ChatSession, text: str, pick: str | None = None
 ) -> ChatReply:
-    ws = await db.get(Workspace, agent.workspace_id)
-    assert ws is not None
-    # Frozen for the conversation, like a task run, so the cached prompt prefix keeps hitting.
-    # A WhatsApp or Telegram chat is one conversation forever: after a quiet hour (the cache
-    # is cold by then anyway) it picks up what changed in core memory meanwhile.
-    last = await db.scalar(
-        select(func.max(AgentMessage.created_at)).where(AgentMessage.session_id == session.id)
-    )
-    stale = last is not None and datetime.now(UTC) - last > SNAPSHOT_IDLE
-    if session.memory_snapshot is None or stale:
-        session.memory_snapshot = await core_memory.snapshot(db, agent)
-    asked = _add(db, agent, "user", session_id=session.id, content=text)
-    await db.commit()
-    # P51: limits first, so someone over theirs costs no model call (the scope check is one).
-    st = await budget.state(db, agent, ws.timezone)
-    left = await allowance.check(db, ws, session.user_id)
-    if st.over or left is not None:
-        if left is not None:  # P114: they and their managers hear of it, once a day
-            await allowance.tell_used_up(db, ws, session.user_id, agent, left)
-        note = (
-            left.note(explicit_lang() or await prefs.language(db, session.user_id))
-            if left is not None
-            else over_budget_reply(st)
+    sink = stream.current()
+    loop = asyncio.get_running_loop()
+    with timing.step("load"):
+        ws = await db.get(Workspace, agent.workspace_id)
+        assert ws is not None
+        # Frozen for the conversation, like a task run, so the cached prompt prefix keeps
+        # hitting. A WhatsApp or Telegram chat is one conversation forever: after a quiet hour
+        # (the cache is cold by then anyway) it picks up what changed in core memory meanwhile.
+        last = await db.scalar(
+            select(func.max(AgentMessage.created_at)).where(AgentMessage.session_id == session.id)
         )
-        answer = _add(
-            db, agent, "assistant", session_id=session.id, content=note, meta={"budget": True}
-        )
+        stale = last is not None and datetime.now(UTC) - last > SNAPSHOT_IDLE
+        if session.memory_snapshot is None or stale:
+            session.memory_snapshot = await core_memory.snapshot(db, agent)
+        asked = _add(db, agent, "user", session_id=session.id, content=text)
         await db.commit()
-        return ChatReply(note, "", "", [], answer.id)
-    # P36: staff use their AI for their work; anything else is refused before any work.
-    verdict = await scope_guard.check(db, ws, session.user_id, text, "chat")
-    if not verdict.ok:
-        note = scope_guard.refusal(
-            verdict.why, explicit_lang() or await prefs.language(db, session.user_id)
-        )
-        answer = _add(
-            db, agent, "assistant", session_id=session.id, content=note, meta={"scope": True}
-        )
-        await db.commit()
-        return ChatReply(note, "", "", [], answer.id)
-    # P92: a correction or "remember this" is kept as a lesson now, so this very answer and
-    # every later one use it; the person sees "Noted for next time" under the answer.
-    noted = await _chat_lesson(db, agent, session, asked, text)
-    # P94: ePerolehan asked in chat: the browser tools are given when this person may, else
-    # the agent tells them plainly who can allow it.
-    from . import browser_grant
-
-    no_browser = await browser_grant.for_chat(db, agent, session.user_id, text)
-    if not no_browser:  # P96: the office skill this asks for, given when this person may
-        from . import skill_grant
-
-        no_browser = await skill_grant.for_chat(db, agent, session.user_id, text)
-    # Recalled memory rides on this turn only: it is not stored, and earlier turns stay
-    # byte-identical, so the cached prompt prefix keeps hitting.
-    recalled: list[dict[str, Any]] = []
-    query = await _recall_query(db, session.id, asked.id, text)
-    block, _, _ = await recall_block(
-        db,
-        agent,
-        query,
-        ws.timezone,
-        exclude_session_id=session.id,
-        used=recalled,
+    # P148c: the preparation runs side by side, on connections of their own: memory (from now
+    # on), the limits and the work-scope check (a model call when not cached), while this
+    # connection reads the rest. Nothing is given, learned or answered before the check says
+    # yes, and the model is not asked before it either.
+    recall_job = (
+        None
+        if trivial(text)
+        else asyncio.create_task(_recall_lane(agent.id, session.id, asked.id, text, ws.timezone))
     )
-    taught = await brain_lessons.block_for_chat(db, agent, query)
-    block = "\n\n".join(b for b in (block, taught, no_browser) if b)
-    # P22: the person's language rides on this turn too (never the system prompt). The
-    # request's language (X-Lang, or a bot's use_lang), else the person's saved one.
-    # P37/P97: the person's dialect or casual style, and what their dialect words mean, when
-    # they write in Malay (mixed with English counts); otherwise plain speech, so a dialect
-    # never outlives the setting. The same for every agent they talk to; a conversation may
-    # pick another language or dialect for itself.
-    voice = await prefs.voice(db, session.user_id, text, lang=explicit_lang(), pick=pick)
-    note = lang_notes.turn_note(voice, text)
-    block = f"{block}\n\n{note}" if block else note
+    recall_until = loop.time() + RECALL_BUDGET
+    gate_job = asyncio.create_task(_gate_lane(agent.id, session.user_id, text))
+    # The prompt too; built again after the grants only when they gave or refused something
+    # (a skill or tool given just now is in the prompt and the list).
+    prompt_job = asyncio.create_task(_prompt_lane(agent.id, session.memory_snapshot))
+    try:
+        with timing.step("prepare"):
+            # The person's language rides on this turn (P22/P37/P97: their dialect or casual
+            # style when they write in Malay, a conversation's own pick; never the system
+            # prompt, so the cached prefix stays the same).
+            voice = await prefs.voice(db, session.user_id, text, lang=explicit_lang(), pick=pick)
+            # A person who could approve this agent's requests asking it directly (policy.py).
+            approver = await policy.chat_approver(db, agent, session.user_id)
+            # P51: their own AI opens their mail and computer only for them.
+            mine = await owner_asks(db, agent, person=session.user_id)
+            # Outside text was read in this conversation (policy.OUTSIDE_CONTENT). P29: it
+            # persists across turns (the text is still in the context); the person's own "yes"
+            # right after the agent asked for confirmation is the confirmation.
+            outside_read = await _outside_seen(db, session.id, asked.id)
+            confirmed = outside_read and await _confirms(db, session.id, asked.id, text)
+            # What this agent may be offered does not change during one turn: asked once, not
+            # once per tool round.
+            flags = {
+                "mcp": await _has_mcp(db, ws.id),
+                "pc": await pc_ready(db, agent) and mine,
+                "mail": await mail_ready(db, agent) and mine,
+                "teams": await teams_ready(db, agent) and mine,
+                "m365": await m365_copilot.search_ready(db, agent) and mine,
+            }
+            window_size = await context.group_window(db, ws.id, agent.model_group)
+        with timing.step("wait.gate"):
+            gate = await gate_job
+        if gate.verdict is None:  # over the agent's budget or the person's allowance
+            _cancel(recall_job, prompt_job)
+            st, left = gate.limits, gate.allowance
+            if left is not None:  # P114: they and their managers hear of it, once a day
+                await allowance.tell_used_up(db, ws, session.user_id, agent, left)
+            note = (
+                left.note(explicit_lang() or await prefs.language(db, session.user_id))
+                if left is not None
+                else over_budget_reply(st)
+            )
+            answer = _add(
+                db, agent, "assistant", session_id=session.id, content=note, meta={"budget": True}
+            )
+            await db.commit()
+            return ChatReply(note, "", "", [], answer.id)
+        # P36: staff use their AI for their work; anything else is refused before any work.
+        if not gate.verdict.ok:
+            _cancel(recall_job, prompt_job)
+            note = scope_guard.refusal(
+                gate.verdict.why, explicit_lang() or await prefs.language(db, session.user_id)
+            )
+            answer = _add(
+                db, agent, "assistant", session_id=session.id, content=note, meta={"scope": True}
+            )
+            await db.commit()
+            return ChatReply(note, "", "", [], answer.id)
+        # P92: a correction or "remember this" is kept as a lesson now, so this very answer
+        # and every later one use it; the person sees "Noted for next time" under the answer.
+        with timing.step("lesson"):
+            noted = await _chat_lesson(db, agent, session, asked, text)
+        # P94: ePerolehan asked in chat: the browser tools are given when this person may,
+        # else the agent tells them plainly who can allow it.
+        from . import browser_grant
+
+        with timing.step("grants"):
+            no_browser = await browser_grant.for_chat(db, agent, session.user_id, text)
+            if not no_browser:  # P96: the office skill this asks for, when this person may
+                from . import skill_grant
+
+                no_browser = await skill_grant.for_chat(db, agent, session.user_id, text)
+        with timing.step("wait.prompt"):
+            prompt = await prompt_job
+        if prompt is None or no_browser or browser_grant.about_text(text):
+            with timing.step("prompt.again"):
+                prompt = await system_prompt(db, agent, "chat", session.memory_snapshot)
+        with timing.step("tools"):
+            offered = offered_tools(agent, **flags)
+        # Recalled memory rides on this turn only: it is not stored, and earlier turns stay
+        # byte-identical, so the cached prompt prefix keeps hitting.
+        recalled: list[dict[str, Any]] = []
+        block = taught = ""
+        query = text
+        if recall_job is not None:
+            with timing.step("wait.recall"):
+                query, block, taught, recalled = await _within(
+                    recall_job, recall_until, (text, "", "", [])
+                )
+        if noted is not None:  # the lesson just taught is in this very answer
+            taught = await brain_lessons.block_for_chat(db, agent, query)
+        block = "\n\n".join(b for b in (block, taught, no_browser) if b)
+        note = lang_notes.turn_note(voice, text)
+        block = f"{block}\n\n{note}" if block else note
+    except BaseException:
+        _cancel(recall_job, gate_job, prompt_job)
+        raise
     ctx = ToolContext(
         db=db, agent=agent, workspace=ws, task=None, person=session.user_id, session_id=session.id
     )
-    # A person who could approve this agent's requests asking it directly (policy.py).
-    approver = await policy.chat_approver(db, agent, session.user_id)
-    # P51: their own AI opens their mail and computer only for them.
-    mine = await owner_asks(db, agent, person=session.user_id)
     used: list[str] = []
-    # Outside text was read in this conversation (policy.OUTSIDE_CONTENT). P29: it persists
-    # across turns (the text is still in the context); the person's own "yes" right after
-    # the agent asked for confirmation is the confirmation.
-    outside_read = await _outside_seen(db, session.id, asked.id)
-    confirmed = outside_read and await _confirms(db, session.id, asked.id, text)
     for round_no in range(CHAT_ROUNDS):
         # The last round offers no tools: the agent answers from what it has found so far,
         # instead of the person getting "could not finish" after real work was done.
         last = round_no == CHAT_ROUNDS - 1
-        history = await _history(db, session_id=session.id)
-        prompt = await system_prompt(db, agent, "chat", session.memory_snapshot)
-        messages = [{"role": "system", "content": prompt}]
-        # P12: a long conversation is checkpointed instead of cut at a fixed count (which
-        # could split a tool call from its results).
-        window = await context.plan(
-            db,
-            session,
-            history,
-            workspace_id=ws.id,
-            group=agent.model_group,
-            pinned_first=False,
-            window=await context.group_window(db, ws.id, agent.model_group),
-            agent_id=agent.id,
-        )
-        messages += context.render(
-            history,
-            window,
-            to_openai,
-            pinned_first=False,
-            extra={asked.id: block} if block else None,
-        )
+        with timing.step("history"):
+            history = await _history(db, session_id=session.id)
+            messages = [{"role": "system", "content": prompt}]
+            # P12: a long conversation is checkpointed instead of cut at a fixed count (which
+            # could split a tool call from its results).
+            window = await context.plan(
+                db,
+                session,
+                history,
+                workspace_id=ws.id,
+                group=agent.model_group,
+                pinned_first=False,
+                window=window_size,
+                agent_id=agent.id,
+            )
+            messages += context.render(
+                history,
+                window,
+                to_openai,
+                pinned_first=False,
+                extra={asked.id: block} if block else None,
+            )
         if last:
             messages.append({"role": "user", "content": FINAL_ROUND})
-        tools = (
-            None
-            if last
-            else offered_tools(
-                agent,
-                mcp=await _has_mcp(db, ws.id),
-                pc=await pc_ready(db, agent) and mine,
-                mail=await mail_ready(db, agent) and mine,
-                teams=await teams_ready(db, agent) and mine,
-                m365=await m365_copilot.search_ready(db, agent) and mine,
-            )
-        )
+        tools = None if last else offered
         # P96: the same first question, same person, same sources: the answer it gave before.
         reuse = (
             answers.key(
@@ -2464,8 +2693,10 @@ async def _chat_turn(
             )
             await db.commit()
             await answers.count(ws.id, agent.id, saved)
+            if sink is not None:
+                sink.delta(hit["content"])
             return ChatReply(hit["content"], "reuse", str(hit.get("model") or ""), [], answer.id)
-        await agent_thinking(agent, True)
+        thinking = _thinking_on(agent)
         # P147: the first answer of a person's own conversation with their own AI may come from
         # Microsoft 365 Copilot, as them (engine/copilot_first.py decides, else the engine).
         mark = (
@@ -2474,7 +2705,7 @@ async def _chat_turn(
             else contextlib.nullcontext()
         )
         try:
-            with mark:
+            with mark, timing.step("model" if round_no == 0 else "model.again"):
                 reply = await gateway.chat(
                     db,
                     ws.id,
@@ -2491,8 +2722,11 @@ async def _chat_turn(
             if backup is None:
                 raise
             reply = backup
+            if sink is not None:
+                sink.reset()
+                sink.delta(reply.content)
         finally:
-            await agent_thinking(agent, False)
+            await _thinking_off(thinking, agent)
         if not reply.tool_calls and (reply.content or "").strip():
             if reuse and not reply.truncated and BACKUP_NOTE not in reply.content:
                 await answers.keep(
@@ -2517,6 +2751,8 @@ async def _chat_turn(
             )
             await db.commit()
             return ChatReply(reply.content, reply.provider_name, reply.model, used, answer.id)
+        if sink is not None:
+            sink.reset()  # words before a tool call ("let me check") are not the answer
         _add(
             db,
             agent,
@@ -2539,7 +2775,10 @@ async def _chat_turn(
                 if d.rule == "chat.person_asked" and outside_read and not confirmed:
                     result = OUTSIDE_HOLD
                 elif d.effect == "allow":
-                    result = await run_tool(ctx, name, args)
+                    if sink is not None:
+                        sink.tool(name)
+                    with timing.step(f"tool.{name}"):
+                        result = await run_tool(ctx, name, args)
                     used.append(name)
                     if name in policy.OUTSIDE_CONTENT:
                         outside_read, confirmed = True, False

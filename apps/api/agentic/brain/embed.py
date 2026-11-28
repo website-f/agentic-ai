@@ -10,6 +10,7 @@ import logging
 import math
 import re
 import threading
+from collections import OrderedDict
 from typing import Any
 
 from ..core.config import settings
@@ -93,9 +94,26 @@ async def embed(texts: list[str]) -> list[list[float]] | None:
     return await asyncio.to_thread(_embed_sync, texts)
 
 
+# P148c: one chat turn embeds the same words more than once (the skill match, memory recall,
+# the library), and a person often asks the same thing again: the last vectors are kept.
+_RECENT: "OrderedDict[str, list[float]]" = OrderedDict()
+RECENT_MAX = 256
+RECENT_MAX_CHARS = 4000
+
+
 async def embed_one(text: str) -> list[float] | None:
+    keep = len(text) <= RECENT_MAX_CHARS
+    key = f"{settings.embed_backend}|{settings.embed_model}|{text}"
+    if keep and (hit := _RECENT.get(key)) is not None:
+        _RECENT.move_to_end(key)
+        return hit
     out = await embed([text])
-    return out[0] if out else None
+    vec = out[0] if out else None
+    if keep and vec is not None:
+        _RECENT[key] = vec
+        if len(_RECENT) > RECENT_MAX:
+            _RECENT.popitem(last=False)
+    return vec
 
 
 async def warm() -> None:

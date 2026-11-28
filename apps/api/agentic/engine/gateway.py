@@ -17,6 +17,7 @@ import contextlib
 import hashlib
 import json
 import random
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -28,7 +29,7 @@ from ..core.config import settings
 from ..core.db import release_idle
 from ..models import AIModel, AIProvider, ModelGroup
 from ..obs import langfuse
-from . import client, compliance, copilot_first, media, privacy, rotation, store
+from . import client, compliance, copilot_first, media, privacy, rotation, store, stream, timing
 from .client import Usage
 from .errors import Failure
 
@@ -179,36 +180,11 @@ async def _chat(
     and tool calls come back with the real values. Callers only ever see real text."""
     if reasoning_effort is None and json_mode and task.startswith(BACKGROUND_TASKS):
         reasoning_effort = "low"
-    # Default groups are created lazily; a fresh workspace may not have them yet.
-    await store.ensure_default_groups(db, workspace_id)
-    g = await db.scalar(
-        select(ModelGroup).where(ModelGroup.workspace_id == workspace_id, ModelGroup.name == group)
-    )
-    if g is None:
-        raise GatewayUnavailable(f"There is no model group called '{group}'.", [])
-    if g.name in media.NAMES:
-        raise GatewayUnavailable(
-            f"The {g.label} group does not chat. Pick a chat group such as Smart or Fast.", []
+    sink = stream.for_task(task, json_mode)
+    with timing.step("gateway.setup"):
+        g, providers, guard = await _setup(
+            db, workspace_id, group, branch_id, agent_id, task_id, _guard
         )
-    if not g.members:
-        raise GatewayUnavailable(
-            f"The {g.label} group has no models yet. Add some in AI Engine > Model groups.", []
-        )
-
-    provider_ids = {m["provider_id"] for m in g.members}
-    providers = {
-        p.id: p
-        for p in (
-            await db.scalars(
-                select(AIProvider).where(
-                    AIProvider.id.in_(provider_ids), AIProvider.workspace_id == workspace_id
-                )
-            )
-        ).all()
-    }
-    guard = _guard or await _guard_for(db, workspace_id, branch_id, agent_id, task_id)
-    guard.check(g.members, providers)
-
     prefix = prefix_hash(messages, tools)
     attempts: list[dict[str, Any]] = []
     waits: list[int] = []  # seconds until a cooling or rate-limited member is usable again
@@ -216,8 +192,10 @@ async def _chat(
     interactive = task in INTERACTIVE_TASKS
     cap = min(MAX_WAIT, settings.ai_chat_max_wait) if interactive else MAX_WAIT
     # P105: shared members take turns (sticky per agent or task), then the rest in order.
-    members = await rotation.order(g.id, g.members, agent_id, task_id)
+    with timing.step("gateway.rotation"):
+        members = await rotation.order(g.id, g.members, agent_id, task_id)
     for i, member in enumerate(members):
+        t_member = time.perf_counter()
         p = providers.get(member["provider_id"])
         model_id = member["model_id"]
         label = f"{p.name if p else 'removed provider'} / {model_id}"
@@ -243,11 +221,13 @@ async def _chat(
         if not key:
             attempts.append({"member": label, "skipped": "no key saved"})
             continue
-        if wait := await store.cooling_for(p.id):
+        # P148c: the member's rest, quirks and thinking flag in one Valkey round trip.
+        ms = await store.member_state(p.id, model_id)
+        if wait := ms.cooling:
             attempts.append({"member": label, "skipped": f"cooling down for {wait} s"})
             waits.append(wait)
             continue
-        if wait := await store.model_cooling_for(p.id, model_id):
+        if wait := ms.model_cooling:
             attempts.append({"member": label, "skipped": f"model cooling down for {wait} s"})
             waits.append(wait)
             continue
@@ -272,13 +252,12 @@ async def _chat(
             attempts.append({"member": label, "skipped": "model no longer offered"})
             continue
 
-        known = await store.quirks(p.id, model_id) | client.local_quirks(p.tier, model_id)
-        thinker = "no_think" not in known and (
-            client.thinks(model_id) or await store.is_reasoning(p.id, model_id)
-        )
+        known = ms.quirks | client.local_quirks(p.tier, model_id)
+        thinker = "no_think" not in known and (client.thinks(model_id) or ms.reasoning)
         budget = max(max_tokens, client.reasoning_floor(json_mode)) if thinker else max_tokens
         # P33: a cloud member sees placeholders, never the real values.
-        sent, masker = guard.masked(p, messages)
+        with timing.step("gateway.mask"):
+            sent, masker = guard.masked(p, messages)
         await release_idle(db)  # P96: inside a task step, no connection held while it thinks
         # P105: a person is waiting and another model could answer: do not wait on a slow one.
         deadline = (
@@ -287,6 +266,11 @@ async def _chat(
             and await _another(members[i + 1 :], providers, _skip | failed, guard, group, task)
             else None
         )
+        timing.record("gateway.member_checks", t_member)
+        # P148c: a person reading along sees the answer as it is written.
+        first = asyncio.Event()
+        on_delta = _streamer(sink, first, masker) if sink is not None else None
+        timing.mark("provider_call")
         pending = client.chat(
             p.base_url,
             key,
@@ -301,25 +285,25 @@ async def _chat(
             if thinker and client.takes_effort(model_id)
             else None,
             extra_body=privacy.zdr_body() if p.require_zdr else None,
+            on_delta=on_delta,
         )
-        if deadline is None:
-            r = await pending
-        else:
-            try:
-                r = await asyncio.wait_for(pending, deadline)
-            except TimeoutError:
-                r = client.ChatResult(
-                    call=client.CallResult(
-                        ok=False,
-                        latency_ms=int(deadline * 1000),
-                        failure=Failure(
-                            "slow",
-                            f"No answer within {deadline:g} s, so the next model was asked.",
-                        ),
-                    )
-                )
+        with timing.step("gateway.provider"):
+            if deadline is None:
+                r = await pending
+            elif on_delta is not None:
+                # Streaming: the deadline is for the model to start answering; once the
+                # words come, a long answer is read to its end.
+                r = await _first_within(pending, first, deadline)
+            else:
+                try:
+                    r = await asyncio.wait_for(pending, deadline)
+                except TimeoutError:
+                    r = _slow(deadline)
+        t_after = time.perf_counter()
         if masker is not None:
             privacy.unmask_result(r, masker.mapping, json_mode=json_mode)
+        if on_delta is not None:
+            _streamed_end(sink, on_delta)
         if r.quirks - known:
             await store.remember_quirks(p.id, model_id, r.quirks - known)
         if r.reasoning_retry:
@@ -393,6 +377,9 @@ async def _chat(
             max_tokens=budget,
             temperature=temperature,
         )
+        if sink is not None and not usable:
+            sink.reset()  # its words (if any) are not the answer: the next model starts over
+        timing.record("gateway.bookkeeping", t_after)
         if usable:
             attempts.append({"member": label, "ok": True, "latency_ms": r.call.latency_ms})
             return GatewayReply(
@@ -467,6 +454,120 @@ async def _chat(
     )
 
 
+async def _setup(
+    db: AsyncSession,
+    workspace_id: str,
+    group: str,
+    branch_id: str | None,
+    agent_id: str | None,
+    task_id: str | None,
+    guard: _Guard | None,
+) -> tuple[ModelGroup, dict[str, AIProvider], _Guard]:
+    """The group, its providers and the call's data guard (raises when none can answer)."""
+    # Default groups are created lazily; a fresh workspace may not have them yet. The list
+    # it reads is the group's row too (P148c: no second query for it).
+    rows = await store.ensure_default_groups(db, workspace_id)
+    g = next((r for r in rows if r.name == group), None)
+    if g is None:
+        raise GatewayUnavailable(f"There is no model group called '{group}'.", [])
+    if g.name in media.NAMES:
+        raise GatewayUnavailable(
+            f"The {g.label} group does not chat. Pick a chat group such as Smart or Fast.", []
+        )
+    if not g.members:
+        raise GatewayUnavailable(
+            f"The {g.label} group has no models yet. Add some in AI Engine > Model groups.", []
+        )
+    provider_ids = {m["provider_id"] for m in g.members}
+    providers = {
+        p.id: p
+        for p in (
+            await db.scalars(
+                select(AIProvider).where(
+                    AIProvider.id.in_(provider_ids), AIProvider.workspace_id == workspace_id
+                )
+            )
+        ).all()
+    }
+    guard = guard or await _guard_for(db, workspace_id, branch_id, agent_id, task_id)
+    guard.check(g.members, providers)
+    return g, providers, guard
+
+
+def _slow(deadline: float) -> client.ChatResult:
+    return client.ChatResult(
+        call=client.CallResult(
+            ok=False,
+            latency_ms=int(deadline * 1000),
+            failure=Failure(
+                "slow", f"No answer within {deadline:g} s, so the next model was asked."
+            ),
+        )
+    )
+
+
+async def _first_within(
+    pending: Awaitable[client.ChatResult], first: asyncio.Event, deadline: float
+) -> client.ChatResult:
+    """The streamed call, given up when not even its first word came within `deadline`."""
+    call = asyncio.ensure_future(pending)
+    started = asyncio.ensure_future(first.wait())
+    try:
+        await asyncio.wait({call, started}, timeout=deadline, return_when=asyncio.FIRST_COMPLETED)
+    except asyncio.CancelledError:
+        call.cancel()  # the turn itself was stopped: so is its model call
+        raise
+    finally:
+        started.cancel()
+    if call.done() or first.is_set():
+        return await call
+    call.cancel()
+    with contextlib.suppress(BaseException):
+        await call
+    return _slow(deadline)
+
+
+def _streamer(
+    sink: stream.Sink, first: asyncio.Event, masker: privacy.Masker | None
+) -> Callable[[str], None]:
+    """The client's on_delta for one member: words to the sink (real values back in place of
+    a cloud model's placeholders, P33), and the timing marks."""
+    unmasker = (
+        stream.Unmasker(lambda t: privacy.unmask(t, masker.mapping), privacy.KINDS)
+        if masker is not None and masker.mapping
+        else None
+    )
+
+    def on_delta(text: str) -> None:
+        if not first.is_set():
+            first.set()
+            timing.mark("first_byte")
+        if not text:
+            return
+        timing.mark("first_token")
+        if unmasker is None:
+            sink.delta(text)
+            return
+        add, replace = unmasker.feed(text)
+        if replace:
+            sink.reset()
+        sink.delta(add)
+
+    on_delta.unmasker = unmasker  # type: ignore[attr-defined]
+    return on_delta
+
+
+def _streamed_end(sink: stream.Sink | None, on_delta: Callable[[str], None]) -> None:
+    """The last words a masked stream held back (the word being written)."""
+    unmasker = getattr(on_delta, "unmasker", None)
+    if sink is None or unmasker is None:
+        return
+    add, replace = unmasker.flush()
+    if replace:
+        sink.reset()
+    sink.delta(add)
+
+
 async def _another(
     later: list[dict[str, Any]],
     providers: dict[str, AIProvider],
@@ -477,6 +578,7 @@ async def _another(
 ) -> bool:
     """P105: some later member could take the work right now (on, keyed, allowed, not
     resting), so a slow answer may be cut short. The last hope is always waited for."""
+    able = []
     for m in later:
         p = providers.get(m["provider_id"])
         if (
@@ -488,10 +590,9 @@ async def _another(
             or (p.name == store.LOCAL_PROVIDER and group != "local" and task not in TINY_TASKS)
         ):
             continue
-        if await store.cooling_for(p.id) or await store.model_cooling_for(p.id, m["model_id"]):
-            continue
-        return True
-    return False
+        able.append((p.id, m["model_id"]))
+    # P148c: every candidate's rest in one Valkey round trip.
+    return any(not (a or b) for a, b in await store.cooling_many(able))
 
 
 def _bad_reply(r: client.ChatResult) -> str:
@@ -578,6 +679,8 @@ async def chat(
     if task in copilot_first.TASKS and copilot_first.current() is not None:
         got = await copilot_first.try_answer(db, workspace_id, group, messages, task=task, **kw)
         if got is not None:
+            if (sink := stream.for_task(task)) is not None:
+                sink.delta(got.content)
             return GatewayReply(
                 content=got.content,
                 provider_id="",

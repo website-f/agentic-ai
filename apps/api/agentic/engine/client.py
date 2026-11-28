@@ -1,9 +1,12 @@
 """OpenAI-compatible HTTP calls. Every function guards the URL first (core/ssrf.py) and
 never logs the key. Tests swap the transport with `use_transport`."""
 
+import asyncio
 import base64
+import json as jsonlib
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
@@ -11,7 +14,7 @@ from urllib.parse import urlparse
 import httpx
 
 from ..core.http import tls
-from ..core.ssrf import pinned
+from ..core.ssrf import guard_url, pinned
 from .errors import Failure, classify_exception, classify_response, rate_limits
 
 REASONING_FLOOR = 2048  # thinking models spend max_tokens on hidden reasoning first
@@ -89,6 +92,8 @@ def use_transport(transport: httpx.AsyncBaseTransport | None) -> None:
     """Test hook: route every engine call through a fake transport."""
     global _transport
     _transport = transport
+    _pool.clear()
+    _pins.clear()
 
 
 def _client(timeout: float) -> httpx.AsyncClient:
@@ -96,6 +101,78 @@ def _client(timeout: float) -> httpx.AsyncClient:
     return httpx.AsyncClient(
         transport=_transport, timeout=timeout, follow_redirects=False, verify=tls()
     )
+
+
+# P148c: model calls reuse their connections. A new client per call paid a TCP + TLS
+# handshake to the provider every time (100-300 ms to a cloud region before the request
+# was even sent). One pooled client per provider host (and event loop: the api and each
+# worker have their own) keeps connections warm between calls. Per host, because the
+# connection goes to the vetted IP with the host as TLS name: two hosts behind one IP never
+# share a connection.
+POOL_LIMITS = httpx.Limits(max_connections=64, max_keepalive_connections=16, keepalive_expiry=90)
+# A provider that does not even accept the connection fails in seconds, so the gateway asks
+# the next model instead of waiting out the whole answer timeout (120 s before).
+CONNECT_TIMEOUT = 6.0
+PIN_TTL = 60.0  # seconds a vetted provider address is reused (the DNS lookup is not free)
+# (loop id, host, transport id) -> (the loop, its client). The loop itself is kept to tell a
+# new loop that got a dead one's id apart from it.
+_pool: dict[tuple[int, str, int], tuple[Any, httpx.AsyncClient]] = {}
+_pins: dict[tuple[str, str], tuple[str | None, float]] = {}
+
+
+def request_timeout(timeout: float) -> httpx.Timeout:
+    return httpx.Timeout(timeout, connect=min(CONNECT_TIMEOUT, timeout), pool=min(10.0, timeout))
+
+
+def _pooled(host: str) -> httpx.AsyncClient:
+    running = asyncio.get_running_loop()
+    loop = id(running)
+    key = (loop, host, id(_transport))
+    hit = _pool.get(key)
+    c = hit[1] if hit is not None and hit[0] is running else None
+    if c is None or c.is_closed:
+        if len(_pool) > 64:  # clients of event loops that are gone (tests): forget them
+            for k in [k for k in _pool if k[0] != loop]:
+                _pool.pop(k, None)
+        c = httpx.AsyncClient(
+            transport=_transport,
+            limits=POOL_LIMITS,
+            follow_redirects=False,
+            verify=tls(),
+            timeout=request_timeout(120),
+        )
+        _pool[key] = (running, c)
+    return c
+
+
+async def close_pool() -> None:
+    """Close this event loop's pooled clients (shutdown, tests)."""
+    loop = id(asyncio.get_running_loop())
+    for k in [k for k in _pool if k[0] == loop]:
+        c = _pool.pop(k)[1]
+        try:
+            await c.aclose()
+        except Exception:  # noqa: BLE001, S110 - closing is best effort
+            pass
+
+
+async def _pin(url: str) -> tuple[str, dict[str, str], dict[str, Any]]:
+    """core.ssrf.pinned with the vetted address remembered for PIN_TTL seconds per origin
+    (the check itself is the same: a name is resolved and every address checked)."""
+    u = urlparse(url)
+    key = (u.scheme, u.netloc)
+    now = time.monotonic()
+    hit = _pins.get(key)
+    if hit is None or hit[1] <= now:
+        ip = await guard_url(url)
+        _pins[key] = (ip, now + PIN_TTL)
+    else:
+        ip = hit[0]
+    if ip is None:
+        return url, {}, {}
+    netloc = (f"[{ip}]" if ":" in ip else ip) + (f":{u.port}" if u.port else "")
+    ext: dict[str, Any] = {"sni_hostname": u.hostname} if u.scheme == "https" else {}
+    return u._replace(netloc=netloc).geturl(), {"Host": u.netloc}, ext
 
 
 def host_of(url: str) -> str:
@@ -177,19 +254,24 @@ async def _request(
     t0 = time.perf_counter()
     host = host_of(url)
     try:
-        target, pin, ext = await pinned(url)
-        async with _client(timeout) as http:
-            r = await http.request(
-                method,
-                target,
-                headers={**_headers(key, host), **pin},
-                json=json,
-                files=files,
-                data=form,
-                extensions=ext,
-            )
+        target, pin, ext = await _pin(url)
+        r = await _pooled(host).request(
+            method,
+            target,
+            headers={**_headers(key, host), **pin},
+            json=json,
+            files=files,
+            data=form,
+            extensions=ext,
+            timeout=request_timeout(timeout),
+        )
     except Exception as e:  # noqa: BLE001 - every failure becomes a classified result
         return CallResult(ok=False, latency_ms=_ms(t0), failure=classify_exception(e, host))
+    return _result(r, host, t0)
+
+
+def _result(r: httpx.Response, host: str, t0: float) -> CallResult:
+    """A read response as a CallResult (a JSON body, or the classified failure)."""
     rate = rate_limits(r.headers)
     if r.status_code >= 400:
         return CallResult(
@@ -215,6 +297,156 @@ async def _request(
 
 def _ms(t0: float) -> int:
     return int((time.perf_counter() - t0) * 1000)
+
+
+OnDelta = Callable[[str], None]
+
+
+async def _stream_request(
+    url: str, key: str, body: dict[str, Any], timeout: float, on_delta: OnDelta
+) -> CallResult:
+    """P148c: POST a chat with "stream": true and read the server-sent events as they come.
+    Every piece of the answer goes to `on_delta` at once (and `on_delta("")` on the first
+    event of any kind: the model is alive). The pieces are put back together into the same
+    shape as a plain reply, so everything after this (quirks, unmasking, tool calls, usage)
+    is unchanged. A provider that ignores "stream" and answers JSON is read as JSON."""
+    t0 = time.perf_counter()
+    host = host_of(url)
+    try:
+        target, pin, ext = await _pin(url)
+        http = _pooled(host)
+        req = http.build_request(
+            "POST",
+            target,
+            headers={**_headers(key, host), **pin, "Accept": "text/event-stream"},
+            json=body,
+            extensions=ext,
+            timeout=request_timeout(timeout),
+        )
+        r = await http.send(req, stream=True)
+    except Exception as e:  # noqa: BLE001 - every failure becomes a classified result
+        return CallResult(ok=False, latency_ms=_ms(t0), failure=classify_exception(e, host))
+    try:
+        if r.status_code >= 400 or "text/event-stream" not in r.headers.get("content-type", ""):
+            await r.aread()
+            res = _result(r, host, t0)
+            if res.ok:
+                on_delta("")
+                text = ((res.data.get("choices") or [{}])[0].get("message") or {}).get("content")
+                if isinstance(text, str) and text:
+                    on_delta(text)
+            return res
+        acc = _Assembly(str(body.get("model") or ""))
+        started = False
+        async for line in r.aiter_lines():
+            if not line.startswith("data:"):
+                continue  # blank lines, ": keep-alive" comments, event names
+            raw = line[5:].strip()
+            if raw == "[DONE]":
+                break
+            try:
+                obj = jsonlib.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            if obj.get("error"):
+                err = obj["error"]
+                msg = str(err.get("message") if isinstance(err, dict) else err)[:500]
+                return CallResult(
+                    ok=False,
+                    latency_ms=_ms(t0),
+                    status=r.status_code,
+                    data={"error_text": msg},
+                    rate=rate_limits(r.headers),
+                    failure=Failure("bad_response", f"{host} stopped the answer: {msg}"),
+                )
+            if not started:
+                started = True
+                on_delta("")
+            text = acc.add(obj)
+            if text:
+                on_delta(text)
+    except Exception as e:  # noqa: BLE001 - a dropped stream is a failed call
+        return CallResult(ok=False, latency_ms=_ms(t0), failure=classify_exception(e, host))
+    finally:
+        await r.aclose()
+    return CallResult(
+        ok=True,
+        latency_ms=_ms(t0),
+        status=r.status_code,
+        data=acc.data(body),
+        rate=rate_limits(r.headers),
+    )
+
+
+class _Assembly:
+    """Streamed chunks back into one chat completion."""
+
+    def __init__(self, model: str) -> None:
+        self.model = model
+        self.content: list[str] = []
+        self.reasoning: list[str] = []
+        self.tools: dict[int, dict[str, Any]] = {}
+        self.finish: str | None = None
+        self.usage: dict[str, Any] = {}
+
+    def add(self, obj: dict[str, Any]) -> str:
+        self.model = str(obj.get("model") or self.model)
+        if isinstance(obj.get("usage"), dict):
+            self.usage = obj["usage"]
+        out = []
+        for ch in obj.get("choices") or []:
+            if not isinstance(ch, dict):
+                continue
+            d = ch.get("delta") or ch.get("message") or {}
+            if isinstance(d.get("content"), str) and d["content"]:
+                self.content.append(d["content"])
+                out.append(d["content"])
+            if isinstance(d.get("reasoning_content"), str) and d["reasoning_content"]:
+                self.reasoning.append(d["reasoning_content"])
+            for tc in d.get("tool_calls") or []:
+                if not isinstance(tc, dict):
+                    continue
+                idx = int(tc.get("index", len(self.tools)) or 0)
+                cur = self.tools.setdefault(
+                    idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+                )
+                if tc.get("id"):
+                    cur["id"] = str(tc["id"])
+                fn = tc.get("function") or {}
+                if fn.get("name") and not cur["function"]["name"]:
+                    cur["function"]["name"] = str(fn["name"])
+                if fn.get("arguments"):
+                    a = fn["arguments"]
+                    cur["function"]["arguments"] += a if isinstance(a, str) else jsonlib.dumps(a)
+            if ch.get("finish_reason"):
+                self.finish = str(ch["finish_reason"])
+        return "".join(out)
+
+    def data(self, body: dict[str, Any]) -> dict[str, Any]:
+        calls = []
+        for i in sorted(self.tools):
+            c = self.tools[i]
+            c["id"] = c["id"] or f"call_{i}"
+            calls.append(c)
+        msg: dict[str, Any] = {"role": "assistant", "content": "".join(self.content) or None}
+        if calls:
+            msg["tool_calls"] = calls
+        if self.reasoning:
+            msg["reasoning_content"] = "".join(self.reasoning)
+        usage = self.usage
+        if not usage.get("prompt_tokens") and not usage.get("completion_tokens"):
+            # A provider that streams without telling the tokens used: about four characters
+            # a token, so the budget and the person's allowance still count the call.
+            sent = jsonlib.dumps([body.get("messages"), body.get("tools")], default=str)
+            out = jsonlib.dumps([msg.get("content"), calls, msg.get("reasoning_content")])
+            usage = {"prompt_tokens": len(sent) // 4, "completion_tokens": len(out) // 4}
+        return {
+            "model": self.model,
+            "choices": [{"message": msg, "finish_reason": self.finish}],
+            "usage": usage,
+        }
 
 
 async def list_models(base_url: str, key: str) -> tuple[CallResult, list[dict[str, Any]]]:
@@ -313,6 +545,12 @@ def _quirk_for(error_text: str) -> str | None:
     t = error_text.lower()
     if "cache_control" in t:
         return "no_cache_control"
+    # P148c: a provider that will not stream (or not report usage while streaming) is asked
+    # the plain way; the answer then shows at once instead of word by word.
+    if "stream_options" in t or "include_usage" in t:
+        return "no_stream_options"
+    if "stream" in t and any(w in t for w in ("not support", "unsupported", "not allowed")):
+        return "no_stream"
     if "max_completion_tokens" in t and "max_tokens" in t:
         return "max_completion_tokens"
     if "reasoning_content" in t and ("passed back" in t or "must be" in t):
@@ -351,9 +589,11 @@ async def chat(
     quirks: frozenset[str] = frozenset(),
     reasoning_effort: str | None = None,
     extra_body: dict[str, Any] | None = None,
+    on_delta: OnDelta | None = None,
 ) -> ChatResult:
     """`extra_body` adds provider-specific fields to the request (P33: OpenRouter's zero
-    data retention routing)."""
+    data retention routing). P148c: with `on_delta` the reply is streamed, each piece of the
+    answer passed to it as it arrives (the result is the same whole reply either way)."""
     q = set(quirks)
     cacheable = wants_cache_control(base_url, model)
 
@@ -385,15 +625,30 @@ async def chat(
             body["tool_choice"] = tool_choice
     if extra_body:
         body.update(extra_body)
+    if on_delta is not None and not json_mode and "no_stream" not in q:
+        body["stream"] = True
+        if "no_stream_options" not in q:
+            body["stream_options"] = {"include_usage": True}
 
     url = _url(base_url, "/chat/completions")
-    call = await _request("POST", url, key, body, timeout)
-    for _ in range(3):  # at most three parameter fixes, each tried once
+
+    async def send() -> CallResult:
+        if body.get("stream") and on_delta is not None:
+            return await _stream_request(url, key, body, timeout, on_delta)
+        return await _request("POST", url, key, body, timeout)
+
+    call = await send()
+    for _ in range(4):  # at most four parameter fixes, each tried once
         fix = _quirk_for(str(call.data.get("error_text", ""))) if call.status == 400 else None
         if fix is None or fix in q:
             break
         q.add(fix)
-        if fix == "max_completion_tokens":
+        if fix == "no_stream_options":
+            body.pop("stream_options", None)
+        elif fix == "no_stream":
+            body.pop("stream", None)
+            body.pop("stream_options", None)
+        elif fix == "max_completion_tokens":
             body["max_completion_tokens"] = body.pop("max_tokens", max_tokens)
         elif fix in ("echo_reasoning", "no_cache_control"):
             body["messages"], marked = shaped()
@@ -403,7 +658,7 @@ async def chat(
             body.pop("reasoning_effort", None)
         else:
             body.pop("temperature", None)
-        call = await _request("POST", url, key, body, timeout)
+        call = await send()
     tokens_key = "max_completion_tokens" if "max_completion_tokens" in q else "max_tokens"
     result = _parse(call, model)
     result.quirks = frozenset(q)
@@ -418,7 +673,7 @@ async def chat(
     ) or (call.status == 400 and _out_of_tokens(str(call.data.get("error_text", ""))))
     if starved and max_tokens < floor:
         body[tokens_key] = floor
-        retry = _parse(await _request("POST", url, key, body, timeout), model)
+        retry = _parse(await send(), model)
         retry.reasoning_retry = True
         retry.quirks = frozenset(q)
         retry.call.latency_ms += result.call.latency_ms
