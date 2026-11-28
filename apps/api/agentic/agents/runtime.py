@@ -6,6 +6,7 @@ All state lives in the database, so a crashed worker simply re-runs the step.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -28,10 +29,12 @@ from ..core.redact import redact
 from ..core.workspace_settings import max_task_model_calls
 from ..devices.core import PC_TOOLS, pc_ready
 from ..devices.core import personal as pc_personal
-from ..engine import acting, gateway
+from ..engine import acting, copilot_first, gateway
 from ..i18n import explicit_lang
 from ..i18n import notes as lang_notes
-from ..microsoft.access import MAIL_TOOLS, TEAMS_TOOLS, mail_ready, teams_ready
+from ..microsoft import copilot as m365_copilot
+from ..microsoft.access import COPILOT_TOOLS, MAIL_TOOLS, TEAMS_TOOLS, mail_ready, teams_ready
+from ..microsoft.access import personal_ai as access_personal_ai
 from ..models import (
     Agent,
     AgentMessage,
@@ -556,6 +559,7 @@ def offered_tools(
     pc: bool = False,
     mail: bool = False,
     teams: bool = False,
+    m365: bool = False,
 ) -> list[dict[str, Any]]:
     """Denied tools are not even shown to the model. Team tools exist only inside tasks, and
     delegate only for orchestrators above their depth cap. The MCP bridge is shown only when
@@ -580,6 +584,8 @@ def offered_tools(
         if n in MAIL_TOOLS and not mail:  # a mailbox it may use (P34)
             continue
         if n in TEAMS_TOOLS and not teams:  # its person's own Teams (P52)
+            continue
+        if n in COPILOT_TOOLS and not m365:  # P147: Microsoft 365 search, when allowed
             continue
         if n in PRIMA_TOOLS and not prima_ready(agent.workspace_id):  # P66: Prima is here
             continue
@@ -1447,6 +1453,8 @@ async def _run_task_step(task_id: str) -> StepResult:
                             pc=await pc_ready(db, agent) and await owner_asks(db, agent, task),
                             mail=await mail_ready(db, agent) and await owner_asks(db, agent, task),
                             teams=await teams_ready(db, agent)
+                            and await owner_asks(db, agent, task),
+                            m365=await m365_copilot.search_ready(db, agent)
                             and await owner_asks(db, agent, task),
                         ),
                         history,
@@ -2423,6 +2431,7 @@ async def _chat_turn(
                 pc=await pc_ready(db, agent) and mine,
                 mail=await mail_ready(db, agent) and mine,
                 teams=await teams_ready(db, agent) and mine,
+                m365=await m365_copilot.search_ready(db, agent) and mine,
             )
         )
         # P96: the same first question, same person, same sources: the answer it gave before.
@@ -2457,18 +2466,26 @@ async def _chat_turn(
             await answers.count(ws.id, agent.id, saved)
             return ChatReply(hit["content"], "reuse", str(hit.get("model") or ""), [], answer.id)
         await agent_thinking(agent, True)
+        # P147: the first answer of a person's own conversation with their own AI may come from
+        # Microsoft 365 Copilot, as them (engine/copilot_first.py decides, else the engine).
+        mark = (
+            copilot_first.for_person(session.user_id, session.id, text)
+            if round_no == 0 and mine and session.user_id and access_personal_ai(agent)
+            else contextlib.nullcontext()
+        )
         try:
-            reply = await gateway.chat(
-                db,
-                ws.id,
-                agent.model_group,
-                messages,
-                task="agent.chat",
-                tools=tools,
-                max_tokens=1600 if last else 1200,
-                agent_id=agent.id,
-                branch_id=agent.branch_id,
-            )
+            with mark:
+                reply = await gateway.chat(
+                    db,
+                    ws.id,
+                    agent.model_group,
+                    messages,
+                    task="agent.chat",
+                    tools=tools,
+                    max_tokens=1600 if last else 1200,
+                    agent_id=agent.id,
+                    branch_id=agent.branch_id,
+                )
         except gateway.GatewayUnavailable:
             backup = await _backup_reply(db, ws, agent, history)
             if backup is None:

@@ -103,4 +103,10 @@ export const AI_USAGE_PEOPLE: Record<string, string> = {
   "Tokens (about)": "Token (anggaran)",
   "Last message": "Mesej terakhir",
   "Last call": "Panggilan terakhir",
+  // P147: calls answered by Microsoft 365 Copilot instead of the AI engine.
+  Copilot: "Copilot",
+  "{n} saved": "{n} dijimatkan",
+  "Answered by Copilot": "Dijawab oleh Copilot",
+  "About {n} engine tokens saved (Microsoft 365 Copilot, free with the licence)": "Kira-kira {n} token enjin dijimatkan (Microsoft 365 Copilot, percuma dengan lesen)",
+  "{n} by Copilot, about {saved} tokens saved": "{n} oleh Copilot, kira-kira {saved} token dijimatkan",
 };

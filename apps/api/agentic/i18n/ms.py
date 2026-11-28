@@ -2119,3 +2119,8 @@ MS.update({k: v for k, v in MS_P145.items() if k not in MS})
 from .ms_p146 import MS_P146  # noqa: E402
 
 MS.update({k: v for k, v in MS_P146.items() if k not in MS})
+
+# P147: Microsoft 365 Copilot first and Microsoft 365 search.
+from .ms_p147 import MS_P147  # noqa: E402
+
+MS.update({k: v for k, v in MS_P147.items() if k not in MS})

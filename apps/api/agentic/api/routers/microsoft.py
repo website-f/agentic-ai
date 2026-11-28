@@ -32,6 +32,7 @@ from ...core.security import can
 from ...core.valkey import valkey
 from ...i18n import Msg, render, tr
 from ...microsoft import access, app, auth, domains, graph, signin, sync
+from ...microsoft import copilot as m365_copilot
 from ...microsoft import rules as mail_rules
 from ...microsoft.domains import CONSUMER_TENANT
 from ...microsoft.errors import Forbidden, MicrosoftError, NotConfigured, NotFound
@@ -209,6 +210,9 @@ class ConnectIn(BaseModel):
     with_files: bool = False
     # P102: also allow starting new Teams chats (the Teams tab's "Allow new Teams chats").
     with_new_chats: bool = False
+    # P147: also allow Microsoft 365 Copilot (the Microsoft 365 page's "Allow Microsoft 365
+    # Copilot"). A work account only; never part of everyone's sign-in.
+    with_copilot: bool = False
     # P118: connect another Microsoft account (personal or shared) beside the main one.
     another: bool = False
     # P142: connect a personal Microsoft account (Outlook.com, Hotmail, Live) as the main one.
@@ -241,6 +245,7 @@ async def microsoft_connect(
             base,
             with_files=bool(body and body.with_files),
             with_new_chats=bool(body and body.with_new_chats),
+            with_copilot=bool(body and body.with_copilot),
             another=bool(body and body.another),
             personal=bool(body and body.personal),
         )
@@ -328,9 +333,12 @@ async def microsoft_callback(
     home = await _home(db, principal)
     files = await auth.started_with_files(state)
     chats = await auth.started_with_new_chats(state)
+    copilot_ask = await auth.started_with_copilot(state)
     another = await auth.started_another(state)
     extra: dict[str, str] = {}
-    if files:  # P80: the Library's SharePoint reconnect comes back to the Library
+    if copilot_ask:  # P147: "Allow Microsoft 365 Copilot" comes back to the Microsoft 365 page
+        home, extra = "/mail", {"app": "mail"}
+    elif files:  # P80: the Library's SharePoint reconnect comes back to the Library
         home = "/library"
     elif chats:  # P102: "Allow new Teams chats" comes back to the Teams tab
         home, extra = "/mail", {"app": "teams"}
@@ -352,6 +360,21 @@ async def microsoft_callback(
                 "Files.Read.All and Sites.Read.All to this app (Azure portal > App "
                 "registrations > API permissions > Grant admin consent), then try again. Your "
                 "sign-in and mail keep working."
+            ),
+        )
+    if error and copilot_ask:
+        # P147: Copilot's permissions refused (most often "Need admin approval"). The existing
+        # connection, mail and Teams keep working as they were; the engine keeps answering.
+        await auth.drop_state(state)
+        return back(
+            "error",
+            tr(
+                "Microsoft 365 Copilot was not allowed. Your Microsoft 365 admin must grant admin "
+                "consent for this app's Copilot permissions (Sites.Read.All, Files.Read.All, "
+                "Mail.Read, People.Read.All, OnlineMeetingTranscript.Read.All, Chat.Read, "
+                "ChannelMessage.Read.All, ExternalItem.Read.All) in the Azure portal > App "
+                "registrations > API permissions, then try again. Your sign-in and mail keep "
+                "working."
             ),
         )
     if error and chats:
@@ -417,6 +440,8 @@ async def microsoft_callback(
     else:  # P124: no longer waiting (their own identity now, or a HOD): nothing left to ask
         await work_mail.cancel_for_account(db, principal, acct.id)
         await db.commit()
+    if copilot_ask:  # P147: a fresh start: the licence is asked again, no rest left over
+        await m365_copilot.forget(acct.id)
     await sync.queue_box(acct)
     background.add_task(sync.kick)
     return back("connected", acct.email)
@@ -471,6 +496,7 @@ async def microsoft_account(
             "new_chats_ok": False,
             "channel_send_ok": False,
             "approvals_ok": False,
+            "copilot_ok": False,
             "last_sync_at": None,
             "webhooks": "off",
             "last_error": None,
@@ -507,10 +533,38 @@ async def microsoft_account(
         # P109: may post and reply in Teams channels, and see Teams Approvals.
         "channel_send_ok": auth.has_scope(acct.scopes, app.CHANNEL_SEND_SCOPE),
         "approvals_ok": auth.has_scope(acct.scopes, app.APPROVALS_SCOPE),
+        # P147: allowed Microsoft 365 Copilot (every scope it needs); a work account only.
+        "copilot_ok": (acct.tenant_id or "").lower() != CONSUMER_TENANT
+        and auth.copilot_granted(acct.scopes or ""),
         "last_sync_at": acct.last_sync_at,
         "webhooks": await sync.webhooks_state(db, acct),
         "last_error": render(acct.last_error) if acct.last_error else None,
     }
+
+
+# ---------------------------------------------------------------- P147: Microsoft 365 Copilot
+
+
+@router.get(f"{BASE}/copilot")
+async def microsoft_copilot(
+    fresh: bool = Query(default=False),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """The person's own Microsoft 365 Copilot: state (no_microsoft | no_scope | no_licence |
+    throttled | ready), until when it rests, and whether the owner turned Copilot first on.
+    `fresh` asks Microsoft for the licence again (at most once a minute per person)."""
+    from ...core.workspace_settings import copilot_first
+    from ...models import Workspace
+
+    ws = await db.get(Workspace, principal.workspace_id)
+    cf = copilot_first(ws.settings if ws is not None else None)
+    if fresh:
+        acct = await m365_copilot.account_of(db, principal.workspace_id, principal.user.id)
+        if acct is not None and await valkey().set(f"copilot:fresh:{acct.id}", "1", ex=60, nx=True):
+            await m365_copilot.licensed(db, acct, force=True)
+    st = await m365_copilot.status(db, principal.workspace_id, principal.user.id)
+    return {**st.out(), "on": cf.on, "use_retrieval": cf.use_retrieval}
 
 
 # ---------------------------------------------------------------- Teams (P52): your own chats

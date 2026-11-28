@@ -204,8 +204,10 @@ async def record_call(
     masked: int = 0,
     branch_id: str | None = None,
     data_level: str | None = None,
+    saved_tokens: int = 0,
 ) -> None:
-    """Own session, so a failed call is still logged even if the caller rolls back."""
+    """Own session, so a failed call is still logged even if the caller rolls back. P147:
+    `saved_tokens`, what our engine would have used when Microsoft 365 Copilot answered."""
     try:
         async with SessionLocal() as db:
             db.add(
@@ -233,6 +235,7 @@ async def record_call(
                     branch_id=branch_id,
                     data_level=data_level,
                     user_id=acting.current(),
+                    saved_tokens=saved_tokens,
                 )
             )
             await db.commit()

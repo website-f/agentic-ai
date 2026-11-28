@@ -413,4 +413,6 @@ TEAMS_TOOLS: list[Tool] = [
     ),
 ]
 
-assert {t.name for t in TEAMS_TOOLS} == access.TEAMS_TOOLS - access.APPROVAL_TOOLS
+assert {t.name for t in TEAMS_TOOLS} == (
+    access.TEAMS_TOOLS - access.APPROVAL_TOOLS - access.COPILOT_TOOLS
+)

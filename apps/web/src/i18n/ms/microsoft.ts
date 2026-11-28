@@ -343,4 +343,22 @@ export const MICROSOFT: Record<string, string> = {
   "Which calendar": "Kalendar yang mana",
   "A personal Microsoft account has no Teams meetings, so this event has no Teams link.":
     "Akaun Microsoft peribadi tiada mesyuarat Teams, jadi acara ini tiada pautan Teams.",
+  // P147: Microsoft 365 Copilot on the Microsoft 365 page.
+  "Microsoft 365 Copilot": "Microsoft 365 Copilot",
+  "Your plain questions to your AI (summaries, drafts, translations, explanations) go to Microsoft 365 Copilot first, free with your licence. Bigger work uses the office's AI engine.":
+    "Soalan biasa anda kepada AI anda (ringkasan, draf, terjemahan, penerangan) dihantar kepada Microsoft 365 Copilot dahulu, percuma dengan lesen anda. Kerja yang lebih besar menggunakan enjin AI pejabat.",
+  "Needs permission": "Perlu kebenaran",
+  "Allow Copilot once. Your Microsoft 365 admin must have approved the Copilot permissions for this app first.":
+    "Benarkan Copilot sekali. Pentadbir Microsoft 365 anda mesti meluluskan kebenaran Copilot untuk aplikasi ini terlebih dahulu.",
+  "No licence": "Tiada lesen",
+  "Your account has no Microsoft 365 Copilot licence, or it could not be checked just now. Your AI uses the office's AI engine.":
+    "Akaun anda tiada lesen Microsoft 365 Copilot, atau ia tidak dapat disemak sebentar tadi. AI anda menggunakan enjin AI pejabat.",
+  "Microsoft asked to slow down. The office's AI engine answers until {time}.":
+    "Microsoft meminta supaya diperlahankan. Enjin AI pejabat menjawab sehingga {time}.",
+  "Not available": "Tidak tersedia",
+  "Copilot needs your own Microsoft 365 work account connected here.": "Copilot memerlukan akaun kerja Microsoft 365 anda sendiri disambungkan di sini.",
+  "Paused (busy until {time})": "Dijeda (sibuk sehingga {time})",
+  "Your AI can also search your SharePoint and OneDrive files through Copilot, only what you can already open.":
+    "AI anda juga boleh mencari fail SharePoint dan OneDrive anda melalui Copilot, hanya yang anda sudah boleh buka.",
+  "Allow Copilot": "Benarkan Copilot",
 };

@@ -28,7 +28,7 @@ from ..core.config import settings
 from ..core.db import release_idle
 from ..models import AIModel, AIProvider, ModelGroup
 from ..obs import langfuse
-from . import client, compliance, media, privacy, rotation, store
+from . import client, compliance, copilot_first, media, privacy, rotation, store
 from .client import Usage
 from .errors import Failure
 
@@ -573,6 +573,23 @@ async def chat(
     from the cache, free and instant."""
     from ..core.valkey import valkey
 
+    # P147: a person's own plain chat goes to Microsoft 365 Copilot first when the owner turned
+    # that on and the person is ready (engine/copilot_first.py); else, or on any failure, on.
+    if task in copilot_first.TASKS and copilot_first.current() is not None:
+        got = await copilot_first.try_answer(db, workspace_id, group, messages, task=task, **kw)
+        if got is not None:
+            return GatewayReply(
+                content=got.content,
+                provider_id="",
+                provider_name=copilot_first.PROVIDER,
+                model=copilot_first.LABEL,
+                usage=Usage(),
+                latency_ms=got.latency_ms,
+                cost_usd=0.0,
+                attempts=[
+                    {"member": copilot_first.LABEL, "ok": True, "latency_ms": got.latency_ms}
+                ],
+            )
     key = _cache_key(workspace_id, group, task, messages, kw)
     if key is not None:
         try:

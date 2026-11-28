@@ -1560,6 +1560,11 @@ from .approval_tools import APPROVAL_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in APPROVAL_TOOLS})
 
+# P147: Microsoft 365 search (Copilot Retrieval API), as the person, for their own AI.
+from .m365_tools import M365_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in M365_TOOLS})
+
 # P66: Prima Secure (attendance, leave, claims, pay...), as the person who asked.
 from .prima_tools import PRIMA_TOOLS  # noqa: E402
 

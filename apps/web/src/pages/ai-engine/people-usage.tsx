@@ -6,7 +6,7 @@
  * conversations and the tasks their use paid for (opening them is audited). Numbers come from
  * the model-call ledger (api/routers/ai_people_usage.py).
  */
-import { BuildingsIcon, ChartBarIcon, ChatsCircleIcon, CoinsIcon, CrownIcon, FileXlsIcon, ListChecksIcon, TextAaIcon, UsersIcon } from "@phosphor-icons/react";
+import { BuildingsIcon, ChartBarIcon, ChatsCircleIcon, CoinsIcon, CrownIcon, FileXlsIcon, ListChecksIcon, SparkleIcon, TextAaIcon, UsersIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
@@ -47,6 +47,10 @@ export interface UsageSums {
   cost_usd: number;
   /** Successful calls to a model with no price. */
   unpriced: number;
+  /** P147: calls Microsoft 365 Copilot answered instead of the AI engine (free, no tokens of
+   * ours), and the tokens the engine would have used for them (estimated). */
+  copilot_calls?: number;
+  saved_tokens?: number;
 }
 
 export interface PersonUsage extends UsageSums {
@@ -384,6 +388,14 @@ export function PeopleUsageTab() {
       ),
       exportValue: (p) => p.cost_usd.toFixed(6),
     },
+    {
+      // P147: what Microsoft 365 Copilot answered for them, and the engine tokens that saved.
+      id: "copilot", header: t("Copilot"), sortable: true, kind: "number", align: "right", hideBelow: "xl",
+      cell: (p) => (p.copilot_calls
+        ? <span className="grid justify-items-end max-md:justify-items-start"><Num>{compact(p.copilot_calls)}</Num><span className="text-[11.5px] whitespace-nowrap text-ok">{t("{n} saved", { n: compact(p.saved_tokens ?? 0) })}</span></span>
+        : <span className="text-muted">–</span>),
+      exportValue: (p) => `${p.copilot_calls ?? 0}/${p.saved_tokens ?? 0}`,
+    },
     { id: "share", header: t("Share"), sortable: true, kind: "number", cell: (p) => <ShareBar share={p.share} />, exportValue: (p) => p.share },
     { id: "today", header: t("Allowance today"), sortable: true, kind: "number", hideBelow: "lg", cell: (p) => <Allowance used={p.today_used} limit={p.today_limit} />, exportValue: (p) => (p.today_limit === null ? `${p.today_used}` : `${p.today_used}/${p.today_limit}`) },
     { id: "top", header: t("Mostly for"), hideBelow: "2xl", cell: (p) => (p.top_feature ? feature(p.top_feature) : <span className="text-muted">–</span>), exportValue: (p) => (p.top_feature ? feature(p.top_feature) : "") },
@@ -422,6 +434,10 @@ export function PeopleUsageTab() {
             onClick={totals.office_calls ? () => setOpen(OFFICE) : undefined} />
           <Stat label={t("Top feature")} value={<span className="text-[clamp(1rem,2vw,1.35rem)] leading-tight">{feature(totals.top_feature)}</span>} icon={CrownIcon} tone="violet"
             hint={totals.top_feature ? t("{n} tokens · {pct} of all", { n: compact(totals.top_feature_tokens), pct: pctText(topShare) }) : t("No AI use yet")} />
+          {totals.copilot_calls ? (
+            <Stat label={t("Answered by Copilot")} value={compact(totals.copilot_calls)} icon={SparkleIcon} tone="info"
+              hint={t("About {n} engine tokens saved (Microsoft 365 Copilot, free with the licence)", { n: compact(totals.saved_tokens ?? 0) })} />
+          ) : null}
         </StatGrid>
       )}
 
@@ -868,7 +884,12 @@ export function PersonReport({ userId, params, onClose }: { userId: string; para
             <Stat label={t("Cost (USD)")} value={money(r.totals)} icon={CoinsIcon} tone="ok"
               hint={r.totals.unpriced ? t("{n} calls had no price", { n: r.totals.unpriced }) : t("Every call priced")} />
             <Stat label={t("Calls")} value={compact(r.totals.calls)} icon={ChartBarIcon} tone="info"
-              hint={[r.totals.errors ? t("{n} failed", { n: r.totals.errors }) : "", r.tasks ? t("{n} tasks", { n: r.tasks }) : ""].filter(Boolean).join(" · ") || undefined} />
+              hint={[
+                r.totals.errors ? t("{n} failed", { n: r.totals.errors }) : "",
+                r.tasks ? t("{n} tasks", { n: r.tasks }) : "",
+                // P147: answered by Microsoft 365 Copilot instead of the engine.
+                r.totals.copilot_calls ? t("{n} by Copilot, about {saved} tokens saved", { n: compact(r.totals.copilot_calls), saved: compact(r.totals.saved_tokens ?? 0) }) : "",
+              ].filter(Boolean).join(" · ") || undefined} />
             {office ? null : (
               <Stat label={t("Allowance today")} value={compact(r.person.today_used)} icon={UsersIcon} tone="violet"
                 hint={r.person.today_limit === null ? t("No limit") : t("of {limit} tokens", { limit: compact(r.person.today_limit) })} />

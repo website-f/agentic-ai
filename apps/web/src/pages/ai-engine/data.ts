@@ -46,9 +46,21 @@ export interface Provider {
   data_policy_note?: string;
 }
 
+/** P147: Microsoft 365 Copilot first (owner/admin, off by default). */
+export interface CopilotFirst {
+  on: boolean;
+  /** Longer questions (with their conversation) go to the AI engine. */
+  max_prompt_chars: number;
+  /** The m365_search tool: SharePoint and OneDrive passages through Copilot. */
+  use_retrieval: boolean;
+}
+
 export interface AISettings {
   max_task_model_calls: number;
   hard_max_task_model_calls: number;
+  /** P147: absent on an older server. */
+  copilot_first?: CopilotFirst;
+  can_set_copilot?: boolean;
 }
 
 export interface AIModel {

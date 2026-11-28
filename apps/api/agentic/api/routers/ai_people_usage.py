@@ -78,6 +78,7 @@ async def require_usage_reader(principal: Principal = Depends(current_principal)
 
 
 OFFICE = "office"  # the {user_id} for work nobody asked for (llm_calls.user_id IS NULL)
+COPILOT = "copilot"  # P147: llm_calls.provider_name of a call Microsoft 365 Copilot answered
 MAX_DAYS = 366
 Period = Literal["today", "7d", "30d", "month", "last_month", "custom"]
 
@@ -233,6 +234,10 @@ class Sums(BaseModel):
     tokens: int = 0
     cost_usd: float = 0.0
     unpriced: int = 0  # successful calls with no price for the model
+    # P147: calls Microsoft 365 Copilot answered instead of our engine (provider "copilot", cost
+    # 0, no tokens of ours) and the tokens our engine would have used for them (estimated).
+    copilot_calls: int = 0
+    saved_tokens: int = 0
 
     def add(self, r: Any) -> None:
         self.calls += int(r.calls or 0)
@@ -243,6 +248,8 @@ class Sums(BaseModel):
         self.tokens = self.prompt + self.completion
         self.cost_usd = round(self.cost_usd + float(r.cost or 0), 6)
         self.unpriced += int(r.unpriced or 0)
+        self.copilot_calls += int(getattr(r, "copilot_calls", 0) or 0)
+        self.saved_tokens += int(getattr(r, "saved", 0) or 0)
 
 
 class FeatureSums(Sums):
@@ -293,6 +300,13 @@ def _sums(*group: Any):
         func.coalesce(
             func.sum(case((LLMCall.cost_usd.is_(None) & (LLMCall.status == "ok"), 1), else_=0)), 0
         ).label("unpriced"),
+        func.coalesce(
+            func.sum(
+                case(((LLMCall.provider_name == COPILOT) & (LLMCall.status == "ok"), 1), else_=0)
+            ),
+            0,
+        ).label("copilot_calls"),
+        func.coalesce(func.sum(LLMCall.saved_tokens), 0).label("saved"),
     )
 
 
@@ -333,6 +347,7 @@ SORT_KEYS: dict[str, Any] = {
     "share": lambda p: p.share,
     "today": lambda p: p.today_used,
     "last_used": lambda p: p.last_used,
+    "copilot": lambda p: (p.saved_tokens, p.copilot_calls),  # P147
 }
 
 

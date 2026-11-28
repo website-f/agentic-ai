@@ -84,6 +84,8 @@ export interface MicrosoftAccount {
   channel_send_ok?: boolean;
   /** P109: may read and answer Teams Approvals. */
   approvals_ok?: boolean;
+  /** P147: allowed Microsoft 365 Copilot ("Allow Microsoft 365 Copilot"); a work account only. */
+  copilot_ok?: boolean;
   last_sync_at: string | null;
   webhooks: WebhookMode;
   /** What Microsoft last said, when something went wrong (already in the UI language). */
@@ -201,6 +203,28 @@ export const startSharePointConnect = () => api<{ url: string }>(`${MS_PATH}/con
 /** P102: the same, also allowing new Teams chats (a first message to anyone); back on the Teams tab. */
 export const startNewChatsConnect = () => api<{ url: string }>(`${MS_PATH}/connect`, "POST", { with_new_chats: true });
 
+/** P147: the same, also allowing Microsoft 365 Copilot (needs the admin's consent); back on the
+ * Microsoft 365 page. */
+export const startCopilotConnect = () => api<{ url: string }>(`${MS_PATH}/connect`, "POST", { with_copilot: true });
+
+/** P147: the person's own Microsoft 365 Copilot. ready: their plain questions to their AI go to
+ * Copilot first (free with their licence); no_scope: "Allow Microsoft 365 Copilot" first;
+ * no_licence: no Copilot licence (or it could not be checked); throttled: Microsoft asked to slow
+ * down, our AI engine answers until `until`; no_microsoft: no work account of their own. */
+export type CopilotState = "ready" | "no_scope" | "no_licence" | "throttled" | "no_microsoft";
+export interface CopilotStatus {
+  state: CopilotState;
+  until: string | null;
+  licensed: boolean | null;
+  checked_at: string | null;
+  scope_ok: boolean;
+  /** The owner switched "Microsoft 365 Copilot first" on (AI Engine > Settings). */
+  on: boolean;
+  use_retrieval: boolean;
+}
+
+export const refreshCopilotStatus = () => api<CopilotStatus>(`${MS_PATH}/copilot?fresh=1`);
+
 /** P118: every Microsoft account the person connected: the main one (sign-in, their AI, Teams,
  * Prima) first, then extra ones (personal, or a shared work mailbox others here connected too). */
 export interface MsAccount {
@@ -312,6 +336,14 @@ export const microsoftAccountQuery = queryOptions({
   queryFn: getMicrosoftAccount,
   retry: retryUnlessMissing,
   staleTime: 30_000,
+});
+
+/** P147: the person's own Microsoft 365 Copilot (see CopilotStatus). */
+export const copilotStatusQuery = queryOptions({
+  queryKey: [...microsoftKeys.account, "copilot"] as const,
+  queryFn: () => api<CopilotStatus>(`${MS_PATH}/copilot`),
+  retry: retryUnlessMissing,
+  staleTime: 60_000,
 });
 
 /** P34: what a person's own AI does with their Outlook (same shape as a shared mailbox's rules;

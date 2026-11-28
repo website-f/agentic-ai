@@ -58,13 +58,24 @@ class ProviderOut(BaseModel):
     data_policy_note: str = ""
 
 
+class CopilotFirstSettings(BaseModel):
+    """P147: Microsoft 365 Copilot first (owner/admin, off by default)."""
+
+    on: bool = False
+    max_prompt_chars: int = Field(default=6000, ge=1000, le=20000)
+    use_retrieval: bool = True
+
+
 class AISettingsOut(BaseModel):
     max_task_model_calls: int
     hard_max_task_model_calls: int
+    copilot_first: CopilotFirstSettings = CopilotFirstSettings()
+    can_set_copilot: bool = False  # owners and admins
 
 
 class AISettingsUpdateIn(BaseModel):
-    max_task_model_calls: int = Field(ge=1, le=200)
+    max_task_model_calls: int | None = Field(default=None, ge=1, le=200)
+    copilot_first: CopilotFirstSettings | None = None
 
 
 class ProviderCreateIn(BaseModel):

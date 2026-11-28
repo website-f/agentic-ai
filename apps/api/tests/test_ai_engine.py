@@ -158,7 +158,13 @@ async def test_task_call_limit_is_a_workspace_ai_setting(client: httpx.AsyncClie
 
     current = await client.get("/api/ai/settings")
     assert current.status_code == 200
-    assert current.json() == {"max_task_model_calls": 30, "hard_max_task_model_calls": 200}
+    assert current.json() == {
+        "max_task_model_calls": 30,
+        "hard_max_task_model_calls": 200,
+        # P147: Microsoft 365 Copilot first, off until an owner or admin turns it on.
+        "copilot_first": {"on": False, "max_prompt_chars": 6000, "use_retrieval": True},
+        "can_set_copilot": True,
+    }
 
     saved = await client.patch(
         "/api/ai/settings",

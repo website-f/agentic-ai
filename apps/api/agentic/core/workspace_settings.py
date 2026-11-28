@@ -90,3 +90,46 @@ def clean_system_mail(
         first_login=first_login,
         forgot_password=forgot_password,
     )
+
+
+# ---------------------------------------------------------------- P147 Copilot first
+
+COPILOT_FIRST = "copilot_first"
+DEFAULT_COPILOT_PROMPT_CHARS = 6000
+MIN_COPILOT_PROMPT_CHARS = 1000
+MAX_COPILOT_PROMPT_CHARS = 20000
+
+
+@dataclass(frozen=True)
+class CopilotFirst:
+    """Workspace.settings["copilot_first"] (owner/admin, off by default): a person's own AI
+    asks Microsoft 365 Copilot first for plain answers (no tools), as that person, when they
+    have a Copilot licence and allowed it; our AI engine answers everything else.
+
+    on                the switch
+    max_prompt_chars  longer questions (with their conversation) go to our engine
+    use_retrieval     the m365_search tool (Copilot Retrieval API) for SharePoint / OneDrive
+    """
+
+    on: bool = False
+    max_prompt_chars: int = DEFAULT_COPILOT_PROMPT_CHARS
+    use_retrieval: bool = True
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def copilot_first(settings: Mapping[str, Any] | None) -> CopilotFirst:
+    """The stored setting, read leniently (a bad value reads as off / the default)."""
+    raw = (settings or {}).get(COPILOT_FIRST)
+    if not isinstance(raw, Mapping):
+        return CopilotFirst()
+    try:
+        chars = int(raw.get("max_prompt_chars", DEFAULT_COPILOT_PROMPT_CHARS))
+    except (TypeError, ValueError):
+        chars = DEFAULT_COPILOT_PROMPT_CHARS
+    return CopilotFirst(
+        on=raw.get("on") is True,
+        max_prompt_chars=max(MIN_COPILOT_PROMPT_CHARS, min(MAX_COPILOT_PROMPT_CHARS, chars)),
+        use_retrieval=raw.get("use_retrieval") is not False,
+    )

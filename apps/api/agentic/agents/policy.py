@@ -60,6 +60,7 @@ OUTSIDE_CONTENT = frozenset(
         # P127: Microsoft approvals (what other people wrote in them).
         "m365_approvals",
         "m365_approval",
+        "m365_search",  # P147: passages of SharePoint / OneDrive files
         # P66: Prima's records (what staff typed).
         "prima_read",
         "prima_record",

@@ -14,7 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.db import SessionLocal, get_db
 from ...core.security import can
 from ...core.ssrf import BlockedURL, guard_url
-from ...core.workspace_settings import HARD_MAX_TASK_MODEL_CALLS, max_task_model_calls
+from ...core.workspace_settings import (
+    COPILOT_FIRST,
+    HARD_MAX_TASK_MODEL_CALLS,
+    copilot_first,
+    max_task_model_calls,
+)
 from ...engine import cache_health, client, gateway, media, privacy, store, tester
 from ...engine.presets import BY_ID, PRESETS, PRIMARY, data_policy_note, preset_of
 from ...i18n import tr
@@ -33,6 +38,7 @@ from ..ai_schemas import (
     AISettingsOut,
     AISettingsUpdateIn,
     CheckOut,
+    CopilotFirstSettings,
     DiscoverIn,
     GroupMember,
     GroupOut,
@@ -155,15 +161,24 @@ def _model_out(m: AIModel) -> ModelOut:
 # ------------------------------------------------------------------ presets + providers
 
 
+COPILOT_SETTERS = ("owner", "admin")  # P147: Copilot first is the owner's or an admin's call
+
+
+def _settings_out(ws: Workspace, role: str) -> AISettingsOut:
+    return AISettingsOut(
+        max_task_model_calls=max_task_model_calls(ws.settings),
+        hard_max_task_model_calls=HARD_MAX_TASK_MODEL_CALLS,
+        copilot_first=CopilotFirstSettings(**copilot_first(ws.settings).as_dict()),
+        can_set_copilot=role in COPILOT_SETTERS,
+    )
+
+
 @router.get("/settings")
 async def get_ai_settings(
     principal: Principal = Depends(require("engine.view")), db: AsyncSession = Depends(get_db)
 ) -> AISettingsOut:
     ws = await _workspace(db, principal.workspace_id)
-    return AISettingsOut(
-        max_task_model_calls=max_task_model_calls(ws.settings),
-        hard_max_task_model_calls=HARD_MAX_TASK_MODEL_CALLS,
-    )
+    return _settings_out(ws, principal.role)
 
 
 @router.patch("/settings")
@@ -173,22 +188,34 @@ async def update_ai_settings(
     db: AsyncSession = Depends(get_db),
 ) -> AISettingsOut:
     ws = await _workspace(db, principal.workspace_id)
-    before = max_task_model_calls(ws.settings)
-    ws.settings = {**(ws.settings or {}), "max_task_model_calls": body.max_task_model_calls}
-    await audit.record(
-        db,
-        principal.workspace_id,
-        principal.actor,
-        "ai.settings_updated",
-        target=ws.id,
-        before={"max_task_model_calls": before},
-        after={"max_task_model_calls": body.max_task_model_calls},
-    )
-    await db.commit()
-    return AISettingsOut(
-        max_task_model_calls=body.max_task_model_calls,
-        hard_max_task_model_calls=HARD_MAX_TASK_MODEL_CALLS,
-    )
+    before: dict[str, object] = {}
+    after: dict[str, object] = {}
+    changes: dict[str, object] = {}
+    if body.max_task_model_calls is not None:
+        before["max_task_model_calls"] = max_task_model_calls(ws.settings)
+        after["max_task_model_calls"] = changes["max_task_model_calls"] = body.max_task_model_calls
+    if body.copilot_first is not None:
+        if principal.role not in COPILOT_SETTERS:
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "forbidden",
+                "Only owners and admins switch Microsoft 365 Copilot first on or off.",
+            )
+        before[COPILOT_FIRST] = copilot_first(ws.settings).as_dict()
+        after[COPILOT_FIRST] = changes[COPILOT_FIRST] = body.copilot_first.model_dump()
+    if changes:
+        ws.settings = {**(ws.settings or {}), **changes}
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "ai.settings_updated",
+            target=ws.id,
+            before=before,
+            after=after,
+        )
+        await db.commit()
+    return _settings_out(ws, principal.role)
 
 
 @router.get("/presets")
@@ -785,6 +812,8 @@ async def usage(
             func.sum(
                 case((LLMCall.cost_usd.is_(None) & (LLMCall.status == "ok"), 1), else_=0)
             ).label("unpriced"),
+            # P147: tokens our engine did not spend because Microsoft 365 Copilot answered.
+            func.coalesce(func.sum(LLMCall.saved_tokens), 0).label("saved"),
         ).where(*base)
 
     def rows(q):

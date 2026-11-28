@@ -41,6 +41,7 @@ TOOL_SERVICE: dict[str, str] = {
             "m365_approvals",  # P127
             "m365_approval",
             "m365_approval_answer",
+            "m365_search",  # P147
         )
     },
     **{n: "google" for n in ("email_search", "email_read", "email_draft_reply", "email_draft")},

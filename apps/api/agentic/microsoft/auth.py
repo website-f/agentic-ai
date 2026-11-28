@@ -98,11 +98,13 @@ async def scopes_for(
     user_id: str | None,
     files: bool,
     chats: bool = False,
+    copilot: bool = False,
 ) -> str:
     """P80: what a person's sign-in asks for: the office's scopes, plus file reading when they
     asked for it now (`files`) or granted it before (so it is never lost on a later sign-in).
-    P102: the same for starting new Teams chats (`chats`, app.CHAT_CREATE)."""
-    if (not files or not chats) and user_id:
+    P102: the same for starting new Teams chats (`chats`, app.CHAT_CREATE). P147: and for
+    Microsoft 365 Copilot (`copilot`, app.COPILOT_SCOPES)."""
+    if (not files or not chats or not copilot) and user_id:
         acct = await db.scalar(
             select(MicrosoftAccount).where(
                 MicrosoftAccount.workspace_id == workspace_id,
@@ -113,11 +115,19 @@ async def scopes_for(
         granted = acct.scopes if acct is not None else ""
         files = files or has_scope(granted, app.FILES_SCOPES[0])
         chats = chats or has_scope(granted, app.CHAT_CREATE)
+        copilot = copilot or copilot_granted(granted)
     scope = app.with_files(cfg.scopes) if files else cfg.scopes
     scope = app.with_new_chats(scope) if chats else scope
     if cfg.multi_tenant and not await _in_consented_tenant(db, cfg, workspace_id, user_id):
         scope = app.without(scope, app.ADMIN_ONLY_SCOPES)
-    return scope
+    # P147: added after the admin-only ones are taken out: Copilot needs an admin's consent in
+    # the person's organisation anyway, and the person asked for it themselves.
+    return app.with_copilot(scope) if copilot else scope
+
+
+def copilot_granted(granted: str) -> bool:
+    """P147: this connection was given every scope the Copilot Chat and Retrieval APIs need."""
+    return all(has_scope(granted, s) for s in app.COPILOT_SCOPES)
 
 
 async def _in_consented_tenant(
@@ -164,6 +174,7 @@ async def auth_url(
     *,
     with_files: bool = False,
     with_new_chats: bool = False,
+    with_copilot: bool = False,
     another: bool = False,
     personal: bool = False,
 ) -> str:
@@ -171,9 +182,18 @@ async def auth_url(
     (personal or shared) beside their main one. `base` is the public address the callback
     returns to; it is remembered in the state so the token call uses the same one. P80:
     `with_files` also asks to read their SharePoint / OneDrive files (the Library). P102:
-    `with_new_chats` also asks to start new Teams chats (the Teams tab)."""
+    `with_new_chats` also asks to start new Teams chats (the Teams tab). P147: `with_copilot`
+    also asks for what Microsoft 365 Copilot needs (the Microsoft 365 page's "Allow Microsoft
+    365 Copilot"): only for the person's own work account, never an extra or personal one."""
     cfg = await _configured(db, workspace_id)
     open_to_personal = cfg.personal_accounts and cfg.multi_tenant
+    if with_copilot and (another or personal or await _personal_main(db, workspace_id, user_id)):
+        raise MicrosoftError(
+            Msg(
+                "Microsoft 365 Copilot works only with a work account. Personal Microsoft "
+                "accounts (Outlook.com, Hotmail) cannot use it."
+            )
+        )
     if personal and not open_to_personal:
         raise MicrosoftError(
             Msg(
@@ -196,7 +216,9 @@ async def auth_url(
         scope = app.EXTRA_SCOPES
         authority = app.COMMON
     else:
-        scope = await scopes_for(db, cfg, workspace_id, user_id, with_files, with_new_chats)
+        scope = await scopes_for(
+            db, cfg, workspace_id, user_id, with_files, with_new_chats, with_copilot
+        )
         authority = cfg.tenant
     state = secrets.token_urlsafe(24)
     verifier = secrets.token_urlsafe(48)
@@ -216,6 +238,7 @@ async def auth_url(
                 "scope": scope,
                 "files": with_files,
                 "chats": with_new_chats,
+                "copilot": with_copilot,
                 "another": another,
                 "authority": authority,
             }
@@ -278,6 +301,11 @@ async def started_another(state: str) -> bool:
 async def started_with_new_chats(state: str) -> bool:
     """P102: was this connect started by the Teams tab's "Allow new Teams chats"?"""
     return await _started(state, "chats")
+
+
+async def started_with_copilot(state: str) -> bool:
+    """P147: was this connect started by "Allow Microsoft 365 Copilot"?"""
+    return await _started(state, "copilot")
 
 
 async def drop_state(state: str) -> None:
@@ -432,6 +460,9 @@ async def store(
     had_chats = has_scope(acct.scopes or "", app.CHAT_CREATE)
     if had_chats and not changed_mailbox and not has_scope(granted, app.CHAT_CREATE):
         granted = app.with_new_chats(granted)  # P102: the same for new Teams chats
+    had_copilot = copilot_granted(acct.scopes or "")
+    if had_copilot and not changed_mailbox and not copilot_granted(granted):
+        granted = app.with_copilot(granted)  # P147: the same for Microsoft 365 Copilot
     acct.scopes = granted
     acct.token_enc = crypto.encrypt(tok["refresh_token"], acct.aad)
     member = await db.get(Membership, (workspace_id, user_id))
@@ -535,11 +566,13 @@ def refresh_scopes(asked: str, granted: str) -> str:
     """P80: what a token refresh asks for: the office's scopes, plus Files.Read.All /
     Sites.Read.All only when this person granted them (the Library's reconnect). Asking for
     them without that grant would make Microsoft refuse the refresh and stop their mail too.
-    P102: the same for Chat.Create (the Teams tab's "Allow new Teams chats")."""
+    P102: the same for Chat.Create (the Teams tab's "Allow new Teams chats"). P147: and for
+    Microsoft 365 Copilot ("Allow Microsoft 365 Copilot"), only while every one is granted."""
     asked = " ".join(s for s in asked.split() if s not in app.OPT_IN_SCOPES)
     if has_scope(granted, app.FILES_SCOPES[0]):
         asked = app.with_files(asked)
-    return app.with_new_chats(asked) if has_scope(granted, app.CHAT_CREATE) else asked
+    asked = app.with_new_chats(asked) if has_scope(granted, app.CHAT_CREATE) else asked
+    return app.with_copilot(asked) if copilot_granted(granted) else asked
 
 
 async def _cache(account_id: str, tok: dict[str, Any]) -> None:
@@ -576,6 +609,9 @@ async def access_token(db: AsyncSession, acct: MicrosoftAccount, force: bool = F
     # starting new Teams chats. Either way, keep mail and everything else working with the
     # scopes they still have.
     for drop in (
+        # P147: Copilot's own scopes first (an admin withdrew that consent): everything else
+        # keeps working without Copilot until they allow it again.
+        set(app.COPILOT_ONLY_SCOPES) | (set() if cfg.teams_channels else {app.CHANNEL_SCOPE}),
         {app.CHANNEL_SCOPE} if cfg.teams_channels else set(),
         # P109: the same for channel posting and Teams Approvals, until the person signs in again.
         {app.CHANNEL_SEND_SCOPE} if cfg.teams_channel_send else set(),

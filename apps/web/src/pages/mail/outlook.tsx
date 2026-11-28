@@ -62,6 +62,8 @@ import {
 } from "@/lib/microsoft";
 import { cn, timeAgo } from "@/lib/utils";
 
+import { CopilotStatusRow } from "./copilot";
+
 /** P34: what the person's own AI does with their Outlook. Off by default except the daily
  * report: it makes tasks only for the kinds of mail the person ticks. */
 function OutlookPrefs() {
@@ -261,6 +263,7 @@ export function MicrosoftAbilities({ account }: { account: MicrosoftAccount }) {
             );
           })}
         </ul>
+        <CopilotStatusRow account={account} />
         <p className="flex items-start gap-2 text-[12.5px] text-fg/85">
           <ShieldCheckIcon size={16} weight="duotone" className="mt-0.5 shrink-0 text-ok" />
           <span className="min-w-0">{t("Your AI only reads and drafts. Nothing is sent, posted or booked until you press Send or Confirm under Waiting for your approval.")}</span>

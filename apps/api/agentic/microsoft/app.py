@@ -70,6 +70,43 @@ CHAT_CREATE = "Chat.Create"
 # Scopes a person adds for themselves with a reconnect; kept only while they have them.
 OPT_IN_SCOPES = (*FILES_SCOPES, CHAT_CREATE)
 
+# P147 (owner, 28 Nov 2026: "Copilot first: it costs us nothing for licensed users"): what the
+# Microsoft 365 Copilot APIs need, exactly as Microsoft's docs list them (delegated, work or
+# school accounts only; personal accounts and app-only are not supported):
+# - Chat API (Graph beta POST /copilot/conversations and /conversations/{id}/chat): "Sites.Read.All,
+#   Mail.Read, People.Read.All, OnlineMeetingTranscript.Read.All, Chat.Read,
+#   ChannelMessage.Read.All, ExternalItem.Read.All" (all of them are needed);
+# - Retrieval API (v1.0 POST /copilot/retrieval): Files.Read.All and Sites.Read.All for SharePoint
+#   and OneDrive (ExternalItem.Read.All for Copilot connectors).
+# Several need an admin's consent (People.Read.All, OnlineMeetingTranscript.Read.All,
+# ChannelMessage.Read.All, ExternalItem.Read.All), so they are never part of everyone's sign-in:
+# asked for only by the Microsoft 365 page's "Allow Microsoft 365 Copilot" reconnect, and from
+# then on in that person's own sign-ins and refreshes (like FILES_SCOPES).
+COPILOT_CHAT_SCOPES = (
+    "Sites.Read.All",
+    "Mail.Read",
+    "People.Read.All",
+    "OnlineMeetingTranscript.Read.All",
+    "Chat.Read",
+    "ChannelMessage.Read.All",
+    "ExternalItem.Read.All",
+)
+COPILOT_RETRIEVAL_SCOPES = ("Files.Read.All", "Sites.Read.All")
+COPILOT_SCOPES = tuple(dict.fromkeys((*COPILOT_CHAT_SCOPES, *COPILOT_RETRIEVAL_SCOPES)))
+# The ones nothing else in the office asks for: dropped first when a refresh is refused over
+# them (an admin withdrew the consent), so mail and the rest keep working.
+COPILOT_ONLY_SCOPES = (
+    "Mail.Read",
+    "People.Read.All",
+    "OnlineMeetingTranscript.Read.All",
+    "ExternalItem.Read.All",
+)
+
+
+def with_copilot(scopes: str) -> str:
+    """P147: the scopes plus everything the Copilot Chat and Retrieval APIs need (once)."""
+    return with_scopes(scopes, COPILOT_SCOPES)
+
 
 def with_scopes(scopes: str, extra: tuple[str, ...]) -> str:
     """The scopes plus `extra` (each once)."""

@@ -293,6 +293,7 @@ STAFF_OK = {
     "/api/library/linked", "/api/mail/activity", "/api/me/allowance", "/api/me/needs",
     "/api/me/notifications",  # P114: their own notification settings
     "/api/integrations/microsoft/accounts",  # P118: their own Microsoft accounts only
+    "/api/integrations/microsoft/copilot",  # P147: their own Microsoft 365 Copilot status only
     # P122: their own accounts, and only the shared mailboxes the P34 rules give them
     "/api/integrations/microsoft/my-mailboxes",
     # P124: where Microsoft returns another company's IT admin after the shared approval link

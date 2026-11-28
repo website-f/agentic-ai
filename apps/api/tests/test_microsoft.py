@@ -425,6 +425,7 @@ async def test_connect_is_bound_to_the_starting_session(client, llm, temporal, m
         "new_chats_ok": False,  # P102: new Teams chats (GRANTED has no Chat.Create)
         "channel_send_ok": False,  # P109: posting in channels (admin turns it on first)
         "approvals_ok": False,  # P109: Teams Approvals (admin consent first)
+        "copilot_ok": False,  # P147: only after "Allow Microsoft 365 Copilot"
         "last_sync_at": None,
         "webhooks": "polling",
         "last_error": None,

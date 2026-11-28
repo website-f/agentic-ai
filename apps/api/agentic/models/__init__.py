@@ -380,6 +380,9 @@ class LLMCall(Base):
     data_level: Mapped[str | None] = mapped_column(String(16))
     # P36: the person the work was for (engine/acting.py), for their daily AI allowance.
     user_id: Mapped[str | None] = mapped_column(String(40))
+    # P147: Microsoft 365 Copilot answered instead of our engine (provider "copilot", cost 0):
+    # the tokens our engine would have used (estimated). Prompt/completion stay 0 on such rows.
+    saved_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class ProviderCheck(Base):
@@ -2152,6 +2155,8 @@ class MicrosoftAccount(Timestamps, Base):
     # P118: the main account (one per person), and what the person calls an extra one.
     is_primary: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     label: Mapped[str] = mapped_column(String(40), default="", server_default="")
+    # P147: the last Microsoft 365 Copilot licence check ({"licensed", "checked_at", "skus"}).
+    copilot: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
 
     @property
     def aad(self) -> str:

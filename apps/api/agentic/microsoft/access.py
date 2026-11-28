@@ -218,11 +218,15 @@ async def mail_ready(db: AsyncSession, agent: Agent | None) -> bool:
 # P63: and, read only, the posts of the channels they are a member of.
 # P127: Microsoft approvals (agents/approval_tools.py), gated exactly like Teams.
 APPROVAL_TOOLS = frozenset({"m365_approvals", "m365_approval", "m365_approval_answer"})
+# P147: Microsoft 365 search (Copilot Retrieval API) as the person: gated like Teams, and offered
+# only when the owner turned it on and the person allowed Copilot (microsoft/copilot.search_ready).
+COPILOT_TOOLS = frozenset({"m365_search"})
 TEAMS_TOOLS = (
     frozenset(
         {"teams_chats", "teams_read_chat", "teams_send", "teams_channels", "teams_read_channel"}
     )
     | APPROVAL_TOOLS
+    | COPILOT_TOOLS
 )
 
 
