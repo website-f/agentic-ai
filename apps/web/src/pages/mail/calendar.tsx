@@ -16,7 +16,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/page";
@@ -73,6 +73,16 @@ export function OutlookCalendar({ teams = true }: { teams?: boolean }) {
   const openMeeting = useMeetingComposer((s) => s.open);
   const end = addDaysTo(anchor, 7);
   const q = useQuery(calendarQuery(anchor.toISOString(), end.toISOString()));
+  const qc = useQueryClient();
+  // P148a: once this week is in, the weeks either side are asked for, so Previous / Next open at once.
+  const shownOk = q.isSuccess && !q.isPlaceholderData;
+  useEffect(() => {
+    if (!shownOk) return;
+    for (const d of [-7, 7]) {
+      const s = addDaysTo(anchor, d);
+      void qc.prefetchQuery(calendarQuery(s.toISOString(), addDaysTo(s, 7).toISOString()));
+    }
+  }, [anchor, shownOk, qc]);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysTo(anchor, i)), [anchor]);
   const byDay = useMemo(() => {
     const map = new Map<string, CalEvent[]>();
@@ -105,7 +115,7 @@ export function OutlookCalendar({ teams = true }: { teams?: boolean }) {
       {q.isLoading ? <Skeleton className="h-72 rounded-[var(--radius-md)]" />
         : q.error ? <p role="alert" className="text-[13.5px] text-danger">{errorMessage(q.error)}</p>
         : wide ? (
-          <div className="grid grid-cols-7 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
+          <div aria-busy={q.isPlaceholderData} className={cn("grid grid-cols-7 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface transition-opacity", q.isPlaceholderData && "opacity-60")}>
             {days.map((d) => {
               const list = byDay.get(d.toDateString()) ?? [];
               const isToday = d.toDateString() === today;
@@ -122,7 +132,7 @@ export function OutlookCalendar({ teams = true }: { teams?: boolean }) {
             })}
           </div>
         ) : (
-          <ol className="grid gap-3">
+          <ol aria-busy={q.isPlaceholderData} className={cn("grid gap-3 transition-opacity", q.isPlaceholderData && "opacity-60")}>
             {days.filter((d) => (byDay.get(d.toDateString()) ?? []).length || d.toDateString() === today).map((d) => (
               <li key={d.toISOString()} className="grid gap-1.5">
                 <h4 className={cn("text-[12.5px] font-semibold text-muted uppercase", d.toDateString() === today && "text-accent")}>

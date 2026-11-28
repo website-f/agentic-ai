@@ -5636,6 +5636,19 @@ export class PrimaService {
    * 3 Nov 2026). While it is built, repeated reads are served once; any write clears them (see read-memo.ts).
    */
   async home(user: User, companyId?: Id): Promise<Home> {
+    // P148d: one build for this person's requests that arrive together (the API's homeShare: the home screen and the
+    // alert bell both build the home when Prima opens). Only while a build is running: no answer is kept after it.
+    if (this.memoDepth === 0 && this.homeShare) return this.homeShare(`${user.id}|${companyId ?? ''}|${this.today()}`, () => this.homeOnce(user, companyId));
+    return this.homeOnce(user, companyId);
+  }
+
+  /**
+   * P148d: set by the API to share one home build between requests of the same person running at the same moment
+   * (null: each request builds its own, as in tests and the in-memory store).
+   */
+  homeShare: ((key: string, build: () => Promise<Home>) => Promise<Home>) | null = null;
+
+  private async homeOnce(user: User, companyId?: Id): Promise<Home> {
     if (this.memoDepth++ === 0) {
       this.storeBeforeMemo = this.store;
       this.store = readMemo(this.store);

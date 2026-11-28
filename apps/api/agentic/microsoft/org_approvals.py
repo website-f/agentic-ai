@@ -283,6 +283,12 @@ async def _account_items(
     return items, False
 
 
+async def account_items(account_id: str) -> tuple[list[dict[str, Any]], bool]:
+    """P148a: one account's approvals as kept here (the Microsoft 365 tab counts share the
+    Approvals tab's list instead of asking Microsoft again): (items, whether reading failed)."""
+    return await _account_items(account_id, False, asyncio.Semaphore(1))
+
+
 @dataclass
 class Entry:
     """One approval, merged over every account that returned it."""

@@ -26,8 +26,9 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select, update
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from ...core.db import get_db
 from ...core.security import can
@@ -437,14 +438,15 @@ async def get_structure(
     db: AsyncSession = Depends(get_db),
 ) -> StructureOut:
     ws = principal.workspace_id
-    if not await db.scalar(
-        select(func.count()).select_from(OrgUnit).where(OrgUnit.workspace_id == ws)
-    ):
+    # P148b: both checks in one query (they were four, on every open of the chart).
+    has_units, missing = (await db.execute(_structure_checks(ws))).one()
+    if not has_units:
         # A workspace made after the API started: its structure on the first read.
         await seed.ensure(db, ws, only_if_empty=True)
         await db.commit()
+        missing = await _companies_missing(db, ws)
     # P146: every office company and department as a unit (only what is missing).
-    if await _companies_missing(db, ws):
+    if missing:
         await seed.ensure_companies(db, ws)
         await db.commit()
     units = (
@@ -511,6 +513,26 @@ async def get_structure(
         members=members,
         groups=[g for g in groups if g.member_ids],
         can_edit=editor,
+    )
+
+
+def _structure_checks(ws: str) -> Select:
+    """(any unit yet, an office company or department with no unit) as one row."""
+    unit = aliased(OrgUnit)
+    company_unit = (
+        select(unit.id)
+        .where(unit.workspace_id == ws, unit.branch_id == Branch.id, unit.department_id.is_(None))
+        .exists()
+    )
+    dept_unit = (
+        select(unit.id).where(unit.workspace_id == ws, unit.department_id == Department.id).exists()
+    )
+    return select(
+        select(OrgUnit.id).where(OrgUnit.workspace_id == ws).exists(),
+        or_(
+            select(Branch.id).where(Branch.workspace_id == ws, ~company_unit).exists(),
+            select(Department.id).where(Department.workspace_id == ws, ~dept_unit).exists(),
+        ),
     )
 
 

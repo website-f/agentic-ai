@@ -11,13 +11,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from ..brain import embed
 from ..brain import facts as brain_facts
 from ..brain import store as brain_store
 from ..brain.scope import for_agent
+from ..core import workspace_settings
 from ..models import (
     Agent,
     BrainPage,
@@ -386,14 +388,31 @@ async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
     settings = dict(ws.settings or {})
     if _current(settings, all_names):
         return  # the usual case: two dict lookups, no query
+    # P148b: the slow parts (embeddings, the vault's git commits) run with no lock held. Before,
+    # they ran with the workspace row locked (SELECT ... FOR NO KEY UPDATE): after a deploy that
+    # added a starter, every other settings write in the office (a folder made in Files, an
+    # owner's setting) waited for them, up to two and a half minutes on the live server.
+    existing = set((await db.scalars(select(Skill.name).where(Skill.workspace_id == ws.id))).all())
+    before = settings.get(seeded_key)
+    guess = [
+        b
+        for b in BUILTIN
+        if b[0] not in existing and not (isinstance(before, list) and b[0] in before)
+    ]
+    vecs: dict[str, Any] = {}
+    if guess:
+        got = await embed.embed([f"{n}: {d}" for n, d, _ in guess]) or [None] * len(guess)
+        vecs = {b[0]: v for b, v in zip(guess, got, strict=True)}
     # P96: many first steps at once (50 people pressing Start, or the first steps after a
     # deploy that adds a starter) raced here: one seeded, the others failed their step on
-    # uq_skills_ws_name, and each wrote the workspace settings back whole over changes made
-    # meanwhile. Lock the workspace row and read its settings again: one at a time, each
-    # seeing what the one before it wrote (the lock goes at the commit below).
-    await db.refresh(ws, ["settings"], with_for_update={"key_share": True})
-    settings = dict(ws.settings or {})
+    # uq_skills_ws_name. One seeder at a time (an advisory lock: the workspace row stays free),
+    # each reading the settings as the one before it left them.
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"skills:builtin:{ws.id}"}
+    )
+    settings = dict(await db.scalar(select(Workspace.settings).where(Workspace.id == ws.id)) or {})
     if _current(settings, all_names):
+        set_committed_value(ws, "settings", settings)
         await db.commit()  # the one before us did it
         return
     seeded = settings.get(seeded_key)
@@ -405,16 +424,12 @@ async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
     existing = set((await db.scalars(select(Skill.name).where(Skill.workspace_id == ws.id))).all())
     todo = [b for b in BUILTIN if b[0] not in seeded and b[0] not in existing]
     older = settings.get(_REV_KEY, 1) < BUILTIN_REV
-    settings[seeded_key] = sorted({*seeded, *all_names})
-    settings[_REV_KEY] = BUILTIN_REV
-    ws.settings = settings
-    if older and eperolehan.NAME in existing:
-        await eperolehan.upgrade(db, ws)  # a skill seeded now has the new text already
-    if not todo:
-        await db.commit()
-        return
-    vectors = await embed.embed([f"{n}: {d}" for n, d, _ in todo]) or [None] * len(todo)
-    for (name, description, body), vec in zip(todo, vectors, strict=True):
+    late = [b for b in todo if b[0] not in vecs]  # seeded since the guess: rare
+    if late:
+        got = await embed.embed([f"{n}: {d}" for n, d, _ in late]) or [None] * len(late)
+        vecs |= {b[0]: v for b, v in zip(late, got, strict=True)}
+    made: list[Skill] = []
+    for name, description, body in todo:
         s = Skill(
             workspace_id=ws.id,
             name=name,
@@ -424,7 +439,7 @@ async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
             trust="builtin",
             created_by="system",
             approved_by="system",
-            embedding=vec,
+            embedding=vecs.get(name),
         )
         db.add(s)
         await db.flush()
@@ -452,8 +467,22 @@ async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
                     created_at=_now(),
                 )
             )
-        await _mirror(db, ws, s, brain_store.SYSTEM, f"skills: add built-in {name}")
+        made.append(s)
+    # Last before the commit: the workspace row is locked only for this one write.
+    await workspace_settings.merge(
+        db, ws.id, {seeded_key: sorted({*seeded, *all_names}), _REV_KEY: BUILTIN_REV}, ws
+    )
     await db.commit()
+    # The vault copies (each commits on its own; a skill seeded now has the new text already).
+    try:
+        if older and eperolehan.NAME in existing:
+            await eperolehan.upgrade(db, ws)
+        for s in made:
+            await _mirror(db, ws, s, brain_store.SYSTEM, f"skills: add built-in {s.name}")
+        await db.commit()
+    except Exception:  # noqa: BLE001 - the skills are saved; their vault copy can be redone
+        await db.rollback()
+        log.warning("built-in skills: the vault copy failed", exc_info=True)
 
 
 # ---------------------------------------------------------------- reading

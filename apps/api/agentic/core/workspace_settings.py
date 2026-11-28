@@ -3,10 +3,52 @@
 import re
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 DEFAULT_MAX_TASK_MODEL_CALLS = 30
 HARD_MAX_TASK_MODEL_CALLS = 200
+
+
+# ---------------------------------------------------------------- P148b atomic writes
+
+
+async def merge(
+    db: "AsyncSession", workspace_id: str, patch: Mapping[str, Any], ws: Any = None
+) -> dict[str, Any]:
+    """Set these top-level keys of the workspace's settings in ONE statement
+    (`settings = settings || patch`), never a read-modify-write of the whole document.
+
+    P148b (live, 28 Nov 2026: `SELECT workspaces.settings ... FOR NO KEY UPDATE` waited 11 s on
+    average, 156 s at worst): a run that read the settings, worked for minutes (Prima over HTTP,
+    embeddings, a vault commit) and then wrote the whole document back both lost what others
+    saved meanwhile and, once written, held the workspace row locked until its commit. This
+    write locks the row only from here to the caller's commit, so call it LAST, right before
+    committing. Other keys saved meanwhile are kept. Returns the settings as saved; `ws` (a
+    loaded Workspace) is brought up to date without being marked changed."""
+    from sqlalchemy import bindparam, func, update
+    from sqlalchemy.dialects.postgresql import JSONB
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    from ..models import Workspace
+
+    new = await db.scalar(
+        update(Workspace)
+        .where(Workspace.id == workspace_id)
+        .values(
+            settings=func.coalesce(Workspace.settings, func.jsonb_build_object()).op("||")(
+                bindparam("p148b_patch", dict(patch), type_=JSONB)
+            )
+        )
+        .returning(Workspace.settings)
+        .execution_options(synchronize_session=False)
+    )
+    saved = dict(new or {})
+    if ws is not None:
+        set_committed_value(ws, "settings", saved)
+    return saved
 
 
 def max_task_model_calls(settings: Mapping[str, Any] | None) -> int:

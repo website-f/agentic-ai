@@ -691,6 +691,10 @@ async def process_file(
 
     try:
         data = await storage.read(db, f)  # P40: wherever it lives
+        if not (db.new or db.dirty or db.deleted):
+            # P148b: reading a scan (OCR) takes minutes; no transaction (and no pooled
+            # connection) stays open meanwhile. Nothing is unsaved here: only reads so far.
+            await db.commit()
         out = await asyncio.to_thread(extract, data, f.name, f.mime)
     except storage.StorageError as e:
         f.status, f.error = "failed", str(e)[:300]

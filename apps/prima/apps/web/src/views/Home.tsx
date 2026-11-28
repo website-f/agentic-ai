@@ -201,11 +201,34 @@ function GroupedList({
   );
 }
 
+type HomeData = Awaited<ReturnType<typeof api.home>>;
+/**
+ * P148d (speed): the last home this tab showed, by person and company. Opening Home (or an app's home) again shows it at
+ * once while the fresh one loads, and the fresh one replaces it as soon as it arrives (a group home takes about a second
+ * to build). Only in this tab's memory: nothing is stored.
+ */
+const lastHome = new Map<string, HomeData>();
+
+export function useHome(userId: string, companyId: string | undefined, on = true): { data: HomeData | null; error: string | null } {
+  const key = `${userId}|${companyId ?? ''}`;
+  const { data, error } = useLoad(
+    () =>
+      on
+        ? api.home(companyId).then((h) => {
+            lastHome.set(key, h);
+            return h;
+          })
+        : Promise.resolve(null),
+    [on, key],
+  );
+  return { data: data ?? (on && !error ? (lastHome.get(key) ?? null) : null), error };
+}
+
 /** The first screen for each job: only what that person must watch, each line opening where the work is done (Fauzan, 25 Oct 2026). */
 export function HomeView() {
   const { me, companyId, setCompanyId, go, apps, menu, mainMenu, openSpace } = useApp();
   const companyScoped = me.user.role === 'company_manager' || me.user.role === 'admin_exec';
-  const { data, error } = useLoad(() => api.home(companyScoped ? companyId : undefined), [companyScoped ? companyId : '']);
+  const { data, error } = useHome(me.user.id, companyScoped ? companyId : undefined);
   if (error)
     return (
       <div className="page">

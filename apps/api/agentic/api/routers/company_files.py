@@ -343,13 +343,15 @@ async def _saved_folders(
 
 
 async def _save_folders(db: AsyncSession, workspace_id: str, entries: list[dict[str, Any]]) -> None:
-    ws = await db.get(Workspace, workspace_id)
-    if ws is None:
-        return
+    """P148b: only this key, in one statement (the rest of the settings as others left them)."""
+    from ...core import workspace_settings
+
     unique: dict[tuple[str, str | None, str | None], dict[str, Any]] = {}
     for e in entries:
         unique.setdefault((e["path"], e["branch_id"], e.get("department_id")), e)
-    ws.settings = {**(ws.settings or {}), FOLDERS_KEY: list(unique.values())}
+    sync = db.sync_session  # a Workspace already loaded here is kept up to date (no query)
+    ws = sync.identity_map.get(sync.identity_key(Workspace, workspace_id))
+    await workspace_settings.merge(db, workspace_id, {FOLDERS_KEY: list(unique.values())}, ws)
 
 
 def _company_ok(principal: Principal, branch_id: str | None) -> bool:
@@ -504,12 +506,19 @@ async def rename_folder(
             "This folder cannot be renamed or moved.",
         )
     dept = await _unit_department(db, principal, body.branch_id, body.department_id)
-    saved = await _saved_folders(db, principal.workspace_id, lock=True)
+    # P148b: the files first, the workspace row last. Locked first, it stayed locked while every
+    # file of the folder was rewritten (each waiting for anyone working on that file): on the
+    # live server other folder changes and settings waited up to two and a half minutes.
+    saved = await _saved_folders(db, principal.workspace_id)
     files = list(
         (await db.scalars(_changeable(principal, body.branch_id, dept).where(_under(src)))).all()
     )
-    seen = {id(e) for e in _saved_seen(saved, principal, body.branch_id, dept)}
-    moved_saved = [e for e in saved if id(e) in seen and _is_under(e["path"], src)]
+
+    def under_src(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        seen = {id(e) for e in _saved_seen(entries, principal, body.branch_id, dept)}
+        return [e for e in entries if id(e) in seen and _is_under(e["path"], src)]
+
+    moved_saved = under_src(saved)
     if not files and not moved_saved:
         raise api_error(status.HTTP_404_NOT_FOUND, "folder_not_found", "That folder is not here.")
     new_paths = [dst + f.folder[len(src) :] for f in files] + [
@@ -523,9 +532,11 @@ async def rename_folder(
         )
     for f in files:
         f.folder = dst + f.folder[len(src) :]
-    for e in moved_saved:
-        e["path"] = dst + e["path"][len(src) :]
     if moved_saved:
+        await db.flush()  # the files' rows, before the workspace row
+        saved = await _saved_folders(db, principal.workspace_id, lock=True)  # as they are now
+        for e in under_src(saved):
+            e["path"] = dst + e["path"][len(src) :]
         await _save_folders(db, principal.workspace_id, saved)
     await audit.record(
         db,

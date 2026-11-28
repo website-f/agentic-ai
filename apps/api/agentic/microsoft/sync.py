@@ -126,6 +126,28 @@ async def webhooks_state(db: AsyncSession, box: Box) -> str:
     return "live" if any(s.expires_at > t for s in await subscriptions_of(db, box)) else "polling"
 
 
+async def webhooks_states(db: AsyncSession, mailboxes: list[SharedMailbox]) -> dict[str, str]:
+    """P148a: `webhooks_state` of many shared mailboxes in one query (a list of them asked one
+    query each)."""
+    if not mailboxes:
+        return {}
+    t = now()
+    live = set(
+        (
+            await db.scalars(
+                select(MailSubscription.mailbox_id).where(
+                    MailSubscription.mailbox_id.in_([m.id for m in mailboxes]),
+                    MailSubscription.expires_at > t,
+                )
+            )
+        ).all()
+    )
+    return {
+        m.id: "off" if not is_active(m) else "live" if m.id in live else "polling"
+        for m in mailboxes
+    }
+
+
 def hash_state(client_state: str) -> str:
     return hashlib.sha256(f"msclientstate:{client_state}".encode()).hexdigest()
 
@@ -214,9 +236,23 @@ async def sync_box(db: AsyncSession, box: Box) -> list[MailItem]:
         else []
     )
     items.sort(key=lambda i: i.received_at or now())
+    if items and isinstance(box, MicrosoftAccount):
+        await _mail_arrived(box)
     for item in items:
         await hooks.on_new_mail(item)
     return items
+
+
+async def _mail_arrived(acct: MicrosoftAccount) -> None:
+    """P148a: new mail in the person's inbox: the Microsoft 365 page reads its mail lists again
+    (they are kept a while, longest while webhooks are live) and its tab counts behind."""
+    from . import swr
+
+    try:
+        await swr.bump(account_id=acct.id, areas=("mail",))
+        await swr.touch(await swr.key(acct.workspace_id, acct.user_id, "summary", acct.id))
+    except Exception:  # noqa: BLE001 - the kept answers age out on their own
+        log.info("could not refresh the Microsoft 365 page's mail for %s", acct.id)
 
 
 async def record_failure(db: AsyncSession, box: Box, e: Exception) -> None:
@@ -557,6 +593,9 @@ async def disconnect_account(db: AsyncSession, acct: MicrosoftAccount) -> None:
     acct.last_sync_at = None
     acct.last_error = None
     await db.commit()
+    from . import swr  # P148a: nothing kept for the page from this account is shown again
+
+    await swr.bump(acct.workspace_id, acct.user_id, account_id=acct.id, areas=("mail", "cal"))
 
 
 async def delete_mailbox(db: AsyncSession, mailbox: SharedMailbox) -> None:

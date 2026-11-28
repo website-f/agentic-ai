@@ -639,18 +639,29 @@ async def access_token(db: AsyncSession, acct: MicrosoftAccount, force: bool = F
             acct.last_error = f"Microsoft: {why}"[:500]
             await db.commit()
             await valkey().delete(f"mstok:{acct.id}")
+            await _changed(acct)
             raise ReconnectNeeded(Msg("Outlook needs reconnecting ({why}).", why=why), status)
         acct.last_error = f"Microsoft: {why}"[:500]
         await db.commit()
         raise MicrosoftError(Msg("Microsoft sign-in failed for now ({why}).", why=why), status)
     if tok.get("refresh_token"):
         acct.token_enc = crypto.encrypt(tok["refresh_token"], acct.aad)
+    scopes_changed = bool(tok.get("scope")) and str(tok["scope"]) != (acct.scopes or "")
     if tok.get("scope"):
         acct.scopes = str(tok["scope"])
     acct.last_error = None
     await db.commit()
     await _cache(acct.id, tok)
+    if scopes_changed:  # what the person may do changed: the page reads it again
+        await _changed(acct)
     return str(tok["access_token"])
+
+
+async def _changed(acct: MicrosoftAccount) -> None:
+    """P148a: the Microsoft 365 page's kept answers of this person are read again."""
+    from . import swr
+
+    await swr.bump(acct.workspace_id, acct.user_id)
 
 
 async def forget(acct: MicrosoftAccount) -> None:

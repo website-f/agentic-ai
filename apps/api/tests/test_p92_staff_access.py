@@ -517,6 +517,7 @@ async def test_staff_watch_colleague_agents_not_their_work(client, llm, temporal
 
 # Writes a staff member makes with an empty body that may succeed: their own things only.
 STAFF_WRITE_OK = {
+    ("POST", "/api/m365/refresh"),  # P148: re-read their own Microsoft 365 answers
     ("DELETE", "/api/search/recent"),  # their own recent searches
     ("POST", "/api/me/needs/seen"),  # their own "seen" mark
     ("POST", "/api/push/unsubscribe"),  # this device

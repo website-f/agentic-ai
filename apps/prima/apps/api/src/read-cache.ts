@@ -43,15 +43,38 @@ const passing = (v: unknown): boolean => v === true || (Array.isArray(v) && v.le
 /** Tests: forget the kept schema answers. */
 export function forgetCatalog(): void {
   catalogKept.clear();
+  bigSeen.clear();
 }
+
+/**
+ * P148d: tables found over MAX_ROWS, per database and person (the rows a person sees follow their company walls),
+ * remembered for CATALOG_TTL_MS. Their snapshot read (MAX_ROWS + 1 rows,
+ * then thrown away) ran on every request that read them three times (shifts and attendance on every leader's home). Only
+ * the wasted read is skipped: reads of such a table go to the database as they did after the failed snapshot. A table
+ * that has shrunk since is snapshotted again once the time is up; until then its reads are plain queries, also exact.
+ */
+const bigSeen = new Map<string, number>();
+const dbKey = (client: unknown): string | null => {
+  const cp = (client as { connectionParameters?: { host?: string; port?: number; database?: string } }).connectionParameters;
+  return cp ? `${cp.host ?? ''}:${cp.port ?? ''}/${cp.database ?? ''}` : null;
+};
 
 /** Plain reads (no change): everything else on the store counts as a change. hrItProblems sets the tenant for the
  *  transaction, so it is a read but is never kept. */
 // P123: the archive checks (prima.ic_archived, a STABLE read) are reads too: as changes they dropped every snapshot once
 // per IT record, so a leader's home read the same tables again and again.
-const READS = new Set<string>(['list', 'get', 'hasTable', 'companyOfficeReady', 'companyRunLinksReady', ...CATALOG, 'hrItProblems', 'itImportProblems', 'rentalSimulation', 'hrItTrustedTenant', 'itCleanupArchived', 'itCleanupArchivedMany']);
+// P148d: the module-installed checks below only read the catalogue too; as changes they dropped every snapshot on each
+// home load (guard pay, pay formulas, registers, quality), so the tables read before them were read again after.
+const READS = new Set<string>(['list', 'get', 'hasTable', 'companyOfficeReady', 'companyRunLinksReady', ...CATALOG, 'hrItProblems', 'itImportProblems', 'rentalSimulation', 'hrItTrustedTenant', 'itCleanupArchived', 'itCleanupArchivedMany', 'guardPayReady', 'payFormulasReady', 'registersReady', 'qualityReady', 'amExtrasReady']);
 
-type Snap = { rows: Record<string, unknown>[]; byId: Map<string, Record<string, unknown>> } | 'too-big';
+/**
+ * P148d: each row is kept as the database's own JSON text beside the parsed row: the parsed row answers the filters and
+ * every caller gets a fresh JSON.parse of the text (2 to 4 times faster than structuredClone of the parsed row, and the
+ * same values: jsonb's text is what the database driver parses too). Rows by company are found through an index built
+ * on the first company filter, instead of testing every row of the table for each company of a group-wide screen.
+ */
+type Kept = { o: Record<string, unknown>; t: string };
+type Snap = { rows: Kept[]; byId: Map<string, Kept>; byCompany?: Map<string, number[]> } | 'too-big';
 
 const isPrimitive = (v: unknown): boolean => v === null || ['string', 'number', 'boolean'].includes(typeof v);
 
@@ -93,10 +116,56 @@ export function pgMatches(row: Record<string, unknown>, filter?: Record<string, 
   return true;
 }
 
-const copy = <T>(row: T): T => structuredClone(row);
+const fresh = <T>(row: Kept): T => JSON.parse(row.t) as T;
+
+/** The text a row's field is compared as for an array filter (pgMatches), or undefined when it can never match. */
+const asText = (have: unknown): string | undefined =>
+  have === undefined || have === null ? undefined : typeof have === 'string' ? have : typeof have === 'object' ? JSON.stringify(have) : String(have);
+
+/** pgMatches for one filter and range, with the array values turned to text once instead of once per row. */
+function matcher(filter?: Record<string, unknown>, range?: { field: unknown; from?: unknown; before?: unknown }): (row: Record<string, unknown>) => boolean {
+  const sets = new Map<string, Set<string>>();
+  for (const [key, want] of Object.entries(filter ?? {})) if (Array.isArray(want)) sets.set(key, new Set(want.map(String)));
+  const entries = Object.entries(filter ?? {});
+  return (row) => {
+    for (const [key, want] of entries) {
+      if (want === undefined) continue;
+      const have = row[key];
+      if (Array.isArray(want)) {
+        const text = asText(have);
+        if (text === undefined || !sets.get(key)!.has(text)) return false;
+      } else if (want === null) {
+        if (!(key in row) || have !== null) return false;
+      } else if (have !== want) return false;
+    }
+    return range ? pgMatches(row, undefined, range) : true;
+  };
+}
+
+/** Positions of the rows that may match a company filter (every row that does is among them), in table order. */
+function companyRows(snap: Exclude<Snap, 'too-big'>, want: unknown): number[] | null {
+  if (want === undefined || want === null || (!Array.isArray(want) && typeof want !== 'string')) return null;
+  if (!snap.byCompany) {
+    const idx = new Map<string, number[]>();
+    snap.rows.forEach((r, i) => {
+      const k = asText(r.o.companyId);
+      if (k === undefined) return;
+      const at = idx.get(k);
+      if (at) at.push(i);
+      else idx.set(k, [i]);
+    });
+    snap.byCompany = idx;
+  }
+  if (!Array.isArray(want)) return snap.byCompany.get(want) ?? [];
+  const keys = [...new Set(want.map(String))];
+  if (keys.length === 1) return snap.byCompany.get(keys[0]) ?? [];
+  const out: number[] = [];
+  for (const k of keys) for (const i of snap.byCompany.get(k) ?? []) out.push(i);
+  return out.sort((a, b) => a - b);
+}
 
 /** The store a request uses: PgStore with the per-request snapshots above. */
-export function withReadSnapshots<S extends Store>(store: S, client: Pick<PoolClient, 'query'>, tableOf: (t: TableName) => string): S {
+export function withReadSnapshots<S extends Store>(store: S, client: Pick<PoolClient, 'query'>, tableOf: (t: TableName) => string, who?: string): S {
   const snaps = new Map<string, Snap>();
   const reads = new Map<string, number>();
   const drop = () => {
@@ -111,19 +180,36 @@ export function withReadSnapshots<S extends Store>(store: S, client: Pick<PoolCl
     const n = (reads.get(table) ?? 0) + 1;
     reads.set(table, n);
     if (n < SNAPSHOT_AFTER) return undefined;
-    // P105: a table of a module not installed in this database (upstream's 24 off-list modules) is never snapshotted:
-    // its reads go to PgStore, which answers "not installed" without a failed query that would abort the transaction.
-    const exists = await client.query('SELECT to_regclass($1) IS NOT NULL AS ok', [tableOf(table)]);
-    if (exists.rows[0]?.ok !== true) {
+    const db = who ? dbKey(client) : null;
+    const big = db ? `${db} ${who} ${table}` : null;
+    const seen = big ? bigSeen.get(big) : undefined;
+    if (seen !== undefined && Date.now() - seen < CATALOG_TTL_MS) {
       snaps.set(table, 'too-big');
       return snaps.get(table);
     }
-    const res = await client.query(`SELECT data FROM ${tableOf(table)} LIMIT ${MAX_ROWS + 1}`);
+    // P105: a table of a module not installed in this database (upstream's 24 off-list modules) is never snapshotted:
+    // its reads go to PgStore, which answers "not installed" without a failed query that would abort the transaction.
+    // P148d: through the store's own per-request answer when it has one (PgStore.hasTable: one catalogue read).
+    const has = (store as { hasTable?: (t: TableName) => Promise<boolean> }).hasTable;
+    const ok = typeof has === 'function' ? await has.call(store, table) : (await client.query('SELECT to_regclass($1) IS NOT NULL AS ok', [tableOf(table)])).rows[0]?.ok === true;
+    if (!ok) {
+      snaps.set(table, 'too-big');
+      return snaps.get(table);
+    }
+    const res = await client.query(`SELECT data::text AS t FROM ${tableOf(table)} LIMIT ${MAX_ROWS + 1}`);
     let snap: Snap;
-    if (res.rows.length > MAX_ROWS) snap = 'too-big';
-    else {
-      const rows = res.rows.map((r) => r.data as Record<string, unknown>);
-      snap = { rows, byId: new Map(rows.map((r) => [String(r.id), r])) };
+    if (res.rows.length > MAX_ROWS) {
+      snap = 'too-big';
+      if (big) {
+        if (bigSeen.size > 20_000) bigSeen.clear();
+        bigSeen.set(big, Date.now());
+      }
+    } else {
+      const rows: Kept[] = res.rows.map((r: { t?: string; data?: unknown }) => {
+        const t = typeof r.t === 'string' ? r.t : JSON.stringify(r.data);
+        return { o: JSON.parse(t) as Record<string, unknown>, t };
+      });
+      snap = { rows, byId: new Map(rows.map((r) => [String(r.o.id), r])) };
     }
     snaps.set(table, snap);
     return snap;
@@ -141,7 +227,11 @@ export function withReadSnapshots<S extends Store>(store: S, client: Pick<PoolCl
             const snap = await snapshot(table);
             if (snap && snap !== 'too-big') {
               const out: Row<TableName>[] = [];
-              for (const r of snap.rows) if (pgMatches(r, f, range as { field: unknown })) out.push(copy(r) as unknown as Row<TableName>);
+              const ok = matcher(f, range as { field: unknown } | undefined);
+              const some = companyRows(snap, f?.companyId);
+              if (some) {
+                for (const i of some) if (ok(snap.rows[i].o)) out.push(fresh(snap.rows[i]));
+              } else for (const r of snap.rows) if (ok(r.o)) out.push(fresh(r));
               return out;
             }
           }
@@ -153,7 +243,7 @@ export function withReadSnapshots<S extends Store>(store: S, client: Pick<PoolCl
           const snap = await snapshot(table);
           if (snap && snap !== 'too-big') {
             const r = snap.byId.get(String(id));
-            return r ? copy(r) : undefined;
+            return r ? fresh(r) : undefined;
           }
           return value.call(target, table, id);
         };

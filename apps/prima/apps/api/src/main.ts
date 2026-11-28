@@ -9,6 +9,7 @@ import { guardPhoneConfig } from './guard-phone';
 import { Db, assertRestrictedLogin, assertSchemaCurrent } from './db';
 import { DomainErrors } from './errors';
 import { hideSecrets, rateLimit, securityHeaders } from './security';
+import { serverTiming } from './server-timing';
 
 export async function createApp() {
   // The container image runs with NODE_ENV=production: the test sign-in can never be switched on there.
@@ -25,6 +26,8 @@ export async function createApp() {
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.set('json replacer', hideSecrets);
+  // P148d: where each request's time went (Server-Timing: the API, its database queries, the wait for a connection).
+  app.use(serverTiming);
   app.use(securityHeaders);
   // Client report links are public: a tighter limit per address on top of the general one.
   app.use('/api/share', rateLimit(Number(process.env.SHARE_RATE_LIMIT_PER_MIN ?? 30)));

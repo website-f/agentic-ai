@@ -180,7 +180,7 @@ async def update(db: AsyncSession, user_id: str, patch: dict[str, Any]) -> dict[
         await db.execute(
             select(User)
             .where(User.id == user_id)
-            .with_for_update()
+            .with_for_update(key_share=True)  # P148b: no key update
             .execution_options(populate_existing=True)
         )
     ).scalar_one()

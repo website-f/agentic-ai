@@ -533,16 +533,20 @@ async def store_new(db: AsyncSession, f: DocFile, data: bytes) -> None:
 
 async def replace(db: AsyncSession, f: DocFile, data: bytes) -> None:
     """New bytes for an existing file, where it lives (a re-export, new minutes). P143c: what
-    compression recorded is about the old bytes, so it goes (compress.py sets it after)."""
-    f.compression = None
+    compression recorded is about the old bytes, so it goes (compress.py sets it after).
+    P148b: the upload runs before the file's row is changed (and so locked by the flush the
+    storage look-up would make): people moving or filing the file never wait for a bucket."""
     if f.storage_id:
-        t = await db.get(StorageTarget, f.storage_id)
+        with db.no_autoflush:
+            t = await db.get(StorageTarget, f.storage_id)
         if t is not None and f.storage_key:
             try:
                 await put(t, f.storage_key, data)
+                f.compression = None
                 return
             except (StorageError, httpx.HTTPError) as e:
                 log.warning("storage %s failed, moving %s into the database: %s", t.id, f.id, e)
+    f.compression = None
     f.data, f.storage_id, f.storage_key = data, None, None
 
 

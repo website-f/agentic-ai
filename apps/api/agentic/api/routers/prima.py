@@ -9,6 +9,7 @@ with no Prima record of their own gets their own account in that company.
 """
 
 import json
+import time
 from difflib import SequenceMatcher
 from typing import Literal
 
@@ -463,7 +464,28 @@ async def opens_as_put(
     return await _opens_as_out(db, principal)
 
 
-async def _forward(request: Request, path: str, principal: Principal, db: AsyncSession) -> Response:
+async def _started() -> float:
+    """P148d: when the office began on this call (declared first, so before the sign-in check)."""
+    return time.perf_counter()
+
+
+def _timing(started: float, ans: client.Answer) -> str:
+    """P148d: Server-Timing for a forwarded call: the office's own part (sign-in, the person's
+    checks, signing), the round trip to Prima, then Prima's own figures (its work, its database
+    time). Durations only."""
+    total = (time.perf_counter() - started) * 1000
+    parts = [
+        f"office;dur={max(total - ans.upstream_ms, 0):.1f}",
+        f"prima-call;dur={ans.upstream_ms:.1f}",
+    ]
+    if ans.timing and len(ans.timing) <= 500 and ans.timing.isprintable():
+        parts.append(ans.timing)
+    return ", ".join(parts)
+
+
+async def _forward(
+    request: Request, path: str, principal: Principal, db: AsyncSession, started: float = 0.0
+) -> Response:
     body = await request.body() if request.method == "POST" else b""
     try:
         ans = await client.call(
@@ -485,6 +507,8 @@ async def _forward(request: Request, path: str, principal: Principal, db: AsyncS
     if request.method == "GET" and path.strip("/") == "api/me" and ans.status == 200:
         m = await db.get(Membership, (principal.workspace_id, principal.user.id))
         body_out = _with_office(ans, principal, own=m is not None and client.opens_own(m))
+    if started:
+        headers["server-timing"] = _timing(started, ans)
     return Response(body_out, status_code=ans.status, media_type=ans.content_type, headers=headers)
 
 
@@ -524,17 +548,19 @@ def _with_office(ans: client.Answer, principal: Principal, own: bool = False) ->
 async def prima_get(
     path: str,
     request: Request,
+    started: float = Depends(_started),
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    return await _forward(request, path, principal, db)
+    return await _forward(request, path, principal, db, started)
 
 
 @router.post("/{path:path}")
 async def prima_post(
     path: str,
     request: Request,
+    started: float = Depends(_started),
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    return await _forward(request, path, principal, db)
+    return await _forward(request, path, principal, db, started)

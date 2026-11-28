@@ -6,7 +6,7 @@
  *
  * Every query key starts with "mail", so the live `mail.new` event refreshes them all.
  */
-import { queryOptions } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { api, m365AccountId } from "./api";
 import type { WorkMailApproval } from "./microsoft";
@@ -59,7 +59,15 @@ export const m365Keys = {
 
 const enc = encodeURIComponent;
 
-export interface MailPage { items: MailRow[]; next_skip: number | null }
+/** P148a: `refreshing`: the server showed a page it kept while it reads Microsoft again behind. */
+export interface MailPage { items: MailRow[]; next_skip: number | null; refreshing?: boolean }
+
+/** P148a: the server keeps each answer per person (shown at once, read again behind). A query whose
+ * answer says `refreshing` asks again shortly for the new one; otherwise at its own pace. */
+const SOON = 2_500;
+const GC = 10 * 60_000;
+export const soonIfRefreshing = (every: number) => (q: { state: { data?: unknown } }) =>
+  (q.state.data as { refreshing?: boolean } | undefined)?.refreshing ? SOON : every;
 
 export const mailListQuery = (folder: MailFolder, q: string, unread: boolean) =>
   queryOptions({
@@ -68,7 +76,9 @@ export const mailListQuery = (folder: MailFolder, q: string, unread: boolean) =>
     retry: false,
     // P122: a list just fetched (the route's prefetch, a tab switched back to) is not asked again.
     staleTime: 20_000,
-    refetchInterval: 60_000,
+    gcTime: GC,
+    refetchInterval: soonIfRefreshing(60_000),
+    refetchOnWindowFocus: false,
   });
 
 export const moreMail = (folder: MailFolder, skip: number, unread: boolean) =>
@@ -191,14 +201,16 @@ export interface TeamsMsg {
 
 export interface TeamsPostThread extends TeamsMsg { replies: TeamsMsg[] }
 
-export interface ChatPage { messages: TeamsMsg[]; more: string | null; chat?: ChatRow }
+export interface ChatPage { messages: TeamsMsg[]; more: string | null; chat?: ChatRow; refreshing?: boolean }
 
 export const chatsQuery = queryOptions({
   queryKey: m365Keys.chats,
   queryFn: () => api<ChatRow[]>("/api/m365/teams/chats"),
   retry: false,
   staleTime: 15_000,
+  gcTime: GC,
   refetchInterval: 30_000,
+  refetchOnWindowFocus: false,
 });
 
 export const chatQuery = (id: string) =>
@@ -206,7 +218,10 @@ export const chatQuery = (id: string) =>
     queryKey: m365Keys.chat(id),
     queryFn: () => api<ChatPage>(`/api/m365/teams/chats/${enc(id)}/messages`),
     retry: false,
-    refetchInterval: 10_000,
+    staleTime: 5_000,
+    gcTime: GC,
+    refetchInterval: soonIfRefreshing(10_000),
+    refetchOnWindowFocus: false,
   });
 
 export const olderChat = (id: string, before: string) =>
@@ -275,8 +290,18 @@ export const calendarQuery = (start: string, end: string) =>
     queryFn: () => api<CalEvent[]>(`/api/m365/calendar?start=${enc(start)}&end=${enc(end)}`),
     retry: false,
     staleTime: 60_000,
+    gcTime: GC,
     refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    // P148a: another week keeps the one shown (dimmed) until it arrives, instead of a blank grid.
+    placeholderData: keepPreviousData,
   });
+
+/** P148a: the calendar week the Calendar tab opens on (the same key as its first query). */
+export function thisWeekQuery(now = new Date()) {
+  const start = weekStart(now);
+  return calendarQuery(start.toISOString(), addDaysTo(start, 7).toISOString());
+}
 
 export const eventQuery = (id: string) =>
   queryOptions({ queryKey: m365Keys.event(id), queryFn: () => api<CalEventFull>(`/api/m365/calendar/${enc(id)}`), retry: false });
@@ -599,6 +624,8 @@ export interface M365Summary {
   approvals_pending: number | null;
   /** Prima runs here: offer "Also record in Prima Meetings". */
   prima: boolean;
+  /** P148a: some numbers are still on their way (null now): asked again in a moment. */
+  refreshing?: boolean;
 }
 
 export const summaryKey = ["mail", "m365", "summary"] as const;
@@ -610,8 +637,22 @@ export const m365SummaryQuery = (enabled = true) =>
     retry: false,
     enabled,
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    gcTime: GC,
+    refetchInterval: soonIfRefreshing(60_000),
+    refetchOnWindowFocus: false,
   });
+
+/** P148a: the page's Refresh: the server reads everything of the person from Microsoft again. */
+export const refreshM365 = () => api<void>("/api/m365/refresh", "POST");
+
+/** P148a: when the Microsoft 365 page opens, the other tabs' first answers are asked for at once
+ * (in parallel, not when the tab is clicked): the inbox, this week's calendar and, with Teams,
+ * the chat list. Only what is not already cached and fresh is fetched. */
+export function prefetchM365(qc: QueryClient, { teams }: { teams: boolean }): void {
+  void qc.prefetchQuery(mailListQuery("inbox", "", false));
+  void qc.prefetchQuery(thisWeekQuery());
+  if (teams) void qc.prefetchQuery(chatsQuery);
+}
 
 /** Someone to invite: an office member, someone from the person's own Outlook or Teams. */
 export interface Invitee {

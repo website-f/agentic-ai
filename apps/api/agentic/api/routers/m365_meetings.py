@@ -18,7 +18,6 @@ POST /api/m365/meetings/cancel    cancel it (attendees are told; Prima's record 
 
 import asyncio
 import contextlib
-import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -29,31 +28,35 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
-from ...core.valkey import valkey
-from ...microsoft import access, app, assist, auth, hub, meetings
+from ...microsoft import access, app, assist, auth, hub, meetings, org_approvals, swr
 from ...microsoft.errors import MicrosoftError
 from ...microsoft.graph import parse_time
 from ...microsoft.meeting_models import PRIMA_KINDS, TeamsMeeting
 from ...models import Workspace
 from ...services import audit
 from ..deps import Principal, api_error, client_ip, ensure_allowance, require
-from .m365 import _event, _fail, _mine
+from .m365 import CHATS_KEEP, _event, _fail, _mine, chat_rows, chats_key, summary_key
 
 router = APIRouter(prefix="/api/m365", tags=["m365"])
 log = logging.getLogger("agentic.api.m365_meetings")
 
-SUMMARY_FOR = 60  # seconds the tile's numbers are kept
+# P148a: the tile's numbers are fresh a minute, then still shown at once (and refreshed behind)
+# for SUMMARY_KEEP. With none kept yet, the answer waits at most COLD_WAIT for Microsoft: the
+# numbers not in by then are null with `refreshing` (the page asks again in a moment).
+SUMMARY_FOR = 60
+SUMMARY_KEEP = 6 * 3600
+COLD_WAIT = 1.2
+NUMBERS = ("unread_mail", "next_meeting", "unread_chats", "approvals_pending")
 DEFAULT_TZ = "Asia/Kuala_Lumpur"
 Kind = Literal["board", "management", "operations", "department", "client", "toolbox", "other"]
+_progress: dict[str, dict[str, Any]] = {}  # summary key -> the numbers in so far
 
 
-def _summary_key(principal: Principal) -> str:
-    return f"m365:summary:{principal.workspace_id}:{principal.user.id}"
-
-
-async def _forget_summary(principal: Principal) -> None:
-    with contextlib.suppress(Exception):
-        await valkey().delete(_summary_key(principal))
+async def _forget_summary(principal: Principal, acct: Any) -> None:
+    """A meeting made, changed or cancelled here: the calendar is read again and the tile's
+    numbers refreshed behind."""
+    await swr.bump(account_id=acct.id, areas=("cal",))
+    await swr.touch(await summary_key(principal.workspace_id, principal.user.id, acct.id))
 
 
 async def _tz(db: AsyncSession, workspace_id: str) -> str:
@@ -95,61 +98,91 @@ async def summary(
     if acct.status not in access.USABLE_ACCOUNT:
         return out
     out["connected"] = True
-    key = _summary_key(principal)
+    ws, uid = principal.workspace_id, principal.user.id
+    key = await summary_key(ws, uid, acct.id)
+    build = _numbers(ws, uid, acct.id, key, await chats_key(ws, uid, acct.id))
     if not fresh:
-        with contextlib.suppress(Exception):
-            raw = await valkey().get(key)
-            if raw:
-                return {**out, **json.loads(raw)}
-    mine, g = await _mine(db, principal)
-    # P123: the access token first, once. With none kept (it lasts an hour; the tile is opened a
-    # few times a day) the four calls below each refreshed it at once: four sign-ins to
-    # Microsoft on the one database session, each storing its own rotated refresh token. A
-    # refusal shows below as null numbers, as before.
-    with contextlib.suppress(Exception):
-        await auth.access_token(db, mine)
-    me_id = acct.ms_user_id or ""
-    now = datetime.now(UTC)
+        hit = await swr.peek(key, SUMMARY_FOR)
+        if hit is not None and (not hit.stale or swr.BACKGROUND):
+            if hit.stale:
+                await swr.behind(key, build, SUMMARY_KEEP)
+            return {**out, **hit.value, "refreshing": hit.stale}
+    await swr.release(db)
+    task = swr.start(key, build, SUMMARY_KEEP)
+    try:
+        numbers = await asyncio.wait_for(asyncio.shield(task), COLD_WAIT)
+    except TimeoutError:  # what is in so far; the rest is kept when it arrives
+        part = _progress.get(key) or {}
+        return {**out, **{n: part.get(n) for n in NUMBERS}, "refreshing": True}
+    except Exception as e:  # noqa: BLE001 - Microsoft did not answer: no numbers this time
+        log.info("m365 summary not read: %s", type(e).__name__)
+        return {**out, "refreshing": False}
+    return {**out, **numbers, "refreshing": False}
 
-    async def unread_mail() -> int:
-        body = await g.request(
-            "GET", "/me/mailFolders/inbox", params={"$select": "unreadItemCount"}
-        )
-        return int(body.get("unreadItemCount") or 0)
 
-    async def next_meeting() -> dict[str, Any] | None:
-        rows = await g.calendar_view(now, now + timedelta(days=7), top=25, tz="UTC")
-        for e in rows:
-            ev = _event(e)
-            end = parse_time(ev.get("end"))
-            if ev["cancelled"] or ev["all_day"] or end is None or end <= now:
-                continue
-            return ev
-        return None
+def _numbers(ws: str, uid: str, account_id: str, key: str, chats: str) -> swr.Build:
+    """The tile's four numbers, asked of Microsoft at once on a session of their own. The chat
+    list read for them is kept for the Teams tab too; the approvals come from the list the
+    Approvals tab keeps (org_approvals)."""
 
-    async def unread_chats() -> int:
-        return sum(1 for c in await g.list_chats(50) if hub.chat_unread(c, me_id))
+    async def build() -> dict[str, Any]:
+        part = _progress.setdefault(key, {})
+        try:
+            async with swr.account_graph(account_id, ws, uid) as (db, acct, g):
+                # P123: the access token first, once. With none kept (it lasts an hour) the four
+                # calls below each refreshed it at once: four sign-ins to Microsoft, each storing
+                # its own rotated refresh token. A refusal shows as null numbers, as before.
+                with contextlib.suppress(Exception):
+                    await auth.access_token(db, acct)
+                now = datetime.now(UTC)
 
-    async def approvals() -> int | None:
-        if not auth.has_scope(acct.scopes, app.APPROVALS_SCOPE):
-            return None
-        items = [hub.approval_row(a) for a in await g.approvals(60)]
-        return sum(1 for a in items if a["i_approve"] and a["state"] == "pending")
+                async def unread_mail() -> int:
+                    body = await g.request(
+                        "GET", "/me/mailFolders/inbox", params={"$select": "unreadItemCount"}
+                    )
+                    return int(body.get("unreadItemCount") or 0)
 
-    got = await asyncio.gather(
-        unread_mail(), next_meeting(), unread_chats(), approvals(), return_exceptions=True
-    )
-    names = ("unread_mail", "next_meeting", "unread_chats", "approvals_pending")
-    numbers: dict[str, Any] = {}
-    for name, v in zip(names, got, strict=True):
-        if isinstance(v, BaseException):
-            if not isinstance(v, MicrosoftError):
-                log.warning("m365 summary %s failed: %s", name, type(v).__name__)
-            v = None
-        numbers[name] = v
-    with contextlib.suppress(Exception):
-        await valkey().set(key, json.dumps(numbers, default=str), ex=SUMMARY_FOR)
-    return {**out, **numbers}
+                async def next_meeting() -> dict[str, Any] | None:
+                    rows = await g.calendar_view(now, now + timedelta(days=7), top=25, tz="UTC")
+                    for e in rows:
+                        ev = _event(e)
+                        end = parse_time(ev.get("end"))
+                        if ev["cancelled"] or ev["all_day"] or end is None or end <= now:
+                            continue
+                        return ev
+                    return None
+
+                async def unread_chats() -> int:
+                    rows = await chat_rows(acct, g)
+                    await swr.put(chats, rows, CHATS_KEEP)  # the Teams tab opens at once
+                    return sum(1 for c in rows if c.get("unread"))
+
+                async def approvals() -> int | None:
+                    if not auth.has_scope(acct.scopes, app.APPROVALS_SCOPE):
+                        return None
+                    got, failed = await org_approvals.account_items(acct.id)
+                    if failed:
+                        return None
+                    items = [hub.approval_row(a) for a in got]
+                    return sum(1 for a in items if a["i_approve"] and a["state"] == "pending")
+
+                async def one(name: str, fn: Any) -> Any:
+                    try:
+                        v = await fn()
+                    except Exception as e:  # noqa: BLE001 - that number is null this time
+                        if not isinstance(e, MicrosoftError):
+                            log.warning("m365 summary %s failed: %s", name, type(e).__name__)
+                        v = None
+                    part[name] = v
+                    return v
+
+                fns = (unread_mail, next_meeting, unread_chats, approvals)
+                got = await asyncio.gather(*(one(n, f) for n, f in zip(NUMBERS, fns, strict=True)))
+                return dict(zip(NUMBERS, got, strict=True))
+        finally:
+            _progress.pop(key, None)
+
+    return build
 
 
 # ---------------------------------------------------------------- people
@@ -362,7 +395,7 @@ async def meeting_create(
         after={"guests": len(people), "prima": row.prima_status},
     )
     await db.commit()
-    await _forget_summary(principal)
+    await _forget_summary(principal, acct)
     return meetings.row_out(row)
 
 
@@ -507,7 +540,7 @@ async def meeting_change(
         after={"what": sorted(graph_changes), "prima": "not_changed" if warn else row.prima_status},
     )
     await db.commit()
-    await _forget_summary(principal)
+    await _forget_summary(principal, acct)
     return {**meetings.row_out(row), "prima_warning": warn}
 
 
@@ -528,7 +561,7 @@ async def meeting_cancel(
     from ...i18n import tr
 
     row = await _own_row(db, principal, body.event_id)
-    _, g = await _mine(db, principal)
+    acct, g = await _mine(db, principal)
     reason = body.reason.strip()
     if len(reason) < 5:
         reason = tr("Cancelled in Microsoft 365 from the office")
@@ -551,5 +584,5 @@ async def meeting_cancel(
         after={"prima": "not_cancelled" if warn else row.prima_status},
     )
     await db.commit()
-    await _forget_summary(principal)
+    await _forget_summary(principal, acct)
     return {**meetings.row_out(row), "prima_warning": warn}

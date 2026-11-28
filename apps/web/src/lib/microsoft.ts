@@ -278,6 +278,8 @@ export const myMailboxesQuery = queryOptions({
   queryKey: ["microsoft", "my-mailboxes"] as const,
   queryFn: () => api<MyMailboxes>(`${MS_PATH}/my-mailboxes`),
   staleTime: 60_000,
+  gcTime: 10 * 60_000,
+  refetchOnWindowFocus: false, // P148a: changes here come from this page, which refreshes it
 });
 
 /** "Add another Microsoft account": Microsoft's sign-in page, back on the Microsoft 365 page. */
@@ -344,6 +346,8 @@ export const copilotStatusQuery = queryOptions({
   queryFn: () => api<CopilotStatus>(`${MS_PATH}/copilot`),
   retry: retryUnlessMissing,
   staleTime: 60_000,
+  gcTime: 10 * 60_000,
+  refetchOnWindowFocus: false, // P148a
 });
 
 /** P34: what a person's own AI does with their Outlook (same shape as a shared mailbox's rules;

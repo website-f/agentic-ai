@@ -9,7 +9,7 @@ old the index is.
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -55,6 +55,11 @@ class SearchSource(Base):
     changed). Files: sha256 + pages; the rest: updated_at."""
 
     __tablename__ = "search_sources"
+    __table_args__ = (
+        Index("ix_search_sources_ws", "workspace_id", "source_kind"),
+        # P148b (0086): deleting a file found its rows by reading the whole table.
+        Index("ix_search_sources_file", "file_id", postgresql_where=text("file_id IS NOT NULL")),
+    )
 
     source_kind: Mapped[str] = mapped_column(String(16), primary_key=True)
     source_id: Mapped[str] = mapped_column(String(40), primary_key=True)

@@ -1,10 +1,9 @@
 import type { HomeLink } from '@prima/core';
-import { api } from '../api';
 import { myName } from '../office-access';
 import { useApp } from '../App';
 import { setFinTarget } from '../finTarget';
 import { HomeLaunchpad, SpaceHome } from '../Spaces';
-import { useLoad } from '../ui';
+import { useHome } from './Home';
 import { spaceOf, type SpaceId } from '../nav-catalog';
 import '../styles/home.css';
 import { Suspense, lazy } from 'react';
@@ -21,7 +20,8 @@ export function SpaceRoute({ id }: { id: SpaceId }) {
   const companyScoped = me.user.role === 'company_manager' || me.user.role === 'admin_exec';
   // The waiting items come from the person's home list, so only for people whose menu has the home screen.
   const hasHome = canOpen?.('home') ?? false;
-  const { data } = useLoad(() => (hasHome ? api.home(companyScoped ? companyId : undefined) : Promise.resolve(null)), [hasHome, companyScoped ? companyId : '']);
+  // P148d: the same last-shown home as the Home screen (views/Home useHome), so an app's waiting items show at once.
+  const { data } = useHome(me.user.id, companyScoped ? companyId : undefined, hasHome);
   const open = (l: HomeLink) => {
     if (l.view === 'finance' && l.tab) setFinTarget({ tab: l.tab, section: l.section, companyId: l.companyId });
     else if (l.companyId) setCompanyId(l.companyId);

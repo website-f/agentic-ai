@@ -554,7 +554,7 @@ async def _locked_user(db: AsyncSession, principal: Principal) -> User:
         await db.execute(
             select(User)
             .where(User.id == principal.user.id)
-            .with_for_update()
+            .with_for_update(key_share=True)  # P148b: no key update
             .execution_options(populate_existing=True)
         )
     ).scalar_one()

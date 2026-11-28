@@ -22,6 +22,7 @@ Behaviour:
   `tz` asked for (Prefer: outlook.timezone), default UTC.
 """
 
+import time
 import urllib.parse
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -59,6 +60,10 @@ TokenFn = Callable[[bool], Awaitable[str]]
 # has no Teams. Its calendar is read without `onlineMeeting` (Graph may refuse that property for
 # such a mailbox) and a new event there is never a Teams meeting (teamsForBusiness is refused).
 ONLINE_FIELD = "onlineMeeting"
+# P148a: Microsoft refused sorting the Approvals list (400): asked unsorted (and sorted here) for
+# this long, instead of a refused call first every time (a second or more each).
+UNSORTED_FOR = 3600.0
+_approvals_unsorted_until = 0.0
 
 
 def iso(dt: datetime) -> str:
@@ -676,14 +681,22 @@ class Graph:
         app's own list: approvals made in Teams and SharePoint's built-in approvals alike.
         P122: every page up to `top`, newest first (the first 60 in Microsoft's own order were
         all SharePoint files for a busy library, so the Teams ones never showed)."""
+        global _approvals_unsorted_until
         url = f"{GRAPH_BETA}/solutions/approval/approvalItems"
         cap = max(1, min(top, 500))
-        try:
-            items = await self._pages(url, cap, **{"$top": 100, "$orderby": "createdDateTime desc"})
-        except GraphError as e:
-            if getattr(e, "status", 0) != 400:  # refused the sort: the same list, sorted here
-                raise
-            items = await self._pages(url, cap, **{"$top": 100})
+        page = min(100, cap)
+        if time.monotonic() < _approvals_unsorted_until:  # P148a: refused lately: not asked
+            items = await self._pages(url, cap, **{"$top": page})
+        else:
+            try:
+                items = await self._pages(
+                    url, cap, **{"$top": page, "$orderby": "createdDateTime desc"}
+                )
+            except GraphError as e:
+                if getattr(e, "status", 0) != 400:  # refused the sort: the same list, sorted here
+                    raise
+                _approvals_unsorted_until = time.monotonic() + UNSORTED_FOR
+                items = await self._pages(url, cap, **{"$top": page})
         items.sort(key=lambda a: str(a.get("createdDateTime") or ""), reverse=True)
         return items
 

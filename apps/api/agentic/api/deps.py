@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import Depends, HTTPException, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.access import is_prima_only, prima_only_allows
@@ -223,26 +223,37 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
     token = session_token(request)
     if not token:
         raise api_error(status.HTTP_401_UNAUTHORIZED, "not_authenticated", "Sign in to continue.")
-    session = await db.get(AuthSession, token_hash(token))
+    # P148b: the session, the person, their membership and the workspace's settings in ONE
+    # query (it was two, on every request: 526k + 464k calls on the live server). Outer joins
+    # keep the two refusals apart: no session row is "session ended", a session whose person
+    # left the workspace (or was switched off) is "access removed".
+    found = (
+        await db.execute(
+            select(AuthSession, User, Membership, Workspace.settings)
+            .outerjoin(
+                Membership,
+                and_(
+                    Membership.user_id == AuthSession.user_id,
+                    Membership.workspace_id == AuthSession.workspace_id,
+                ),
+            )
+            .outerjoin(User, User.id == Membership.user_id)
+            .outerjoin(Workspace, Workspace.id == Membership.workspace_id)
+            .where(AuthSession.id == token_hash(token))
+        )
+    ).first()
+    session = found[0] if found is not None else None
     if session is None or session.expires_at <= datetime.now(UTC):
         raise api_error(
             status.HTTP_401_UNAUTHORIZED, "session_expired", "Your session ended. Sign in again."
         )
-    row = (
-        await db.execute(
-            select(User, Membership, Workspace.settings)
-            .join(Membership, Membership.user_id == User.id)
-            .join(Workspace, Workspace.id == Membership.workspace_id)
-            .where(User.id == session.user_id, Membership.workspace_id == session.workspace_id)
-        )
-    ).first()
-    if row is None or not row[0].is_active:
+    user, m, ws_settings = found[1], found[2], found[3]
+    if m is None or user is None or not user.is_active:
         raise api_error(
             status.HTTP_401_UNAUTHORIZED,
             "access_removed",
             "This account no longer has access to the workspace.",
         )
-    user, m, ws_settings = row
     _remember_lang(request, user)
     prima_only = is_prima_only(m.access, m.role)
     if prima_only and not prima_only_allows(request.method, request.url.path):

@@ -1,5 +1,16 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
-from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select, true
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    and_,
+    delete,
+    func,
+    literal,
+    or_,
+    select,
+    true,
+    union_all,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -353,22 +364,19 @@ def _member_in_scope(principal: Principal, m: Membership) -> bool:
 
 
 async def _names(db: AsyncSession, ws: str) -> dict[str, str]:
-    out = {
-        i: n
-        for i, n in (
-            await db.execute(select(Branch.id, Branch.name).where(Branch.workspace_id == ws))
-        ).all()
-    }
-    out.update(
-        {
-            i: n
-            for i, n in (
-                await db.execute(
-                    select(Department.id, Department.name).where(Department.workspace_id == ws)
-                )
-            ).all()
-        }
+    """Every company's and department's name by id (P148b: one query, it was two)."""
+    rows = await db.execute(
+        union_all(
+            select(Branch.id, Branch.name, literal(0).label("k")).where(Branch.workspace_id == ws),
+            select(Department.id, Department.name, literal(1).label("k")).where(
+                Department.workspace_id == ws
+            ),
+        )
     )
+    # Companies first, then departments over them (as before, should an id ever repeat).
+    out: dict[str, str] = {}
+    for i, n, _k in sorted(rows.all(), key=lambda r: r[2]):
+        out[i] = n
     return out
 
 

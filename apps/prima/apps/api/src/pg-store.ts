@@ -682,7 +682,7 @@ export class PgStore implements Store {
   /** Whether the optional company office module (db/modules/company-office-v1.sql) is applied in this database. */
   async companyOfficeReady(): Promise<boolean> {
     if (this.officeReady === null)
-      this.officeReady = (await this.client.query("SELECT to_regclass('prima.company_desks') IS NOT NULL AS ok")).rows[0].ok === true;
+      this.officeReady = await this.relationExists('prima.company_desks');
     return this.officeReady;
   }
   private speakUpWall: Promise<SpeakUpWall | null> | null = null;
@@ -716,7 +716,7 @@ export class PgStore implements Store {
   /** Whether the optional module for companies run by another office (db/modules/company-run-links-v1.sql) is applied. */
   async companyRunLinksReady(): Promise<boolean> {
     if (this.runLinksReady === null)
-      this.runLinksReady = (await this.client.query("SELECT to_regclass('prima.company_run_links') IS NOT NULL AS ok")).rows[0].ok === true;
+      this.runLinksReady = await this.relationExists('prima.company_run_links');
     return this.runLinksReady;
   }
 
@@ -782,33 +782,57 @@ export class PgStore implements Store {
     return result.rows[0].data as ItTicket;
   }
 
+  /**
+   * P148d (speed): the prima schema's tables, read once per request. A leader's home asked "is this module's table
+   * installed?" about 290 times (one to_regclass round trip each, the toolbox and KDN boards once per row); now one
+   * catalog query answers them all for the rest of the request. Per request only, so a module installed since the
+   * last request is seen at once, as before.
+   */
+  private relations: Promise<Set<string>> | null = null;
+  private async relationExists(qualified: string): Promise<boolean> {
+    const m = /^prima\.([a-z0-9_]+)$/.exec(qualified);
+    if (!m) return (await this.client.query('SELECT to_regclass($1) IS NOT NULL AS ok', [qualified])).rows[0]?.ok === true;
+    const mine = (this.relations ??= this.client
+      .query(`SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'prima' AND c.relkind IN ('r', 'p', 'v', 'm', 'f')`)
+      .then((r) => new Set(r.rows.map((x: { relname: string }) => x.relname))));
+    try {
+      return (await mine).has(m[1]);
+    } catch (e) {
+      if (this.relations === mine) this.relations = null;
+      throw e;
+    }
+  }
+
+  private async allExist(names: string[]): Promise<boolean> {
+    for (const n of names) if (!(await this.relationExists(n))) return false;
+    return true;
+  }
+
   private moduleChecked = new Set<TableName>();
   /** A proposed-module table must exist before it is used; the check runs once per request. */
   private async needModule(table: TableName): Promise<void> {
     const why = MODULE_TABLES[table];
     if (!why || this.moduleChecked.has(table)) return;
-    const r = await this.client.query('SELECT to_regclass($1) IS NOT NULL AS ok', [TABLE[table]]);
-    if (r.rows[0]?.ok !== true) throw new BadRequest(why);
+    if (!(await this.relationExists(TABLE[table]))) throw new BadRequest(why);
     this.moduleChecked.add(table);
   }
 
   async hasTable(table: TableName): Promise<boolean> {
-    const r = await this.client.query(`SELECT to_regclass($1) IS NOT NULL AS ok`, [TABLE[table]]);
-    return r.rows[0]?.ok === true;
+    return this.relationExists(TABLE[table]);
   }
 
   private payFormulasPresent: boolean | null = null;
   /** Whether the optional pay formulas module (db/modules/pay-formulas-v1.sql) is applied in this database. */
   async payFormulasReady(): Promise<boolean> {
     if (this.payFormulasPresent === null)
-      this.payFormulasPresent = (await this.client.query("SELECT to_regclass('prima.pay_formulas') IS NOT NULL AND to_regclass('prima.pay_formula_uses') IS NOT NULL AND to_regclass('prima.site_hours_approvals') IS NOT NULL AND to_regclass('prima.public_holiday_lists') IS NOT NULL AND to_regclass('prima.pay_law_versions') IS NOT NULL AS ok")).rows[0].ok === true;
+      this.payFormulasPresent = await this.allExist(['prima.pay_formulas', 'prima.pay_formula_uses', 'prima.site_hours_approvals', 'prima.public_holiday_lists', 'prima.pay_law_versions']);
     return this.payFormulasPresent;
   }
   private guardPayPresent: boolean | null = null;
   /** Whether the optional guard pay module (db/modules/guard-pay-v1.sql) is applied in this database. */
   async guardPayReady(): Promise<boolean> {
     if (this.guardPayPresent === null)
-      this.guardPayPresent = (await this.client.query("SELECT to_regclass('prima.guard_pay_runs') IS NOT NULL AND to_regclass('prima.guard_pay_advances') IS NOT NULL AND to_regclass('prima.statutory_versions') IS NOT NULL AND to_regclass('prima.guard_loans') IS NOT NULL AS ok")).rows[0].ok === true;
+      this.guardPayPresent = await this.allExist(['prima.guard_pay_runs', 'prima.guard_pay_advances', 'prima.statutory_versions', 'prima.guard_loans']);
     return this.guardPayPresent;
   }
   private async payFormulaTable(table: TableName): Promise<'ready' | 'missing' | 'other'> {

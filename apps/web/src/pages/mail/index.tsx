@@ -44,7 +44,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locale, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
-import { m365Keys, m365SummaryQuery, mailAccountsQuery, summaryKey, type MailAccount } from "@/lib/m365";
+import { m365Keys, m365SummaryQuery, mailAccountsQuery, prefetchM365, refreshM365, summaryKey, type MailAccount } from "@/lib/m365";
 import type { MailKind } from "@/lib/mail-kind";
 import {
   actionLink,
@@ -229,7 +229,17 @@ export function MailPage() {
     void navigate({ search: (x) => ({ ...x, new: undefined }), replace: true });
   }, [search.new, connected, openMeeting, navigate]);
 
-  const refresh = () => {
+  // P148a: the other tabs' first answers are asked for as the page opens (in parallel), so a tab
+  // switched to shows at once. Again when another of the person's own accounts is shown.
+  const teamsReady = teamsHere && (!!extraId || !!account.data?.teams_ok);
+  const prefetchKey = connected || extraId ? `${extraId ?? "main"}:${teamsReady}` : "";
+  useEffect(() => {
+    if (prefetchKey) prefetchM365(qc, { teams: teamsReady });
+  }, [prefetchKey, teamsReady, qc]);
+
+  const refresh = async () => {
+    // P148a: the server keeps each answer a while; Refresh reads them all from Microsoft again.
+    await refreshM365().catch(() => undefined);
     void qc.invalidateQueries({ queryKey: m365Keys.all });
     void qc.invalidateQueries({ queryKey: mailKeys.all });
     void qc.invalidateQueries({ queryKey: summaryKey });
@@ -244,7 +254,7 @@ export function MailPage() {
           <VideoCameraIcon size={16} /> <span className="max-sm:sr-only">{t("New Teams meeting")}</span>
         </Button>
       ) : null}
-      <Button size="icon" variant="ghost" aria-label={t("Refresh")} title={t("Refresh")} onClick={refresh}><ArrowsClockwiseIcon size={17} /></Button>
+      <Button size="icon" variant="ghost" aria-label={t("Refresh")} title={t("Refresh")} onClick={() => void refresh()}><ArrowsClockwiseIcon size={17} /></Button>
     </>
   ) : null;
 

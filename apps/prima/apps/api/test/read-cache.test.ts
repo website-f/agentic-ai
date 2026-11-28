@@ -125,4 +125,81 @@ describe('per-request read snapshots', () => {
     assert.equal(hr, 2, 'the HR/IT check sets the tenant for its transaction: always run');
     forgetCatalog();
   });
+
+  // P148d (speed): rows by company through an index, copies from the database's own text, big tables remembered.
+  it('answers company filters through its index exactly as the database rules, in table order', async () => {
+    const odd: R[] = [
+      ...people,
+      { id: 'n1', companyId: 5, name: 'Number company' },
+      { id: 'n2', companyId: null, name: 'No company' },
+      { id: 'n3', name: 'Missing company' },
+      { id: 'n4', companyId: { a: 1 }, name: 'Object company' },
+    ];
+    const h = harness({ people: odd });
+    for (let i = 0; i < 3; i++) await h.store.list('people', {});
+    const cases: R[] = [
+      { companyId: 'co-1' },
+      { companyId: ['co-2', 'co-0', 'co-2'] },
+      { companyId: ['5'] },
+      { companyId: [5, 'co-1'] },
+      { companyId: '5' },
+      { companyId: null },
+      { companyId: [JSON.stringify({ a: 1 })] },
+      { companyId: [] as string[] },
+      { companyId: 'co-1', active: true },
+    ];
+    for (const f of cases) {
+      const got = (await h.store.list('people', f)).map((p: R) => p.id);
+      const want = odd.filter((r) => pgMatches(r, f)).map((r) => r.id);
+      assert.deepEqual(got, want, JSON.stringify(f));
+    }
+    assert.equal(h.sql.length, 1, 'one snapshot served every filter');
+  });
+
+  it('hands out a fresh row for every read, from the same values', async () => {
+    const h = harness({ people });
+    for (let i = 0; i < 3; i++) await h.store.list('people', {});
+    const a = (await h.store.get('people', 'p3')) as R;
+    const b = (await h.store.get('people', 'p3')) as R;
+    assert.deepEqual(a, people[3]);
+    assert.notEqual(a, b);
+    a.name = 'Changed by a caller';
+    assert.equal(((await h.store.get('people', 'p3')) as R).name, people[3].name);
+  });
+
+  it('remembers a big table for the same person and database only, and forgets it with the catalogue', async () => {
+    forgetCatalog();
+    const big = Array.from({ length: MAX_ROWS + 5 }, (_, i) => ({ id: `b${i}`, companyId: 'co-0' }));
+    let snapshots = 0;
+    const base = { async list() { return []; }, async hasTable() { return true; } };
+    const client = (database: string) => ({
+      connectionParameters: { host: 'h', port: 1, database },
+      async query(text: string) {
+        if (text.startsWith('SELECT to_regclass')) return { rows: [{ ok: true }] };
+        snapshots++;
+        return { rows: big.slice(0, MAX_ROWS + 1).map((d) => ({ data: d })) };
+      },
+    });
+    const store = (who: string | undefined, database = 'one') => {
+      const s = withReadSnapshots(base as unknown as Store, client(database) as never, (t) => t, who) as unknown as { list(t: string): Promise<unknown[]> };
+      return async () => {
+        for (let i = 0; i < SNAPSHOT_AFTER + 2; i++) await s.list('big');
+      };
+    };
+    await store('u-a')();
+    assert.equal(snapshots, 1);
+    await store('u-a')();
+    assert.equal(snapshots, 1, 'the next request of the same person skips the wasted read');
+    await store('u-b')();
+    assert.equal(snapshots, 2, 'another person (other company walls) is tried on its own');
+    await store('u-a', 'two')();
+    assert.equal(snapshots, 3, 'another database is tried on its own');
+    await store(undefined)();
+    await store(undefined)();
+    assert.equal(snapshots, 5, 'without a person nothing is remembered');
+    forgetCatalog();
+    await store('u-a')();
+    assert.equal(snapshots, 6);
+    forgetCatalog();
+  });
 });

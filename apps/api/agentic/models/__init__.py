@@ -440,6 +440,14 @@ class Agent(Timestamps, Base):
     __tablename__ = "agents"
     __table_args__ = (
         UniqueConstraint("workspace_id", "slug", name="uq_agents_ws_slug"),
+        # P148b (0086): each member's own AI workers (counts on the Members list, who sees which)
+        Index(
+            "ix_agents_ws_owner",
+            "workspace_id",
+            "owner_user_id",
+            "status",
+            postgresql_where=text("clone_of IS NULL"),
+        ),
         CheckConstraint("status IN ('active', 'paused', 'retired')", name="ck_agents_status"),
         CheckConstraint("autonomy IN ('ask', 'auto')", name="ck_agents_autonomy"),
     )
@@ -641,6 +649,7 @@ class Approval(Base):
     __tablename__ = "approvals"
     __table_args__ = (
         Index("ix_approvals_ws_status", "workspace_id", "status"),
+        Index("ix_approvals_task", "task_id"),  # P148b (0086)
         CheckConstraint(
             "status IN ('pending', 'approved', 'denied', 'answered', 'expired', 'cancelled')",
             name="ck_approvals_status",
@@ -1442,6 +1451,20 @@ class DocFile(Timestamps, Base):
         CheckConstraint("status IN ('reading', 'ready', 'failed')", name="ck_files_status"),
         CheckConstraint("origin IN ('uploaded', 'person', 'agent')", name="ck_files_origin"),
         Index("ix_files_ws_created", "workspace_id", "created_at"),
+        # P148b (0086): the Library, an agent's files, a department's files.
+        Index(
+            "ix_files_ws_library",
+            "workspace_id",
+            "branch_id",
+            "department_id",
+            postgresql_where=text("library"),
+        ),
+        Index("ix_files_agent", "agent_id", postgresql_where=text("agent_id IS NOT NULL")),
+        Index(
+            "ix_files_department",
+            "department_id",
+            postgresql_where=text("department_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("fl"))
@@ -2133,6 +2156,7 @@ class MicrosoftAccount(Timestamps, Base):
             unique=True,
             postgresql_where=text("ms_user_id <> ''"),
         ),
+        Index("ix_microsoft_accounts_ws_user", "workspace_id", "user_id"),  # P148b (0086)
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ma"))
@@ -2237,6 +2261,8 @@ class MailItem(Base):
         ),
         Index("ix_mail_items_box_received", "mailbox_ref", "received_at"),
         Index("ix_mail_items_box_status", "mailbox_ref", "status"),
+        Index("ix_mail_items_account_received", "account_id", "received_at"),  # P148b (0086)
+        Index("ix_mail_items_task", "task_id", postgresql_where=text("task_id IS NOT NULL")),
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("mi"))
@@ -2320,6 +2346,9 @@ class DeviceActivity(Base):
     __table_args__ = (
         Index("ix_device_activity_user", "user_id"),
         Index("ix_device_activity_device_ts", "device_id", "ts"),
+        Index(  # P148b (0086)
+            "ix_device_activity_task", "task_id", postgresql_where=text("task_id IS NOT NULL")
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

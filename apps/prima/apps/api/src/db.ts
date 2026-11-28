@@ -7,6 +7,7 @@ import { ownRecordCompanyIds } from './office-accounts';
 import { FileStore, archiveDiskFromEnv, fileBackendFromEnv } from './file-store';
 import { BackendArchiveBytes } from './archive-bytes';
 import { migrationSha } from './schema';
+import { timeQueries, timedConnect } from './server-timing';
 
 export function nowMyt(): string {
   return fromMs(Date.now());
@@ -96,6 +97,26 @@ export class Db implements OnModuleDestroy {
   }
 
   /**
+   * P148d: home builds running now, by person, company asked for and day. When Prima opens, the home screen and the alert
+   * bell (whose list is the home's to-do list for leaders and managers) asked for the same build at the same moment, and
+   * on a busy group home each cost over a second. The later request now waits for the running build and gets its own
+   * copy; nothing is kept once the build ends, so the next request builds afresh. A build that fails is not shared: the
+   * waiting request builds its own.
+   */
+  private readonly homesBuilding = new Map<string, Promise<unknown>>();
+  shareHome<T>(key: string, build: () => Promise<T>): Promise<T> {
+    const running = this.homesBuilding.get(key) as Promise<T> | undefined;
+    if (running) return running.then((h) => structuredClone(h), () => build());
+    const mine = build();
+    this.homesBuilding.set(key, mine);
+    const done = () => {
+      if (this.homesBuilding.get(key) === mine) this.homesBuilding.delete(key);
+    };
+    mine.then(done, done);
+    return mine;
+  }
+
+  /**
    * Run one request as a user. The user and their grants are read first; then the
    * transaction drops to the prima_app role with app.company_ids set, so row-level
    * security, not only application code, keeps each company's records apart. app.walls
@@ -104,7 +125,8 @@ export class Db implements OnModuleDestroy {
    * route can serve a leaver whatever way they signed in.
    */
   async asUser<R>(userId: string, fn: (svc: PrimaService, user: User, store: Store) => Promise<R>, clock: () => string = nowMyt): Promise<R> {
-    const client = await this.pool.connect();
+    // P148d: counted for the Server-Timing header (server-timing.ts); the connection itself is unchanged.
+    const client = timeQueries(await timedConnect(() => this.pool.connect()));
     try {
       await client.query('BEGIN');
       const u = await client.query('SELECT data FROM prima.users WHERE id = $1', [userId]);
@@ -121,14 +143,14 @@ export class Db implements OnModuleDestroy {
       const user = await overlayOne(withRunCompanies(stored, await pgStore.list('companyRunLinks')), orgLines, dateOf(clock()), (id) => pgStore.get('users', id));
       // P109: an office account of central staff also reaches its own staff record in a licensed company (office-accounts.ts).
       const companies = [...new Set([...tenantCompanyIds(user, grants, dateOf(clock())), ...ownRecordCompanyIds(user)])];
-      await client.query(`SELECT set_config('app.company_ids', $1, true)`, [companies.join(',')]);
-      await client.query(`SELECT set_config('app.user_id', $1, true)`, [user.id]);
-      await client.query(`SELECT set_config('app.user_role', $1, true)`, [user.role]);
-      await client.query(`SELECT set_config('app.group_user', $1, true)`, [isGroupRole(user) ? 'on' : 'off']);
-      await client.query(`SELECT set_config('app.walls', $1, true)`, [dataWalls(user).join(',')]);
+      // P148d: the five request settings in one round trip (they were five); the same values, set for this transaction.
+      await client.query(
+        `SELECT set_config('app.company_ids', $1, true), set_config('app.user_id', $2, true), set_config('app.user_role', $3, true), set_config('app.group_user', $4, true), set_config('app.walls', $5, true)`,
+        [companies.join(','), user.id, user.role, isGroupRole(user) ? 'on' : 'off', dataWalls(user).join(',')],
+      );
       // Hand-overs between departments ride the audit log in this same transaction, when switched on.
       // P83: per-request read snapshots (read-cache.ts): one query per table instead of one per company.
-      const reads = process.env.PRIMA_READ_SNAPSHOTS === 'false' ? pgStore : withReadSnapshots(pgStore, client, (t) => TABLE[t]);
+      const reads = process.env.PRIMA_READ_SNAPSHOTS === 'false' ? pgStore : withReadSnapshots(pgStore, client, (t) => TABLE[t], user.id);
       const fileStore = this.files ? this.files.wrap(reads) : reads;
       const linked = this.orgLinks ? withOrgLinks(fileStore) : fileStore;
       // Finance payments in their own table (gap B3, module fin-payments-v1), only once the module is installed.
@@ -144,6 +166,7 @@ export class Db implements OnModuleDestroy {
       // in this repository, so nothing is ever sent from here until the reviewed vendor adapter is added.
       svc.sqlPostingEnabled = process.env.SQL_POSTING_ENABLED?.trim() === 'true';
       svc.teamsServiceOid = process.env.TEAMS_FLOW_SERVICE_OID ?? '';
+      svc.homeShare = (key, build) => this.shareHome(key, build);
       const out = await fn(svc, user, store);
       await client.query('COMMIT');
       return out;
@@ -161,7 +184,7 @@ export class Db implements OnModuleDestroy {
    * department walls, so row-level security limits the page to that company's records whatever the code asks for.
    */
   async asShareLink<R>(companyId: string, fn: (svc: PrimaService, store: Store) => Promise<R>, clock: () => string = nowMyt): Promise<R> {
-    const client = await this.pool.connect();
+    const client = timeQueries(await timedConnect(() => this.pool.connect()));
     try {
       await client.query('BEGIN');
       await client.query('SET LOCAL ROLE prima_app');

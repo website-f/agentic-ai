@@ -13,10 +13,12 @@
 
 import asyncio
 import contextlib
+import hashlib
 import html
 import json
 import logging
 import urllib.parse
+from types import SimpleNamespace
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response, status
@@ -31,7 +33,7 @@ from ...core.db import SessionLocal, get_db
 from ...core.security import can
 from ...core.valkey import valkey
 from ...i18n import Msg, render, tr
-from ...microsoft import access, app, auth, domains, graph, signin, sync
+from ...microsoft import access, app, auth, domains, graph, signin, swr, sync
 from ...microsoft import copilot as m365_copilot
 from ...microsoft import rules as mail_rules
 from ...microsoft.domains import CONSUMER_TENANT
@@ -47,6 +49,13 @@ log = logging.getLogger("agentic.api.microsoft")
 
 BASE = "/api/integrations/microsoft"
 MAX_NOTIFY_BYTES = 1024 * 1024
+# P148a: the Microsoft 365 page's own answers, kept per person (microsoft/swr.py): fresh this
+# many seconds, then shown at once and refreshed behind for KEPT_FOR. Connecting, naming,
+# removing or disconnecting an account, or changing a shared mailbox, forgets them.
+ACCOUNT_FRESH = 15
+MAILBOXES_FRESH = 15
+COPILOT_FRESH = 60
+KEPT_FOR = 600
 
 
 def _base(request: Request) -> str:
@@ -431,6 +440,7 @@ async def microsoft_callback(
     except Exception:  # noqa: BLE001 - Microsoft unreachable and the like
         log.warning("Microsoft sign-in failed", exc_info=True)
         return back("error", tr("Could not reach Microsoft. Try again."))
+    await swr.bump(principal.workspace_id, principal.user.id)  # P148a
     if acct.status == work_mail.PENDING:
         try:
             if await _waits(db, principal, acct):
@@ -471,10 +481,38 @@ async def _waits(db: AsyncSession, principal: Principal, acct: MicrosoftAccount)
     return False
 
 
+def _who(principal: Principal) -> Any:
+    """P148a: what an answer built behind needs of the person (plain values: the request and
+    its session are gone by then)."""
+    return SimpleNamespace(
+        workspace_id=principal.workspace_id,
+        user=SimpleNamespace(id=principal.user.id, email=principal.user.email),
+        role=principal.role,
+        branch_ids=list(principal.branch_ids or []),
+    )
+
+
+def _on_own_session(fn: Any, *args: Any) -> swr.Build:
+    async def build() -> Any:
+        async with SessionLocal() as s:
+            return await fn(s, *args)
+
+    return build
+
+
 @router.get(f"{BASE}/account")
 async def microsoft_account(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
+    """P148a: kept per person a few seconds, shown at once and refreshed behind."""
+    key = await swr.key(principal.workspace_id, principal.user.id, "account")
+    got, _stale = await swr.serve(
+        key, _on_own_session(_account_answer, _who(principal)), fresh=ACCOUNT_FRESH, keep=KEPT_FOR
+    )
+    return dict(got)
+
+
+async def _account_answer(db: AsyncSession, principal: Any) -> dict[str, Any]:
     acct = await access.main_row(db, principal.workspace_id, principal.user.id)
     if acct is None or acct.status in ("disconnected", work_mail.PENDING):
         pending = acct is not None and acct.status == work_mail.PENDING
@@ -563,8 +601,21 @@ async def microsoft_copilot(
         acct = await m365_copilot.account_of(db, principal.workspace_id, principal.user.id)
         if acct is not None and await valkey().set(f"copilot:fresh:{acct.id}", "1", ex=60, nx=True):
             await m365_copilot.licensed(db, acct, force=True)
-    st = await m365_copilot.status(db, principal.workspace_id, principal.user.id)
-    return {**st.out(), "on": cf.on, "use_retrieval": cf.use_retrieval}
+    # P148a: the state is kept per person a minute (the licence check asked Microsoft each time
+    # it could not tell), shown at once and refreshed behind; `fresh` reads it now.
+    key = await swr.key(principal.workspace_id, principal.user.id, "copilot")
+    got, _stale = await swr.serve(
+        key,
+        _on_own_session(_copilot_state, principal.workspace_id, principal.user.id),
+        fresh=COPILOT_FRESH,
+        keep=KEPT_FOR,
+        force=fresh,
+    )
+    return {**got, "on": cf.on, "use_retrieval": cf.use_retrieval}
+
+
+async def _copilot_state(db: AsyncSession, workspace_id: str, user_id: str) -> dict[str, Any]:
+    return dict((await m365_copilot.status(db, workspace_id, user_id)).out())
 
 
 # ---------------------------------------------------------------- Teams (P52): your own chats
@@ -846,13 +897,17 @@ async def _account_row(
     a: Any,
     kind: str | None = None,
     waiting: dict[str, dict[str, Any]] | None = None,
+    shared_with: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """One of my accounts, and how many other people here connected the same one (shared).
     P122: `kind` is "work" (the main account, or one on a company domain or in the company's
     Microsoft tenant) or "personal" (microsoft/domains.py). P124: a work account that waits for
-    approval is `pending` (not connected: nothing reads it), with who was asked."""
+    approval is `pending` (not connected: nothing reads it), with who was asked. P148a:
+    `shared_with` gives the counts of every account at once (`_shared_counts`)."""
     others = 0
-    if a.ms_user_id:
+    if shared_with is not None:
+        others = shared_with.get(a.ms_user_id or "", 0)
+    elif a.ms_user_id:
         others = int(
             await db.scalar(
                 select(func.count(func.distinct(MicrosoftAccount.user_id))).where(
@@ -883,7 +938,26 @@ async def _account_row(
     }
 
 
-async def _kinds(db: AsyncSession, principal: Principal, rows: list[Any]) -> tuple[Any, list[str]]:
+async def _shared_counts(db: AsyncSession, principal: Any, rows: list[Any]) -> dict[str, int]:
+    """P148a: {Microsoft user id: other people here who connected it} for all my accounts in
+    one query (it was one query per account)."""
+    ids = {a.ms_user_id for a in rows if a.ms_user_id}
+    if not ids:
+        return {}
+    got = await db.execute(
+        select(MicrosoftAccount.ms_user_id, func.count(func.distinct(MicrosoftAccount.user_id)))
+        .where(
+            MicrosoftAccount.workspace_id == principal.workspace_id,
+            MicrosoftAccount.ms_user_id.in_(ids),
+            MicrosoftAccount.user_id != principal.user.id,
+            MicrosoftAccount.status != "disconnected",
+        )
+        .group_by(MicrosoftAccount.ms_user_id)
+    )
+    return {str(m): int(n) for m, n in got.all()}
+
+
+async def _kinds(db: AsyncSession, principal: Any, rows: list[Any]) -> tuple[Any, list[str]]:
     """P122: (kind of one account, the company's domains) for this person's accounts."""
     cfg = await app.load(db, principal.workspace_id)
     company = await domains.company_domains(db, principal.workspace_id, principal.user.email)
@@ -900,7 +974,8 @@ async def my_accounts(
     rows = await access.accounts_of(db, principal.workspace_id, principal.user.id)
     kind, _company = await _kinds(db, principal, rows)
     waiting = await work_mail.waiting_for(db, principal.workspace_id, principal.user.id)
-    return [await _account_row(db, principal, a, kind(a), waiting) for a in rows]
+    counts = await _shared_counts(db, principal, rows)
+    return [await _account_row(db, principal, a, kind(a), waiting, counts) for a in rows]
 
 
 @router.get(f"{BASE}/my-mailboxes")
@@ -911,20 +986,62 @@ async def my_mailboxes(
     accounts (each "work" or "personal"), the company's shared mailboxes I may use (the P34
     rules: owner, admins, management and HR; the company's branch managers; the owner of the
     agent assigned to it), the company's domains, and whether personal Microsoft accounts
-    (outlook.com, hotmail) can sign in with the office's app at all."""
+    (outlook.com, hotmail) can sign in with the office's app at all. P148a: kept per person
+    (and role, companies, the office's shared mailboxes), shown at once, refreshed behind."""
+    who = _who(principal)
+    scope = hashlib.sha256(f"{who.role}|{','.join(sorted(who.branch_ids))}".encode()).hexdigest()[
+        :16
+    ]
+    ver = await _mailboxes_version(principal.workspace_id)
+    key = await swr.key(
+        principal.workspace_id, principal.user.id, "mailboxes", extra=f"{scope}:{ver}"
+    )
+    got, _stale = await swr.serve(
+        key, _on_own_session(_mailboxes_answer, who), fresh=MAILBOXES_FRESH, keep=KEPT_FOR
+    )
+    return dict(got)
+
+
+def _mailboxes_ver_key(workspace_id: str) -> str:
+    return f"m365:gen:shared:{workspace_id}"
+
+
+async def _mailboxes_version(workspace_id: str) -> int:
+    try:
+        return int(await valkey().get(_mailboxes_ver_key(workspace_id)) or 0)
+    except Exception:  # noqa: BLE001 - no Valkey: nothing is kept either
+        return 0
+
+
+async def _mailboxes_changed(workspace_id: str) -> None:
+    """A shared mailbox added, changed or removed: everyone's "my mailboxes" is read again."""
+    with contextlib.suppress(Exception):
+        await valkey().incr(_mailboxes_ver_key(workspace_id))
+        await valkey().expire(_mailboxes_ver_key(workspace_id), swr.GEN_FOR)
+
+
+async def _mailboxes_answer(db: AsyncSession, principal: Any) -> dict[str, Any]:
     cfg = await app.load(db, principal.workspace_id)
     rows = await access.accounts_of(db, principal.workspace_id, principal.user.id)
     kind, company = await _kinds(db, principal, rows)
     waiting = await work_mail.waiting_for(db, principal.workspace_id, principal.user.id)
+    counts = await _shared_counts(db, principal, rows)
     shared = (
-        await db.scalars(
-            select(SharedMailbox)
-            .where(
-                access.shared_where(
-                    principal.workspace_id, principal.user.id, principal.role, principal.branch_ids
+        list(
+            (
+                await db.scalars(
+                    select(SharedMailbox)
+                    .where(
+                        access.shared_where(
+                            principal.workspace_id,
+                            principal.user.id,
+                            principal.role,
+                            principal.branch_ids,
+                        )
+                    )
+                    .order_by(SharedMailbox.created_at)
                 )
-            )
-            .order_by(SharedMailbox.created_at)
+            ).all()
         )
         if cfg.configured
         else []
@@ -936,8 +1053,8 @@ async def my_mailboxes(
         "personal_ms_ok": cfg.configured
         and (cfg.tenant == "common" or (cfg.personal_accounts and cfg.multi_tenant)),
         "can_manage": can(principal.role, "channels.manage"),
-        "accounts": [await _account_row(db, principal, a, kind(a), waiting) for a in rows],
-        "shared": [await _mailbox_out(db, mb) for mb in shared],
+        "accounts": [await _account_row(db, principal, a, kind(a), waiting, counts) for a in rows],
+        "shared": await _mailboxes_out(db, shared),
     }
 
 
@@ -961,6 +1078,7 @@ async def name_account(
     acct = await _my_account(db, principal, account_id)
     acct.label = body.label.strip()
     await db.commit()
+    await swr.bump(principal.workspace_id, principal.user.id)  # P148a
     kind, _company = await _kinds(
         db, principal, await access.accounts_of(db, principal.workspace_id, principal.user.id)
     )
@@ -997,6 +1115,7 @@ async def remove_account(
     )
     await db.delete(acct)
     await db.commit()
+    await swr.bump(principal.workspace_id, principal.user.id)  # P148a
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1014,6 +1133,7 @@ async def microsoft_disconnect(
         await db.commit()
     elif acct is not None and acct.status != "disconnected":
         await sync.disconnect_account(db, acct)
+    await swr.bump(principal.workspace_id, principal.user.id)  # P148a
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1147,9 +1267,36 @@ class MailboxPatch(BaseModel):
     paused: bool | None = None
 
 
+async def _mailboxes_out(db: AsyncSession, boxes: list[SharedMailbox]) -> list[dict[str, Any]]:
+    """P148a: many shared mailboxes' rows in three queries (it was three per mailbox)."""
+    if not boxes:
+        return []
+    branch_ids = {mb.branch_id for mb in boxes if mb.branch_id}
+    agent_ids = {mb.agent_id for mb in boxes if mb.agent_id}
+    branches = (
+        {b.id: b for b in (await db.scalars(select(Branch).where(Branch.id.in_(branch_ids))))}
+        if branch_ids
+        else {}
+    )
+    agents = (
+        {a.id: a for a in (await db.scalars(select(Agent).where(Agent.id.in_(agent_ids))))}
+        if agent_ids
+        else {}
+    )
+    hooks = await sync.webhooks_states(db, boxes)
+    return [
+        _mailbox_row(mb, branches.get(mb.branch_id), agents.get(mb.agent_id or ""), hooks[mb.id])
+        for mb in boxes
+    ]
+
+
 async def _mailbox_out(db: AsyncSession, mb: SharedMailbox) -> dict[str, Any]:
     branch = await db.get(Branch, mb.branch_id)
     agent = await db.get(Agent, mb.agent_id) if mb.agent_id else None
+    return _mailbox_row(mb, branch, agent, await sync.webhooks_state(db, mb))
+
+
+def _mailbox_row(mb: SharedMailbox, branch: Any, agent: Any, webhooks: str) -> dict[str, Any]:
     return {
         "id": mb.id,
         "address": mb.address,
@@ -1161,7 +1308,7 @@ async def _mailbox_out(db: AsyncSession, mb: SharedMailbox) -> dict[str, Any]:
         "rules": mail_rules.effective(mb.rules),
         "status": mb.status,
         "last_sync_at": mb.last_sync_at,
-        "webhooks": await sync.webhooks_state(db, mb),
+        "webhooks": webhooks,
         "last_error": render(mb.last_error) if mb.last_error else None,
     }
 
@@ -1212,7 +1359,7 @@ async def list_mailboxes(
             .order_by(SharedMailbox.created_at)
         )
     ).all()
-    return [await _mailbox_out(db, mb) for mb in rows]
+    return await _mailboxes_out(db, list(rows))
 
 
 @router.post(f"{BASE}/mailboxes", status_code=status.HTTP_201_CREATED)
@@ -1273,6 +1420,7 @@ async def add_mailbox(
     )
     await app.remember_base(db, principal.workspace_id, _base(request), principal.actor)
     await db.commit()
+    await _mailboxes_changed(principal.workspace_id)
     await sync.queue_box(mb)
     background.add_task(sync.kick)
     return await _mailbox_out(db, mb)
@@ -1317,6 +1465,7 @@ async def change_mailbox(
         after={"branch_id": mb.branch_id, "agent_id": mb.agent_id, "status": mb.status},
     )
     await db.commit()
+    await _mailboxes_changed(principal.workspace_id)
     if mb.status == "paused":
         await sync.drop_subscriptions(db, mb)
     elif resume:
@@ -1341,6 +1490,7 @@ async def remove_mailbox(
         before={"address": mb.address},
     )
     await sync.delete_mailbox(db, mb)  # commits (the audit row too)
+    await _mailboxes_changed(principal.workspace_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -5985,6 +5985,12 @@
  },
  {
   "method": "POST",
+  "path": "api/org/unit",
+  "name": "orgSetUnit",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/overtime/:id/decide",
   "name": "decideOtClaim",
   "params": [

@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from ...agents import dispatch
 from ...core.db import get_db
@@ -152,11 +153,26 @@ async def list_library(
                 restricted=f.restricted,
             )
         )
+    # P148b: the list needs no SOP text (bodies are long), and each department SOP's company
+    # comes from the departments loaded here once (it was one query per department SOP).
     sops = (
         await db.scalars(
-            select(SOP).where(SOP.workspace_id == principal.workspace_id).order_by(SOP.title)
+            select(SOP)
+            .where(SOP.workspace_id == principal.workspace_id)
+            .options(load_only(SOP.id, SOP.title, SOP.scope, SOP.scope_id, SOP.updated_at))
+            .order_by(SOP.title)
         )
     ).all()
+    # Kept referenced: the session's identity map holds them weakly.
+    depts = (
+        (
+            await db.scalars(
+                select(Department).where(Department.workspace_id == principal.workspace_id)
+            )
+        ).all()
+        if any(s.scope == "department" for s in sops)
+        else []
+    )
     for s in sops:
         bid, did = await indexer.sop_scope(db, s)
         if not library.sees(reader, bid, None):  # P36: every SOP of the company
@@ -184,6 +200,7 @@ async def list_library(
                 updated_at=s.updated_at,
             )
         )
+    del depts
     return LibraryOut(
         sources=out,
         passages=sum(s.passages for s in out),

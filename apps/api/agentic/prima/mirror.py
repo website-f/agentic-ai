@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core import workspace_settings
 from ..core.db import SessionLocal
 from ..core.ids import new_id
 from ..core.security import hash_password, new_token
@@ -167,16 +168,49 @@ async def _department(
     return d.id
 
 
-async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool = False) -> Report:
+@dataclass
+class PrimaNow:
+    """Everything a run reads from Prima, fetched before the run touches the database."""
+
+    companies: list[client.Company]
+    staff: list[client.StaffRecord]
+    heads: dict[str, list[str]]
+    people: list[client.StaffPerson]
+
+
+async def read_prima() -> PrimaNow:
+    """P148b: Prima's companies, accounts, chart heads and staff records, read over HTTP with no
+    transaction open. Before, these calls ran inside the run's transaction between its writes:
+    new companies, member changes and audit rows (the workspace's audit lock) stayed locked for
+    as long as Prima took to answer, and every audited change in the office waited."""
+    companies = await client.companies()
+    staff = [r for r in await client.staff() if r.role in MIRRORED_ROLES]
+    top = await client.top_record()
+    heads = await _chart_heads(top.id) if top else {}
+    return PrimaNow(companies, staff, heads, await client.people())
+
+
+async def run(
+    db: AsyncSession,
+    ws_id: str,
+    *,
+    dry: bool = False,
+    held_too: bool = False,
+    prima: PrimaNow | None = None,
+) -> Report:
     report = Report()
-    w = await db.get(Workspace, ws_id)
+    if db.in_transaction() and not (db.new or db.dirty or db.deleted):
+        await db.commit()  # nothing of ours is open while Prima answers (a read-only start)
+    prima = prima or await read_prima()
+    w = await db.get(Workspace, ws_id, populate_existing=True)
     if w is None:
         return report
     settings = dict(w.settings or {})
     cmap: dict[str, str] = dict(settings.get("prima_companies") or {})
+    made: dict[str, str] = {}  # the office companies this run adds to the map
 
     # Companies.
-    companies = await client.companies()
+    companies = prima.companies
     branches = {
         b.id: b
         for b in (await db.scalars(select(Branch).where(Branch.workspace_id == ws_id))).all()
@@ -199,6 +233,7 @@ async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool
             await db.flush()
             branches[b.id] = b
             cmap[b.id] = c.id
+            made[b.id] = c.id
             office_of[c.id] = [b.id]
             report.companies_made.append(c.name)
         elif len(have) == 1 and branches[have[0]].name != c.name:
@@ -206,9 +241,7 @@ async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool
             branches[have[0]].name = c.name[:120]
 
     # People.
-    staff = [r for r in await client.staff() if r.role in MIRRORED_ROLES]
-    top = await client.top_record()
-    heads = await _chart_heads(top.id) if top else {}
+    staff, heads = prima.staff, prima.heads
     links = {
         lk.prima_user_id: lk
         for lk in (await db.scalars(select(PrimaLink).where(PrimaLink.workspace_id == ws_id))).all()
@@ -396,7 +429,7 @@ async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool
         for r in staff
         if r.person_id and (r.id in links or r.id.startswith(OFFICE_ACCOUNT_PREFIX))
     }
-    for rec in await client.people():
+    for rec in prima.people:
         if (
             rec.id in taken
             or rec.email in by_email
@@ -455,15 +488,20 @@ async def run(db: AsyncSession, ws_id: str, *, dry: bool = False, held_too: bool
             )
         held = []
     report.held = held
-    settings["prima_companies"] = cmap
-    state = dict(settings.get(STATE_KEY) or {})
-    state.update(summary=report.summary(), held=held[:500], on=bool(state.get("on")) or not dry)
-    settings[STATE_KEY] = state
-    w.settings = settings
     if dry:
         await db.rollback()
-    else:
-        await db.commit()
+        return report
+    # P148b: only this run's two keys, written last (one statement, the workspace row locked
+    # only until the commit below), over the settings as they are now: what others saved while
+    # this run worked is kept.
+    now = dict(await db.scalar(select(Workspace.settings).where(Workspace.id == ws_id)) or {})
+    state = dict(now.get(STATE_KEY) or {})
+    state.update(summary=report.summary(), held=held[:500], on=True)
+    patch: dict = {STATE_KEY: state}
+    if made:
+        patch["prima_companies"] = {**dict(now.get("prima_companies") or {}), **made}
+    await workspace_settings.merge(db, ws_id, patch, w)
+    await db.commit()
     return report
 
 
@@ -478,6 +516,7 @@ async def tick_one(ws_id: str) -> None:
         async with SessionLocal() as db:
             if not is_on(await db.get(Workspace, ws_id)):
                 return
+            await db.commit()  # P148b: no transaction stays open while Prima answers
             rep = await run(db, ws_id)
         log.info("prima mirror: %s", rep.summary())
     except Exception:

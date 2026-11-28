@@ -37,12 +37,12 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
-from ...microsoft import access, app, assist, auth, graph, hub, org_approvals
+from ...microsoft import access, app, assist, auth, graph, hub, org_approvals, swr, sync
 from ...microsoft.errors import MicrosoftError
 from ...models import MicrosoftAccount, Workspace
 from ...services import audit
 from ..deps import Principal, api_error, ensure_allowance, require
-from .microsoft import _channels_fail, _kept, _say, _teams_fail
+from .microsoft import _channels_fail, _say, _teams_fail
 
 # P118: which of the person's own Microsoft accounts this request is for: the X-M365-Account
 # header (or ?account= on a plain link, e.g. an attachment); none means their main account.
@@ -59,13 +59,27 @@ log = logging.getLogger("agentic.api.m365")
 
 FOLDERS = ("inbox", "sentitems", "drafts", "archive", "deleteditems", "junkemail")
 MAX_RANGE_DAYS = 42
-CHATS_FOR = 30  # seconds the chat list is kept (Microsoft is slow to list chats)
+# P148a: how long each answer is fresh, then how long it is still shown at once (and refreshed
+# behind) per person and account (microsoft/swr.py). A write here forgets what it changed.
+MAIL_FRESH = 20  # a mail folder page
+MAIL_FRESH_LIVE = 120  # the inbox while Microsoft tells us of new mail (webhooks live)
+MAIL_KEEP = 900
+CAL_FRESH, CAL_KEEP = 60, 1800  # a calendar range
+CHATS_FRESH, CHATS_KEEP = 30, 1800  # the Teams chat list (Microsoft is slow to list chats)
+CHAT_FRESH, CHAT_KEEP = 8, 900  # one chat's latest messages (the page asks every 10 s)
 
 
 # ---------------------------------------------------------------- the person's own connection
 
 
 async def _mine(db: AsyncSession, principal: Principal) -> tuple[MicrosoftAccount, graph.Graph]:
+    acct = await _own(db, principal)
+    return acct, await graph.for_account(db, acct)
+
+
+async def _own(db: AsyncSession, principal: Principal) -> MicrosoftAccount:
+    """The person's own usable account this request is for (the main one, or the one picked);
+    P148a: without a Graph client (an answer kept here needs none)."""
     picked = _PICKED.get()
     if picked:  # P118: one of their own extra accounts (never anyone else's: 404)
         acct = await access.own_account(db, principal.workspace_id, principal.user.id, picked)
@@ -87,7 +101,42 @@ async def _mine(db: AsyncSession, principal: Principal) -> tuple[MicrosoftAccoun
             "microsoft_not_connected",
             "Connect your Microsoft 365 account first.",
         )
-    return acct, await graph.for_account(db, acct)
+    return acct
+
+
+def _build(principal: Principal, acct: MicrosoftAccount, fn: Any) -> swr.Build:
+    """P148a: `fn(acct, g)` on a database session of its own (it may run behind the answer)."""
+    ws, uid, aid = principal.workspace_id, principal.user.id, acct.id
+
+    async def build() -> Any:
+        async with swr.account_graph(aid, ws, uid) as (_db, a, g):
+            return await fn(a, g)
+
+    return build
+
+
+async def _key(
+    principal: Principal, kind: str, acct: MicrosoftAccount, area: str = "", extra: str = ""
+) -> str:
+    return await swr.key(
+        principal.workspace_id, principal.user.id, kind, acct.id, area=area, extra=extra
+    )
+
+
+async def summary_key(workspace_id: str, user_id: str, account_id: str) -> str:
+    """The Microsoft 365 tab counts of one account (m365_meetings.summary)."""
+    return await swr.key(workspace_id, user_id, "summary", account_id)
+
+
+async def chats_key(workspace_id: str, user_id: str, account_id: str) -> str:
+    return await swr.key(workspace_id, user_id, "chats", account_id)
+
+
+async def changed(principal: Principal, acct: MicrosoftAccount, *areas: str) -> None:
+    """P148a: after the person's own write: that account's answers in `areas` are forgotten and
+    the tab counts refreshed behind (shown at once meanwhile)."""
+    await swr.bump(account_id=acct.id, areas=areas)
+    await swr.touch(await summary_key(principal.workspace_id, principal.user.id, acct.id))
 
 
 def _fail(e: MicrosoftError) -> Exception:
@@ -114,6 +163,14 @@ async def _sent(
     await db.commit()
 
 
+@router.post("/refresh", status_code=status.HTTP_204_NO_CONTENT)
+async def refresh(principal: Principal = Depends(require("read"))) -> Response:
+    """P148a: the page's Refresh button: everything kept for this person is read again from
+    Microsoft (their own answers only; nothing at Microsoft changes)."""
+    await swr.bump(principal.workspace_id, principal.user.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ---------------------------------------------------------------- mail
 
 
@@ -124,24 +181,43 @@ async def mail_list(
     top: int = Query(default=25, ge=1, le=50),
     q: str = Query(default="", max_length=200),
     unread: bool = Query(default=False),
+    fresh: bool = Query(default=False),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """A folder of the person's own Outlook, newest first (or a search in it)."""
+    """A folder of the person's own Outlook, newest first (or a search in it). P148a: a folder
+    page is kept per account (a search is always asked live); the inbox longer while Microsoft
+    tells us of new mail, which forgets it (sync.py). `refreshing`: an older page shown at once
+    while a new one is read behind."""
     if folder not in FOLDERS:
         raise api_error(status.HTTP_400_BAD_REQUEST, "bad_folder", "That mail folder is not known.")
-    _, g = await _mine(db, principal)
+    acct = await _own(db, principal)
+    query = q.strip()
+
+    async def page(_a: MicrosoftAccount, gg: graph.Graph) -> dict[str, Any]:
+        rows = await gg.folder_messages(folder, top=top, skip=skip, unread_only=unread, query=query)
+        more = len(rows) >= top and not query
+        return {
+            "items": [hub.mail_row(m) for m in rows],
+            "next_skip": skip + len(rows) if more else None,
+        }
+
     try:
-        rows = await g.folder_messages(
-            folder, top=top, skip=skip, unread_only=unread, query=q.strip()
+        if query:
+            return {**await page(acct, await graph.for_account(db, acct)), "refreshing": False}
+        live = folder == "inbox" and await sync.webhooks_state(db, acct) == "live"
+        key = await _key(principal, "mail", acct, "mail", f"{folder}:{int(unread)}:{skip}:{top}")
+        await swr.release(db)
+        got, stale = await swr.serve(
+            key,
+            _build(principal, acct, page),
+            fresh=MAIL_FRESH_LIVE if live else MAIL_FRESH,
+            keep=MAIL_KEEP,
+            force=fresh,
         )
     except MicrosoftError as e:
         raise _fail(e) from e
-    more = len(rows) >= top and not q.strip()
-    return {
-        "items": [hub.mail_row(m) for m in rows],
-        "next_skip": skip + len(rows) if more else None,
-    }
+    return {**got, "refreshing": stale}
 
 
 @router.get("/mail/{message_id}")
@@ -169,11 +245,12 @@ async def mail_mark_read(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, bool]:
-    _, g = await _mine(db, principal)
+    acct, g = await _mine(db, principal)
     try:
         await g.mark_read(message_id, body.read)
     except MicrosoftError as e:
         raise _fail(e) from e
+    await changed(principal, acct, "mail")
     return {"read": body.read}
 
 
@@ -265,7 +342,7 @@ async def mail_reply(
     """The person's own reply: sent at once (they pressed Send), or kept as a draft."""
     if body.send and not body.body.strip():
         raise api_error(status.HTTP_400_BAD_REQUEST, "empty", "Write the message first.")
-    _, g = await _mine(db, principal)
+    acct, g = await _mine(db, principal)
     try:
         d = await g.create_reply_draft(
             message_id, hub.text_html(body.body), reply_all=body.reply_all
@@ -274,6 +351,7 @@ async def mail_reply(
             await g.send_draft(str(d.get("id") or ""))
     except MicrosoftError as e:
         raise _fail(e) from e
+    await changed(principal, acct, "mail")
     if body.send:
         await _sent(db, principal, "m365.mail_replied", message_id, reply_all=body.reply_all)
     return _draft_out(d, body.send)
@@ -286,7 +364,7 @@ async def mail_forward(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    _, g = await _mine(db, principal)
+    acct, g = await _mine(db, principal)
     to = [str(a) for a in body.to]
     try:
         d = await g.create_forward_draft(message_id, to, hub.text_html(body.body))
@@ -294,6 +372,7 @@ async def mail_forward(
             await g.send_draft(str(d.get("id") or ""))
     except MicrosoftError as e:
         raise _fail(e) from e
+    await changed(principal, acct, "mail")
     if body.send:
         await _sent(db, principal, "m365.mail_forwarded", message_id, to=len(to))
     return _draft_out(d, body.send)
@@ -306,7 +385,7 @@ async def mail_send(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """A new email the person wrote: sent at once, or kept in Outlook's Drafts."""
-    _, g = await _mine(db, principal)
+    acct, g = await _mine(db, principal)
     to, cc = [str(a) for a in body.to], [str(a) for a in body.cc]
     try:
         d = await g.create_draft(to, body.subject.strip(), hub.text_html(body.body), cc=cc)
@@ -314,6 +393,7 @@ async def mail_send(
             await g.send_draft(str(d.get("id") or ""))
     except MicrosoftError as e:
         raise _fail(e) from e
+    await changed(principal, acct, "mail")
     if body.send:
         await _sent(db, principal, "m365.mail_sent", "new", to=len(to), cc=len(cc))
     return _draft_out(d, body.send)
@@ -328,18 +408,24 @@ async def chats(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    """The person's own Teams chats, most recent first, with the people in them."""
-    acct, g = await _mine(db, principal)
+    """The person's own Teams chats, most recent first, with the people in them. P148a: kept per
+    account, shown at once and refreshed behind (the tab counts' refresh fills it too)."""
+    acct = await _own(db, principal)
+    key = await chats_key(principal.workspace_id, principal.user.id, acct.id)
+    await swr.release(db)
+    try:
+        rows, _stale = await swr.serve(
+            key, _build(principal, acct, chat_rows), fresh=CHATS_FRESH, keep=CHATS_KEEP, force=fresh
+        )
+    except MicrosoftError as e:
+        raise _teams_fail(e) from e
+    return list(rows)
+
+
+async def chat_rows(acct: MicrosoftAccount, g: graph.Graph) -> list[dict[str, Any]]:
+    """The chat list as the Teams tab shows it (the tab counts' refresh keeps it too)."""
     me_name, me_id = acct.display_name or "", acct.ms_user_id or ""
-
-    async def make() -> list[dict[str, Any]]:
-        try:
-            return [hub.chat_row(c, me_name, me_id) for c in await g.list_chats(50)]
-        except MicrosoftError as e:
-            raise _teams_fail(e) from e
-
-    key = f"m365:chats:{principal.workspace_id}:{principal.user.id}"
-    return await _kept(key, CHATS_FOR, fresh, make)
+    return [hub.chat_row(c, me_name, me_id) for c in await g.list_chats(50)]
 
 
 def _older_link(chat_id: str, before: str) -> str | None:
@@ -355,27 +441,44 @@ def _older_link(chat_id: str, before: str) -> str | None:
 async def chat_messages(
     chat_id: str,
     before: str = Query(default="", max_length=4000),
+    fresh: bool = Query(default=False),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """A chat's messages, oldest first, as Teams shows them; `more` gets older ones."""
-    acct, g = await _mine(db, principal)
+    """A chat's messages, oldest first, as Teams shows them; `more` gets older ones. P148a: the
+    messages and the chat's people are asked at once (they waited for each other), and the
+    latest page is kept a few seconds per account (`refreshing`: shown at once, read behind)."""
+    acct = await _own(db, principal)
     link = _older_link(chat_id, before) if before else None
     if before and link is None:
         raise api_error(status.HTTP_400_BAD_REQUEST, "bad_cursor", "That page link is not valid.")
+
+    async def page(a: MicrosoftAccount, gg: graph.Graph) -> dict[str, Any]:
+        info: dict[str, Any] = {}
+        if link:
+            msgs, nxt = await gg.chat_page(chat_id, 40, link)
+        else:
+            (msgs, nxt), info = await asyncio.gather(gg.chat_page(chat_id, 40), gg.chat(chat_id))
+        me = a.ms_user_id or ""
+        out: dict[str, Any] = {
+            "messages": [hub.chat_message(m, me) for m in reversed(msgs)],
+            "more": nxt,
+        }
+        if info:
+            out["chat"] = hub.chat_row(info, a.display_name or "", me)
+        return out
+
     try:
-        msgs, nxt = await g.chat_page(chat_id, 40, link)
-        info = await g.chat(chat_id) if not before else {}
+        if link:
+            return {**await page(acct, await graph.for_account(db, acct)), "refreshing": False}
+        key = await _key(principal, "chat", acct, extra=chat_id[:300])
+        await swr.release(db)
+        got, stale = await swr.serve(
+            key, _build(principal, acct, page), fresh=CHAT_FRESH, keep=CHAT_KEEP, force=fresh
+        )
     except MicrosoftError as e:
         raise _teams_fail(e) from e
-    me = acct.ms_user_id or ""
-    out: dict[str, Any] = {
-        "messages": [hub.chat_message(m, me) for m in reversed(msgs)],
-        "more": nxt,
-    }
-    if info:
-        out["chat"] = hub.chat_row(info, acct.display_name or "", me)
-    return out
+    return {**got, "refreshing": stale}
 
 
 class ChatSendIn(BaseModel):
@@ -398,12 +501,12 @@ async def chat_send(
     except MicrosoftError as e:
         raise _teams_fail(e) from e
     await _sent(db, principal, "m365.teams_sent", chat_id)
-    from ...core.valkey import valkey
-
-    try:
-        await valkey().delete(f"m365:chats:{principal.workspace_id}:{principal.user.id}")
-    except Exception:  # noqa: BLE001,S110 - a stale list refreshes itself soon
-        pass
+    # P148a: this chat and the chat list are read again; the tab counts refreshed behind.
+    await swr.forget(
+        await _key(principal, "chat", acct, extra=chat_id[:300]),
+        await chats_key(principal.workspace_id, principal.user.id, acct.id),
+    )
+    await swr.touch(await summary_key(principal.workspace_id, principal.user.id, acct.id))
     shaped = hub.chat_message(m, acct.ms_user_id or "") if m.get("id") else None
     return shaped or {"id": "", "mine": True, "text": body.text.strip()}
 
@@ -578,10 +681,12 @@ def _parse(v: str, name: str) -> datetime:
 async def calendar(
     start: str = Query(min_length=10, max_length=40),
     end: str = Query(min_length=10, max_length=40),
+    fresh: bool = Query(default=False),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    """The person's own Outlook calendar between two times (at most six weeks)."""
+    """The person's own Outlook calendar between two times (at most six weeks). P148a: kept per
+    account and range, shown at once and refreshed behind; a new event or answer forgets it."""
     a, b = _parse(start, "start"), _parse(end, "end")
     if b <= a or b - a > timedelta(days=MAX_RANGE_DAYS):
         raise api_error(
@@ -590,12 +695,20 @@ async def calendar(
             "Pick a range of up to {days} days.",
             days=MAX_RANGE_DAYS,
         )
-    _, g = await _mine(db, principal)
+    acct = await _own(db, principal)
+
+    async def view(_a: MicrosoftAccount, g: graph.Graph) -> list[dict[str, Any]]:
+        return [_event(e) for e in await g.calendar_view(a, b, top=250, tz="UTC")]
+
     try:
-        events = await g.calendar_view(a, b, top=250, tz="UTC")
+        key = await _key(principal, "cal", acct, "cal", f"{graph.iso(a)}|{graph.iso(b)}")
+        await swr.release(db)
+        got, _stale = await swr.serve(
+            key, _build(principal, acct, view), fresh=CAL_FRESH, keep=CAL_KEEP, force=fresh
+        )
     except MicrosoftError as e:
         raise _fail(e) from e
-    return [_event(e) for e in events]
+    return list(got)
 
 
 @router.get("/calendar/{event_id}")
@@ -651,6 +764,7 @@ async def calendar_create(
         )
     except MicrosoftError as e2:
         raise _fail(e2) from e2
+    await changed(principal, acct, "cal")
     await _sent(
         db, principal, "m365.event_created", str(e.get("id") or ""), guests=len(body.attendees)
     )
@@ -669,11 +783,12 @@ async def calendar_respond(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    _, g = await _mine(db, principal)
+    acct, g = await _mine(db, principal)
     try:
         await g.respond_event(event_id, body.answer, body.comment.strip())
     except MicrosoftError as e:
         raise _fail(e) from e
+    await changed(principal, acct, "cal")
     await _sent(db, principal, "m365.event_answered", event_id, answer=body.answer)
     return {"answer": body.answer}
 
@@ -773,6 +888,7 @@ async def approval_respond(
     except MicrosoftError as e:
         raise _fail(e) from e
     await org_approvals.forget([acct.id])
+    await changed(principal, acct)
     await _sent(db, principal, "m365.approval_answered", approval_id, response=body.response)
     return {"response": body.response}
 

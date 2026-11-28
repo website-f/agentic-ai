@@ -23,6 +23,23 @@ export const MEMO_TABLES: ReadonlySet<TableName> = new Set<TableName>([
   'clientAccounts',
 ]);
 
+/** Store methods that only read the database catalogue (whether an optional module is installed and set up). */
+const CATALOG_READS: ReadonlySet<string> = new Set([
+  'companyOfficeReady',
+  'companyRunLinksReady',
+  'guardPayReady',
+  'payFormulasReady',
+  'registersReady',
+  'qualityReady',
+  'amExtrasReady',
+  'rentalCorrectionProblems',
+  'procurementProblems',
+  'itOperationsProblems',
+  'itManualProblems',
+  'workflowMetricProblems',
+  'itCleanupProblems',
+]);
+
 export function readMemo(store: Store, tables: ReadonlySet<TableName> = MEMO_TABLES): Store {
   const memo = new Map<string, Promise<unknown[]>>();
   return new Proxy(store, {
@@ -43,7 +60,9 @@ export function readMemo(store: Store, tables: ReadonlySet<TableName> = MEMO_TAB
       const v = Reflect.get(target, prop, receiver);
       if (typeof v !== 'function') return v;
       // P123: the IT archive checks only read (a write still goes through the clearing path below).
-      if (prop === 'get' || prop === 'hasTable' || prop === 'itCleanupArchived' || prop === 'itCleanupArchivedMany') return v.bind(target);
+      // P148d: so do the "is this module installed" checks of the catalogue; as writes they emptied the memo on every
+      // home, so grants, people and companies were read again after each one.
+      if (prop === 'get' || prop === 'hasTable' || prop === 'itCleanupArchived' || prop === 'itCleanupArchivedMany' || (typeof prop === 'string' && CATALOG_READS.has(prop))) return v.bind(target);
       // Anything else may write: forget what was read, then pass straight through.
       return (...args: unknown[]) => {
         memo.clear();

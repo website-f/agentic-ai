@@ -138,6 +138,9 @@ class Answer:
     content_type: str
     body: bytes
     disposition: str = ""
+    # P148d: Prima's own Server-Timing (its work, its database time); the round trip to it, in ms.
+    timing: str = ""
+    upstream_ms: float = 0.0
 
     def json(self) -> object:
         import json
@@ -876,13 +879,32 @@ def top_of(records: list[StaffRecord]) -> StaffRecord | None:
     return tops[0] if tops else None
 
 
+_TOP_RENEWING: set[asyncio.Task[None]] = set()
+
+
+async def _renew_top(url: str) -> None:
+    try:
+        _TOP[url] = (time.monotonic(), top_of(await staff()))
+    except Exception:  # noqa: BLE001 - kept as it was; asked again on the next call
+        log.warning("could not renew Prima's top record")
+
+
 async def top_record() -> StaffRecord | None:
     now = time.monotonic()
-    hit = _TOP.get(settings.prima_url)
+    url = settings.prima_url
+    hit = _TOP.get(url)
     if hit is not None and now - hit[0] < TOP_TTL:
         return hit[1]
+    if hit is not None and hit[1] is not None:
+        # P148d: the top record (the CEO) all but never changes. Renewed in the background, so the
+        # call after every five minutes no longer waits for Prima's whole staff list (~0.5 s).
+        _TOP[url] = (now, hit[1])  # one renewal at a time
+        task = asyncio.get_running_loop().create_task(_renew_top(url))
+        _TOP_RENEWING.add(task)
+        task.add_done_callback(_TOP_RENEWING.discard)
+        return hit[1]
     top = top_of(await staff())
-    _TOP[settings.prima_url] = (now, top)
+    _TOP[url] = (now, top)
     return top
 
 
@@ -1019,6 +1041,7 @@ async def _send(
     if client_ip:
         # Prima limits calls per address (behind one trusted proxy): the person's, not ours.
         headers["x-forwarded-for"] = client_ip
+    started = time.perf_counter()
     try:
         r = await _client().request(
             method,
@@ -1035,6 +1058,8 @@ async def _send(
         content_type=r.headers.get("content-type", "application/json"),
         body=r.content,
         disposition=r.headers.get("content-disposition", ""),
+        timing=r.headers.get("server-timing", ""),
+        upstream_ms=(time.perf_counter() - started) * 1000,
     )
 
 

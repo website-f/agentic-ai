@@ -2959,7 +2959,8 @@
   "orgchart": [
    "GET org/chart",
    "POST org/head",
-   "POST org/line"
+   "POST org/line",
+   "POST org/unit"
   ],
   "overview": [
    "GET group/overview",

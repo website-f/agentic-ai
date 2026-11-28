@@ -378,6 +378,12 @@ async def sync(db: AsyncSession, workspace_id: str) -> PrimaOrgSyncRun | None:
         office = office if office in active else None
         plans.append(_decide(states.get(uid), uid, office, pair.get(office or ""), line, rev))
 
+    # P148b: the audit rows are written after the calls to Prima below. Written as they
+    # happened, the first one took the workspace's audit lock (and flushed the member rows
+    # changed here), and both stayed held through every POST to Prima and the chart read after
+    # them: every audited change in the office waited for Prima.
+    notes: list[dict] = []
+
     # Prima -> office, one at a time against the chart as it grows (never a loop).
     for plan in plans:
         if plan.act != "take":
@@ -391,15 +397,14 @@ async def sync(db: AsyncSession, workspace_id: str) -> PrimaOrgSyncRun | None:
         before = m.reports_to_user_id
         m.reports_to_user_id = boss
         parent[plan.user_id] = boss
-        await audit.record(
-            db,
-            workspace_id,
-            ACTOR,
-            "member.manager_changed",
-            target=plan.user_id,
-            before={"reports_to": before},
-            after={"reports_to": boss},
-            note="From Prima's org chart (P127 sync)",
+        notes.append(
+            {
+                "action": "member.manager_changed",
+                "target": plan.user_id,
+                "before": {"reports_to": before},
+                "after": {"reports_to": boss},
+                "note": "From Prima's org chart (P127 sync)",
+            }
         )
         counts["from_prima"] += 1
 
@@ -422,13 +427,12 @@ async def sync(db: AsyncSession, workspace_id: str) -> PrimaOrgSyncRun | None:
             down = True
             plan.act, plan.why = "waiting", "prima_down"
             continue
-        await audit.record(
-            db,
-            workspace_id,
-            ACTOR,
-            "prima.org_line",
-            target=plan.user_id,
-            after={"prima_manager": plan.manager, "status": ans.status},
+        notes.append(
+            {
+                "action": "prima.org_line",
+                "target": plan.user_id,
+                "after": {"prima_manager": plan.manager, "status": ans.status},
+            }
         )
         if 200 <= ans.status < 300:
             pushed.append(plan)
@@ -453,6 +457,8 @@ async def sync(db: AsyncSession, workspace_id: str) -> PrimaOrgSyncRun | None:
                 plan.act, plan.why = "differs_after_push", "prima_job_line"
             else:
                 plan.act = "pushed"
+    for n in notes:
+        await audit.record(db, workspace_id, ACTOR, n.pop("action"), **n)
 
     for plan in plans:
         st = row(plan.user_id)
