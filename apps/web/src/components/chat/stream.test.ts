@@ -51,7 +51,7 @@ describe("streamChat", () => {
     expect(started).toBe("cs_1");
     expect(seen).toEqual(["Three", "Three invoices."]);
     expect(done.reply).toBe("Three invoices.");
-    expect(vi.mocked(fetch).mock.calls[0][0]).toBe("/api/agents/ag_1/chat/stream");
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("/api/agents/ag_1/chat/stream");
   });
 
   it("turns an error line into the same error the plain chat gives", async () => {
