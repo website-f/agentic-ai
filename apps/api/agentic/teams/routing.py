@@ -30,6 +30,7 @@ ABILITY = {
     "draft_document": "write letters quotations proposals documents surat",
     "export_document": "pdf word excel documents",
     "file_document": "file organise folders filing documents fail",
+    "suggest_organization": "organize organise sort tidy library folders keywords susun fail",
     "compile_documents": "compile combine merge documents pack",
     "fill_form": "fill forms borang",
     "browser_open": "browse websites portals online",

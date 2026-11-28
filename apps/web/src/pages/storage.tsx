@@ -22,6 +22,8 @@ import { api, ApiError, errorMessage } from "@/lib/api";
 import { branchesQuery } from "@/lib/queries";
 import { timeAgo } from "@/lib/utils";
 
+import { StorageJobsCard } from "./storage-jobs";
+
 type Kind = "local" | "s3" | "webdav";
 
 interface SyncSettings {
@@ -227,6 +229,7 @@ export function StoragePage() {
           <ListCard className="rounded-none border-0">{data.map((x) => <TargetRow key={x.id} target={x} />)}</ListCard>
         </Card>
       )}
+      {data?.length ? <StorageJobsCard /> : null}
       <Card>
         <CardBody className="text-[12.5px] text-muted">
           {t("Keys and passwords are encrypted with the server's master key and never shown again. Only owners and admins see this page.")}

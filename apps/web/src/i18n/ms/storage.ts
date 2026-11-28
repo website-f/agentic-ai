@@ -70,4 +70,34 @@ export const STORAGE: Record<string, string> = {
   "Stop keeping new files here": "Berhenti menyimpan fail baharu di sini",
   "Only possible when no file is kept there any more. The files themselves are never deleted from your bucket or server.":
     "Hanya boleh apabila tiada lagi fail disimpan di sana. Fail itu sendiri tidak sekali-kali dipadam dari bucket atau pelayan anda.",
+
+  // P149a: moving files to the file server, compression, database space, backups
+  "Move files to the file server": "Pindahkan fail ke pelayan fail",
+  "Make older files smaller": "Kecilkan fail lama",
+  "the file server": "pelayan fail",
+  "Files kept in the app's database are copied to {name}, checked there, then removed from the database. Opening them keeps working the whole time.":
+    "Fail yang disimpan dalam pangkalan data aplikasi disalin ke {name}, disemak di sana, kemudian dibuang dari pangkalan data. Fail tetap boleh dibuka sepanjang masa.",
+  "Files saved before compression was turned on are made smaller in the same format, at night and at weekends only.":
+    "Fail yang disimpan sebelum pemampatan dihidupkan dikecilkan dalam format yang sama, pada waktu malam dan hujung minggu sahaja.",
+  "{done} of {total} files moved ({before} sent as {after}); {left} left":
+    "{done} daripada {total} fail dipindahkan ({before} dihantar sebagai {after}); tinggal {left}",
+  "{done} files made smaller, {kept} already as small as they go; {left} left":
+    "{done} fail dikecilkan, {kept} sudah sekecil mungkin; tinggal {left}",
+  "{n} errors": "{n} ralat",
+  "last worked {when}": "kali terakhir bekerja {when}",
+  "Waiting for the evening (after 8 pm) or the weekend.": "Menunggu waktu malam (selepas 8 malam) atau hujung minggu.",
+  "Paused by itself after repeated failures: {reason}": "Dijeda sendiri selepas gagal berulang kali: {reason}",
+  "Last problem: {reason}": "Masalah terakhir: {reason}",
+  "Moving and compressing files": "Memindah dan memampatkan fail",
+  "{db} files ({dbsize}) are still in the app's database; {n} files ({size}) are on {name}. Compression has saved {saved}.":
+    "{db} fail ({dbsize}) masih dalam pangkalan data aplikasi; {n} fail ({size}) berada di {name}. Pemampatan telah menjimatkan {saved}.",
+  "Database: the files table takes {table}; {inside} of file bytes are still inside. About {free} can be given back to the server's disk.":
+    "Pangkalan data: jadual fail menggunakan {table}; {inside} bait fail masih di dalamnya. Kira-kira {free} boleh dipulangkan kepada cakera pelayan.",
+  "Giving it back locks the files table for a few minutes: the developer runs it once, at a quiet hour.":
+    "Memulangkannya mengunci jadual fail selama beberapa minit: pembangun menjalankannya sekali, pada waktu lengang.",
+  "Quick-open copy on the server: {n} files, {size} of {cap}.": "Salinan buka pantas di pelayan: {n} fail, {size} daripada {cap}.",
+  "Last backup to the file server {when}: {size}, checked.": "Sandaran terakhir ke pelayan fail {when}: {size}, telah disemak.",
+  "The last backup failed: {reason}": "Sandaran terakhir gagal: {reason}",
+  "The last good one was {when}.": "Sandaran baik terakhir ialah {when}.",
+  "No backup to the file server yet. It runs every night at 2:30 am.": "Belum ada sandaran ke pelayan fail. Ia berjalan setiap malam pada 2:30 pagi.",
 };

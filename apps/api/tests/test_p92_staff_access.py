@@ -263,6 +263,9 @@ STAFF_OK = {
     # P144/P145: the Library units and places they may open (scoped), and the group structure
     # (units, positions, and only the members their scope shows).
     "/api/library/places", "/api/library/units", "/api/org/structure",
+    # P149c: the keywords on the files they see (files._filtered), and the sorting rules of a
+    # place they open (no file data: folder names and switches only).
+    "/api/files/keywords", "/api/library/organize/rules",
     "/api/agents", "/api/agents/templates", "/api/agents/tools", "/api/ai/groups",
     "/api/approvals", "/api/assistants", "/api/auth/2fa", "/api/auth/2fa/policy", "/api/auth/me",
     "/api/auth/setup-status", "/api/auth/sso", "/api/blueprints", "/api/branches",

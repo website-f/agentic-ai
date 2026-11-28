@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
@@ -179,6 +179,7 @@ async def move(
     for fid in ids:
         f = await get_file(db, principal, fid)  # 404 for anything this person cannot see
         f.folder = folder
+        f.folder_by = "person"  # P149c: a person placed it; the sorter leaves it there
     await audit.record(
         db,
         principal.workspace_id,
@@ -286,6 +287,8 @@ async def copy_files(
             origin="person",
             owner_user_id=owner,
             labels=list(f.labels or []),
+            keywords=list(f.keywords or []),  # P149c
+            folder_by="person",
             compression=dict(f.compression) if f.compression else None,  # P143c
         )
         await storage.store_new(db, new, data)  # P40: where new files go, like an upload
@@ -532,6 +535,7 @@ async def rename_folder(
         )
     for f in files:
         f.folder = dst + f.folder[len(src) :]
+        f.folder_by = "person"  # P149c
     if moved_saved:
         await db.flush()  # the files' rows, before the workspace row
         saved = await _saved_folders(db, principal.workspace_id, lock=True)  # as they are now
@@ -621,24 +625,35 @@ def _image_png(data: bytes) -> bytes | None:
 @router.get("/{file_id}/preview")
 async def preview(
     file_id: str,
+    request: Request,
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Something the browser can show for every file: PDFs and pictures as they are, text
-    as plain text, and Word, Excel, PowerPoint (and anything else) as a PDF of its text."""
+    as plain text, and Word, Excel, PowerPoint (and anything else) as a PDF of its text.
+    P149a: a PDF or picture the browser shows as it is streams from where it is kept (only
+    its first bytes are read here to check its type)."""
     f = await get_file(db, principal, file_id, library_ok=True)
     check_held_back(principal, f)
-    row = await db.scalar(select(DocFile).where(DocFile.id == f.id).options(undefer(DocFile.text)))
-    from ...documents import storage  # P40: the bytes may live outside the database
+    from ...documents import serve, storage  # P40: the bytes may live outside the database
 
-    data = await storage.read_id(db, f.id)
-    text = (row.text if row else "") or ""
     headers = {
         "Content-Disposition": f"inline; filename*=UTF-8''{quote(f.name)}",
         "Content-Security-Policy": CSP,
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-store",
     }
+    if f.mime in INLINE_SAFE and sniff(await storage.read_head(db, f), f.name, f.mime) in (
+        "pdf",
+        "image",
+    ):
+        try:
+            return await serve.file_response(db, f, request, media_type=f.mime, headers=headers)
+        except storage.StorageError:
+            pass  # shown from its text below
+    row = await db.scalar(select(DocFile).where(DocFile.id == f.id).options(undefer(DocFile.text)))
+    data = await storage.read_id(db, f.id)
+    text = (row.text if row else "") or ""
     kind = sniff(data, f.name, f.mime)
     if f.mime in INLINE_SAFE and (kind in ("pdf", "image")):
         return Response(content=data, media_type=f.mime, headers=headers)

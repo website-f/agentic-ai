@@ -263,6 +263,23 @@ async def test_background_work_is_not_cut_short(client, fake, monkeypatch):
     assert r.content == "from good.fake"
 
 
+async def test_background_work_moves_on_after_its_own_longer_limit(client, fake, monkeypatch):
+    """P149: a model on the owner's own server that takes too long on background work is left
+    for the next one (AI Foundry), with a longer limit than a waiting person's."""
+    monkeypatch.setattr(settings, "ai_answer_timeout", 0.1)
+    monkeypatch.setattr(settings, "ai_task_answer_timeout", 0.3)
+    p = await office(client, 2)
+    await put_group(client, "bulk", [(p[0]["id"], False), (p[1]["id"], False)])
+    fake.behave = {"good.fake": 3.0}
+    r = await gw("bulk", task="brain.extract.p149")
+    assert r.content == "from flaky.fake"
+    assert r.attempts[0]["error_class"] == "slow"
+    # 0 turns the limit off: background work waits for the model again.
+    monkeypatch.setattr(settings, "ai_task_answer_timeout", 0)
+    fake.behave = {"good.fake": 0.4}
+    assert (await gw("bulk", task="brain.extract.p149b")).content == "from good.fake"
+
+
 async def _local_backup(c: httpx.AsyncClient) -> dict:
     return await add_provider(c, store.LOCAL_PROVIDER, "ratelimit.fake", tier="local")
 

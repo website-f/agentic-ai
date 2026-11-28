@@ -97,6 +97,9 @@ class Settings(BaseSettings):
     # keeps the long timeout. And such a chat waits at most this long for a resting model
     # before the backup answers.
     ai_answer_timeout: float = Field(default=25.0, ge=3, le=120)
+    # P149: the same for background work (task steps, routines): a model that has not answered
+    # in this many seconds is left for the next one in the group, when there is one. 0 = wait.
+    ai_task_answer_timeout: float = Field(default=150.0, ge=0, le=900)
     ai_chat_max_wait: float = Field(default=20.0, ge=0, le=60)
 
     # Where people open the app (P16): Google sign-in returns here, links in messages point here.
@@ -162,6 +165,9 @@ class Settings(BaseSettings):
     media_dir: str = "./data/media"
     # P40: the "This server's disk" file storage (company files kept on the VPS disk).
     files_dir: str = "./data/files"
+    # P149a: files read from an S3 bucket or file server are kept for a while in
+    # <files_dir>/.cache so repeated opens are fast; the oldest are dropped past this size.
+    file_cache_mb: int = 2048
     # P65: the Prima Secure knowledge pack (company SOPs, workflows W1-W34, rules, record
     # forms) imported into every workspace's Library. The folder mirrors apps/prima; empty =
     # /app/prima-pack in the image, else the repo's apps/prima. Off = never imported.

@@ -1,0 +1,12 @@
+# P149a: every night at 02:30 Malaysia time (the server's own clock is Europe/Berlin).
+# Persistent: a night missed while the server was down runs at the next boot.
+[Unit]
+Description=Nightly Agentic office backup to the S3 file server
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Asia/Kuala_Lumpur
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

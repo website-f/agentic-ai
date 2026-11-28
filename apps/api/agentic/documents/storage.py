@@ -10,6 +10,12 @@ new files go there. Any target may also be a source: its files are imported into
 Library and read in place (they are not copied into the database). Every read of a file's
 bytes goes through `read()`, whatever the place.
 
+P149a: files are moved off the VPS onto the company's S3 file server (documents/offload.py);
+`read()` finds the bytes wherever they are at that moment (a move may finish between loading a
+file and reading it) and keeps hot ones in a small disk cache (filecache.py). Browsers are
+served by `open_stream()` (chunked, with Range) or a short-lived presigned URL
+(`presigned_get`), never by loading a whole file into the API process.
+
 S3 requests are signed with AWS Signature V4 (no SDK). Credentials are encrypted at rest with
 the master key (core/crypto.py) and never returned by the API.
 """
@@ -22,24 +28,27 @@ import logging
 import os
 import re
 import xml.etree.ElementTree as ET  # noqa: S405 - parses our own storage's listing XML
-from dataclasses import dataclass
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlparse
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import crypto
 from ..core.config import settings
 from ..models import DocFile, StorageTarget
+from . import filecache
 
 log = logging.getLogger("agentic.storage")
 
 KINDS = ("local", "s3", "webdav")
 TIMEOUT = 60
 MAX_LIST = 5000
+CHUNK = 256 * 1024  # bytes per piece when a file is streamed
 _transport: httpx.AsyncBaseTransport | None = None  # tests replace it
 
 
@@ -61,7 +70,14 @@ class Entry:
 
 
 def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(timeout=TIMEOUT, transport=_transport, follow_redirects=False)
+    # P149a: a named agent: the company's S3 endpoint sits behind Cloudflare, which refuses
+    # some library defaults.
+    return httpx.AsyncClient(
+        timeout=TIMEOUT,
+        transport=_transport,
+        follow_redirects=False,
+        headers={"User-Agent": "agentic-office/1.0"},
+    )
 
 
 # ---------------------------------------------------------------- secrets
@@ -217,6 +233,50 @@ def sigv4_headers(
     }
 
 
+def presign_url(
+    method: str,
+    url: str,
+    *,
+    region: str,
+    access_key: str,
+    secret_key: str,
+    expires: int = 60,
+    query: dict[str, str] | None = None,
+    now: dt.datetime | None = None,
+) -> str:
+    """P149a: a URL anyone holding it may use for `expires` seconds (SigV4 query signing,
+    UNSIGNED-PAYLOAD, only the host header signed). `query` adds S3's response-* overrides
+    (Content-Disposition, Content-Type), which are signed too and so cannot be changed."""
+    now = now or dt.datetime.now(dt.UTC)
+    amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+    day = now.strftime("%Y%m%d")
+    u = urlparse(url)
+    scope = f"{day}/{region}/s3/aws4_request"
+    q = dict(query or {})
+    q.update(
+        {
+            "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+            "X-Amz-Credential": f"{access_key}/{scope}",
+            "X-Amz-Date": amz_date,
+            "X-Amz-Expires": str(max(1, min(int(expires), 7 * 24 * 3600))),
+            "X-Amz-SignedHeaders": "host",
+        }
+    )
+    canonical_uri = quote(unquote(u.path or "/"), safe="/~-_.")
+    canonical_query = "&".join(
+        f"{quote(k, safe='-_.~')}={quote(v, safe='-_.~')}" for k, v in sorted(q.items())
+    )
+    canonical = "\n".join(
+        [method, canonical_uri, canonical_query, f"host:{u.netloc}\n", "host", "UNSIGNED-PAYLOAD"]
+    )
+    to_sign = "\n".join(
+        ["AWS4-HMAC-SHA256", amz_date, scope, hashlib.sha256(canonical.encode()).hexdigest()]
+    )
+    k = _sign(_sign(_sign(_sign(f"AWS4{secret_key}".encode(), day), region), "s3"), "aws4_request")
+    signature = hmac.new(k, to_sign.encode(), hashlib.sha256).hexdigest()
+    return f"{u.scheme}://{u.netloc}{canonical_uri}?{canonical_query}&X-Amz-Signature={signature}"
+
+
 def _s3(t: StorageTarget) -> tuple[str, str, str, str, str]:
     c = t.config or {}
     endpoint = str(c.get("endpoint") or "").rstrip("/")
@@ -243,6 +303,7 @@ async def _s3_call(
     *,
     data: bytes = b"",
     query: dict[str, str] | None = None,
+    extra: dict[str, str] | None = None,
 ) -> httpx.Response:
     endpoint, bucket, region, ak, sk = _s3(t)
     url = _s3_url(endpoint, bucket, key) if key else f"{endpoint}/{quote(bucket, safe='')}/"
@@ -254,7 +315,9 @@ async def _s3_call(
             f"{quote(k, safe='-_.~')}={quote(v, safe='-_.~')}" for k, v in sorted(query.items())
         )
     async with _client() as c:
-        return await c.request(method, httpx.URL(url), content=data or None, headers=headers)
+        return await c.request(
+            method, httpx.URL(url), content=data or None, headers={**headers, **(extra or {})}
+        )
 
 
 def _s3_error(r: httpx.Response, what: str) -> StorageError:
@@ -277,6 +340,27 @@ async def _s3_get(t: StorageTarget, key: str) -> bytes:
     if r.status_code >= 300:
         raise _s3_error(r, "Reading the file failed")
     return r.content
+
+
+async def _s3_head(t: StorageTarget, key: str) -> tuple[int, str] | None:
+    """(size, ETag without quotes) of an object, or None when it is not there. P149a: the
+    company's endpoint sits behind Cloudflare, which now and then answers HEAD with 403 for an
+    object that is there: then the first byte is read instead (GET is answered reliably)."""
+    r = await _s3_call(t, "HEAD", key)
+    if r.status_code == 404:
+        return None
+    if r.status_code < 300:
+        return int(r.headers.get("content-length") or 0), r.headers.get("etag", "").strip('"')
+    r = await _s3_call(t, "GET", key, extra={"Range": "bytes=0-0"})
+    if r.status_code == 404:
+        return None
+    if r.status_code == 416:  # an empty object
+        return 0, r.headers.get("etag", "").strip('"')
+    if r.status_code >= 300:
+        raise _s3_error(r, "Checking the file failed")
+    total = (r.headers.get("content-range") or "").rpartition("/")[2]
+    size = int(total) if total.isdigit() else int(r.headers.get("content-length") or 0)
+    return size, r.headers.get("etag", "").strip('"')
 
 
 async def _s3_delete(t: StorageTarget, key: str) -> None:
@@ -481,6 +565,197 @@ async def list_files(t: StorageTarget, prefix: str = "") -> list[Entry]:
     return await _ops(t)[3](t, prefix)
 
 
+# ---------------------------------------------------------------- P149a: head, stream, link
+
+
+async def head(t: StorageTarget, key: str) -> tuple[int, str] | None:
+    """(size, ETag) of a stored file, or None when it is not there."""
+    if t.kind == "s3":
+        await _approved(t)
+        return await _s3_head(t, key)
+    if t.kind == "local":
+        p = _local_path(t, key)
+        try:
+            st = await asyncio.to_thread(p.stat)
+        except FileNotFoundError:
+            return None
+        return st.st_size, f"{st.st_size}-{int(st.st_mtime)}"
+    if t.kind == "webdav":
+        await _approved(t)
+        base, auth = _dav(t)
+        async with _client() as c:
+            r = await c.head(_dav_url(base, key), auth=auth)
+        if r.status_code == 404:
+            return None
+        if r.status_code >= 300:
+            raise StorageError(
+                f"Checking the file failed: the file server answered {r.status_code}."
+            )
+        return int(r.headers.get("content-length") or 0), r.headers.get("etag", "").strip('"')
+    raise StorageError(f"Unknown storage kind {t.kind}.")
+
+
+_RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
+
+
+def parse_range(header: str | None, size: int) -> tuple[int, int] | None:
+    """(first, last) byte of one `Range: bytes=a-b` over `size` bytes; None for the whole
+    file (no header, several ranges, or one this does not understand). Raises ValueError for
+    a range past the end (416)."""
+    m = _RANGE.match((header or "").strip())
+    if not m or (not m.group(1) and not m.group(2)):
+        return None
+    if m.group(1):
+        first = int(m.group(1))
+        last = min(int(m.group(2)), size - 1) if m.group(2) else size - 1
+    else:  # the last n bytes
+        n = int(m.group(2))
+        if n == 0:
+            raise ValueError("empty suffix range")
+        first, last = max(0, size - n), size - 1
+    if first >= size or first > last:
+        raise ValueError("range not satisfiable")
+    return first, last
+
+
+@dataclass
+class Opened:
+    """A stored file opened for streaming. status 200 (whole file) or 206 (`content_range`);
+    `body` yields it in pieces and closes the connection when done or dropped."""
+
+    status: int
+    length: int | None
+    content_range: str | None
+    etag: str
+    body: AsyncIterator[bytes] = field(repr=False)
+
+
+class RangeNotSatisfiable(StorageError):
+    """The range asked for is past the end of the file."""
+
+
+async def _http_stream(url: str, headers: dict[str, str], auth: Any, what: str) -> Opened:
+    c = _client()
+    extra: dict[str, Any] = {}
+    if auth is not None and auth is not httpx.USE_CLIENT_DEFAULT:
+        extra["auth"] = auth
+    try:
+        req = c.build_request("GET", httpx.URL(url), headers=headers)
+        r = await c.send(req, stream=True, **extra)
+    except BaseException:
+        await c.aclose()
+        raise
+    if r.status_code >= 300:
+        await r.aread()
+        await r.aclose()
+        await c.aclose()
+        if r.status_code == 416:
+            raise RangeNotSatisfiable("That part of the file does not exist.")
+        if r.status_code == 404:
+            raise StorageError(f"The file is no longer in {what}.")
+        raise StorageError(f"Reading the file failed: {what} answered {r.status_code}.")
+
+    async def body() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in r.aiter_bytes(CHUNK):
+                yield chunk
+        finally:
+            await r.aclose()
+            await c.aclose()
+
+    length = r.headers.get("content-length")
+    return Opened(
+        status=206 if r.status_code == 206 else 200,
+        length=int(length) if length and length.isdigit() else None,
+        content_range=r.headers.get("content-range") if r.status_code == 206 else None,
+        etag=r.headers.get("etag", "").strip('"'),
+        body=body(),
+    )
+
+
+async def open_stream(t: StorageTarget, key: str, range_header: str | None = None) -> Opened:
+    """Open a stored file for streaming, passing one byte range on (S3 and WebDAV answer it
+    themselves). Nothing is held in memory but one piece at a time."""
+    await _approved(t)
+    rng = {"Range": range_header} if range_header and _RANGE.match(range_header.strip()) else {}
+    if t.kind == "s3":
+        endpoint, bucket, region, ak, sk = _s3(t)
+        url = _s3_url(endpoint, bucket, key)
+        headers = sigv4_headers("GET", url, region=region, access_key=ak, secret_key=sk)
+        return await _http_stream(url, {**headers, **rng}, None, t.name)
+    if t.kind == "webdav":
+        base, auth = _dav(t)
+        return await _http_stream(_dav_url(base, key), rng, auth, t.name)
+    if t.kind == "local":
+        p = _local_path(t, key)
+        try:
+            st = await asyncio.to_thread(p.stat)
+        except FileNotFoundError as e:
+            raise StorageError("The file is no longer on this server's disk.") from e
+        try:
+            part = parse_range(range_header, st.st_size)
+        except ValueError as e:
+            raise RangeNotSatisfiable("That part of the file does not exist.") from e
+        first, last = part or (0, st.st_size - 1)
+        return Opened(
+            status=206 if part else 200,
+            length=max(0, last - first + 1),
+            content_range=f"bytes {first}-{last}/{st.st_size}" if part else None,
+            etag=f"{st.st_size}-{int(st.st_mtime)}",
+            body=_file_pieces(p, first, last),
+        )
+    raise StorageError(f"Unknown storage kind {t.kind}.")
+
+
+async def _file_pieces(p: Path, first: int, last: int) -> AsyncIterator[bytes]:
+    fh = await asyncio.to_thread(p.open, "rb")
+    try:
+        await asyncio.to_thread(fh.seek, first)
+        left = last - first + 1
+        while left > 0:
+            chunk = await asyncio.to_thread(fh.read, min(CHUNK, left))
+            if not chunk:
+                break
+            left -= len(chunk)
+            yield chunk
+    finally:
+        fh.close()
+
+
+LINK_SECONDS = 60
+
+
+async def presigned_get(
+    t: StorageTarget,
+    key: str,
+    *,
+    filename: str,
+    content_type: str,
+    inline: bool,
+    expires: int = LINK_SECONDS,
+) -> str | None:
+    """A short-lived link straight to the bucket (S3 only; None elsewhere), with the name,
+    type and inline/attachment fixed in the signed link. Only for after the access checks."""
+    if t.kind != "s3":
+        return None
+    await _approved(t)
+    endpoint, bucket, region, ak, sk = _s3(t)
+    disposition = f"{'inline' if inline else 'attachment'}; filename*=UTF-8''{quote(filename)}"
+    return presign_url(
+        "GET",
+        _s3_url(endpoint, bucket, key),
+        region=region,
+        access_key=ak,
+        secret_key=sk,
+        expires=expires,
+        query={
+            "response-content-disposition": disposition,
+            "response-content-type": content_type,
+            "response-cache-control": "private, no-store",
+        },
+    )
+
+
 async def check(t: StorageTarget) -> None:
     """Write, read back and delete a small file: proves the target works. Raises StorageError."""
     key = f".agentic-check-{os.urandom(4).hex()}.txt"
@@ -509,9 +784,13 @@ async def primary(db: AsyncSession, workspace_id: str) -> StorageTarget | None:
     )
 
 
-def file_key(f: DocFile) -> str:
-    ext = Path(f.name or "").suffix.lower()[:10]
-    return f"agentic/{f.workspace_id}/{f.id}{ext}"
+def file_key(f: DocFile, sha256: str = "") -> str:
+    """Where we keep a file: agentic/<workspace>/files/<file id>[-<content hash>]<ext>. P149a:
+    the background jobs write each version under its own hash, so the pointer only ever
+    changes to bytes that are fully stored (the old object is deleted after the switch)."""
+    ext = re.sub(r"[^a-z0-9.]", "", Path(f.name or "").suffix.lower())[:10]
+    tag = f"-{sha256[:12]}" if sha256 else ""
+    return f"agentic/{f.workspace_id}/files/{f.id}{tag}{ext}"
 
 
 async def store_new(db: AsyncSession, f: DocFile, data: bytes) -> None:
@@ -536,6 +815,7 @@ async def replace(db: AsyncSession, f: DocFile, data: bytes) -> None:
     compression recorded is about the old bytes, so it goes (compress.py sets it after).
     P148b: the upload runs before the file's row is changed (and so locked by the flush the
     storage look-up would make): people moving or filing the file never wait for a bucket."""
+    filecache.drop(f.id)
     if f.storage_id:
         with db.no_autoflush:
             t = await db.get(StorageTarget, f.storage_id)
@@ -550,18 +830,98 @@ async def replace(db: AsyncSession, f: DocFile, data: bytes) -> None:
     f.data, f.storage_id, f.storage_key = data, None, None
 
 
-async def read(db: AsyncSession, f: DocFile) -> bytes:
-    """A file's bytes from wherever it lives. Raises StorageError when it cannot be read."""
-    if not f.storage_id:
-        data = await db.scalar(select(DocFile.data).where(DocFile.id == f.id))
-        return bytes(data or b"")
-    t = await db.get(StorageTarget, f.storage_id)
-    if t is None or not f.storage_key:
+async def pointer(db: AsyncSession, file_id: str) -> tuple[str | None, str | None]:
+    """Where the file's bytes are now, as stored (not as loaded earlier)."""
+    row = (
+        await db.execute(
+            select(DocFile.storage_id, DocFile.storage_key).where(DocFile.id == file_id)
+        )
+    ).first()
+    return (row[0], row[1]) if row else (None, None)
+
+
+async def db_bytes(db: AsyncSession, file_id: str) -> bytes | None:
+    data = await db.scalar(select(DocFile.data).where(DocFile.id == file_id))
+    return None if data is None else bytes(data)
+
+
+async def _read_from(db: AsyncSession, f: DocFile, sid: str, key: str | None) -> bytes:
+    t = await db.get(StorageTarget, sid)
+    if t is None or not key:
         raise StorageError("The storage this file was kept in has been removed.")
+    remote = t.kind != "local"
+    sha, size = f.sha256 or "", int(f.size or 0)
+    if remote and (hit := await asyncio.to_thread(filecache.get, f.id, sha, size)) is not None:
+        return hit
     try:
-        return await get(t, f.storage_key)
+        data = await get(t, key)
     except httpx.HTTPError as e:
         raise StorageError(f"{t.name} could not be reached ({e.__class__.__name__}).") from e
+    if remote and sha:
+
+        def keep() -> None:
+            if hashlib.sha256(data).hexdigest() == sha:  # only bytes the row describes
+                filecache.put(f.id, sha, data)
+
+        await asyncio.to_thread(keep)
+    return data
+
+
+async def read(db: AsyncSession, f: DocFile) -> bytes:
+    """A file's bytes from wherever it lives. Raises StorageError when it cannot be read.
+    P149a: wherever they are *now*: a move to the file server may have finished after the
+    file was loaded (then the database copy is gone), or not finished (then the stored copy
+    may not be there yet); both are looked up again before giving up. Hot files come from the
+    disk cache."""
+    if not f.storage_id:
+        data = await db_bytes(db, f.id)
+        if data is not None:
+            return data
+        sid, key = await pointer(db, f.id)
+        return await _read_from(db, f, sid, key) if sid else b""
+    try:
+        return await _read_from(db, f, f.storage_id, f.storage_key)
+    except StorageError:
+        data = await db_bytes(db, f.id)
+        if data is not None:
+            return data
+        sid, key = await pointer(db, f.id)
+        if sid and (sid, key) != (f.storage_id, f.storage_key):
+            return await _read_from(db, f, sid, key)
+        raise
+
+
+def _first_bytes(p: Path, n: int) -> bytes:
+    with p.open("rb") as fh:
+        return fh.read(n)
+
+
+async def read_head(db: AsyncSession, f: DocFile, n: int = 4096) -> bytes:
+    """The first `n` bytes of a file (to tell its type) without fetching all of it."""
+    if not f.storage_id:
+        data = await db.scalar(select(func.substring(DocFile.data, 1, n)).where(DocFile.id == f.id))
+        if data is not None:
+            return bytes(data)
+    try:
+        sid, key = await pointer(db, f.id)
+        t = await db.get(StorageTarget, sid) if sid else None
+        if t is None or not key:
+            return (await read(db, f))[:n]
+        hit = await asyncio.to_thread(filecache.path_for, f.id, f.sha256 or "", int(f.size or 0))
+        if hit is not None:
+            return await asyncio.to_thread(_first_bytes, hit, n)
+        opened = await open_stream(t, key, f"bytes=0-{n - 1}")
+        out = b""
+        async for chunk in opened.body:
+            out += chunk
+            if len(out) >= n:
+                break
+        await opened.body.aclose()  # type: ignore[attr-defined]
+        return out[:n]
+    except RangeNotSatisfiable:
+        return b""
+    except (StorageError, httpx.HTTPError):
+        return (await read(db, f))[:n]
 
 
 async def read_id(db: AsyncSession, file_id: str | None) -> bytes:
@@ -581,6 +941,7 @@ async def read_id(db: AsyncSession, file_id: str | None) -> bytes:
 async def forget(db: AsyncSession, f: DocFile) -> None:
     """Delete a file's bytes where they live (before its row is deleted). Files imported
     from a source stay there: they are the company's own copy."""
+    filecache.drop(f.id)
     # Only what we wrote ourselves (agentic/...): a company's own files never are.
     if not f.storage_id or not f.storage_key or not f.storage_key.startswith("agentic/"):
         return

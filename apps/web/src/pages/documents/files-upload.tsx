@@ -23,6 +23,9 @@ import type { Branch } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
 
 import { IntakeSuggestions } from "@/components/doc-builders";
+import { KeywordInput } from "@/components/file-keywords";
+import { SwitchField } from "@/components/ui/switch";
+import { folderGroups, previewSort } from "@/lib/organize";
 import { KindTile } from "./visuals";
 
 const AUTO = "__auto";
@@ -75,16 +78,25 @@ export function IntakeDrop({ branch, folder, department, onBatch, ref }: {
   const [dept, setDept] = useState(AUTO);
   const [items, setItems] = useState<Item[]>([]);
   const [running, setRunning] = useState(false);
+  // P149c: picked files wait here first: keywords for all of them, and sorting into folders.
+  const [staged, setStaged] = useState<{ files: PickedFile[]; into: string } | null>(null);
+  const [keywords, setKeywords] = useState<string[]>([]);
+  const [autoSort, setAutoSort] = useState<boolean | null>(null); // null: the place's default
 
   const update = (i: number, patch: Partial<Item>) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
-  const run = async (picked: PickedFile[], into: string | undefined = folder) => {
+  const stage = (picked: PickedFile[], into: string | undefined = folder) => {
     const files = picked.filter((p) => !isJunk(p) && p.file.size > 0);
     if (!files.length) {
       toast.error(tr("Nothing to upload: the folder is empty."));
       return;
     }
     if (running) return;
+    setStaged({ files, into: into ?? "" });
+  };
+
+  const run = async (files: PickedFile[], into: string | undefined, opts: { keywords: string[]; auto: boolean }) => {
+    if (running || !files.length) return;
     const ctrl = new AbortController();
     abort.current = ctrl;
     setRunning(true);
@@ -95,7 +107,10 @@ export function IntakeDrop({ branch, folder, department, onBatch, ref }: {
     const one = async (i: number) => {
       const p = files[i]!;
       update(i, { state: "sending" });
-      const params = { branch_id: branch.id, name: p.path, department_id: department?.id ?? (dept === AUTO ? null : dept), batch, folder: into || null };
+      const params = {
+        branch_id: branch.id, name: p.path, department_id: department?.id ?? (dept === AUTO ? null : dept), batch, folder: into || null,
+        keywords: opts.keywords, auto_sort: opts.auto && !into,
+      };
       const progress = (f: number) => update(i, { progress: f });
       try {
         if (!plain) {
@@ -135,16 +150,25 @@ export function IntakeDrop({ branch, folder, department, onBatch, ref }: {
     if (sent === files.length) setTimeout(() => setItems([]), 1200);
   };
 
-  useImperativeHandle(ref, () => ({ upload: (files, into) => void run(files, into) }));
+  useImperativeHandle(ref, () => ({ upload: (files, into) => stage(files, into) }));
 
   const onDrop = async (e: DragEvent) => {
     e.preventDefault();
     setOver(false);
     try {
-      void run(await filesFromDrop(e.dataTransfer));
+      stage(await filesFromDrop(e.dataTransfer));
     } catch (err) {
       toast.error(errorMessage(err));
     }
+  };
+
+  const confirm = (auto: boolean) => {
+    if (!staged) return;
+    const { files, into } = staged;
+    setStaged(null);
+    void run(files, into, { keywords, auto });
+    setKeywords([]);
+    setAutoSort(null);
   };
 
   const total = items.length;
@@ -165,9 +189,9 @@ export function IntakeDrop({ branch, folder, department, onBatch, ref }: {
         )}
       >
         <input ref={pickFiles} type="file" multiple accept={ACCEPT} hidden
-          onChange={(e) => { if (e.target.files) void run(filesFromInput(e.target.files)); e.target.value = ""; }} />
+          onChange={(e) => { if (e.target.files) stage(filesFromInput(e.target.files)); e.target.value = ""; }} />
         <input ref={(el) => { pickFolder.current = el; el?.setAttribute("webkitdirectory", ""); }} type="file" multiple hidden
-          onChange={(e) => { if (e.target.files) void run(filesFromInput(e.target.files)); e.target.value = ""; }} />
+          onChange={(e) => { if (e.target.files) stage(filesFromInput(e.target.files)); e.target.value = ""; }} />
         <div className="grid max-w-xl justify-items-center gap-2.5">
           <CloudArrowUpIcon size={36} weight="duotone" className="text-accent" />
           <p className="text-[15px] font-semibold text-balance">
@@ -183,8 +207,8 @@ export function IntakeDrop({ branch, folder, department, onBatch, ref }: {
             {t("Files, whole folders or a .zip: PDF, Word, Excel, PowerPoint, images and text. Folders are kept. Each file is read, sorted by kind and department, and checked for passwords and personal data.")}
           </p>
           <div className="mt-1 flex flex-wrap justify-center gap-2">
-            <Button size="sm" disabled={running} onClick={() => pickFiles.current?.click()}><FileIcon size={15} /> {t("Choose files")}</Button>
-            <Button size="sm" variant="outline" disabled={running} onClick={() => pickFolder.current?.click()}><FolderOpenIcon size={15} /> {t("Choose a folder")}</Button>
+            <Button size="sm" disabled={running || !!staged} onClick={() => pickFiles.current?.click()}><FileIcon size={15} /> {t("Choose files")}</Button>
+            <Button size="sm" variant="outline" disabled={running || !!staged} onClick={() => pickFolder.current?.click()}><FolderOpenIcon size={15} /> {t("Choose a folder")}</Button>
           </div>
           {department ? null : (
             <div className="mt-1 flex w-full max-w-xs items-center gap-2 text-[12.5px] text-muted">
@@ -195,6 +219,12 @@ export function IntakeDrop({ branch, folder, department, onBatch, ref }: {
           )}
         </div>
       </div>
+
+      {staged ? (
+        <StagedUpload files={staged.files} into={staged.into} branch={branch} department={department ?? null}
+          keywords={keywords} setKeywords={setKeywords} autoSort={autoSort} setAutoSort={setAutoSort}
+          onCancel={() => { setStaged(null); setKeywords([]); setAutoSort(null); }} onConfirm={confirm} />
+      ) : null}
 
       {items.length ? (
         <Card>
@@ -234,6 +264,86 @@ export function IntakeDrop({ branch, folder, department, onBatch, ref }: {
         </Card>
       ) : null}
     </section>
+  );
+}
+
+// ---------------------------------------------------------------- P149c: before uploading
+
+/** The picked files, waiting: keywords for all of them, "Sort into folders automatically"
+ * (on by default in a unit) and where each would go, then Upload. */
+function StagedUpload({ files, into, branch, department, keywords, setKeywords, autoSort, setAutoSort, onCancel, onConfirm }: {
+  files: PickedFile[];
+  into: string;
+  branch: Branch;
+  department: { id: string; name: string } | null;
+  keywords: string[];
+  setKeywords: (k: string[]) => void;
+  autoSort: boolean | null;
+  setAutoSort: (on: boolean) => void;
+  onCancel: () => void;
+  onConfirm: (auto: boolean) => void;
+}) {
+  const t = useT();
+  const names = files.map((f) => f.path);
+  const { data: preview, isFetching } = useQuery({
+    queryKey: ["files", "sort-preview", branch.id, department?.id ?? "", into, keywords, names],
+    queryFn: () => previewSort({ branchId: branch.id, departmentId: department?.id, folder: into, keywords, names }),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+  // A chosen folder keeps its files; sorting is for the top of the unit or company.
+  const canSort = !into && preview !== null;
+  const auto = canSort && (autoSort ?? preview?.auto ?? !!department);
+  const groups = preview && auto ? folderGroups(preview.items) : [];
+  const sorted = groups.filter((g) => g.sorted).reduce((n, g) => n + g.names.length, 0);
+  return (
+    <Card data-guide="files.upload-options">
+      <CardHeader
+        icon={<span className="grid size-9 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-accent-soft text-accent"><CloudArrowUpIcon size={18} weight="duotone" /></span>}
+        title={files.length === 1 ? t("1 file ready to upload") : t("{n} files ready to upload", { n: files.length })}
+        description={into ? t("Into the folder {folder}", { folder: into }) : department?.name ?? branch.name}
+      />
+      <CardBody className="grid gap-4">
+        <div className="grid gap-1.5">
+          <span className="text-[13px] font-semibold">{t("Keywords for these files")}</span>
+          <span className="text-[12.5px] text-muted">{t("Added to every file in this upload, so you can find, filter and sort them later.")}</span>
+          <KeywordInput value={keywords} onChange={setKeywords} branchId={branch.id} departmentId={department?.id} autoFocus />
+        </div>
+        {canSort ? (
+          <SwitchField checked={auto} onCheckedChange={setAutoSort} label={t("Sort into folders automatically")}
+            hint={t("By what each file is and the date in its name or content, e.g. Payroll/2026/11. Folders you upload keep their own folders.")} />
+        ) : into ? (
+          <p className="text-[12.5px] text-muted">{t("The files stay in the folder you chose.")}</p>
+        ) : null}
+        {auto && groups.length ? (
+          <div className="grid gap-1.5" aria-busy={isFetching}>
+            <span className="text-[12.5px] font-semibold">
+              {t("Proposed folders: {n} of {total} files sorted", { n: sorted, total: files.length })}
+            </span>
+            <ul className="grid max-h-48 gap-1 overflow-y-auto rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-2 text-[12.5px]">
+              {groups.map((g) => (
+                <li key={`${g.sorted}:${g.folder}`} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+                  <FolderOpenIcon size={14} weight="duotone" className={g.sorted ? "text-accent" : "text-muted"} />
+                  <span className="min-w-0 truncate" title={g.names.join("\n")}>
+                    <span className="font-medium">{g.folder || t("Top level")}</span>
+                    {!g.sorted ? <span className="text-muted"> · {t("stays here")}</span> : null}
+                    <span className="text-muted"> · {g.names.slice(0, 2).join(", ")}{g.names.length > 2 ? "…" : ""}</span>
+                  </span>
+                  <span className="text-muted tabular">{g.names.length}</span>
+                </li>
+              ))}
+            </ul>
+            <span className="text-[12px] text-muted">{t("From the file names and keywords; once read, a file's content can still decide its folder.")}</span>
+          </div>
+        ) : null}
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-3">
+          <Button variant="ghost" onClick={onCancel}>{t("Cancel")}</Button>
+          <Button onClick={() => onConfirm(auto)}>
+            <CloudArrowUpIcon size={15} /> {files.length === 1 ? t("Upload 1 file") : t("Upload {n} files", { n: files.length })}
+          </Button>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 

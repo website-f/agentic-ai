@@ -7,10 +7,10 @@ SOPs are indexed when saved. People see and search what an agent in their place 
 
 import logging
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
@@ -597,3 +597,215 @@ async def sync_prima_pack(
         removed=c["removed"],
         indexing=len(out.to_index),
     )
+
+
+# ---------------------------------------------------------------- P149c organize
+
+
+class OrganizeRulesOut(BaseModel):
+    branch_id: str | None
+    department_id: str | None
+    unit: str | None  # hr | audit | finance
+    folders: dict[str, str]  # category -> folder name (every category)
+    defaults: dict[str, str]  # category -> the default folder name
+    dates: Literal["month", "year", "off"]
+    keyword_folders: bool
+    auto: bool  # "sort into folders automatically" starts on in the upload dialog
+    can_edit: bool
+
+
+class OrganizeRulesIn(BaseModel):
+    branch_id: str | None = None
+    department_id: str | None = None
+    folders: dict[str, str] | None = None
+    dates: Literal["month", "year", "off"] | None = None
+    keyword_folders: bool | None = None
+    auto: bool | None = None
+
+
+async def _organize_place(
+    db: AsyncSession, principal: Principal, branch_id: str | None, department_id: str | None
+) -> tuple[str | None, str | None]:
+    """A company (and department) of this workspace that this person sees."""
+    from .files import check_branch
+
+    if department_id:
+        d = await db.get(Department, department_id)
+        if d is None or d.workspace_id != principal.workspace_id:
+            raise api_error(status.HTTP_400_BAD_REQUEST, "bad_department", "Pick a department.")
+        if branch_id and branch_id != d.branch_id:
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST,
+                "bad_department",
+                "That department is in another company.",
+            )
+        if not units.may_open(principal, d):
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "out_of_scope",
+                "Only the people of this unit, their managers and the office's leaders open it.",
+            )
+        return d.branch_id, d.id
+    await check_branch(db, principal, branch_id)
+    return branch_id, None
+
+
+def _may_sort(principal: Principal, branch_id: str | None, department_id: str | None) -> bool:
+    from .files import place_refused
+
+    return (
+        can(principal.role, "work.write")
+        and place_refused(principal, branch_id, department_id) is None
+    )
+
+
+def _rules_out(
+    principal: Principal, branch_id: str | None, department_id: str | None, r: Any
+) -> OrganizeRulesOut:
+    from ...knowledge import organize
+
+    o = r.out()
+    return OrganizeRulesOut(
+        branch_id=branch_id,
+        department_id=department_id,
+        unit=r.unit,
+        folders=o["folders"],
+        defaults={c.key: c.folder for c in organize.CATEGORIES},
+        dates=r.dates,
+        keyword_folders=r.keyword_folders,
+        auto=r.auto,
+        can_edit=_may_sort(principal, branch_id, department_id),
+    )
+
+
+@router.get("/api/library/organize/rules")
+async def organize_rules(
+    branch_id: str | None = None,
+    department_id: str | None = Query(default=None, max_length=40),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> OrganizeRulesOut:
+    """P149c: how a unit (or company) sorts uploads into folders (knowledge/organize.py)."""
+    from ...knowledge import organize
+
+    branch_id, department_id = await _organize_place(db, principal, branch_id, department_id)
+    r = await organize.load_rules(db, principal.workspace_id, branch_id, department_id)
+    return _rules_out(principal, branch_id, department_id, r)
+
+
+@router.put("/api/library/organize/rules")
+async def save_organize_rules(
+    body: OrganizeRulesIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> OrganizeRulesOut:
+    """Change a unit's (or company's) sorting rules: folder names per category, date folders
+    (month | year | off), keyword folders, and whether sorting starts on. Who may file into
+    the place may change them; audited."""
+    from ...knowledge import organize
+
+    branch_id, department_id = await _organize_place(
+        db, principal, body.branch_id, body.department_id
+    )
+    if not _may_sort(principal, branch_id, department_id):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "out_of_scope",
+            "You can add documents to your department only.",
+        )
+    r = await organize.load_rules(db, principal.workspace_id, branch_id, department_id)
+    before = r.out()
+    if body.folders is not None:
+        for k, v in body.folders.items():
+            if k not in organize.BY_KEY:
+                raise api_error(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "bad_category",
+                    "That is not one of the sorting categories.",
+                )
+            name = organize.clean_folder_name(v)
+            if name and name != organize.BY_KEY[k].folder:
+                r.folders[k] = name
+            else:
+                r.folders.pop(k, None)
+    if body.dates is not None:
+        r.dates = body.dates
+    if body.keyword_folders is not None:
+        r.keyword_folders = body.keyword_folders
+    if body.auto is not None:
+        r.auto = body.auto
+    await organize.save_rules(db, principal.workspace_id, branch_id, department_id, r)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "library.organize_rules",
+        target=department_id or branch_id,
+        before=before,
+        after=r.out(),
+    )
+    await db.commit()
+    return _rules_out(principal, branch_id, department_id, r)
+
+
+class PreviewIn(BaseModel):
+    branch_id: str | None = None
+    department_id: str | None = None
+    folder: str = Field(default="", max_length=300)  # where the upload goes
+    keywords: list[str] = Field(default_factory=list, max_length=40)
+    names: list[str] = Field(min_length=1, max_length=1000)  # relative paths of a folder upload
+
+
+class PreviewItem(BaseModel):
+    name: str
+    folder: str  # where it will go ("" = the top)
+    sorted: bool  # placed by the rules (False: stays where it was uploaded)
+    category: str | None = None
+    date: str | None = None  # what was read, e.g. "Nov 2026"
+
+
+class PreviewOut(BaseModel):
+    auto: bool  # the place's default for "sort into folders automatically"
+    keywords: list[str]  # the keywords as they will be saved
+    items: list[PreviewItem]
+
+
+@router.post("/api/library/organize/preview")
+async def organize_preview(
+    body: PreviewIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> PreviewOut:
+    """P149c: the folders an upload's files would be sorted into, from their names and the
+    keywords (before uploading; once read, a file's content can refine its folder). Files of
+    a folder upload keep their own folders. A zip is unpacked on the server: shown as is."""
+    from ...knowledge import organize
+    from .files import clean_folder
+
+    branch_id, department_id = await _organize_place(
+        db, principal, body.branch_id, body.department_id
+    )
+    base = clean_folder(body.folder)
+    keywords = organize.clean_keywords(body.keywords)
+    rules = await organize.load_rules(db, principal.workspace_id, branch_id, department_id)
+    paths = await organize.folder_paths(db, principal.workspace_id, branch_id, department_id)
+    tree = organize.existing_tree(paths, base)
+    items: list[PreviewItem] = []
+    for raw in body.names:
+        path = raw.replace("\\", "/").strip("/")[:500]
+        parent, _, name = path.rpartition("/")
+        if base or parent or name.lower().endswith(".zip"):  # a chosen folder: they stay
+            kept = organize.join(base, clean_folder(parent))
+            items.append(PreviewItem(name=path, folder=kept, sorted=False))
+            continue
+        p = organize.propose(organize.FileFacts(name=name, keywords=keywords), rules, tree)
+        items.append(
+            PreviewItem(
+                name=path,
+                folder=organize.join(base, p.folder) if p.folder else base,
+                sorted=bool(p.folder),
+                category=p.category,
+                date=p.date.text if p.date else None,
+            )
+        )
+    return PreviewOut(auto=rules.auto, keywords=keywords, items=items)

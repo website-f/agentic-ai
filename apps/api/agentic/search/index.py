@@ -23,7 +23,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Text, and_, cast, delete, func, insert, literal, select, text
+from sqlalchemy import Text, and_, case, cast, delete, func, insert, literal, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
@@ -78,8 +78,15 @@ INSERT_PASSAGE = text(
 
 # What a source's index was built from. Compared in SQL by `sync`.
 def _file_version() -> Any:
+    # P149c: a file's keywords count only when it has some, so the files indexed before them
+    # keep their version (no reindex of everything on the update).
+    keywords = case(
+        (func.cardinality(DocFile.keywords) > 0, cast(DocFile.keywords, Text)), else_=""
+    )
     return func.md5(
-        _sep(DocFile.sha256, ":", DocFile.pages, ":", DocFile.summary, ":", DocFile.fields)
+        _sep(DocFile.sha256, ":", DocFile.pages, ":", DocFile.summary, ":", DocFile.fields).op(
+            "||"
+        )(keywords)
     )
 
 
@@ -244,6 +251,8 @@ def _file_facts(f: DocFile) -> str:
     lines = [f.summary or ""]
     for k, v in (f.fields or {}).items():
         lines.append(f"{k}: {_flat(v)}")
+    if f.keywords:  # P149c: found by the uploader's keywords
+        lines.append("Keywords: " + ", ".join(f.keywords))
     return "\n".join(x for x in lines if x.strip())
 
 

@@ -64,4 +64,33 @@ export const LIBRARY: Record<string, string> = {
   "Unit Kewangan": "Unit Kewangan",
   "Other companies": "Syarikat lain",
   "Search {n} companies": "Cari {n} syarikat",
+
+  // P149c: keywords at upload, sorting into folders, the AI organizes
+  "e.g. payroll, nov 2026, staff A": "cth. gaji, nov 2026, staf A",
+  "Keywords for these files": "Kata kunci untuk fail-fail ini",
+  "Used here": "Digunakan di sini",
+  "Keywords": "Kata kunci",
+  "Keywords…": "Kata kunci…",
+  "Keywords for {n} files": "Kata kunci untuk {n} fail",
+  "Add keywords to all of them, or take one off all of them.": "Tambah kata kunci pada semuanya, atau buang satu daripada semuanya.",
+  "On these files": "Pada fail-fail ini",
+  "No keywords yet.": "Belum ada kata kunci.",
+  "Save keywords": "Simpan kata kunci",
+  "Keywords saved.": "Kata kunci disimpan.",
+  "1 file ready to upload": "1 fail sedia dimuat naik",
+  "{n} files ready to upload": "{n} fail sedia dimuat naik",
+  "Added to every file in this upload, so you can find, filter and sort them later.":
+    "Ditambah pada setiap fail dalam muat naik ini, supaya mudah dicari, ditapis dan disusun kemudian.",
+  "Sort into folders automatically": "Susun ke dalam folder secara automatik",
+  "By what each file is and the date in its name or content, e.g. Payroll/2026/11. Folders you upload keep their own folders.":
+    "Mengikut jenis setiap fail dan tarikh pada nama atau kandungannya, cth. Payroll/2026/11. Folder yang anda muat naik kekal dengan folder sendiri.",
+  "The files stay in the folder you chose.": "Fail-fail kekal dalam folder yang anda pilih.",
+  "Proposed folders: {n} of {total} files sorted": "Folder dicadangkan: {n} daripada {total} fail disusun",
+  "stays here": "kekal di sini",
+  "From the file names and keywords; once read, a file's content can still decide its folder.":
+    "Berdasarkan nama fail dan kata kunci; selepas dibaca, kandungan fail masih boleh menentukan foldernya.",
+  "Organize these {n} files from the folder {folder} with the organize-library skill: plan sub-folders by what each file is and its date (suggest_organization), show me the plan, and move them only after I agree; never delete or rename.":
+    "Susun {n} fail ini daripada folder {folder} dengan kemahiran organize-library: rancang subfolder mengikut jenis setiap fail dan tarikhnya (suggest_organization), tunjukkan rancangan kepada saya, dan pindahkan hanya selepas saya setuju; jangan padam atau tukar nama.",
+  "Organize the folder {folder} of {place} with the organize-library skill: plan sub-folders by what each file is and its date (suggest_organization), show me the plan, and move them only after I agree; never delete or rename.":
+    "Susun folder {folder} di {place} dengan kemahiran organize-library: rancang subfolder mengikut jenis setiap fail dan tarikhnya (suggest_organization), tunjukkan rancangan kepada saya, dan pindahkan hanya selepas saya setuju; jangan padam atau tukar nama.",
 };

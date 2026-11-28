@@ -25,7 +25,7 @@ from sqlalchemy import (
     text,
     true,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from ..core.db import Base, Timestamps
@@ -1440,6 +1440,26 @@ class StorageTarget(Timestamps, Base):
     created_by: Mapped[str] = mapped_column(String(80))
 
 
+class StorageJob(Base):
+    """P149a: a background storage job and its progress (documents/offload.py): "move:<ws>"
+    (file bytes from Postgres or this server's disk to the primary storage), "compress:<ws>"
+    (older files made smaller), "backup" (the nightly backup to the file server, written by
+    deploy/backup/s3backup.py). `state` holds counts, bytes, errors and the cursor."""
+
+    __tablename__ = "storage_jobs"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    workspace_id: Mapped[str | None] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    paused: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    state: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class DocFile(Timestamps, Base):
     """A file people uploaded (or the system generated, like a compiled pack). The bytes live
     here so the API and the worker both reach them and the database backup covers them. The
@@ -1465,6 +1485,8 @@ class DocFile(Timestamps, Base):
             "department_id",
             postgresql_where=text("department_id IS NOT NULL"),
         ),
+        # P149c (0088): files by keyword (`keywords @> ARRAY[...]`).
+        Index("ix_files_keywords", "keywords", postgresql_using="gin"),
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("fl"))
@@ -1542,6 +1564,12 @@ class DocFile(Timestamps, Base):
     # P143c: made smaller after reading (documents/compress.py): {"result": "smaller" | "kept",
     # "original_size", "original_sha256", "method", "reason", "at"}; None = not tried yet.
     compression: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # P149c: the uploader's keywords (lower case; knowledge/organize.clean_keywords), and who
+    # put the file in its folder: "" as uploaded, "sort" waiting to be sorted automatically,
+    # "auto" sorted by the rules, "person" moved by a person (never re-sorted), "agent" moved
+    # by an AI after its plan was confirmed.
+    keywords: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, server_default="{}")
+    folder_by: Mapped[str] = mapped_column(String(10), default="", server_default="")
 
 
 class IntakeBatch(Timestamps, Base):

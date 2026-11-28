@@ -63,6 +63,50 @@ A short table: file, from, to. Then anything you left alone and why.
 ## Pitfalls
 - Never file a file you are unsure about: list it as "left alone" with your guess.
 - Held-back files (secrets or personal data) stay where they are.
+- Tidying a whole Library unit or company (many files): use the organize-library skill.
+""",
+    ),
+    (
+        "organize-library",
+        "Organize a Library unit's or company's uploaded files (e.g. Unit HR) into folders by "
+        "what each file is and its date, with keywords: plan first, show it, apply only after "
+        "the person agrees; never delete.",
+        """## When to use
+Someone asks to organize, sort, group, tidy or arrange files in the Library: "please organize
+the HR files", "susun fail Unit Kewangan", "group the payslips by month", "tag these as
+payroll". Also when uploads were left loose at the top of a unit.
+
+## Steps
+1. Find the place: a unit (unit = hr, audit or finance: Unit HR, Unit Audit, Unit Kewangan),
+   a department, or your company. list_folder_tree shows its folders, how many files lie
+   loose, and the place's sorting rules. If you may not organize that place you get an error:
+   say so plainly; never try another way round it.
+2. suggest_organization for that place (folder = one folder when they named one). It plans,
+   it moves nothing: each loose file goes to a folder by what it is (Payroll, Leave, Claims,
+   Invoices, Contracts, Minutes, Letters, Reports, Policies, Forms...) and its date
+   (Year/Month from the file name, its keywords or its first page, e.g. "Payroll/2026/11"),
+   following the folders people already have. Add use_ai=true only when many files are left
+   with "nothing to go by".
+3. Show the plan to the person as a short table (file, from, to) with the files left alone
+   and why. Ask (ask_human, options "Apply" / "Change" / "Cancel") before anything moves.
+4. Only after they agree: apply_organization with confirmed=true and the moves (drop or
+   change the ones they asked to). For a few files, move_files is enough.
+5. Keywords: when they give words for files ("tag these as payroll, nov 2026") use tag_files;
+   keywords are lower case and help people filter and search the Library.
+6. Names: keep every file's original name unless the person asks for new names; then
+   rename_file one by one.
+
+## Output format
+What moved where (a table, or counts per folder when there are many), the files left alone
+and why, and any new folders.
+
+## Pitfalls
+- Never delete a file or a folder, and never move a file a person placed in a folder (the
+  plan leaves them alone; so do you).
+- Held-back files (passwords or personal data) stay where they are.
+- Stay inside the place asked for: another unit's files are not yours to organize.
+- A date in a file name is not always the document's date (a reference number can look like
+  one): when the plan's reason looks wrong, leave that file and say so.
 """,
     ),
     (
@@ -329,6 +373,51 @@ to check (a signature, a figure you could not confirm).
 - Excel: deleting rows does not shift formulas elsewhere; pictures and charts in a workbook
   are not kept in the edited copy (say so if the file had them).
 - Never present the edited copy as sent or signed: a person reviews it.
+""",
+    ),
+    (
+        "design-poster",
+        "Make a poster, flyer, notice, social-media post or greeting card (event, hiring, "
+        "promotion, safety notice, training, festive, stats, tender notice, menu, webinar, thank "
+        "you, product) from ready templates with the company's logo and colours: PNG and PDF.",
+        """## When to use
+Someone wants something to print or post: a poster, flyer, notice-board sheet, Instagram or
+Facebook post, WhatsApp status, LinkedIn banner, a festive greeting. Not for a letter or a
+report (use draft_document) and not for an illustration or photo (generate_image).
+
+## Steps
+1. Pick the template (design_templates only if none below fits):
+   event (dinners, launches) · announcement (closures, new policy) · hiring (jawatan kosong)
+   · sale (promotions; big = "30%") · safety (rules, warnings; palette safety-yellow
+   warning, safety-red prohibition, safety-blue mandatory, safety-green safe) · training
+   (courses with modules) · festive-raya / festive-cny / festive-deepavali /
+   festive-christmas / festive-merdeka · quote-milestone (a leader's words, "10 years")
+   · stats (3-6 numbers) · tender-notice (formal notices, ref + label|value rows) · menu
+   (items "Name|RM8.50|note") · webinar (people "Name|Role") · thank-you · product.
+2. Size from where it goes: print a4-portrait (notice board a3-portrait); Instagram/Facebook
+   ig-square; story or WhatsApp status ig-story / whatsapp-status; Facebook fb-post;
+   LinkedIn linkedin-post or linkedin-banner. Several places: a list of up to 4 sizes.
+3. Write the slots short, in the language people asked for (Malay or English): headline
+   under 6 words; kicker 1-3 words; one subhead; details as "Label|Value" (Tarikh, Masa,
+   Tempat); cta a few words; footer the contact line. Use only facts from the task; ask
+   (ask_human) for a missing date, venue or number, never invent one. No emoji.
+4. A photo: the id of a picture in the files (the task's attachment, list_files). The
+   company logo and colour are added by themselves (palette "brand"); leave palette out
+   unless asked for a colour or the template has its own (festive, safety, tender).
+5. design_poster once. Read "Looks:" to check it; if text was cut short, shorten it.
+6. Changes ("make the date bold", "change the venue", "in English", "story size"):
+   design_revise with the poster's file id and ONLY the slots or size that change.
+
+## Output format
+The PNG and PDF file ids and names, one line on what it shows, and what a person should
+check (dates, phone numbers, spelling of names).
+
+## Pitfalls
+- Never write HTML, CSS or code for a poster, and never call generate_image for text
+  posters: the templates already do the design and cost almost nothing.
+- Keep the same template, size and slot names for repeated jobs (monthly notices, weekly
+  promotions): the office learns the job and repeats it without the model.
+- Sensitive notices (safety, tender) must quote the exact rules, numbers and dates given.
 """,
     ),
 ]

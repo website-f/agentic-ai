@@ -71,6 +71,7 @@ from .reconcile_activities import liveness_reconcile
 from .reconcile_workflows import LivenessReconcileWorkflow
 from .skill_activities import skill_eval, skill_reflect, skill_reflect_chat
 from .skill_workflows import SkillEvalWorkflow
+from .storage_workflows import StorageJobsTickWorkflow, storage_jobs_tick  # P149a
 from .system import PingWorkflow, ProviderHealthWorkflow
 from .teams_activities import (
     heartbeat_tick,
@@ -120,6 +121,7 @@ WORKFLOWS = [
     LinkedSyncTickWorkflow,
     MailBackupWorkflow,
     PrimaOrgSyncTickWorkflow,
+    StorageJobsTickWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -174,6 +176,7 @@ ACTIVITIES = [
     linked_tick,
     mail_backup_round,
     prima_org_tick,
+    storage_jobs_tick,
 ]
 
 
@@ -201,6 +204,8 @@ async def ensure_schedules(client: Client) -> None:
         ("linked-sync", LinkedSyncTickWorkflow.run, timedelta(minutes=30)),
         # P127: the organization hierarchy and Prima's org chart kept in step.
         ("prima-org-sync", PrimaOrgSyncTickWorkflow.run, timedelta(minutes=30)),
+        # P149a: file bytes to the S3 file server, older files made smaller (when switched on).
+        ("storage-jobs", StorageJobsTickWorkflow.run, timedelta(minutes=5)),
     ]
     for schedule_id, run, every in jobs:
         try:

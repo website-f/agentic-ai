@@ -12,7 +12,7 @@ from typing import Any, cast
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Request, status
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import ColumnElement, Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,6 +84,9 @@ class FileOut(BaseModel):
     labels: list[str] = Field(default_factory=list)
     # P143c: the size it was uploaded at when it was made smaller since (size is now).
     original_size: int | None = None
+    # P149c: the uploader's keywords, and who put it in its folder (knowledge/organize.py).
+    keywords: list[str] = Field(default_factory=list)
+    folder_by: str = ""
 
 
 def may_manage(principal: Principal) -> bool:
@@ -169,6 +172,8 @@ async def file_out(db: AsyncSession, f: DocFile, *, text: bool = False) -> FileO
         review_status=review,
         labels=list(f.labels or []),
         original_size=original_size(f),
+        keywords=list(f.keywords or []),
+        folder_by=f.folder_by or "",
     )
 
 
@@ -344,7 +349,13 @@ def _filtered(
     if q.strip():
         like = f"%{q.strip()}%"
         query = query.where(
-            or_(DocFile.name.ilike(like), DocFile.title.ilike(like), DocFile.kind.ilike(like))
+            or_(
+                DocFile.name.ilike(like),
+                DocFile.title.ilike(like),
+                DocFile.kind.ilike(like),
+                # P149c: a keyword finds its files ("payroll", "nov 2026")
+                func.array_to_string(DocFile.keywords, " , ").ilike(like),
+            )
         )
     return visible_files(query, principal)
 
@@ -502,6 +513,7 @@ async def list_files(
     workflow_run_id: str | None = Query(default=None, max_length=40),
     library: bool | None = None,
     label: str | None = Query(default=None, max_length=30),
+    keyword: list[str] | None = Query(default=None, max_length=10),
     limit: int = Query(default=200, ge=1, le=500),
     cursor: str | None = Query(default=None, max_length=400),
     principal: Principal = Depends(require("read")),
@@ -512,8 +524,14 @@ async def list_files(
     `recursive` everything under it too; "" = the top) and `batch_id` (one upload). P25:
     `origin` (uploaded, made by a person, made by an agent), `agent_id` (that agent and the
     helpers it copied itself into) and `workflow_run_id`. `source=download`: files agents
-    fetched from websites; `library`: in (or not in) the knowledge library. P61: `label`."""
+    fetched from websites; `library`: in (or not in) the knowledge library. P61: `label`.
+    P149c: `keyword` (repeatable): files carrying every one of them."""
     query = _filtered(principal, branch_id, task_id, q)
+    from ...knowledge import organize
+
+    wanted = organize.clean_keywords(list(keyword or []))
+    if wanted:
+        query = query.where(DocFile.keywords.contains(wanted))  # the GIN index (0088)
     if label and label.strip():
         query = query.where(DocFile.labels.contains([label.strip()]))
     if source:
@@ -666,6 +684,97 @@ async def bulk_labels(
     return LabelsOut(updated=changed)
 
 
+# ---------------------------------------------------------------- P149c keywords
+
+
+class KeywordCount(BaseModel):
+    keyword: str
+    count: int
+
+
+@router.get("/keywords")
+async def keyword_counts(
+    branch_id: str | None = None,
+    department_id: str | None = Query(default=None, max_length=40),
+    folder: str | None = Query(default=None, max_length=300),
+    limit: int = Query(default=60, ge=1, le=300),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[KeywordCount]:
+    """The keywords on the files this person sees (a company, a unit; `folder`: that folder
+    and everything under it), most used first: the chips above a folder and the upload
+    dialog's suggestions."""
+    query = _filtered(principal, branch_id, None, "")
+    if department_id:
+        query = query.where(DocFile.department_id == department_id)
+    if folder:
+        path = clean_folder(folder)
+        like = path.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.where(
+            or_(DocFile.folder == path, DocFile.folder.like(f"{like}/%", escape="\\"))
+        )
+    kw = func.unnest(DocFile.keywords).label("kw")
+    sub = query.where(func.cardinality(DocFile.keywords) > 0).with_only_columns(kw).subquery()
+    rows = await db.execute(
+        select(sub.c.kw, func.count())
+        .group_by(sub.c.kw)
+        .order_by(func.count().desc(), sub.c.kw)
+        .limit(limit)
+    )
+    return [KeywordCount(keyword=k, count=int(n)) for k, n in rows.all()]
+
+
+class KeywordsIn(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=500)
+    add: list[str] = Field(default_factory=list, max_length=20)
+    remove: list[str] = Field(default_factory=list, max_length=50)
+
+
+@router.post("/keywords")
+async def bulk_keywords(
+    body: KeywordsIn,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> LabelsOut:
+    """Add and remove keywords on many files at once (404 when one is not this person's to
+    change; nothing is saved then)."""
+    from ...knowledge import organize
+
+    add, remove = organize.clean_keywords(body.add), organize.clean_keywords(body.remove)
+    ids = list(dict.fromkeys(body.ids))
+    changed: list[str] = []
+    for fid in ids:
+        f = await get_file(db, principal, fid)
+        before = list(f.keywords or [])
+        f.keywords = organize.merge_keywords(before, add, remove)
+        if f.keywords != before:
+            changed.append(f.id)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "file.keywords",
+        after={"ids": ids[:50], "count": len(ids), "add": add, "remove": remove},
+    )
+    await db.commit()
+    await reindex_keywords(changed)
+    return LabelsOut(updated=len(changed))
+
+
+REINDEX_NOW = 25  # more than this: the search index's regular sync picks them up
+
+
+async def reindex_keywords(ids: list[str]) -> None:
+    """P149c: document search finds a file by its keywords (search/index._file_facts)."""
+    if not ids or len(ids) > REINDEX_NOW:
+        return
+    from ...search import index as search_index
+
+    async with SessionLocal() as db:
+        for fid in ids:
+            await search_index.try_index(db, "file", fid)
+
+
 @router.get("/{file_id}")
 async def read_file(
     file_id: str,
@@ -687,36 +796,101 @@ def check_held_back(principal: Principal, f: DocFile) -> None:
         )
 
 
+FILE_CSP = (
+    "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'"
+)
+
+
 @router.get("/{file_id}/download")
 async def download(
+    file_id: str,
+    request: Request,
+    inline: bool = False,
+    direct: bool = False,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """The file itself. P149a: streamed in pieces from wherever it is kept (Range answered:
+    video seeking, resumed downloads), never loaded whole into the API; hot files from the
+    disk cache. `direct=1` (a download, not a preview) sends the browser to a 60-second link
+    straight to the company's S3 file server instead, when the file is kept there."""
+    f = await get_file(db, principal, file_id, library_ok=True)
+    check_held_back(principal, f)
+    from ...documents import serve, storage  # P40: the bytes may live outside the database
+
+    mime, show = served_type(f, inline)
+    disposition = "inline" if show else "attachment"
+    if direct and not show and (link := await _presigned(db, f, mime, inline=False)):
+        return RedirectResponse(link, status_code=307, headers={"Cache-Control": "no-store"})
+    try:
+        return await serve.file_response(
+            db,
+            f,
+            request,
+            media_type=mime,
+            headers={
+                "Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(f.name)}",
+                # A served file can never run script against this origin.
+                "Content-Security-Policy": FILE_CSP,
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+    except storage.StorageError as e:
+        raise api_error(status.HTTP_502_BAD_GATEWAY, "storage_unavailable", str(e)) from e
+
+
+async def _presigned(db: AsyncSession, f: DocFile, mime: str, *, inline: bool) -> str | None:
+    """A 60-second link to the file on the S3 file server (None when it is not kept there or
+    the server cannot sign one). Only called after the access checks."""
+    from ...documents import storage
+    from ...models import StorageTarget
+
+    sid, key = await storage.pointer(db, f.id)
+    t = await db.get(StorageTarget, sid) if sid else None
+    if t is None or not key:
+        return None
+    try:
+        return await storage.presigned_get(
+            t, key, filename=f.name, content_type=mime, inline=inline
+        )
+    except storage.StorageError:
+        return None
+
+
+class LinkOut(BaseModel):
+    url: str
+    expires_in: int
+    direct: bool  # straight to the file server (else through the app)
+
+
+@router.get("/{file_id}/link")
+async def file_link(
     file_id: str,
     inline: bool = False,
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
-) -> Response:
+) -> LinkOut:
+    """P149a: where the browser fetches the file: a 60-second presigned link to the S3 file
+    server (after the same checks as /download), or the app's own download address."""
+    from ...documents import storage
+
     f = await get_file(db, principal, file_id, library_ok=True)
     check_held_back(principal, f)
-    from ...documents import storage  # P40: the bytes may live outside the database
-
-    try:
-        data = await storage.read(db, f)
-    except storage.StorageError as e:
-        raise api_error(status.HTTP_502_BAD_GATEWAY, "storage_unavailable", str(e)) from e
     mime, show = served_type(f, inline)
-    disposition = "inline" if show else "attachment"
-    return Response(
-        content=bytes(data or b""),
-        media_type=mime,
-        headers={
-            "Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(f.name)}",
-            # A served file can never run script against this origin.
-            "Content-Security-Policy": (
-                "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; "
-                "style-src 'unsafe-inline'"
-            ),
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+    link = await _presigned(db, f, mime, inline=show)
+    if link:
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "file.link",
+            f.id,
+            after={"inline": show, "seconds": storage.LINK_SECONDS},
+        )
+        await db.commit()
+        return LinkOut(url=link, expires_in=storage.LINK_SECONDS, direct=True)
+    url = f"/api/files/{f.id}/download" + ("?inline=1" if show else "")
+    return LinkOut(url=url, expires_in=0, direct=False)
 
 
 def served_type(f: DocFile, inline: bool) -> tuple[str, bool]:
@@ -744,6 +918,8 @@ class FileUpdateIn(BaseModel):
     department_id: str | None = None
     # P61: the file's labels, replacing what it had (None = leave them).
     labels: list[str] | None = Field(default=None, max_length=50)
+    # P149c: the file's keywords, replacing what it had (None = leave them).
+    keywords: list[str] | None = Field(default=None, max_length=40)
 
 
 @router.patch("/{file_id}")
@@ -770,10 +946,30 @@ async def update_file(
                 before={"labels": old_labels},
                 after={"labels": f.labels},
             )
+    keywords_changed = False
+    if body.keywords is not None:
+        from ...knowledge import organize
+
+        old_keywords = list(f.keywords or [])
+        f.keywords = organize.clean_keywords(body.keywords)
+        keywords_changed = f.keywords != old_keywords
+        if keywords_changed:
+            await audit.record(
+                db,
+                principal.workspace_id,
+                principal.actor,
+                "file.keywords",
+                target=f.id,
+                before={"keywords": old_keywords},
+                after={"keywords": f.keywords},
+            )
     if body.name:
         f.name = body.name.strip()
     if body.folder is not None:
-        f.folder = clean_folder(body.folder)
+        folder = clean_folder(body.folder)
+        if folder != (f.folder or ""):
+            f.folder_by = "person"  # P149c: never sorted again by the rules
+        f.folder = folder
     if body.kind is not None:
         if body.kind not in KINDS:
             raise api_error(
@@ -830,6 +1026,8 @@ async def update_file(
         from .library import start_index
 
         await start_index("file", f.id)
+    if keywords_changed:
+        await reindex_keywords([f.id])
     await db.refresh(f)
     return await file_out(db, f)
 

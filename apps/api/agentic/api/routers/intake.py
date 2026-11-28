@@ -108,9 +108,15 @@ async def upload(
     department_id: str | None = None,
     batch: str | None = Query(default=None, max_length=40),
     folder: str | None = Query(default=None, max_length=300),
+    # P149c: keywords for every file of the upload ("payroll, nov 2026"), and "sort into
+    # folders automatically" (knowledge/organize.py) for the files that land in `folder`.
+    keywords: str = Query(default="", max_length=1000),
+    auto_sort: bool = False,
     principal: Principal = Depends(require("work.write")),
     db: AsyncSession = Depends(get_db),
 ) -> IntakeBatchOut:
+    from ...knowledge import organize
+
     sc = principal.scope
     existing = await get_batch(db, principal, batch) if batch else None
     if existing is not None:
@@ -192,6 +198,9 @@ async def upload(
             created_by=principal.actor,
             folder=base,
             department_id=department_id,
+            keywords=organize.clean_keywords(keywords),
+            # Files put into a folder someone chose stay there: sorting is for the top only.
+            auto_sort=auto_sort and not base,
         )
     except unpack.UnpackError as e:
         await db.rollback()
@@ -204,7 +213,14 @@ async def upload(
         principal.actor,
         "intake.uploaded",
         target=b.id,
-        after={"name": name[:200], "files": added, "zip": is_zip, "branch_id": branch_id},
+        after={
+            "name": name[:200],
+            "files": added,
+            "zip": is_zip,
+            "branch_id": branch_id,
+            **({"keywords": organize.clean_keywords(keywords)} if keywords.strip() else {}),
+            **({"auto_sort": True} if auto_sort else {}),
+        },
     )
     await db.commit()
     await pipeline.publish(b)

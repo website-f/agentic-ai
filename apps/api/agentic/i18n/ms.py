@@ -2124,3 +2124,18 @@ MS.update({k: v for k, v in MS_P146.items() if k not in MS})
 from .ms_p147 import MS_P147  # noqa: E402
 
 MS.update({k: v for k, v in MS_P147.items() if k not in MS})
+
+# P149c: organizing the Library (keywords, sorting into folders, the AI's organize tools).
+from .ms_p149c import MS_P149C  # noqa: E402
+
+MS.update({k: v for k, v in MS_P149C.items() if k not in MS})
+
+# P149a: Library files on the company's S3 file server (compressed), backups there.
+from .ms_p149a import MS_P149A  # noqa: E402
+
+MS.update({k: v for k, v in MS_P149A.items() if k not in MS})
+
+# P149b: posters from ready templates (design_poster, design_templates, design_revise).
+from .ms_p149b import MS_P149B  # noqa: E402
+
+MS.update({k: v for k, v in MS_P149B.items() if k not in MS})

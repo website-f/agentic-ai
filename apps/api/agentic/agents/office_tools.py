@@ -84,6 +84,7 @@ async def _file_document(ctx: ToolContext, args: dict[str, Any]) -> str:
             continue
         before = f.folder
         f.folder = folder
+        f.folder_by = "agent"  # P149c
         await audit.record(
             ctx.db,
             ctx.workspace.id,

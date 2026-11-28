@@ -7,7 +7,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from ..core.fence import fence
 from ..documents import packs as pack_svc
@@ -99,6 +99,7 @@ async def _list_files(ctx: ToolContext, args: dict[str, Any]) -> str:
                 DocFile.title.ilike(like),
                 DocFile.kind.ilike(like),
                 DocFile.summary.ilike(like),
+                func.array_to_string(DocFile.keywords, " , ").ilike(like),  # P149c
             )
         )
     rows = (await ctx.db.scalars(q.order_by(DocFile.created_at.desc()).limit(30))).all()
@@ -114,7 +115,11 @@ async def _list_files(ctx: ToolContext, args: dict[str, Any]) -> str:
     today = service.today_in(ctx.workspace.timezone)
     return (
         "Files (use read_file with the id):\n"
-        + "\n".join(service.file_line(f, today) for f in rows)
+        + "\n".join(
+            service.file_line(f, today)
+            + (f"\n   keywords: {', '.join(f.keywords)}" if f.keywords else "")  # P149c
+            for f in rows
+        )
         + note
     )
 
@@ -182,6 +187,11 @@ async def _rename_file(ctx: ToolContext, args: dict[str, Any]) -> str:
     if f is None:
         return "Error: no such file for you. Use list_files to see the ids."
     own = f.agent_id == ctx.agent.id or (ctx.task is not None and f.task_id == ctx.task.id)
+    if not own and f.library:
+        # P149c: a Library file of a unit or company the agent may organize (when asked).
+        from .organize_tools import changeable
+
+        own = (await changeable(ctx, f.id))[0] is not None
     if not own:
         return "Error: you may rename only files you made or fetched, or this task's files."
     raw = re.sub(r"[\\/\x00-\x1f]", " ", str(args.get("name") or "")).strip()[:180]
@@ -763,7 +773,8 @@ DOC_TOOLS: list[Tool] = [
         "rename_file",
         "Rename a file",
         "Give a file you made or fetched in this task its proper name, e.g. a tender summary "
-        "named the company's way ('QT24560 - SUTERA SUMMARY'). The extension is kept.",
+        "named the company's way ('QT24560 - SUTERA SUMMARY'), or a Library file you may "
+        "organize when the person asked for that name. The extension is kept.",
         {
             "type": "object",
             "properties": {"file_id": _ID, "name": {"type": "string"}},

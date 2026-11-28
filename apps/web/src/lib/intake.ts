@@ -80,6 +80,10 @@ export type Sensitive = FileSensitive;
 export type CompanyFile = DocFile & {
   library?: boolean;
   department_id?: string | null;
+  /** P149c: the uploader's keywords (lower case), and who put it in its folder: "" as
+   * uploaded, "sort" waiting to be sorted, "auto" sorted by the rules, "person", "agent". */
+  keywords?: string[];
+  folder_by?: string;
 };
 
 export interface FolderInfo {
@@ -380,6 +384,10 @@ export interface IntakeParams {
   /** The folder the upload goes into ("" or absent: the top); a dropped folder keeps its own
    * folders under it. */
   folder?: string | null;
+  /** P149c: keywords for every file of the upload. */
+  keywords?: string[];
+  /** P149c: sort the files at the top of the place into folders once read. */
+  auto_sort?: boolean;
 }
 
 /** POST a raw body with upload progress (fetch cannot report it). */
@@ -419,6 +427,8 @@ export function uploadIntake(file: File, p: IntakeParams, onProgress: (fraction:
   if (p.department_id) q.set("department_id", p.department_id);
   if (p.batch) q.set("batch", p.batch);
   if (p.folder) q.set("folder", cleanFolder(p.folder));
+  if (p.keywords?.length) q.set("keywords", p.keywords.join(", "));
+  if (p.auto_sort) q.set("auto_sort", "true");
   return postRaw<IntakeBatch>(`/api/intake?${q}`, file, onProgress, signal);
 }
 

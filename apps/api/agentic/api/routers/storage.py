@@ -7,6 +7,9 @@ admin only (storage.manage, P92): this holds bucket keys and file server passwor
 - POST   /api/storage/{id}/check       test it (write, read back, delete a small file)
 - POST   /api/storage/{id}/sync        import its documents into the Library now
 - DELETE /api/storage/{id}             remove it (only when no file lives there any more)
+- GET    /api/storage/jobs             P149a: moving files to the file server, compressing
+                                       older files, database space, cache, last backup
+- POST   /api/storage/jobs/{job}/{act} start | pause | resume | stop the move or compress job
 """
 
 from typing import Any, Literal
@@ -19,7 +22,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from ...core.db import get_db
 from ...core.ids import new_id
-from ...documents import sources, storage
+from ...documents import offload, sources, storage
 from ...models import Branch, Department, DocFile, StorageTarget
 from ...services import audit
 from ..deps import Principal, api_error, require
@@ -300,3 +303,33 @@ async def delete_target(
     await db.delete(t)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------- P149a: background jobs
+
+
+@router.get("/jobs")
+async def jobs_overview(
+    principal: Principal = Depends(require("storage.manage")), db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    return await offload.overview(db, principal.workspace_id)
+
+
+@router.post("/jobs/{job}/{action}")
+async def job_switch(
+    job: Literal["move", "compress"],
+    action: Literal["start", "pause", "resume", "stop"],
+    principal: Principal = Depends(require("storage.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    if job == "move" and action in ("start", "resume"):
+        t = await storage.primary(db, principal.workspace_id)
+        if t is None:
+            raise api_error(
+                status.HTTP_409_CONFLICT,
+                "no_primary_storage",
+                "Choose where new files are kept first: the files are moved there.",
+            )
+    await offload.set_job(db, job, principal.workspace_id, action, principal.actor)
+    await db.commit()
+    return await offload.overview(db, principal.workspace_id)

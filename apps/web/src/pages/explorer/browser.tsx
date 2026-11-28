@@ -7,7 +7,7 @@
  * selects, and a bar at the bottom acts on what is selected. */
 import {
   ArrowSquareOutIcon, ArrowUpIcon, BooksIcon, CaretRightIcon, CheckIcon, CheckSquareIcon, ClipboardIcon, CopyIcon, DotsThreeIcon,
-  DownloadSimpleIcon, EyeIcon, FlowArrowIcon, FolderOpenIcon, FolderPlusIcon, FunnelSimpleIcon, ListIcon, MagnifyingGlassIcon,
+  DownloadSimpleIcon, EyeIcon, FlowArrowIcon, FolderOpenIcon, FolderPlusIcon, FunnelSimpleIcon, HashIcon, ListIcon, MagnifyingGlassIcon,
   PencilSimpleIcon, RowsIcon, ScissorsIcon, SortAscendingIcon, SparkleIcon, SquaresFourIcon, TagIcon, TrashIcon, TreeStructureIcon,
   UploadSimpleIcon, XIcon,
 } from "@phosphor-icons/react";
@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 
 import { BuildFromDocs } from "@/components/doc-builders";
+import { KeywordChip, KeywordsDialog } from "@/components/file-keywords";
 import { LabelChip, LabelsDialog } from "@/components/file-labels";
 import { LoadMore } from "@/components/load-more";
 import { EmptyState } from "@/components/page";
@@ -42,6 +43,7 @@ import {
 import { archiveUrl, cleanFolder, filesFromDrop, folderChain, folderName, KINDS, kindKey, previewKind, previewUrl, type FolderNode, type KindKey, type PickedFile } from "@/lib/intake";
 import { setLibrary } from "@/lib/library";
 import { unitArchiveUrl, type LibraryUnit } from "@/lib/library-units";
+import { keywordsQuery } from "@/lib/organize";
 import { usePagedList, useDebounced } from "@/lib/paged";
 import { fileOrigin, type FileOrigin } from "@/lib/provenance";
 import { meQuery } from "@/lib/queries";
@@ -91,14 +93,16 @@ interface Filters {
   types: FileType[];
   kinds: KindKey[];
   labels: string[];
+  /** P149c: the uploader's keywords (every one of them). */
+  keywords: string[];
   held: boolean;
   /** A department id, or "none". */
   dept: string | null;
   /** One upload's files (from its report). */
   batch: string | null;
 }
-const NO_FILTERS: Filters = { origin: null, types: [], kinds: [], labels: [], held: false, dept: null, batch: null };
-const filterCount = (f: Filters) => (f.origin ? 1 : 0) + f.types.length + f.kinds.length + f.labels.length + (f.held ? 1 : 0) + (f.dept ? 1 : 0) + (f.batch ? 1 : 0);
+const NO_FILTERS: Filters = { origin: null, types: [], kinds: [], labels: [], keywords: [], held: false, dept: null, batch: null };
+const filterCount = (f: Filters) => (f.origin ? 1 : 0) + f.types.length + f.kinds.length + f.labels.length + f.keywords.length + (f.held ? 1 : 0) + (f.dept ? 1 : 0) + (f.batch ? 1 : 0);
 
 const ORIGINS: { value: FileOrigin; label: string }[] = [
   { value: "agent", label: msg("Made by AI") },
@@ -406,6 +410,7 @@ export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, r
     origin: filters.origin ?? undefined,
     kind: filters.kinds.length === 1 ? filters.kinds[0] : undefined,
     label: filters.labels[0],
+    keyword: filters.keywords[0],
     department_id: unit?.department_id ?? filters.dept ?? undefined,
     batch_id: filters.batch ?? undefined,
   }, { pageSize: 200, poll: (rows) => (rows.some((f) => f.status === "reading") ? 2500 : false) });
@@ -416,6 +421,7 @@ export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, r
     if (filters.types.length && !filters.types.includes(fileType(f))) return false;
     if (filters.kinds.length && !filters.kinds.includes(kindKey(f.kind))) return false;
     if (filters.labels.length && !filters.labels.every((l) => (f.labels ?? []).some((x) => x.toLowerCase() === l.toLowerCase()))) return false;
+    if (filters.keywords.length && !filters.keywords.every((k) => (f.keywords ?? []).includes(k))) return false;
     if (filters.held && !f.quarantined) return false;
     if (filters.dept === "none" && f.department_id) return false;
     if (filters.dept && filters.dept !== "none" && f.department_id !== filters.dept) return false;
@@ -459,6 +465,8 @@ export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, r
   // ---- dialogs
   const [picker, setPicker] = useState<{ mode: "move" | "copy"; items: Item[] } | null>(null);
   const [labelsFor, setLabelsFor] = useState<ExplorerFile[] | null>(null);
+  const [keywordsFor, setKeywordsFor] = useState<ExplorerFile[] | null>(null);
+  const { data: keywordsHere = [] } = useQuery(keywordsQuery(branch.id, unit?.department_id));
   const [removing, setRemoving] = useState<{ files: ExplorerFile[]; folders: string[] } | null>(null);
   const [building, setBuilding] = useState<string[] | null>(null);
   const [notEmpty, setNotEmpty] = useState<{ name: string; path: string; files: number } | null>(null);
@@ -509,7 +517,7 @@ export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, r
       openTaskComposer({
         kind: "general",
         title: tr("Organize {n} files in {folder}", { n: fs.length, folder: name }),
-        brief: tr("Organize these {n} files from the folder {folder}: file them into sensible subfolders the way we already keep things, using list_folders and file_document; list what moved.", { n: fs.length, folder: name }),
+        brief: tr("Organize these {n} files from the folder {folder} with the organize-library skill: plan sub-folders by what each file is and its date (suggest_organization), show me the plan, and move them only after I agree; never delete or rename.", { n: fs.length, folder: name }),
         files: fs.slice(0, 20).map((f) => ({ id: f.id, name: f.name })),
       });
       return;
@@ -517,7 +525,7 @@ export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, r
     openTaskComposer({
       kind: "general",
       title: tr("Organize {folder}", { folder: name }),
-      brief: tr("Organize the folder {folder}: file these documents into sensible subfolders the way we already keep things, using list_folders and file_document; list what moved.", { folder: name }),
+      brief: tr("Organize the folder {folder} of {place} with the organize-library skill: plan sub-folders by what each file is and its date (suggest_organization), show me the plan, and move them only after I agree; never delete or rename.", { folder: name, place: unit ? tr(unit.label) : branch.name }),
     });
   };
   const downloadItems = (its: Item[]) => {
@@ -607,6 +615,7 @@ export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, r
       acts.push({ id: "move", label: t("Move to…"), icon: <FolderOpenIcon />, run: () => setPicker({ mode: "move", items: its }), sep: true });
       acts.push({ id: "copyto", label: t("Copy to…"), icon: <CopyIcon />, run: () => setPicker({ mode: "copy", items: its }) });
       if (fs.length) acts.push({ id: "labels", label: t("Labels…"), icon: <TagIcon />, run: () => setLabelsFor(fs) });
+      if (fs.length) acts.push({ id: "keywords", label: t("Keywords…"), icon: <HashIcon />, run: () => setKeywordsFor(fs) });
       if (fs.length && fs.some((f) => f.source === "upload" && !f.library && !f.quarantined)) {
         acts.push({ id: "guide", label: t("Add to guidelines"), icon: <BooksIcon />, run: () => void addToGuidelines(fs.filter((f) => f.source === "upload" && !f.library)) });
       }
@@ -958,6 +967,21 @@ export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, r
           <SortButton sort={prefs.sort} dir={prefs.dir} onChange={(p) => prefs.set(p)} />
           <ViewSwitch layout={layout} onChange={(l) => prefs.set({ layout: l })} phone={phone} />
         </div>
+        {keywordsHere.length ? (
+          <div role="group" aria-label={t("Keywords")} className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+            <HashIcon size={14} className="shrink-0 text-muted" aria-hidden />
+            {keywordsHere.slice(0, 16).map((k) => {
+              const on = filters.keywords.includes(k.keyword);
+              return (
+                <button key={k.keyword} type="button" aria-pressed={on} title={t("{n} files", { n: k.count })}
+                  onClick={() => setFilters({ ...filters, keywords: on ? filters.keywords.filter((x) => x !== k.keyword) : [...filters.keywords, k.keyword] })}
+                  className="shrink-0 rounded-full pointer-coarse:py-1.5">
+                  <KeywordChip keyword={k.keyword} on={on} className="cursor-pointer hover:border-accent/50" />
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         {filtering ? (
           <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[12.5px]">
             <span className="text-muted">{searching ? t("Filtered results") : t("Matches in this folder and the folders inside it:")}</span>
@@ -965,6 +989,7 @@ export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, r
             {filters.types.map((x) => <Chip key={x} on onClick={() => setFilters({ ...filters, types: filters.types.filter((y) => y !== x) })}>{t(FILE_TYPES.find((y) => y.key === x)?.label ?? "")} <XIcon size={11} /></Chip>)}
             {filters.kinds.map((x) => <Chip key={x} on onClick={() => setFilters({ ...filters, kinds: filters.kinds.filter((y) => y !== x) })}>{x === "sop" ? "SOP" : t(KINDS.find((k) => k.key === x)?.label ?? "")} <XIcon size={11} /></Chip>)}
             {filters.labels.map((x) => <Chip key={x} on onClick={() => setFilters({ ...filters, labels: filters.labels.filter((y) => y !== x) })}>{x} <XIcon size={11} /></Chip>)}
+            {filters.keywords.map((x) => <Chip key={`k:${x}`} on onClick={() => setFilters({ ...filters, keywords: filters.keywords.filter((y) => y !== x) })}>#{x} <XIcon size={11} /></Chip>)}
             {filters.dept ? <Chip on onClick={() => setFilters({ ...filters, dept: null })}>{filters.dept === "none" ? t("No department") : branch.departments.find((d) => d.id === filters.dept)?.name ?? t("Department")} <XIcon size={11} /></Chip> : null}
             {filters.held ? <Chip on onClick={() => setFilters({ ...filters, held: false })}>{t("Held back only")} <XIcon size={11} /></Chip> : null}
             {filters.batch ? <Chip on onClick={() => setFilters({ ...filters, batch: null })}>{t("From one upload")} <XIcon size={11} /></Chip> : null}
@@ -1054,6 +1079,7 @@ export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, r
         {selecting ? <>
           {canEdit ? <Button size="sm" variant="ghost" className="h-7" onClick={() => setPicker({ mode: "move", items: selected })}><FolderOpenIcon size={14} /> {t("Move to…")}</Button> : null}
           {canEdit && selFiles.length ? <Button size="sm" variant="ghost" className="h-7" onClick={() => setLabelsFor(selFiles)}><TagIcon size={14} /> {t("Labels…")}</Button> : null}
+          {canEdit && selFiles.length ? <Button size="sm" variant="ghost" className="h-7" onClick={() => setKeywordsFor(selFiles)}><HashIcon size={14} /> {t("Keywords…")}</Button> : null}
           <Button size="sm" variant="ghost" className="h-7" onClick={() => downloadItems(selected)}><DownloadSimpleIcon size={14} /> {t("Download")}</Button>
           {canEdit ? <Button size="sm" variant="ghost" className="h-7 text-danger" onClick={() => askDelete(selected)}><TrashIcon size={14} /> {t("Delete")}</Button> : null}
           <Button size="icon-sm" variant="ghost" className="size-7" onClick={() => act({ type: "clear" })} aria-label={t("Clear the selection")} title={`${t("Clear the selection")} (Esc)`}><XIcon size={14} /></Button>
@@ -1110,6 +1136,7 @@ export function CompanyExplorer({ branch, unit, folder, openId, initialOrigin, r
           void ops.transfer(picker.mode === "move" ? "cut" : "copy", its.map(toClipItem), cleanFolder(dest)).then((ok) => { if (ok) act({ type: "clear" }); });
         }} />
       <LabelsDialog open={!!labelsFor} onOpenChange={(o) => !o && setLabelsFor(null)} files={labelsFor ?? []} branchId={branch.id} />
+      <KeywordsDialog open={!!keywordsFor} onOpenChange={(o) => !o && setKeywordsFor(null)} files={keywordsFor ?? []} branchId={branch.id} departmentId={unit?.department_id} />
       <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} danger
         confirmLabel={removing ? t("Delete {what}", { what: itemsWord(removing.files.length, removing.folders.length) }) : t("Delete")}
         title={removing ? t("Delete {what}?", { what: itemsWord(removing.files.length, removing.folders.length) }) : ""}

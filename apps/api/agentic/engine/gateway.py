@@ -260,9 +260,13 @@ async def _chat(
             sent, masker = guard.masked(p, messages)
         await release_idle(db)  # P96: inside a task step, no connection held while it thinks
         # P105: a person is waiting and another model could answer: do not wait on a slow one.
+        # P149 (Fitri, 28 Nov 2026: "if it takes too long or errors, fall back to AI Foundry"):
+        # background work gets a longer limit of its own, also only when another model can
+        # take over (a model on the owner's own server may be busy with someone else's job).
+        limit = settings.ai_answer_timeout if interactive else settings.ai_task_answer_timeout
         deadline = (
-            settings.ai_answer_timeout
-            if interactive
+            limit
+            if limit
             and await _another(members[i + 1 :], providers, _skip | failed, guard, group, task)
             else None
         )

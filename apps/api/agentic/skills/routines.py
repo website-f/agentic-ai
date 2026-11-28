@@ -142,9 +142,13 @@ _PAGE_LINE = re.compile(r"^Page: [^\n]*$", re.MULTILINE)  # browser_tools.view's
 # P140: tools that make a new file and name it first in their result ("Saved [fl_...]"): a
 # later step of the same routine may use that file as {{out_N}} (N = the step that made it).
 EDITORS = frozenset({"docx_edit", "xlsx_edit", "pdf_edit", "pptx_edit"})
-PRODUCERS = EDITORS | frozenset({"fill_form", "compile_documents", "export_document"})
+# P149b: design_poster / design_revise name the poster's PNG first ("Saved [fl_...]").
+PRODUCERS = EDITORS | frozenset(
+    {"fill_form", "compile_documents", "export_document", "design_poster", "design_revise"}
+)
 DOCUMENT_TOOLS = PRODUCERS | frozenset(
     {
+        "design_templates",
         "read_file",
         "list_files",
         "view_image",
@@ -152,6 +156,13 @@ DOCUMENT_TOOLS = PRODUCERS | frozenset(
         "list_folders",
         "file_document",
         "rename_file",
+        # P149c: organizing the Library
+        "list_folder_tree",
+        "create_folder",
+        "move_files",
+        "tag_files",
+        "suggest_organization",
+        "apply_organization",
     }
 )
 FILE = "file"  # a slot whose value is a file attached to the task

@@ -1362,6 +1362,13 @@ FOLLOWS = {
     "xlsx_edit": "revise_document",
     "pdf_edit": "revise_document",
     "pptx_edit": "revise_document",
+    # P149c: organizing the Library. Applying a plan changes many files at once: an agent set
+    # to ask (or deny) before revise_document gets the same answer here; moving, tagging and
+    # making folders follow its setting for file_document (filing).
+    "apply_organization": "revise_document",
+    "move_files": "file_document",
+    "tag_files": "file_document",
+    "create_folder": "file_document",
 }
 
 BROWSER_TOOLS = tuple(n for n in TOOLS if n.startswith("browser_"))
@@ -1533,11 +1540,22 @@ from .office_tools import OFFICE_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in OFFICE_TOOLS})
 
+# P149c: organize the Library: a unit's folder tree, folders, moves, keywords, plans.
+from .organize_tools import ORGANIZE_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in ORGANIZE_TOOLS})
+
 # P140: edit Word, Excel, PDF and PowerPoint files with structured operations (a new file
 # next to the original), so learned routines can repeat document jobs on the next file.
 from .office_edit_tools import OFFICE_EDIT_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in OFFICE_EDIT_TOOLS})
+
+# P149b: posters and social graphics from ready templates (a small spec, PNG + PDF), and
+# cheap revisions of one slot.
+from .design_tools import DESIGN_TOOLS  # noqa: E402
+
+TOOLS.update({t.name: t for t in DESIGN_TOOLS})
 
 # P31: the person's own computer (their own AI only): find, read, copy files in and out.
 from .pc_tools import PC_TOOLS  # noqa: E402

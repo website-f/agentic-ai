@@ -70,11 +70,15 @@ async def add_upload(
     created_by: str,
     folder: str = "",
     department_id: str | None = None,
+    keywords: list[str] | None = None,
+    auto_sort: bool = False,
 ) -> int:
     """Store one upload's files in the batch (the caller commits). Returns how many files
     were added; skipped zip entries go to the batch report. Raises unpack.UnpackError for a
     zip that cannot be opened at all. `data` may be the upload's buffer (a zip is read from
-    it in place, P29)."""
+    it in place, P29). P149c: every file gets the uploader's `keywords`; with `auto_sort`, a
+    file that lands in `folder` itself (not in a sub-folder of a folder or zip upload, which
+    keeps its own folders) is sorted into a proposed folder once read (knowledge/organize)."""
     added = 0
     skipped: list[dict[str, str]] = []
     skipped_more = 0
@@ -94,6 +98,12 @@ async def add_upload(
             batch_id=batch.id,
             department_id=department_id,
         )
+        if keywords:
+            f.keywords = list(keywords)
+        if auto_sort and entry.folder == folder:
+            f.folder_by = "sort"
+        if keywords or f.folder_by:
+            await db.flush()  # before it leaves the session
         db.expunge(f)  # the bytes are written; do not hold every file in memory
         added += 1
 
@@ -191,6 +201,11 @@ class Sorter:
                 str(info.get("kind") or ""), f.name, f.folder, f.title
             ):
                 f.restricted = True
+        # P149c: "sort into folders automatically" (knowledge/organize.py).
+        if f.folder_by == "sort":
+            from ..knowledge import organize
+
+            await organize.sort_on_read(db, f, info, text)
 
 
 # ---------------------------------------------------------------- the worker's steps

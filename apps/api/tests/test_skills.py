@@ -104,6 +104,8 @@ async def test_index_in_prompt_body_on_demand(client: httpx.AsyncClient, llm, te
         # P55 everyday office work (skills/office_pack.py)
         "write-business-letter",
         "file-documents",
+        # P149c: organize a Library unit's files (plan, show, apply)
+        "organize-library",
         "compile-document-pack",
         "summarise-document",
         "reply-to-customer",
@@ -116,6 +118,8 @@ async def test_index_in_prompt_body_on_demand(client: httpx.AsyncClient, llm, te
         "edit-office-files",
         "research-brief",
         "clean-spreadsheet",
+        # P149b: posters from ready templates (agents/design_tools.py)
+        "design-poster",
         # P92 the ePerolehan tender procedure (skills/eperolehan.py)
         "eperolehan-tender",
     }

@@ -68,6 +68,7 @@ KIND_FOLDERS: dict[str, tuple[str, str]] = {
     "delivery": ("Delivery orders", "Pesanan penghantaran"),
     "report": ("Reports", "Laporan"),
     "picture": ("Pictures", "Gambar"),
+    "poster": ("Posters", "Poster"),  # P149b design_poster
     "file": ("Other files", "Fail lain"),
     "custom": ("Other documents", "Dokumen lain"),
 }

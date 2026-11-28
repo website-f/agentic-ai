@@ -5,6 +5,7 @@ import { ArrowDownIcon, ArrowUpIcon, FolderIcon, FolderSimpleIcon, ShieldWarning
 import { useRef, useState, type HTMLAttributes, type ReactNode } from "react";
 
 import { FileStatus } from "@/components/file-drop";
+import { KeywordChips } from "@/components/file-keywords";
 import { LabelChips } from "@/components/file-labels";
 import { MadeBy, ReviewPill } from "@/components/provenance";
 import { Pill } from "@/components/ui/pill";
@@ -133,6 +134,7 @@ export function ItemView(p: ItemViewProps) {
     <>
       {isAiMade(f) ? <MadeBy origin="agent" agentName={f.agent_name} agentColor={f.agent_color} size="sm" /> : null}
       <LabelChips labels={f.labels} max={layout === "grid" ? 2 : 3} />
+      <KeywordChips keywords={f.keywords} max={layout === "grid" ? 1 : 2} />
       {held ? <Pill tone="warn" className="px-2"><ShieldWarningIcon size={12} weight="bold" /> {t("Held back")}</Pill> : null}
       {f.library ? <Pill tone="accent" className="px-2">{t("Guideline")}</Pill> : null}
       <ReviewPill status={f.review_status} />
@@ -190,7 +192,7 @@ export function ItemView(p: ItemViewProps) {
           </span>
           {held ? <ShieldWarningIcon size={14} weight="bold" className="shrink-0 text-warn" aria-label={t("Held back")} /> : null}
         </span>
-        <span className="min-w-0">{f ? <LabelChips labels={f.labels} max={2} /> : null}</span>
+        <span className="flex min-w-0 flex-wrap gap-1">{f ? <><LabelChips labels={f.labels} max={2} /><KeywordChips keywords={f.keywords} max={1} /></> : null}</span>
         <span className="truncate text-[12.5px] text-muted" title={f ? typeLabel(f, t) : undefined}>{f ? typeLabel(f, t) : t("Folder")}</span>
         <span className="text-right text-[12.5px] text-muted tabular-nums">{f ? fileSize(f.size) : item.kind === "folder" ? fileSize(item.size) : ""}</span>
         <span className="truncate text-[12.5px] text-muted tabular-nums" title={date ? new Date(date).toLocaleString(locale()) : undefined}>{date ? timeAgo(date) : folderMeta}</span>
